@@ -81,7 +81,7 @@ func TestStewardPermissionsRejectUnknownMissingAndNumericOverflow(t *testing.T) 
 
 func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 	p := DefaultStewardPermissions(5)
-	if !p.Permissions["ai.chat"] || p.Permissions["ai.review.read"] || p.Permissions["ai.memory.edit"] || len(p.Permissions) != 51 {
+	if !p.Permissions["ai.chat"] || p.Permissions["ai.review.read"] || p.Permissions["ai.memory.edit"] || len(p.Permissions) != 55 {
 		t.Fatal("AI defaults", p)
 	}
 	for key := range p.Permissions {
@@ -138,6 +138,92 @@ func TestModelQuotaRoutesRequireRecurringPermission(t *testing.T) {
 		for _, path := range []string{"/api/steward/donations/{id}/keys/{keyId}/model-limits", "/api/steward/donations/1/keys/2/model-limits"} {
 			if got := StewardRoutePermission(method, path); got != "donations.recurring" {
 				t.Fatal(method, path, got)
+			}
+		}
+	}
+}
+
+func TestCharityConfigurationPermissionsRemainIndependent(t *testing.T) {
+	keys := []string{"charity.request_adaptation", "charity.affinity", "charity.price_templates.manage"}
+	for _, key := range keys {
+		if DefaultStewardPermissions(5).Permissions[key] || !DefaultStewardPermissions(6).Permissions[key] {
+			t.Fatal("default", key)
+		}
+	}
+	p := DefaultStewardPermissions(5)
+	for key := range p.Permissions {
+		p.Permissions[key] = false
+	}
+	for _, key := range keys {
+		delete(p.Permissions, key)
+	}
+	grants, _ := json.Marshal(p.Permissions)
+	limits, _ := json.Marshal(p.Limits)
+	if _, err := DecodeStewardPermissions(5, 1, string(grants), string(limits), "standard"); err == nil {
+		t.Fatal("old catalog accepted without upgrade")
+	}
+	p = DefaultStewardPermissions(5)
+	for key := range p.Permissions {
+		p.Permissions[key] = false
+	}
+	for _, key := range keys {
+		p.Permissions[key] = true
+		switch key {
+		case "charity.request_adaptation":
+			if !p.AllowsOperation("charity.request_adaptation.read") || !p.AllowsOperation("charity.read") || p.AllowsOperation("model_fields") {
+				t.Fatal("adaptation implication")
+			}
+		case "charity.affinity":
+			if !p.AllowsOperation("charity.read") || !p.AllowsOperation("model_fields") || p.AllowsOperation("charity.request_adaptation") {
+				t.Fatal("affinity implication")
+			}
+		case "charity.price_templates.manage":
+			if !p.AllowsOperation("charity.price_templates.read") || p.AllowsOperation("charity.read") {
+				t.Fatal("template implication")
+			}
+		}
+		p.Permissions[key] = false
+	}
+	p.Permissions["charity.model_settings"] = true
+	if !p.AllowsOperation("charity.request_adaptation.read") || p.AllowsOperation("charity.request_adaptation") {
+		t.Fatal("old read authority changed")
+	}
+	for _, tc := range []struct{ method, path, want string }{
+		{"GET", "/api/steward/charity-models/1/request-adaptation", "charity.request_adaptation.read"},
+		{"PUT", "/api/steward/charity-models/1/request-adaptation", "charity.request_adaptation"},
+		{"PUT", "/api/steward/charity-models/1/bindings/2/request-adaptation", "charity.request_adaptation"},
+		{"GET", "/api/steward/charity-price-templates", "charity.price_templates.read"},
+		{"POST", "/api/steward/charity-price-templates", "charity.price_templates.manage"},
+		{"PUT", "/api/steward/charity-price-templates/1", "charity.price_templates.manage"},
+		{"DELETE", "/api/steward/charity-price-templates/1", "charity.price_templates.manage"},
+	} {
+		if got := StewardRoutePermission(tc.method, tc.path); got != tc.want {
+			t.Fatal(tc, got)
+		}
+	}
+}
+
+func TestRiskConfigurationPermissionIsIndependent(t *testing.T) {
+	if DefaultStewardPermissions(5).Permissions["risk.configure"] || !DefaultStewardPermissions(6).Permissions["risk.configure"] {
+		t.Fatal("audit threshold defaults")
+	}
+	for _, grant := range []string{"", "risk.read", "risk.manage", "risk.configure"} {
+		p := DefaultStewardPermissions(0)
+		if grant != "" {
+			p.Permissions[grant] = true
+		}
+		for _, tc := range []struct {
+			method, path, operation string
+			allowed                 bool
+		}{
+			{"GET", "config", "risk.config.read", grant == "risk.read" || grant == "risk.configure"},
+			{"PUT", "config", "risk.configure", grant == "risk.configure"},
+			{"GET", "users", "risk.read", grant == "risk.read"},
+			{"POST", "scans", "risk.manage", grant == "risk.manage"},
+		} {
+			operation := StewardRoutePermission(tc.method, "/api/steward/abuse-audit/"+tc.path)
+			if operation != tc.operation || p.AllowsOperation(operation) != tc.allowed {
+				t.Fatalf("grant=%q route=%+v operation=%q", grant, tc, operation)
 			}
 		}
 	}

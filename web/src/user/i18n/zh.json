@@ -2079,8 +2079,7 @@
           "already_donated": "已包含在其他捐赠中",
           "security_processing": "安全处理中",
           "unavailable": "密钥已删除或凭据不可用"
-        },
-        "keyLimits": "并发 {{concurrency}} · RPM {{rpm}}"
+        }
       },
       "tabs": {
         "models": "公益模型",
@@ -2185,7 +2184,9 @@
       "submitDonation": "提交公益捐赠",
       "donationNoticeTitle": "捐赠说明",
       "donationNoticeDefault": "感谢你愿意分享闲置的 API 资源。提交前请确认这些密钥由你合法持有并获准共享；共享期间，所连接的服务可能产生费用。你可以为每把密钥分别设置截止时间，并随时在此查看或停止共享。",
-      "sharedKeyLimitsNotice": "管理员和获授权的协管可调整这把密钥的并发数和每分钟请求数。自用与公益调用共用这些限制，调整后也会影响你的自用调用。",
+      "sharedKeyLimitsNotice": "你、管理员和获授权的协管都可调整这把密钥的并发、RPM、超限行为和队长上限。自用与公益调用共用这些设置。",
+      "editSharedKeyLimits": "修改密钥共享限制",
+      "backToDonation": "返回捐赠详情",
       "mutationResponseUnknown": "操作可能已经完成，但暂时无法确认结果。",
       "mutationConflictRefreshed": "操作完成前资源已发生变化。",
       "mutationReconciled": "已载入最新状态；请检查后再决定是否继续操作。",

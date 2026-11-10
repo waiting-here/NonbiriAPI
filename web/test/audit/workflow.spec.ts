@@ -197,7 +197,10 @@ test('charity request and attempt shortcuts preserve the log window for administ
             : undefined;
         await link.click();
         await expect(
-          page.getByRole('heading', { name: `Manage key #${target.donation_key_id}`, exact: true }),
+          page.getByRole('heading', {
+            name: `Manage donated key #${target.donation_key_id}`,
+            exact: true,
+          }),
         ).toBeVisible();
         await expect(
           page.getByLabel(common.common.keyLimits.concurrency, { exact: true }),
@@ -1136,12 +1139,12 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     expect(pendingDonation.keys[0].charity_state).toBe('pending');
     await expect(
       sourceKeys.getByRole('button', {
-        name: `Manage key #${state.management.automatic_backoff_key_ids[1]}`,
+        name: `Manage donated key #${state.management.automatic_backoff_key_ids[1]}`,
         exact: true,
       }),
     ).toBeVisible();
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${pendingKeyID}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage donated key #${pendingKeyID}`, exact: true }),
     ).toHaveCount(0);
     const pendingSource = pendingDonation.keys[0].safe_source;
     await sourceState.selectOption('pending');
@@ -1170,14 +1173,16 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     );
     await expect(browserSource).toHaveCount(1);
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${pendingKeyID}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage donated key #${pendingKeyID}`, exact: true }),
     ).toBeVisible();
     await expect(
-      sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }),
+      sourceKeys.getByRole('button', { name: `Manage donated key #${pausedID}`, exact: true }),
     ).toHaveCount(0);
     await sourceState.selectOption('disabled');
     await browserSource.click();
-    await sourceKeys.getByRole('button', { name: `Manage key #${pausedID}`, exact: true }).click();
+    await sourceKeys
+      .getByRole('button', { name: `Manage donated key #${pausedID}`, exact: true })
+      .click();
     const concurrency = page.getByLabel(common.common.keyLimits.concurrency, { exact: true });
     const rpm = page.getByLabel(common.common.keyLimits.rpm, { exact: true });
     await concurrency.fill('-1');
@@ -1186,6 +1191,12 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     ).toBeDisabled();
     await concurrency.fill('3');
     await rpm.fill('77');
+    await page
+      .getByLabel(common.common.keyLimits.concurrencyOverflow, { exact: true })
+      .selectOption('queue');
+    await page
+      .getByLabel(common.common.keyLimits.concurrencyQueueLimit, { exact: true })
+      .fill('13');
     const keyPath = `/api/steward/donations/${paused.donation_id}/keys/${pausedID}`;
     const scopePath = `${keyPath}?charity_model_id=${data.models[0]}`;
     const unscoped = await context.request.get(state.user_url + keyPath);
@@ -1221,6 +1232,8 @@ test('level 5 with full donation scope handles four custom-source keys and edits
           expected_key_limits_revision: before.key_limits_revision,
           max_concurrency: 3,
           max_rpm: 77,
+          concurrency_overflow: 'queue',
+          concurrency_queue_limit: 13,
         });
         const response = await route.fetch();
         expect(response.ok()).toBe(true);
@@ -1248,6 +1261,8 @@ test('level 5 with full donation scope handles four custom-source keys and edits
     const saved = await read(context, state.user_url, scopePath);
     expect(saved.max_concurrency).toBe(3);
     expect(saved.max_rpm).toBe(77);
+    expect(saved.concurrency_overflow).toBe('queue');
+    expect(saved.concurrency_queue_limit).toBe(13);
     expect(saved.key_limits_revision).not.toBe(before.key_limits_revision);
     expect(saved).toMatchObject({
       id: before.id,

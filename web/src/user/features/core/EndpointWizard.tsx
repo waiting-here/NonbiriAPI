@@ -1,3 +1,4 @@
+import { keyQueueDraft, keyQueueChanges } from '@shared/operations/keyQueue';
 import { Field, Fields, FormActions, OptionCards, Toggle } from '@shared/components/ui';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { EndpointTransportNotice } from '@shared/components/EndpointTransportNotice';
@@ -66,6 +67,7 @@ export function EndpointWizard({
   const [forceStoreFalse, setForceStoreFalse] = useState(false);
   const [maxConcurrency, setMaxConcurrency] = useState('0');
   const [maxRPM, setMaxRPM] = useState('0');
+  const [queue, setQueue] = useState(() => keyQueueDraft());
   const [endpoint, setEndpoint] = useState<Endpoint | null>(null);
   const [endpointKey, setEndpointKey] = useState<EndpointKey | null>(null);
   const [accepted, setAccepted] = useState<DiscoveryAccepted | null>(null);
@@ -245,6 +247,7 @@ export function EndpointWizard({
         force_store_false: supportsChatStoragePolicy(endpoint.connector_type) && forceStoreFalse,
         max_concurrency: Number(maxConcurrency),
         max_rpm: Number(maxRPM),
+        ...keyQueueChanges(queue, {}),
       },
     };
     await operation
@@ -588,6 +591,8 @@ export function EndpointWizard({
           <KeyLimitFields
             concurrency={maxConcurrency}
             rpm={maxRPM}
+            queue={queue}
+            onQueue={setQueue}
             onConcurrency={setMaxConcurrency}
             onRPM={setMaxRPM}
             disabled={hasKeyAttempt}

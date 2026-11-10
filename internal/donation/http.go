@@ -65,6 +65,7 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminSources, api.sourcesAdmin},
 		{http.MethodGet, routeAdminSourceKeys, api.sourceKeysAdmin},
 		{http.MethodGet, routeAdminKeys, api.keysAdmin},
+		{http.MethodPatch, routeAdminUses + "/{useId}", api.adminUseHandler(api.useRerankPathHandler(reviewerAdmin))},
 		{http.MethodGet, routeAdminUses, api.adminUseHandler(api.usesPageHandler(reviewerAdmin))},
 		{http.MethodPost, routeAdminUses + "/review", api.adminUseHandler(api.useReviewHandler(reviewerAdmin))},
 		{http.MethodPost, routeAdminUses + "/{useId}/failure-streak-reset", api.adminUseHandler(api.useMutationHandler(reviewerAdmin, "reset"))},
@@ -107,6 +108,7 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardSources, api.sourcesSteward},
 		{http.MethodGet, routeStewardSourceKeys, api.sourceKeysSteward},
 		{http.MethodGet, routeStewardKeys, api.keysSteward},
+		{http.MethodPatch, routeStewardUses + "/{useId}", api.useRerankPathHandler(reviewerSteward)},
 		{http.MethodGet, routeStewardUses, api.usesPageHandler(reviewerSteward)},
 		{http.MethodPost, routeStewardUses + "/review", api.useReviewHandler(reviewerSteward)},
 		{http.MethodPost, routeStewardUses + "/{useId}/failure-streak-reset", api.useMutationHandler(reviewerSteward, "reset")},
@@ -654,6 +656,10 @@ type keyManagementWire struct {
 	ExpectedKeyLimitsRevision requiredField[string] `json:"expected_key_limits_revision"`
 	MaxConcurrency            requiredField[int64]  `json:"max_concurrency"`
 	MaxRPM                    requiredField[int64]  `json:"max_rpm"`
+	ConcurrencyOverflow       requiredField[string] `json:"concurrency_overflow"`
+	RPMOverflow               requiredField[string] `json:"rpm_overflow"`
+	ConcurrencyQueueLimit     requiredField[int64]  `json:"concurrency_queue_limit"`
+	RPMQueueLimit             requiredField[int64]  `json:"rpm_queue_limit"`
 	Enabled                   requiredField[bool]   `json:"enabled"`
 	PriceLimit                nullableField[string] `json:"price_limit"`
 	CallsLimit                nullableField[string] `json:"calls_limit"`
@@ -671,7 +677,7 @@ func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[str
 	}
 	revision, err := requiredRevision(wire.ExpectedRevision)
 	if err != nil || !wire.Enabled.Set && !wire.PriceLimit.Set && !wire.CallsLimit.Set && !wire.TokensLimit.Set &&
-		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set && !wire.MaxConcurrency.Set && !wire.MaxRPM.Set && !splitTokenChanged(split) ||
+		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set && !wire.MaxConcurrency.Set && !wire.MaxRPM.Set && !wire.ConcurrencyOverflow.Set && !wire.RPMOverflow.Set && !wire.ConcurrencyQueueLimit.Set && !wire.RPMQueueLimit.Set && !splitTokenChanged(split) ||
 		wire.ResetFailureStreak.Set && !wire.ResetFailureStreak.Value {
 		return KeyManagementInput{}, nil, ErrInvalidRequest
 	}
@@ -695,6 +701,26 @@ func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[str
 		value := wire.MaxRPM.Value
 		input.MaxRPM = &value
 		canonical["max_rpm"] = value
+	}
+	if wire.ConcurrencyOverflow.Set {
+		value := wire.ConcurrencyOverflow.Value
+		input.ConcurrencyOverflow = &value
+		canonical["concurrency_overflow"] = value
+	}
+	if wire.RPMOverflow.Set {
+		value := wire.RPMOverflow.Value
+		input.RPMOverflow = &value
+		canonical["rpm_overflow"] = value
+	}
+	if wire.ConcurrencyQueueLimit.Set {
+		value := wire.ConcurrencyQueueLimit.Value
+		input.ConcurrencyQueueLimit = &value
+		canonical["concurrency_queue_limit"] = value
+	}
+	if wire.RPMQueueLimit.Set {
+		value := wire.RPMQueueLimit.Value
+		input.RPMQueueLimit = &value
+		canonical["rpm_queue_limit"] = value
 	}
 	if !validSharedKeyLimits(input) {
 		return KeyManagementInput{}, nil, ErrInvalidRequest

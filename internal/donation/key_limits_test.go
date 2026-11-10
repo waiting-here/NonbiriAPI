@@ -44,7 +44,7 @@ func TestManagedDonationKeyLimitsHTTPValidationAndCurrentProjection(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if admin.Keys[0].MaxConcurrency == nil || *admin.Keys[0].MaxConcurrency != 4 || steward.Keys[0].MaxRPM == nil || *steward.Keys[0].MaxRPM != 90 || admin.Keys[0].KeyLimitsRevision == nil || *admin.Keys[0].KeyLimitsRevision != "1" {
+	if admin.Keys[0].ConcurrencyOverflow == nil || *admin.Keys[0].ConcurrencyOverflow != "reject" || admin.Keys[0].RPMOverflow == nil || *admin.Keys[0].RPMOverflow != "reject" || admin.Keys[0].ConcurrencyQueueLimit == nil || *admin.Keys[0].ConcurrencyQueueLimit != 0 || admin.Keys[0].RPMQueueLimit == nil || *admin.Keys[0].RPMQueueLimit != 0 || admin.Keys[0].MaxConcurrency == nil || *admin.Keys[0].MaxConcurrency != 4 || steward.Keys[0].MaxRPM == nil || *steward.Keys[0].MaxRPM != 90 || admin.Keys[0].KeyLimitsRevision == nil || *admin.Keys[0].KeyLimitsRevision != "1" {
 		t.Fatal("management projection lost owner limits")
 	}
 	for _, extra := range []string{
@@ -55,6 +55,15 @@ func TestManagedDonationKeyLimitsHTTPValidationAndCurrentProjection(t *testing.T
 		`"expected_key_limits_revision":"0","max_rpm":1`,
 		`"expected_key_limits_revision":"9223372036854775808","max_rpm":1`,
 		`"expected_key_limits_revision":"1","max_rpm":null`,
+		`"expected_key_limits_revision":"1","concurrency_overflow":null`,
+		`"expected_key_limits_revision":"1","rpm_overflow":""`,
+		`"expected_key_limits_revision":"1","concurrency_overflow":"wait"`,
+		`"expected_key_limits_revision":"1","rpm_overflow":true`,
+		`"expected_key_limits_revision":"1","concurrency_queue_limit":null`,
+		`"expected_key_limits_revision":"1","rpm_queue_limit":-1`,
+		`"expected_key_limits_revision":"1","concurrency_queue_limit":2147483648`,
+		`"expected_key_limits_revision":"1","rpm_queue_limit":1.5`,
+		`"expected_key_limits_revision":"1","concurrency_queue_limit":"1"`,
 		`"expected_key_limits_revision":"1","max_rpm":"2"`,
 		`"expected_key_limits_revision":"1","max_rpm":1.5`,
 		`"expected_key_limits_revision":"1","max_concurrency":-1`,
@@ -72,7 +81,7 @@ func TestManagedDonationKeyLimitsHTTPValidationAndCurrentProjection(t *testing.T
 		body             string
 		concurrency, rpm int64
 	}{
-		{reviewerAdmin, `{"expected_revision":"2","expected_key_limits_revision":"1","max_concurrency":2147483647}`, 2147483647, 90},
+		{reviewerAdmin, `{"expected_revision":"2","expected_key_limits_revision":"1","max_concurrency":2147483647,"concurrency_overflow":"queue","concurrency_queue_limit":2147483647,"rpm_overflow":"queue","rpm_queue_limit":2}`, 2147483647, 90},
 		{reviewerSteward, `{"expected_revision":"3","expected_key_limits_revision":"2","max_rpm":0}`, 2147483647, 0},
 	} {
 		w := managedLimitsHTTP(t, e, patch.role, owner, value, patch.body, strings.Repeat(string(byte('a'+i)), 22))
@@ -80,7 +89,7 @@ func TestManagedDonationKeyLimitsHTTPValidationAndCurrentProjection(t *testing.T
 			t.Fatalf("valid patch: %d %s", w.Code, w.Body)
 		}
 		var receipt AdminDonation
-		if err := json.Unmarshal(w.Body.Bytes(), &receipt); err != nil || receipt.Keys[0].KeyLimitsRevision == nil || *receipt.Keys[0].KeyLimitsRevision != fmt.Sprint(i+2) || *receipt.Keys[0].MaxConcurrency != patch.concurrency || *receipt.Keys[0].MaxRPM != patch.rpm {
+		if err := json.Unmarshal(w.Body.Bytes(), &receipt); err != nil || receipt.Keys[0].KeyLimitsRevision == nil || *receipt.Keys[0].KeyLimitsRevision != fmt.Sprint(i+2) || *receipt.Keys[0].MaxConcurrency != patch.concurrency || *receipt.Keys[0].MaxRPM != patch.rpm || *receipt.Keys[0].ConcurrencyOverflow != "queue" || *receipt.Keys[0].RPMOverflow != "queue" || *receipt.Keys[0].ConcurrencyQueueLimit != 2147483647 || *receipt.Keys[0].RPMQueueLimit != 2 {
 			t.Fatalf("partial update receipt: %s %v", w.Body, err)
 		}
 	}
@@ -106,8 +115,9 @@ func TestManagedDonationKeyLimitsCASReplayAuditAndRollback(t *testing.T) {
 	d := approvedResetDonation(t, e, owner, physical)
 	id, key := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
 	concurrency, rpm := int64(2), int64(30)
-	input := KeyManagementInput{ExpectedRevision: 2, ExpectedKeyLimitsRevision: 1, MaxConcurrency: &concurrency, MaxRPM: &rpm}
-	mutation := donationMutation(t, 'k', http.MethodPatch, routeAdminKey, []int64{id, key}, map[string]any{"expected_revision": "2", "expected_key_limits_revision": "1", "max_concurrency": concurrency, "max_rpm": rpm})
+	queue, concurrencyCap, rpmCap := "queue", int64(5), int64(6)
+	input := KeyManagementInput{ExpectedRevision: 2, ExpectedKeyLimitsRevision: 1, MaxConcurrency: &concurrency, MaxRPM: &rpm, ConcurrencyOverflow: &queue, RPMOverflow: &queue, ConcurrencyQueueLimit: &concurrencyCap, RPMQueueLimit: &rpmCap}
+	mutation := donationMutation(t, 'k', http.MethodPatch, routeAdminKey, []int64{id, key}, map[string]any{"expected_revision": "2", "expected_key_limits_revision": "1", "max_concurrency": concurrency, "max_rpm": rpm, "concurrency_overflow": queue, "rpm_overflow": queue, "concurrency_queue_limit": concurrencyCap, "rpm_queue_limit": rpmCap})
 	snapshot := func() string {
 		t.Helper()
 		var donationRevision, physicalRevision, c, r, audits int64
@@ -128,7 +138,7 @@ JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoint_key_limits l 
 	if err := e.store.DB().QueryRow(`SELECT reviewer_user_id,reviewer_role,note FROM donation_reviews WHERE donation_id=? AND action='limit_update'`, id).Scan(&reviewer, &role, &note); err != nil {
 		t.Fatal(err)
 	}
-	if reviewer != admin || role != "admin" || !strings.Contains(note, `"old_key_limits_revision":"1"`) || !strings.Contains(note, `"max_rpm":30`) || strings.Contains(note, "private") {
+	if reviewer != admin || role != "admin" || !strings.Contains(note, `"old_key_limits_revision":"1"`) || !strings.Contains(note, `"max_rpm":30`) || !strings.Contains(note, `"old_concurrency_overflow":"reject"`) || !strings.Contains(note, `"concurrency_overflow":"queue"`) || !strings.Contains(note, `"old_rpm_overflow":"reject"`) || !strings.Contains(note, `"rpm_overflow":"queue"`) || !strings.Contains(note, `"old_concurrency_queue_limit":0`) || !strings.Contains(note, `"concurrency_queue_limit":5`) || !strings.Contains(note, `"old_rpm_queue_limit":0`) || !strings.Contains(note, `"rpm_queue_limit":6`) || strings.Contains(note, "private") {
 		t.Fatalf("shared audit: %d %s %s", reviewer, role, note)
 	}
 	before := snapshot()
@@ -175,8 +185,9 @@ func TestTraineeSharedKeyLimitsUseExistingScopeAndRecheckReplay(t *testing.T) {
 	model := controlModel(t, e, "limit-maintenance", true)
 	ctx := charityscope.WithModel(context.Background(), model)
 	limit := int64(7)
-	input := KeyManagementInput{ExpectedRevision: 2, ExpectedKeyLimitsRevision: 1, MaxRPM: &limit}
-	mutation := donationMutation(t, 'v', http.MethodPatch, routeStewardKey, []int64{id, key}, map[string]any{"max_rpm": limit, "expected_revision": "2", "expected_key_limits_revision": "1"})
+	queue := "queue"
+	input := KeyManagementInput{ExpectedRevision: 2, ExpectedKeyLimitsRevision: 1, MaxRPM: &limit, RPMOverflow: &queue, RPMQueueLimit: &limit}
+	mutation := donationMutation(t, 'v', http.MethodPatch, routeStewardKey, []int64{id, key}, map[string]any{"max_rpm": limit, "rpm_overflow": queue, "rpm_queue_limit": limit, "expected_revision": "2", "expected_key_limits_revision": "1"})
 	mutation.Query = charityscope.Query(ctx)
 	if _, err := e.service.ManageKeySession(ctx, trainee, id, key, mutation, input); !errors.Is(err, ErrNotFound) {
 		t.Fatal("unbound custom key accepted", err)
@@ -190,7 +201,7 @@ func TestTraineeSharedKeyLimitsUseExistingScopeAndRecheckReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	receipt, ok := updated.Value.(ManagedKeyReceipt)
-	if !ok || receipt.Key.EndpointKeyID != nil || *receipt.Key.KeyLimitsRevision != "2" || *receipt.Key.MaxRPM != 7 {
+	if !ok || receipt.Key.EndpointKeyID != nil || *receipt.Key.KeyLimitsRevision != "2" || *receipt.Key.MaxRPM != 7 || *receipt.Key.RPMOverflow != "queue" || *receipt.Key.RPMQueueLimit != 7 {
 		t.Fatalf("scoped receipt: %+v", updated.Value)
 	}
 	var role string

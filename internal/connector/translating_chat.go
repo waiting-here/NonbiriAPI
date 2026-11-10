@@ -90,7 +90,7 @@ func (c *translatingConnector) Attempt(ctx context.Context, input AttemptInput) 
 	return result
 }
 
-// A continuation is scoped to its source protocol even in mixed bindings.
+// A continuation stays on protocols that can preserve its wire representation.
 func continuationCompatible(kind contract.Type, request *openai.ChatRequest) bool {
 	return checkContinuation(kind, request) == nil
 }
@@ -108,12 +108,17 @@ func checkContinuation(kind contract.Type, request *openai.ChatRequest) error {
 	if json.Unmarshal(raw, &messages) != nil {
 		return reject("messages", "expected an array of message objects")
 	}
+	// Chat passthrough does not reinterpret extension namespaces. Providers may
+	// support fields beyond the platform's translated-protocol vocabulary.
+	if kind == contract.TypeOpenAICompatible || kind == contract.TypeOpenAIChatCompletions {
+		return nil
+	}
 	check := func(raw json.RawMessage) error {
 		var extra map[string]json.RawMessage
 		if json.Unmarshal(raw, &extra) != nil {
 			return nil
 		}
-		if _, ok := extra["google"]; ok && kind != contract.TypeGoogleGemini {
+		if _, ok := extra["google"]; ok && kind != contract.TypeGoogleGemini && !kind.AISDKGateway() {
 			return reject("extra_content.google", "field cannot be represented by this connector")
 		}
 		if _, ok := extra["anthropic"]; ok && kind != contract.TypeAnthropicCompatible {

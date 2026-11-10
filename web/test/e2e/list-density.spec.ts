@@ -521,7 +521,7 @@ test('administrator source grouping accepts current key limits on narrow and wid
     body: numberedResponse([donationKeyPageItem(donation, donationKey)], '1', 20),
   });
   await page.goto(`${ADMIN_ORIGIN}/charity`);
-  await page.getByRole('tab', { name: 'Browse by source' }).click();
+  await page.getByRole('tab', { name: 'Donated resources' }).click();
   await page.locator('.charity-source-browser__source-button').click();
   await expect(page.getByText('Maximum RPM: 45', { exact: true })).toBeVisible();
   for (const width of [320, 1935]) {

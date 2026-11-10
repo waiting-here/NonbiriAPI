@@ -369,6 +369,34 @@ describe('donation page operations', () => {
     ).toEqual(normalizeManagedDonationsPage(page([donation({ owner })]), 'steward', {}, '1', 20));
   });
 
+  it('reads old key summaries with queue defaults and forwards current or deleted-key settings', () => {
+    const read = (overrides: Record<string, unknown> = {}) =>
+      normalizeManagedDonationKeysPage(page([keySummary(overrides)]), '7', '1', 20).data[0];
+    expect(read()).toMatchObject({
+      concurrency_overflow: 'reject',
+      rpm_overflow: 'reject',
+      concurrency_queue_limit: 0,
+      rpm_queue_limit: 0,
+    });
+    const current = {
+      concurrency_overflow: 'queue',
+      rpm_overflow: 'reject',
+      concurrency_queue_limit: 9,
+      rpm_queue_limit: 12,
+    };
+    expect(read(current)).toMatchObject(current);
+    const deleted = {
+      max_concurrency: null,
+      max_rpm: null,
+      concurrency_overflow: null,
+      rpm_overflow: null,
+      concurrency_queue_limit: null,
+      rpm_queue_limit: null,
+    };
+    expect(read(deleted)).toMatchObject(deleted);
+    expect(() => read({ concurrency_overflow: null })).toThrow();
+  });
+
   it('uses the steward key path, preserves wide decimal fields, and matches donation id', async () => {
     const donationID = '123456789012345678901234567890';
     const keyID = '987654321098765432109876543210';

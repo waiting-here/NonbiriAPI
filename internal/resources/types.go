@@ -28,22 +28,25 @@ type MutationResult[T any] struct {
 }
 
 type Endpoint struct {
-	ConnectionID      *string                           `json:"connection_id"`
-	ConnectionName    string                            `json:"connection_name"`
-	ConfigurationType string                            `json:"configuration_type"`
-	NativeServices    []connectorcontract.NativeService `json:"native_services"`
-	RerankFormat      connectorcontract.RerankFormat    `json:"rerank_format"`
-	ID                string                            `json:"id"`
-	ConnectorType     string                            `json:"connector_type"`
-	BaseURL           string                            `json:"base_url"`
-	Origin            EndpointOrigin                    `json:"origin"`
-	Note              string                            `json:"note"`
-	Enabled           bool                              `json:"enabled"`
-	Revision          string                            `json:"revision"`
-	KeyCount          string                            `json:"key_count"`
-	Browse            *EndpointBrowse                   `json:"browse,omitempty"`
-	CreatedAt         int64                             `json:"created_at"`
-	UpdatedAt         int64                             `json:"updated_at"`
+	ConnectionID           *string                           `json:"connection_id"`
+	ConnectionName         string                            `json:"connection_name"`
+	ConfigurationType      string                            `json:"configuration_type"`
+	NativeServices         []connectorcontract.NativeService `json:"native_services"`
+	RerankPath             string                            `json:"rerank_path"`
+	RerankURL              string                            `json:"rerank_url"`
+	RerankPathConfigurable bool                              `json:"rerank_path_configurable"`
+	RerankFormat           connectorcontract.RerankFormat    `json:"rerank_format"`
+	ID                     string                            `json:"id"`
+	ConnectorType          string                            `json:"connector_type"`
+	BaseURL                string                            `json:"base_url"`
+	Origin                 EndpointOrigin                    `json:"origin"`
+	Note                   string                            `json:"note"`
+	Enabled                bool                              `json:"enabled"`
+	Revision               string                            `json:"revision"`
+	KeyCount               string                            `json:"key_count"`
+	Browse                 *EndpointBrowse                   `json:"browse,omitempty"`
+	CreatedAt              int64                             `json:"created_at"`
+	UpdatedAt              int64                             `json:"updated_at"`
 }
 
 // EndpointOrigin is deliberately a small, closed public projection. Internal
@@ -91,27 +94,31 @@ type MainstreamEntryMatch struct {
 }
 
 type EndpointKey struct {
-	CredentialNote      string                            `json:"credential_note,omitempty"`
-	CredentialAvailable bool                              `json:"credential_available"`
-	CredentialID        string                            `json:"credential_id"`
-	CredentialVersion   string                            `json:"credential_version"`
-	GrantRevision       string                            `json:"grant_revision"`
-	NativeServices      []connectorcontract.NativeService `json:"native_services"`
-	DiscoverySourceID   *string                           `json:"discovery_source_id"`
-	ID                  string                            `json:"id"`
-	EndpointID          string                            `json:"endpoint_id"`
-	DisplayHead         string                            `json:"display_head"`
-	DisplayTail         string                            `json:"display_tail"`
-	Note                string                            `json:"note"`
-	Enabled             bool                              `json:"enabled"`
-	ForceStoreFalse     bool                              `json:"force_store_false"`
-	MaxConcurrency      int64                             `json:"max_concurrency"`
-	MaxRPM              int64                             `json:"max_rpm"`
-	SuspensionState     string                            `json:"suspension_state"`
-	Browse              *EndpointKeyBrowse                `json:"browse,omitempty"`
-	Revision            string                            `json:"revision"`
-	CreatedAt           int64                             `json:"created_at"`
-	UpdatedAt           int64                             `json:"updated_at"`
+	CredentialNote        string                            `json:"credential_note,omitempty"`
+	CredentialAvailable   bool                              `json:"credential_available"`
+	CredentialID          string                            `json:"credential_id"`
+	CredentialVersion     string                            `json:"credential_version"`
+	GrantRevision         string                            `json:"grant_revision"`
+	NativeServices        []connectorcontract.NativeService `json:"native_services"`
+	DiscoverySourceID     *string                           `json:"discovery_source_id"`
+	ID                    string                            `json:"id"`
+	EndpointID            string                            `json:"endpoint_id"`
+	DisplayHead           string                            `json:"display_head"`
+	DisplayTail           string                            `json:"display_tail"`
+	Note                  string                            `json:"note"`
+	Enabled               bool                              `json:"enabled"`
+	ForceStoreFalse       bool                              `json:"force_store_false"`
+	MaxConcurrency        int64                             `json:"max_concurrency"`
+	MaxRPM                int64                             `json:"max_rpm"`
+	ConcurrencyOverflow   string                            `json:"concurrency_overflow"`
+	RPMOverflow           string                            `json:"rpm_overflow"`
+	ConcurrencyQueueLimit int64                             `json:"concurrency_queue_limit"`
+	RPMQueueLimit         int64                             `json:"rpm_queue_limit"`
+	SuspensionState       string                            `json:"suspension_state"`
+	Browse                *EndpointKeyBrowse                `json:"browse,omitempty"`
+	Revision              string                            `json:"revision"`
+	CreatedAt             int64                             `json:"created_at"`
+	UpdatedAt             int64                             `json:"updated_at"`
 }
 
 type CallerKeyMetadata struct {
@@ -244,6 +251,7 @@ type CreateEndpointInput struct {
 	ChannelRevision int64
 	NativeServices  *[]connectorcontract.NativeService
 	RerankFormat    connectorcontract.RerankFormat
+	RerankPath      string
 	Source          string
 	ChannelID       string
 	ConnectorType   string
@@ -279,34 +287,43 @@ type PatchEndpointInput struct {
 	ConnectionID     *int64
 	NativeServices   *[]connectorcontract.NativeService
 	RerankFormat     *connectorcontract.RerankFormat
+	RerankPath       *string
 	Note             *string
 	Enabled          *bool
 	ExpectedRevision int64
 }
 
 type CreateEndpointKeyInput struct {
-	CredentialID       int64
-	NativeServices     *[]connectorcontract.NativeService
-	DiscoverySourceID  **int64
-	Secret             []byte
-	Note               string
-	Enabled            bool
-	ForceStoreFalse    bool
-	OwnershipConfirmed bool
-	MaxConcurrency     int64
-	MaxRPM             int64
+	CredentialID          int64
+	NativeServices        *[]connectorcontract.NativeService
+	DiscoverySourceID     **int64
+	Secret                []byte
+	Note                  string
+	Enabled               bool
+	ForceStoreFalse       bool
+	OwnershipConfirmed    bool
+	MaxConcurrency        int64
+	MaxRPM                int64
+	ConcurrencyOverflow   string
+	RPMOverflow           string
+	ConcurrencyQueueLimit int64
+	RPMQueueLimit         int64
 }
 
 type PatchEndpointKeyInput struct {
-	CredentialID      *int64
-	NativeServices    *[]connectorcontract.NativeService
-	DiscoverySourceID **int64
-	Note              *string
-	Enabled           *bool
-	ForceStoreFalse   *bool
-	ExpectedRevision  int64
-	MaxConcurrency    *int64
-	MaxRPM            *int64
+	CredentialID          *int64
+	NativeServices        *[]connectorcontract.NativeService
+	DiscoverySourceID     **int64
+	Note                  *string
+	Enabled               *bool
+	ForceStoreFalse       *bool
+	ExpectedRevision      int64
+	MaxConcurrency        *int64
+	MaxRPM                *int64
+	ConcurrencyOverflow   *string
+	RPMOverflow           *string
+	ConcurrencyQueueLimit *int64
+	RPMQueueLimit         *int64
 }
 
 type ManualCatalogInput struct {

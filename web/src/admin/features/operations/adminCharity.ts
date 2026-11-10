@@ -1,4 +1,9 @@
 import {
+  keyQueueFields,
+  normalizeManagedKeyQueue,
+  type KeyQueueProjection,
+} from '@shared/operations/keyQueue';
+import {
   normalizeSmartBackoffFields,
   type SmartBackoffFields,
 } from '@shared/operations/smartBackoff';
@@ -144,7 +149,7 @@ export interface AdminCharityMainstreamSource {
 
 export type AdminCharitySource = AdminCharityCustomSource | AdminCharityMainstreamSource;
 
-export interface AdminCharityKey extends SmartBackoffFields {
+export interface AdminCharityKey extends SmartBackoffFields, KeyQueueProjection {
   failure_disable_threshold: string;
   id: string;
   display_head: string;
@@ -261,7 +266,7 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   ];
   const root = record(
     value,
-    [...required, 'max_concurrency', 'max_rpm'],
+    [...required, 'max_concurrency', 'max_rpm', ...keyQueueFields],
     'administrator charity key',
     required,
   );
@@ -331,6 +336,7 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
     display_tail: displayTail,
     safe_source: normalizeAdminCharitySource(root.safe_source),
     physical_enabled: boolean(root.physical_enabled, 'administrator charity physical state'),
+    ...normalizeManagedKeyQueue(root),
     max_concurrency:
       root.max_concurrency == null
         ? null

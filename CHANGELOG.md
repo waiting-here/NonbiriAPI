@@ -4,6 +4,58 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.8 — 2026-11-10
+
+- Add independent reject or FIFO queue behavior for each upstream key's
+  concurrency and RPM limits, with optional queue caps. Donors and authorized
+  donation managers edit the same settings for personal and charity calls.
+  Valid session affinity takes priority when using cache-balanced routing;
+  other selection first tries connections that can dispatch immediately.
+- Preserve opaque message and tool extensions on native Chat routes. Translate
+  Google thought signatures and supported ordered history through Gateway v3/v4,
+  including signatures received in later streaming tool events.
+- Keep indexed historical model-name lookup when request-log searches combine
+  model names with status, dates or other filters.
+- Add optional same-origin paths for HTTP rerank, including Aliyun Bailian's
+  `/compatible-api/v1/reranks`. Existing entries retain their default paths.
+- Keep donated rerank settings separate from personal settings. Authorized
+  administrators and stewards can override the charity path and restore the
+  submitted setting from approval or management details.
+- Recognize explicit input-length errors for messages, input, and prompts without
+  increasing donated-key consecutive failures, including adapted requests.
+- Recognize native Gateway rejections of a final assistant turn or an explicit
+  output budget outside the reported range when the caller input is verified,
+  preserving consecutive failures without hiding other upstream errors.
+- Give level-6 stewards administrator-equivalent charity configuration controls.
+  New permissions for request adaptation, affinity duration, and price-template
+  management are disabled for level-5 stewards by default.
+- Let level-6 stewards adjust audit thresholds; the independent permission is
+  disabled for level-5 stewards by default. Preserve existing settings on upgrade.
+- Show current and frozen shared-IP thresholds and explain identity deduplication.
+  Apply call-kind filters consistently to synchronous shared-IP results.
+- Page duel history exports in smaller batches within the existing transaction
+  budget, retaining complete cursor traversal and expiry reporting.
+- Reorganize model, pricing, managed-header, account-credit and activity forms
+  around related settings, with responsive interface choices and member grids.
+- Clarify donated resources and connection editing, preserve drafts in task
+  drawers, and separate common model settings from advanced request options.
+- Check idle Rock Paper Scissors matching and ranking expiry through the read
+  pool before acquiring the writer. Work found by a probe retains the existing
+  transaction checks and atomic settlement.
+- Reuse a closed connection-store schema fixture with a private database for
+  each test, avoiding repeated schema compilation without sharing mutable state.
+- Refresh CI timing weights from measured runs and rebalance long race groups
+  within the existing runner budget. Two serial historical-schema rejection
+  matrices keep full ordinary coverage; cancellation and recovery stay in race.
+- Schedule independent historical-upgrade scenarios separately to avoid one
+  combined race test exhausting its deadline, preserving every rollback,
+  cancellation and data-preservation check.
+- Key shared race caches by Go source and embedded inputs so workers reuse the
+  current preparation job's compilation instead of rebuilding changed packages.
+- Advance the database to schema 51 and account export to format 36. Existing
+  databases require an explicit offline upgrade. Existing rerank behavior and
+  rejection on key limit overflow are preserved by default.
+
 ## 1.3.7 — 2026-11-09
 
 This release includes the pending v1.3.7 fixes and the changes briefly published

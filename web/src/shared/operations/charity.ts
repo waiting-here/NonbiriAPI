@@ -1,4 +1,11 @@
 import {
+  keyQueueFields,
+  normalizeKeyQueue,
+  normalizeManagedKeyQueue,
+  type KeyQueueConfig,
+  type KeyQueueProjection,
+} from './keyQueue';
+import {
   normalizeNativeServices,
   normalizeServiceProjection,
   type ServiceProjection,
@@ -119,7 +126,7 @@ export type ManagedSafeSource = { endpoint_tags?: string[] } & (
     }
 );
 
-export interface ManagedDonationKey extends SmartBackoffFields {
+export interface ManagedDonationKey extends SmartBackoffFields, KeyQueueProjection {
   service_statuses?: ServiceStatus[];
   can_manage?: boolean;
   review?: { required: boolean; revision: string | null; material_available: boolean };
@@ -338,6 +345,7 @@ export function normalizeManagedKey(
       ...required,
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
       'key_limits_revision',
       'rate_limited_until',
       'input_token_reserve',
@@ -517,6 +525,7 @@ export function normalizeManagedKey(
     },
     ended_reason: endedReason,
     safe_note: string(root.safe_note, `${label} safe note`, { multiline: true }),
+    ...normalizeManagedKeyQueue(root),
     max_concurrency:
       root.max_concurrency == null
         ? null
@@ -844,7 +853,7 @@ export interface CharityBinding extends Partial<ServiceProjection> {
   ord: number;
   donation_key_id: string;
   donation_id: string;
-  source: {
+  source: Partial<KeyQueueConfig> & {
     connector_type: CharityConnectorType;
     canonical_base_url: string;
     display_head: string;
@@ -1196,11 +1205,13 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
       'display_tail',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
     ],
     label,
     ['connector_type', 'canonical_base_url', 'display_head', 'display_tail'],
   );
   return {
+    ...normalizeKeyQueue(root),
     max_concurrency:
       root.max_concurrency === undefined
         ? 0

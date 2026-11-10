@@ -25,17 +25,9 @@ type expiringRankFact struct {
 func (service *Service) expireRankFacts(ctx context.Context, queryNow int64) (int, error) {
 	total := 0
 	for {
-		tx, err := service.database.BeginTx(ctx, nil)
+		count, err := service.expireRankFactsBatch(ctx, queryNow)
 		if err != nil {
-			return total, classifyDB(err)
-		}
-		count, err := service.expireRankFactsBatchTx(ctx, tx, queryNow)
-		if err != nil {
-			_ = tx.Rollback()
 			return total, err
-		}
-		if err := tx.Commit(); err != nil {
-			return total, classifyDB(err)
 		}
 		total += count
 		if count < workerBatchSize {

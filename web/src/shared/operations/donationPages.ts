@@ -1,3 +1,4 @@
+import { keyQueueFields } from './keyQueue';
 import {
   DONATION_DISPLAY_STATUSES,
   normalizeUseSummary,
@@ -226,6 +227,7 @@ const DONATION_KEY_FIELDS = [
   'safe_note',
   'max_concurrency',
   'max_rpm',
+  ...keyQueueFields,
 ] as const;
 
 const KEY_SUMMARY_FIELDS = [
@@ -486,6 +488,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
     KEY_SUMMARY_FIELDS.filter(
       (field) =>
         ![
+          ...keyQueueFields,
           'can_manage',
           'service_statuses',
           'maintenance_scope_required',
@@ -533,6 +536,7 @@ export function normalizeKeySummary(value: unknown, index: number): ManagedDonat
       safe_note: root.safe_note,
       max_concurrency: root.max_concurrency,
       max_rpm: root.max_rpm,
+      ...Object.fromEntries(keyQueueFields.map((field) => [field, root[field]])),
     },
     `${label} base`,
     'steward',

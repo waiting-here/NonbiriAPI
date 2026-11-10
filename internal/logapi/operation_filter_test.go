@@ -255,13 +255,14 @@ func operationMatches(kind RouteKind, operation contract.Operation) bool {
 	return kind.Operation() == operation
 }
 
-func TestOperationCharityModelFallbackKeepsExactKind(t *testing.T) {
+func TestOperationCharityModelBoundedLookupKeepsExactKind(t *testing.T) {
 	for _, tc := range []struct {
-		names   int
-		pattern string
-		want    int
+		names    int
+		pattern  string
+		want     int
+		complete bool
 	}{
-		{65, "historic", 65}, {4097, "historic-04096", 1},
+		{100, "historic", 100, true}, {4097, "historic-04096", 1, false},
 	} {
 		t.Run(fmt.Sprintf("%d", tc.names), func(t *testing.T) {
 			database := indexedCharityQueryDatabase(t, 1)
@@ -278,8 +279,8 @@ SELECT x+1+offset,printf('req_%021dA',x+1+offset),1800000000,1800000001,printf('
 			}
 			defer tx.Rollback()
 			_, complete, err := matchingCharityModelNames(t.Context(), tx, tc.pattern, "charity_responses")
-			if err != nil || complete {
-				t.Fatal("fixture must use bounded fallback", complete, err)
+			if err != nil || complete != tc.complete {
+				t.Fatal("bounded lookup completion", complete, err)
 			}
 			predicate, args, err := charityModelFilter(t.Context(), tx, ListFilter{Operation: "responses", CharityModel: &tc.pattern})
 			if err != nil {

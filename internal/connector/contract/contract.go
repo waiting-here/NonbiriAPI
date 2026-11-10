@@ -177,11 +177,15 @@ type Target struct {
 	connectorType Type
 	baseURL       string
 	upstreamModel string
+	rerankPath    string
 }
 
 func NewTarget(connectorType Type, baseURL, upstreamModel string) Target {
 	return Target{connectorType: connectorType, baseURL: baseURL, upstreamModel: upstreamModel}
 }
+
+func (t Target) WithRerankPath(path string) Target { t.rerankPath = path; return t }
+func (t Target) RerankPath() string                { return t.rerankPath }
 
 func (t Target) Type() Type            { return t.connectorType }
 func (t Target) BaseURL() string       { return t.baseURL }

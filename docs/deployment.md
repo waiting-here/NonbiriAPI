@@ -339,20 +339,20 @@ own status in the details and do not acquire the site's login/session semantics.
 
 ## Database compatibility and version changes
 
-The service initializes absent storage as schema **50** and opens only the exact
+The service initializes absent storage as schema **51** and opens only the exact
 current schema. Older, newer, unknown and incomplete databases are rejected
 before migration, repair, WAL checkpoint or recovery writes. Exact registered
-schema **16–26** and **33–49** sources use the matching standalone
+schema **16–26** and **33–50** sources use the matching standalone
 [v1 upgrader](../cmd/nonbiri-upgrade-v1/README.md). Other intermediate structures,
 including schema 27–32, are unsupported. SQLite identity remains Generation 2;
-exports use format **35**. See [database upgrades](database-upgrades.md) for
+exports use format **36**. See [database upgrades](database-upgrades.md) for
 manifests, preserved data and content versions.
 
 Run `./nonbiriapi maintenance schema-info --json` and the matching tool's
 `--schema-info --json` without application configuration or a database.
 The service declares `startup_policy="exact"`,
-`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 50 and empty source
-and conversion arrays. The tool declares its 28 exact offline sources.
+`upgrade_tool="nonbiri-upgrade-v1"`, current/minimum schema 51 and empty source
+and conversion arrays. The tool declares its 29 exact offline sources.
 Deployment scripts must honor that policy and stop on mismatches, leaving the
 operator time to preserve the old database and deliberately invoke the tool.
 Do not run `--apply` from a service, startup hook or automatic deployment path.
@@ -398,7 +398,7 @@ instance legal text remain separate operator actions.
    `./nonbiri-upgrade-v1 --apply --database /path/to/database.sqlite` under
    exclusive database access with the existing key. Use `--check` instead for a
    full offline audit; reuse an already-valid audit rather than repeat it without
-   a new reason. Exact registered schemas 16–26 and 33–49 are supported.
+   a new reason. Exact registered schemas 16–26 and 33–50 are supported.
    No service or deployment hook performs this step for you. After a manual
    upgrade, finish this manual release switch; do not retry an automatic path
    that still identifies the source through its old server's schema descriptor.

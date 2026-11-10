@@ -89,3 +89,29 @@ func attachCreatedDonationSourceTx(ctx context.Context, tx *sql.Tx, userID, keyI
 	input.GrantRevision = grant.GrantRevision
 	return nil
 }
+
+// Overflow and queue limits reject explicit null while preserving omitted defaults.
+type overflowBehavior string
+
+func (value *overflowBehavior) UnmarshalJSON(body []byte) error {
+	var current string
+	if err := json.Unmarshal(body, &current); err != nil || current != "reject" && current != "queue" {
+		return errInvalid
+	}
+	*value = overflowBehavior(current)
+	return nil
+}
+
+type queueLimit int64
+
+func (value *queueLimit) UnmarshalJSON(body []byte) error {
+	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
+		return errInvalid
+	}
+	var current int64
+	if err := json.Unmarshal(body, &current); err != nil || current < 0 || current > 2147483647 {
+		return errInvalid
+	}
+	*value = queueLimit(current)
+	return nil
+}

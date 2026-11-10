@@ -57,11 +57,8 @@ func TestPricingAndHistoryRegisteredSessionRoutes(t *testing.T) {
 	require(call("GET", "/api/steward/charity-price-templates/"+template.ID, "", "", false), 403)
 	exec("UPDATE users SET level=6 WHERE id=?", f.userID)
 	require(call("GET", "/api/steward/charity-price-templates", "", "", false), 200)
-	require(call("GET", "/api/steward/charity-price-templates?state=all", "", "", false), 403)
-	denied := call("POST", "/api/steward/charity-price-templates", body, strings.Repeat("S", 22), false)
-	if denied.Code < 400 {
-		t.Fatal("steward created template", denied.Code)
-	}
+	require(call("GET", "/api/steward/charity-price-templates?state=all", "", "", false), 200)
+	require(call("POST", "/api/steward/charity-price-templates", body, strings.Repeat("S", 22), false), 201)
 	// The private history route uses the same real session and CSRF guard.
 	id := exec(`INSERT INTO donations(user_id,status,revision,description,created_at,updated_at,terminal_at) VALUES(?,'rejected',1,'history',?,?,?)`, f.userID, f.now, f.now, f.now)
 	exec(`INSERT INTO donation_handling(donation_id,state,revision,created_at,updated_at) VALUES(?,'legacy',1,?,?)`, id, f.now, f.now)

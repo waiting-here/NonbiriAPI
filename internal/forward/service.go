@@ -133,6 +133,7 @@ func (service *Service) Close() error {
 	if service == nil {
 		return nil
 	}
+	service.BeginShutdown()
 	service.lifecycle.Lock()
 	defer service.lifecycle.Unlock()
 	if service.closed {
@@ -143,6 +144,15 @@ func (service *Service) Close() error {
 		return service.safety.Close()
 	}
 	return nil
+}
+
+// BeginShutdown stops capacity waits before Close joins active request cleanup.
+func (service *Service) BeginShutdown() {
+	if service != nil {
+		if queue, ok := service.claims.(interface{ StopKeyWaiters() }); ok {
+			queue.StopKeyWaiters()
+		}
+	}
 }
 
 func (*Service) String() string { return "[forward service]" }
@@ -368,7 +378,7 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 			if interval == 0 {
 				interval = streamHeartbeatInterval
 			}
-			stream, executionContext = newStreamWriter(executionContext, writer, interval)
+			stream, executionContext = newStreamWriter(executionContext, writer, interval, true)
 			writer = stream
 			defer stream.cancel()
 		}

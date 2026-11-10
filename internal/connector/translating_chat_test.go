@@ -8,13 +8,13 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
 
-func TestContinuationCannotCrossProtocolCandidates(t *testing.T) {
+func TestNativeContinuationUsesTranslationOrChatPassthrough(t *testing.T) {
 	registry := NewDefaultRegistry()
 	for _, tc := range []struct {
 		kind    contract.Type
 		message string
 	}{
-		{contract.TypeGoogleGemini, `{"role":"assistant","content":"answer","extra_content":{"google":{"thought_signature":"YWJj"}}}`},
+		{contract.TypeGoogleGemini, `{"role":"assistant","content":"answer","extra_content":{"google":{"parts":[{"text":"answer","thoughtSignature":"YWJj"}]}}}`},
 		{contract.TypeOpenAIResponses, `{"role":"assistant","content":"answer","extra_content":{"openai":{"reasoning":[{"type":"reasoning","id":"rs_a","summary":[],"encrypted_content":"opaque"}]}}}`},
 	} {
 		request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"public","messages":[`+tc.message+`,{"role":"user","content":"continue"}]}`), 0)
@@ -23,9 +23,59 @@ func TestContinuationCannotCrossProtocolCandidates(t *testing.T) {
 		}
 		defer request.Clear()
 		for _, kind := range registry.Types() {
-			if got := registry.SupportsRequest(kind, request); got != (kind == tc.kind) {
+			passthrough := kind == contract.TypeOpenAICompatible || kind == contract.TypeOpenAIChatCompletions
+			if got := registry.SupportsRequest(kind, request); got != (kind == tc.kind || passthrough || tc.kind == contract.TypeGoogleGemini && kind.AISDKGateway()) {
 				t.Errorf("source %s target %s support %t", tc.kind, kind, got)
 			}
+		}
+	}
+}
+
+func TestGoogleChatSignaturesRemainOnRepresentableProtocols(t *testing.T) {
+	registry := NewDefaultRegistry()
+	for _, message := range []string{
+		`{"role":"assistant","content":"answer","extra_content":{"google":{"thought_signature":"YWJj"}}}`,
+		`{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"clock","arguments":"{}"},"extra_content":{"google":{"thought_signature":"YWJj"}}}]}`,
+	} {
+		history := message
+		if strings.Contains(message, `"tool_calls"`) {
+			history += `,{"role":"tool","tool_call_id":"call_1","content":"done"}`
+		}
+		history += `,{"role":"user","content":"continue"}`
+		request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"public","messages":[`+history+`]}`), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer request.Clear()
+		for _, kind := range []contract.Type{contract.TypeOpenAICompatible, contract.TypeOpenAIChatCompletions, contract.TypeGoogleGemini, contract.TypeAISDKGatewayV3, contract.TypeAISDKGatewayV4} {
+			if !registry.SupportsRequest(kind, request) {
+				t.Fatalf("Google Chat signature rejected by %s", kind)
+			}
+			if err := registry.CheckTargetRequest(contract.NewTarget(kind, "https://upstream.example", "gemini"), contract.OperationChatCompletions, request, nil, contract.AttemptPolicy{}); err != nil {
+				t.Fatalf("Google Chat signature preflight %s: %v", kind, err)
+			}
+		}
+		for _, kind := range []contract.Type{contract.TypeAnthropicCompatible, contract.TypeOpenAIResponses} {
+			if registry.SupportsRequest(kind, request) {
+				t.Fatalf("Google Chat signature admitted to an incompatible protocol %s", kind)
+			}
+		}
+	}
+}
+
+func TestChatPassthroughAcceptsOpaqueMessageAndToolExtensions(t *testing.T) {
+	registry := NewDefaultRegistry()
+	request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"public","messages":[{"role":"assistant","content":"answer","extra_content":{"google":{"thought_signature":"opaque","future_field":{"enabled":true}},"custom_vendor":{"version":7},"anthropic":{"signature":"opaque"},"openai":{"reasoning":[]},"gateway":{"content":[]}},"tool_calls":[{"id":"call_1","type":"function","function":{"name":"clock","arguments":"{}"},"extra_content":{"google":{"thought_signature":"opaque-tool","future_field":[1,2]},"custom_vendor":{"version":8}}}]},{"role":"tool","tool_call_id":"call_1","content":"done"},{"role":"user","content":"continue"}]}`), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	for _, kind := range []contract.Type{contract.TypeOpenAICompatible, contract.TypeOpenAIChatCompletions} {
+		if !registry.SupportsRequest(kind, request) {
+			t.Fatalf("opaque Chat extension rejected by %s", kind)
+		}
+		if err := registry.CheckTargetRequest(contract.NewTarget(kind, "https://upstream.example", "model"), contract.OperationChatCompletions, request, nil, contract.AttemptPolicy{}); err != nil {
+			t.Fatalf("opaque Chat extension preflight %s: %v", kind, err)
 		}
 	}
 }

@@ -568,6 +568,10 @@ dk.token_reserve,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.f
 dk.authorized_expires_at,dk.expires_at,dk.ended_reason,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.concurrency_overflow,'reject') END,
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.rpm_overflow,'reject') END,
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.concurrency_queue_limit,0) END,
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.rpm_queue_limit,0) END,
 k.revision,cooldown.rate_limited_until,COALESCE(sb.period,''),COALESCE(sb.source,''),sb.retry_at,sb.trial_claim_id IS NOT NULL,
 (SELECT COUNT(DISTINCT binding_id) FROM charity_binding_targets b WHERE b.donation_key_id=dk.id),
 dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision,
@@ -610,7 +614,7 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)
 			&channelName, &channelCategory, &tags, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &item.MaxConcurrency, &item.MaxRPM, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID, &item.CharityState); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &item.MaxConcurrency, &item.MaxRPM, &item.ConcurrencyOverflow, &item.RPMOverflow, &item.ConcurrencyQueueLimit, &item.RPMQueueLimit, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID, &item.CharityState); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.Projection = smartbackoff.DecodeProjection(bperiod, bsource, until, probing, now)

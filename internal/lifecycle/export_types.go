@@ -108,6 +108,7 @@ type LogSummaryExport struct {
 }
 
 type EndpointExport struct {
+	RerankPath     string               `json:"rerank_path"`
 	ConnectionID   *string              `json:"connection_id"`
 	NativeServices []string             `json:"native_services"`
 	RerankFormat   string               `json:"rerank_format"`
@@ -129,22 +130,26 @@ type EndpointOriginExport struct {
 }
 
 type EndpointKeyExport struct {
-	CredentialID      string   `json:"credential_id"`
-	CredentialVersion string   `json:"credential_version"`
-	GrantRevision     string   `json:"grant_revision"`
-	NativeServices    []string `json:"native_services"`
-	DiscoverySourceID *string  `json:"discovery_source_id"`
-	ID                string   `json:"id"`
-	DisplayHead       string   `json:"display_head"`
-	DisplayTail       string   `json:"display_tail"`
-	Note              string   `json:"note"`
-	Enabled           bool     `json:"enabled"`
-	ForceStoreFalse   bool     `json:"force_store_false"`
-	MaxConcurrency    int64    `json:"max_concurrency"`
-	MaxRPM            int64    `json:"max_rpm"`
-	SuspensionState   string   `json:"suspension_state"`
-	CreatedAt         int64    `json:"created_at"`
-	UpdatedAt         int64    `json:"updated_at"`
+	CredentialID          string   `json:"credential_id"`
+	CredentialVersion     string   `json:"credential_version"`
+	GrantRevision         string   `json:"grant_revision"`
+	NativeServices        []string `json:"native_services"`
+	DiscoverySourceID     *string  `json:"discovery_source_id"`
+	ID                    string   `json:"id"`
+	DisplayHead           string   `json:"display_head"`
+	DisplayTail           string   `json:"display_tail"`
+	Note                  string   `json:"note"`
+	Enabled               bool     `json:"enabled"`
+	ForceStoreFalse       bool     `json:"force_store_false"`
+	MaxConcurrency        int64    `json:"max_concurrency"`
+	MaxRPM                int64    `json:"max_rpm"`
+	ConcurrencyOverflow   string   `json:"concurrency_overflow"`
+	RPMOverflow           string   `json:"rpm_overflow"`
+	ConcurrencyQueueLimit int64    `json:"concurrency_queue_limit"`
+	RPMQueueLimit         int64    `json:"rpm_queue_limit"`
+	SuspensionState       string   `json:"suspension_state"`
+	CreatedAt             int64    `json:"created_at"`
+	UpdatedAt             int64    `json:"updated_at"`
 }
 
 type DiscoveryEvidenceExport struct {

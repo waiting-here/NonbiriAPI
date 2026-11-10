@@ -102,12 +102,16 @@ func RouteMethods(path string) []string { return matchAutomationRoute(path).meth
 func IsPersonalPath(path string) bool   { return matchAutomationRoute(path).personal }
 
 type importKey struct {
-	Secret          *string `json:"secret"`
-	Note            string  `json:"note"`
-	Enabled         *bool   `json:"enabled"`
-	ForceStoreFalse bool    `json:"force_store_false"`
-	MaxConcurrency  int64   `json:"max_concurrency"`
-	MaxRPM          int64   `json:"max_rpm"`
+	Secret                *string          `json:"secret"`
+	Note                  string           `json:"note"`
+	Enabled               *bool            `json:"enabled"`
+	ForceStoreFalse       bool             `json:"force_store_false"`
+	MaxConcurrency        int64            `json:"max_concurrency"`
+	MaxRPM                int64            `json:"max_rpm"`
+	ConcurrencyOverflow   overflowBehavior `json:"concurrency_overflow,omitempty"`
+	RPMOverflow           overflowBehavior `json:"rpm_overflow,omitempty"`
+	ConcurrencyQueueLimit queueLimit       `json:"concurrency_queue_limit,omitempty"`
+	RPMQueueLimit         queueLimit       `json:"rpm_queue_limit,omitempty"`
 }
 type importInput struct {
 	OwnershipConfirmed bool        `json:"ownership_confirmed"`
@@ -136,12 +140,16 @@ type batchResult struct {
 
 func canonicalImport(input importInput) ([]byte, error) {
 	type key struct {
-		Secret          string `json:"secret"`
-		Note            string `json:"note"`
-		Enabled         bool   `json:"enabled"`
-		ForceStoreFalse bool   `json:"force_store_false"`
-		MaxConcurrency  int64  `json:"max_concurrency"`
-		MaxRPM          int64  `json:"max_rpm"`
+		Secret                string           `json:"secret"`
+		Note                  string           `json:"note"`
+		Enabled               bool             `json:"enabled"`
+		ForceStoreFalse       bool             `json:"force_store_false"`
+		MaxConcurrency        int64            `json:"max_concurrency"`
+		MaxRPM                int64            `json:"max_rpm"`
+		ConcurrencyOverflow   overflowBehavior `json:"concurrency_overflow,omitempty"`
+		RPMOverflow           overflowBehavior `json:"rpm_overflow,omitempty"`
+		ConcurrencyQueueLimit queueLimit       `json:"concurrency_queue_limit,omitempty"`
+		RPMQueueLimit         queueLimit       `json:"rpm_queue_limit,omitempty"`
 	}
 	out := struct {
 		OwnershipConfirmed bool  `json:"ownership_confirmed"`
@@ -151,7 +159,7 @@ func canonicalImport(input importInput) ([]byte, error) {
 		if v.Secret == nil {
 			return nil, errInvalid
 		}
-		out.Keys[i] = key{*v.Secret, v.Note, enabled(v.Enabled), v.ForceStoreFalse, v.MaxConcurrency, v.MaxRPM}
+		out.Keys[i] = key{*v.Secret, v.Note, enabled(v.Enabled), v.ForceStoreFalse, v.MaxConcurrency, v.MaxRPM, v.ConcurrencyOverflow, v.RPMOverflow, v.ConcurrencyQueueLimit, v.RPMQueueLimit}
 	}
 	return json.Marshal(out)
 }

@@ -625,7 +625,7 @@ test.describe('administrator policy changes and subsequent steward review', () =
     }
   });
 
-  test('full steward reads sources and activity diagnostics and edits rules but not thresholds or economy', async ({
+  test('full steward reads sources and activity diagnostics and edits rules and thresholds without economy access', async ({
     browser,
   }) => {
     const f = fixture();
@@ -645,20 +645,15 @@ test.describe('administrator policy changes and subsequent steward review', () =
         .getByRole('tablist', { name: 'Abuse audit', exact: true })
         .getByRole('tab', { name: 'Thresholds', exact: true })
         .click();
-      await expect(page.getByLabel('Threshold (%)', { exact: true })).toBeDisabled();
+      await expect(page.getByLabel('Threshold (%)', { exact: true })).toBeEnabled();
       await expect(page.getByLabel('Threshold (%)', { exact: true })).toHaveValue('75');
-      await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
-      await expect(
-        page.getByText('Only administrators can change thresholds.', { exact: true }),
-      ).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
       const configResponse = await api(context, '/api/steward/abuse-audit/config');
       expect(configResponse.status()).toBe(200);
       const config = (await configResponse.json()) as Record<string, unknown>;
-      const denied = await api(context, '/api/steward/abuse-audit/config', false, 'PUT', {
-        ...config,
-        threshold_percent: 90,
-      });
-      expect(denied.status()).toBe(403);
+      const updated = await api(context, '/api/steward/abuse-audit/config', false, 'PUT', config);
+      expect(updated.status()).toBe(200);
+      expect((await updated.json()).threshold_percent).toBe(75);
       const economy = await api(context, '/admin/api/economy-audit/summary', true);
       expect(economy.status()).toBe(401);
       expect(await economy.text()).not.toContain('"inventory"');

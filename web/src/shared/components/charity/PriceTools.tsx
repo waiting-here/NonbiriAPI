@@ -25,6 +25,7 @@ import { PriceConfigSummary } from './PriceConfigSummary';
 
 interface PriceToolsProps {
   role: CharityRole;
+  canManageTemplates?: boolean;
   onApply: (config: CharityPriceConfig, name: string, revision: string) => void;
   onCapabilityLoss?: () => void;
 }
@@ -197,7 +198,12 @@ function ModelPriceReference({ role, onApply, onCapabilityLoss }: PriceToolsProp
   );
 }
 
-function PriceTemplates({ role, onApply, onCapabilityLoss }: PriceToolsProps) {
+function PriceTemplates({
+  role,
+  canManageTemplates = role === 'admin',
+  onApply,
+  onCapabilityLoss,
+}: PriceToolsProps) {
   const { t } = useTranslation();
   const [, setParams] = useSearchState();
   const [q, setQ] = useState('');
@@ -242,7 +248,7 @@ function PriceTemplates({ role, onApply, onCapabilityLoss }: PriceToolsProps) {
           if (validManagementSearch(draft)) setQ(draft.trim());
         }}
       />
-      {role === 'admin' ? (
+      {canManageTemplates ? (
         <Field label={t('common.workflow.templateState')}>
           {(props) => (
             <select
@@ -326,7 +332,7 @@ function PriceTemplates({ role, onApply, onCapabilityLoss }: PriceToolsProps) {
           </Button>
         </section>
       ) : null}
-      {role === 'admin' ? (
+      {canManageTemplates ? (
         <Button
           type="button"
           onClick={() => {

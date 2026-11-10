@@ -657,6 +657,19 @@ func (service *Service) workerLoop(ctx context.Context, done chan struct{}) {
 }
 
 func (service *Service) expireRankFactsBatch(ctx context.Context, now int64) (int, error) {
+	if now < 0 || now > 253402300799 {
+		return 0, ErrInvalidRequest
+	}
+	var due bool
+	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
+SELECT 1 FROM game_rps_rank_facts WHERE aggregate_applied=1 AND expires_at<=?)`, now).Scan(&due); err != nil {
+		return 0, classifyDB(err)
+	}
+	if !due {
+		return 0, nil
+	}
+	// Release the reader before acquiring the writer, then select the due
+	// facts again in the existing atomic aggregate-update transaction.
 	tx, err := service.database.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, classifyDB(err)

@@ -267,6 +267,9 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				return failure("invalid upstream tool delta", upstreamerror.Detail{})
 			}
 			tool.args.WriteString(args)
+			if mergeContinuationMetadata(parts[tool.partIndex], part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
+			}
 			delta = toolDelta(tool, "", "", args)
 		case "tool-input-end":
 			id, ok := text(part["id"])
@@ -275,6 +278,9 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 				return failure("invalid upstream tool end", upstreamerror.Detail{})
 			}
 			tool.ended = true
+			if mergeContinuationMetadata(parts[tool.partIndex], part["providerMetadata"]) != nil {
+				return failure("upstream continuation metadata was invalid", upstreamerror.Detail{})
+			}
 		case "tool-call":
 			call, err := parseToolCall(part)
 			if err != nil {

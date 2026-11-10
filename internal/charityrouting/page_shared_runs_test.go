@@ -119,9 +119,9 @@ WHERE u.donation_key_id=?3`, first.SourceRevisionID, second.SourceRevisionID, ke
 		defer rows.Close()
 		var got []string
 		for rows.Next() {
-			var candidateKey, donation, automatic, manual, concurrency, rpm int64
-			var kind, base, head, tail, name string
-			if err := rows.Scan(&candidateKey, &donation, &kind, &base, &head, &tail, &name, &automatic, &manual, &concurrency, &rpm); err != nil {
+			var candidateKey, donation, automatic, manual, concurrency, rpm, concurrencyQueue, rpmQueue int64
+			var kind, base, head, tail, name, concurrencyOverflow, rpmOverflow string
+			if err := rows.Scan(&candidateKey, &donation, &kind, &base, &head, &tail, &name, &automatic, &manual, &concurrency, &rpm, &concurrencyOverflow, &rpmOverflow, &concurrencyQueue, &rpmQueue); err != nil {
 				t.Fatal(err)
 			}
 			if candidateKey != keyID || donation != donationID {

@@ -435,14 +435,18 @@ func compilePrompt(raw []byte, model *gatewaypolicy.Model) ([]any, error) {
 				fn, fnErr := parseObject(call["function"])
 				name, nameOK := text(fn["name"])
 				args, argsOK := text(fn["arguments"])
-				if err != nil || fnErr != nil || !only(call, "id", "type", "function") || !only(fn, "name", "arguments") || !idOK || !opaque(id, 512) || !kindOK || kind != "function" || !nameOK || !opaque(name, 64) || !argsOK || calls[id] != "" {
+				if err != nil || fnErr != nil || !only(call, "id", "type", "function", "extra_content") || !only(fn, "name", "arguments") || !idOK || !opaque(id, 512) || !kindOK || kind != "function" || !nameOK || !opaque(name, 64) || !argsOK || calls[id] != "" {
 					return nil, errRequest
 				}
 				if _, err := parseObject([]byte(args)); err != nil {
 					return nil, errRequest
 				}
+				part := map[string]any{"type": "tool-call", "toolCallId": id, "toolName": name, "input": json.RawMessage(args)}
+				if err := applyToolSignature(call["extra_content"], part); err != nil {
+					return nil, err
+				}
 				calls[id] = name
-				parts = append(parts, map[string]any{"type": "tool-call", "toolCallId": id, "toolName": name, "input": json.RawMessage(args)})
+				parts = append(parts, part)
 			}
 		}
 		parts, err = replayContinuation(message["extra_content"], parts)

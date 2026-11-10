@@ -33,7 +33,7 @@ func LoadApprovedUsesTx(ctx context.Context, tx *sql.Tx, donationKeyIDs []int64)
 func approvedUsesQuery(placeholders, filter string) string {
 	// Bound materialized grant facts to these members' approved revisions;
 	// their approved versions may differ from the keys' current self grants.
-	return "SELECT dk.id,u.id,u.revision,COALESCE(u.current_approved_revision_id,0),COALESCE(ur.id,0),COALESCE(ur.use_revision,0),u.native_service_bit,u.enabled,u.discovery_enabled,COALESCE(ur.discovery_source_revision_id,0),COALESCE(ur.review_state,''),COALESCE(d.user_id,0),COALESCE(dk.endpoint_key_id,0),EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id),(dk.ended_at IS NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL),EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1)," +
+	return "SELECT dk.id,u.id,u.revision,COALESCE(u.current_approved_revision_id,0),COALESCE(ur.id,0),COALESCE(ur.use_revision,0),u.native_service_bit,u.enabled,u.discovery_enabled,COALESCE(ur.discovery_source_revision_id,0),COALESCE(ur.review_state,''),COALESCE(u.rerank_path_override,ur.rerank_path,''),COALESCE(d.user_id,0),COALESCE(dk.endpoint_key_id,0),EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id),(dk.ended_at IS NULL AND d.status IN ('pending','approved') AND d.terminal_at IS NULL),EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1)," +
 		grantReadColumns + ` FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN donation_use_revisions ur ON ur.id=u.current_approved_revision_id AND ur.use_id=u.id
 LEFT JOIN (SELECT * FROM endpoint_grant_authorizations WHERE grant_revision_id IN (
@@ -78,8 +78,8 @@ func loadApprovedUsesTx(ctx context.Context, tx *sql.Tx, ids []int64, service *c
 		var row grantRow
 		var approvedRowID, serviceBit, ownerID, keyID int64
 		var enabled, discoveryEnabled, membership, lifecycleLive, reviewRequired int
-		var state string
-		destinations := []any{&use.DonationKeyID, &use.UseID, &use.UseRevision, &use.ApprovedRevisionID, &approvedRowID, &use.ApprovedRevision, &serviceBit, &enabled, &discoveryEnabled, &use.DiscoverySourceRevisionID, &state, &ownerID, &keyID, &membership, &lifecycleLive, &reviewRequired}
+		var state, rerankPath string
+		destinations := []any{&use.DonationKeyID, &use.UseID, &use.UseRevision, &use.ApprovedRevisionID, &approvedRowID, &use.ApprovedRevision, &serviceBit, &enabled, &discoveryEnabled, &use.DiscoverySourceRevisionID, &state, &rerankPath, &ownerID, &keyID, &membership, &lifecycleLive, &reviewRequired}
 		if err := rows.Scan(append(destinations, row.destinations()...)...); err != nil {
 			return nil, err
 		}
@@ -122,6 +122,14 @@ func loadApprovedUsesTx(ctx context.Context, tx *sql.Tx, ids []int64, service *c
 				return nil, ErrUnavailable
 			}
 			continue
+		}
+		if use.NativeService == connectorcontract.NativeServiceRerank {
+			if connectorcontract.ValidateRerankPath(rerankPath) != nil || rerankPath != "" && !connectorcontract.SupportsRerankPath(grant.ConfiguredType) {
+				return nil, ErrInvariant
+			}
+			grant.RerankPath = rerankPath
+		} else {
+			grant.RerankPath = ""
 		}
 		use.Grant = grant
 		result[use.DonationKeyID] = append(result[use.DonationKeyID], use)

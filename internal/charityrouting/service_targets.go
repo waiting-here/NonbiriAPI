@@ -94,7 +94,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				BindingID: candidate.BindingID, TargetID: candidate.Authorization.TargetID, TargetRevision: candidate.Authorization.TargetRevision,
 				CredentialID: grant.CredentialID, CredentialVersionID: grant.CredentialVersionID, CredentialVersion: grant.CredentialVersion,
 				GrantRevisionID: grant.GrantRevisionID, GrantRevision: grant.GrantRevision,
-				ConfiguredType: grant.ConfiguredType, RerankFormat: grant.RerankFormat, NativeService: use.NativeService,
+				ConfiguredType: grant.ConfiguredType, RerankFormat: grant.RerankFormat, RerankPath: grant.RerankPath, NativeService: use.NativeService,
 				UseID: use.UseID, UseRevisionID: use.ApprovedRevisionID, UseRevision: use.ApprovedRevision,
 			}
 			result = append(result, candidate)

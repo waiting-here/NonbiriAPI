@@ -2079,8 +2079,7 @@
           "already_donated": "Already included in another donation",
           "security_processing": "Security processing is still in progress",
           "unavailable": "The credential is deleted or unavailable"
-        },
-        "keyLimits": "Concurrency {{concurrency}} · RPM {{rpm}}"
+        }
       },
       "tabs": {
         "models": "Shared models",
@@ -2185,7 +2184,9 @@
       "submitDonation": "Submit a charity donation",
       "donationNoticeTitle": "Donation notice",
       "donationNoticeDefault": "Thank you for sharing spare API resources. Before submitting, confirm that you own these keys or have permission to share them; the connected service may charge you while they are shared. You can set a separate end time for each key and review or stop sharing here at any time.",
-      "sharedKeyLimitsNotice": "Administrators and authorized stewards can adjust this key's concurrency and requests-per-minute limits. Personal and charity calls share these limits, so changes also affect your personal calls.",
+      "sharedKeyLimitsNotice": "You, administrators and authorized stewards can adjust this key’s concurrency, RPM, overflow behavior and queue limits. Personal and charity calls share these settings.",
+      "editSharedKeyLimits": "Edit shared key limits",
+      "backToDonation": "Back to donation details",
       "mutationResponseUnknown": "The action may have completed, but its result could not be confirmed yet.",
       "mutationConflictRefreshed": "The resource changed before this action completed.",
       "mutationReconciled": "The latest state has been loaded. Review it before deciding whether to act again.",

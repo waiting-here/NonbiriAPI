@@ -24,7 +24,8 @@ func TestLogReadPhasesSeparateConnectionWaitAndQueryWork(t *testing.T) {
 	waitCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	defer cancel()
 	pattern := "CHARITY-LOGICAL"
-	filter := ListFilter{CharityModel: &pattern, Page: &pagination.Request{Page: 1, Size: 10}}
+	status, from, to := 200, int64(0), int64(1_000_000)
+	filter := ListFilter{CharityModel: &pattern, Status: &status, From: &from, To: &to, Page: &pagination.Request{Page: 1, Size: 10}}
 	if _, err := f.repo.ListAdmin(waitCtx, filter); err == nil {
 		t.Fatal("blocked reader unexpectedly succeeded")
 	}

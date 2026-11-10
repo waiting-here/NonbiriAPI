@@ -44,6 +44,25 @@ Sharing a `/rerank` path does not make these payload formats interchangeable. Ga
 v3 and v4 each offer text, image generation, embeddings and rerank. Select the
 upstream's actual version; there is no automatic probing or version fallback.
 
+HTTP rerank entries have an optional **Custom rerank path** in the advanced
+rerank settings. Enter an absolute path on the entry's existing origin, such as
+`/compatible-api/v1/reranks` for Aliyun Bailian's OpenAI-compatible text rerank,
+and check the displayed final URL. Leaving it empty uses the base URL followed
+by `/rerank`. Other operations keep their existing paths. Full URLs, query
+strings, fragments and ambiguous path segments are rejected. The setting is
+unavailable for Gateway's native RPC protocol and does not convert a provider's
+payload format.
+
+Donation submission or rotation captures the entry's rerank path. Later edits
+to the personal entry do not change that donation snapshot. Administrators and
+stewards with permission to manage the donated use can set a separate charity
+override from its approval or management details. They can use the saved donation
+setting, the default suffix or a custom path; the final charity URL is shown.
+These changes do not affect the donor's personal calls. Existing ownership,
+approval and outbound protections still apply. A configured Cloudflare route
+continues to enforce its source-path prefix; a custom path outside that prefix
+is rejected rather than sent directly.
+
 System One is a separate **Typesafe System One** protocol in **Add entry**.
 Its service is `/v1/systemone`; the **Decisions** native service in the
 OpenAI-compatible protocol uses `/v1/decisions`. Choose the applicable service
@@ -110,6 +129,30 @@ Choose **Use this preset** to select that entry alone. Saving submits the select
 protocol's full service set. Switching back to **Custom** preserves the address,
 protocol and note. Saving remains a separate action. Empty or unavailable suggestions do not block custom
 creation, and adopting a preset does not attach credentials or approve donations.
+
+## Key capacity and queues
+
+Each saved key has shared concurrency and requests-per-minute limits. For each
+limit, choose **Reject request** (the default) or **Wait in queue**. Queue
+length is optional; leaving it empty allows waiting without that length cap.
+A full queue returns a platform HTTP 429 before sending the new request upstream.
+If both limits block a request, both must allow queueing, and both applicable
+caps are checked against the key's total number of waiting requests.
+
+Personal and charity calls use one FIFO queue for the key. Donors can edit their
+own key from its donation details; administrators and stewards with key-management
+permission can edit the same settings. These edits affect both kinds of calls.
+Waiting requests do not consume key concurrency or RPM slots, but retain the
+request's total timeout and other platform admission limits. Cancellation or
+shutdown ends the wait; requests are not replayed after a restart.
+
+Cache-balanced routing preserves an existing valid session binding by waiting
+on its key when necessary. Other strategies, and cache-balanced requests without
+a valid binding, first try connections that can send immediately. An unavailable
+preferred binding or full queue also falls back to those connections. If none can
+send immediately, the strategy selects an eligible queue. Once a
+request joins a queue, it does not move merely because another key becomes free.
+FIFO controls dispatch permission, not upstream response order.
 
 ## Key changes and donations
 

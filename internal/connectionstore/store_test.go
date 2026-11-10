@@ -5,34 +5,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"testing"
+
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
-	_ "modernc.org/sqlite"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func connectionFixture(t *testing.T) (*sql.DB, *sql.Tx) {
 	t.Helper()
-	body, err := os.ReadFile(filepath.Join("..", "db", "generation_two.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	database, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	database.SetMaxOpenConns(1)
-	t.Cleanup(func() { database.Close() })
-	if _, err := database.Exec(string(body) + db.ServiceKeyScopeSQL + db.ManagementOperationsSQL + strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER")[0]); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		t.Fatal(err)
-	}
+	database := openConnectionFixtureDatabase(t)
 	tx, err := database.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)

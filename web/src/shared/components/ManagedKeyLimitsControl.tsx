@@ -13,8 +13,15 @@ import { useCharityModelScope } from './charityModelScopeContext';
 import { KeyLimitFields, KeyLimitSummary } from './KeyRoutingLimits';
 import { ErrorState } from './States';
 import { Button } from './ui/Button';
+import {
+  keyQueueDraft,
+  keyQueueChanges,
+  type KeyQueueConfig,
+  type KeyQueueDraft,
+  type KeyQueueProjection,
+} from '@shared/operations/keyQueue';
 
-interface LimitsChange {
+interface LimitsChange extends Partial<KeyQueueConfig> {
   expected_revision: string;
   expected_key_limits_revision: string;
   max_concurrency?: number;
@@ -26,6 +33,7 @@ interface LimitsBaseline {
   keyRevision: string | null;
   concurrency: number | null | undefined;
   rpm: number | null | undefined;
+  queue: KeyQueueProjection;
 }
 
 export interface ManagedKeyLimitsAuthority {
@@ -41,23 +49,27 @@ const authorityBaseline = ({
   keyRevision: item.key_limits_revision,
   concurrency: item.max_concurrency,
   rpm: item.max_rpm,
+  queue: item,
 });
 
 interface LimitsDraft {
   baseline: LimitsBaseline;
   concurrency: string;
   rpm: string;
+  queue: KeyQueueDraft;
 }
 
 const newDraft = (baseline: LimitsBaseline): LimitsDraft => ({
   baseline,
   concurrency: baseline.concurrency?.toString() ?? '',
   rpm: baseline.rpm?.toString() ?? '',
+  queue: keyQueueDraft(baseline.queue),
 });
 
 const isDirty = (draft: LimitsDraft) =>
   draft.concurrency !== (draft.baseline.concurrency?.toString() ?? '') ||
-  draft.rpm !== (draft.baseline.rpm?.toString() ?? '');
+  draft.rpm !== (draft.baseline.rpm?.toString() ?? '') ||
+  Object.keys(keyQueueChanges(draft.queue, draft.baseline.queue)).length > 0;
 
 const validLimit = (value: string) =>
   value.trim() !== '' &&
@@ -86,8 +98,9 @@ export function ManagedKeyLimitsControl({
       keyRevision: item.key_limits_revision,
       concurrency: item.max_concurrency,
       rpm: item.max_rpm,
+      queue: item,
     }),
-    [donation.revision, item.key_limits_revision, item.max_concurrency, item.max_rpm],
+    [donation.revision, item],
   );
   const [draft, setDraft] = useState(() => newDraft(incoming));
   const [observed, setObserved] = useState(incoming);
@@ -95,7 +108,7 @@ export function ManagedKeyLimitsControl({
     setObserved(incoming);
     if (!isDirty(draft)) setDraft(newDraft(incoming));
   }
-  const { baseline, concurrency, rpm } = draft;
+  const { baseline, concurrency, rpm, queue } = draft;
   const [readError, setReadError] = useState<unknown>(null);
   const [reading, setReading] = useState(false);
   const save = useRetainedOperation<LimitsChange, unknown>(
@@ -134,8 +147,16 @@ export function ManagedKeyLimitsControl({
   const conflict = save.outcome === 'conflict';
   const refreshFailed = save.outcome === 'refresh-failed';
   const locked = unavailable || lost || reading || save.isPending || unknown || refreshFailed;
-  const valid = validLimit(concurrency) && validLimit(rpm);
-  const changed = Number(concurrency) !== baseline.concurrency || Number(rpm) !== baseline.rpm;
+  const valid =
+    validLimit(concurrency) &&
+    validLimit(rpm) &&
+    validLimit(queue.concurrency_queue_limit || '0') &&
+    validLimit(queue.rpm_queue_limit || '0');
+  const queueChanges = keyQueueChanges(queue, baseline.queue);
+  const changed =
+    Number(concurrency) !== baseline.concurrency ||
+    Number(rpm) !== baseline.rpm ||
+    Object.keys(queueChanges).length > 0;
   const reread = async () => {
     setReading(true);
     setReadError(null);
@@ -152,11 +173,16 @@ export function ManagedKeyLimitsControl({
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   return (
     <section className="ops-stack">
-      <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} />
+      <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} queue={item} />
       <p className="muted">{t('common.keyLimits.managedHint')}</p>
       <KeyLimitFields
         concurrency={concurrency}
         rpm={rpm}
+        queue={queue}
+        onQueue={(value) => {
+          if (!conflict) save.reset();
+          setDraft((current) => ({ ...current, queue: value }));
+        }}
         disabled={locked}
         onConcurrency={(value) => {
           if (!conflict) save.reset();
@@ -204,6 +230,7 @@ export function ManagedKeyLimitsControl({
             save.mutate({
               expected_revision: baseline.donationRevision,
               expected_key_limits_revision: baseline.keyRevision,
+              ...queueChanges,
               ...(Number(concurrency) !== baseline.concurrency
                 ? { max_concurrency: Number(concurrency) }
                 : {}),

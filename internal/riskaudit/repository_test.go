@@ -168,17 +168,20 @@ func TestRepositoryAuthoritativeSchemaPermissionsRulesAndSources(t *testing.T) {
 	if _, err := f.repository.GetConfig(ctx, Actor{Admin: true, UserID: ordinary.UserID}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("administrator flag bypassed final authority")
 	}
-	for _, actor := range []Actor{trainee, ordinary, {}} {
+	for _, actor := range []Actor{ordinary, {}} {
 		if _, err := f.repository.GetConfig(ctx, actor); !errors.Is(err, ErrForbidden) {
 			t.Fatalf("unprivileged actor: %v", err)
 		}
+	}
+	if _, err := f.repository.GetConfig(ctx, trainee); !errors.Is(err, authz.ErrPermissionDenied) {
+		t.Fatalf("unprivileged trainee: %v", err)
 	}
 	config, err := f.repository.GetConfig(ctx, steward)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.repository.UpdateConfig(ctx, steward, config); !errors.Is(err, ErrForbidden) {
-		t.Fatal("steward changed thresholds")
+	if _, err = f.repository.UpdateConfig(ctx, trainee, config); !errors.Is(err, authz.ErrPermissionDenied) {
+		t.Fatal("unprivileged trainee changed thresholds", err)
 	}
 	rule, err := f.repository.PutRule(ctx, steward, Rule{Name: "Example application", Status: "suspected", Enabled: true, Conditions: []Condition{{Field: "user_agent", Operator: "prefix", Value: "ExampleClient/"}}, EvidenceNote: "Self-reported identifier"}, true)
 	if err != nil {

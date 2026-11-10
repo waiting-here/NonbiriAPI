@@ -116,7 +116,7 @@ func (source adapterTestResources) ExportLifecycleResources(
 		Endpoints: []resources.LifecycleEndpoint{{
 			ID: "2", Note: value, ConnectorType: "ai-sdk-gateway-v4",
 			Origin: resources.EndpointOrigin{Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel"},
-			Keys:   []resources.LifecycleEndpointKey{},
+			Keys:   []resources.LifecycleEndpointKey{{ID: "4", ConcurrencyOverflow: "queue", RPMOverflow: "reject", ConcurrencyQueueLimit: 7, RPMQueueLimit: 8}},
 		}},
 		CatalogPairs: []resources.LifecycleCatalogPair{}, Models: []resources.LifecycleModel{{ID: "3", SessionHeaders: []sessionheader.Config{{Name: "x-session", IdleSeconds: 0, Format: "opencode_session"}}}},
 	}, err
@@ -234,6 +234,9 @@ func TestAccountResourcesUsesOneFrozenSnapshot(t *testing.T) {
 	}
 	if len(models) != 1 || len(models[0].SessionHeaders) != 1 || models[0].SessionHeaders[0] != (lifecycle.SessionHeaderExport{Name: "x-session", IdleSeconds: 0, Format: "opencode_session"}) {
 		t.Fatal(models)
+	}
+	if len(endpoints) != 1 || len(endpoints[0].Keys) != 1 || endpoints[0].Keys[0].ConcurrencyOverflow != "queue" || endpoints[0].Keys[0].RPMOverflow != "reject" || endpoints[0].Keys[0].ConcurrencyQueueLimit != 7 || endpoints[0].Keys[0].RPMQueueLimit != 8 {
+		t.Fatalf("export adapter lost shared queue configuration: %+v", endpoints)
 	}
 	wantCalls := []string{"identity", "logs", "resources", "issues"}
 	if len(state.exportCalls) != len(wantCalls) {

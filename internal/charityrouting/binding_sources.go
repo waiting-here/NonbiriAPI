@@ -86,7 +86,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 	query := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + from + ` AND d.id>? GROUP BY d.id,d.description ORDER BY d.id LIMIT ?`
 	args = append(args, afterID, limit+1)
 	if donationID != 0 {
-		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
+		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0),d.description,d.review_note` + from + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
 		args = scopeArgs
 		args = append(args, donationID, afterID, limit+1)
 	}
@@ -109,7 +109,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 			donations = append(donations, entry)
 		} else {
 			var entry BindingSourceKey
-			if err := rows.Scan(&id, &entry.Source.ConnectorType, &entry.Source.CanonicalBaseURL, &entry.Source.DisplayHead, &entry.Source.DisplayTail, &entry.Note, &entry.Source.MaxConcurrency, &entry.Source.MaxRPM, &entry.DonationNote, &entry.ApprovalNote); err != nil {
+			if err := rows.Scan(&id, &entry.Source.ConnectorType, &entry.Source.CanonicalBaseURL, &entry.Source.DisplayHead, &entry.Source.DisplayTail, &entry.Note, &entry.Source.MaxConcurrency, &entry.Source.MaxRPM, &entry.Source.ConcurrencyOverflow, &entry.Source.RPMOverflow, &entry.Source.ConcurrencyQueueLimit, &entry.Source.RPMQueueLimit, &entry.DonationNote, &entry.ApprovalNote); err != nil {
 				return nil, nil, 0, err
 			}
 			entry.DonationKeyID = strconv.FormatInt(id, 10)

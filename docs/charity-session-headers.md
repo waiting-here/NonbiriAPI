@@ -24,7 +24,7 @@ Managed values replace same-named fixed and forwarded headers. They cannot overr
 
 ## Configuration API
 
-Owner personal-model create, PATCH and detail DTOs and authorized management charity-model DTOs include `session_headers`. Existing ownership, model-setting authority, revision checks, strict JSON parsing and idempotency rules apply. Steward changes require the applicable `charity.create` or `charity.model_settings` grant and current source/model scope. Authorized CallerKey model reads include the saved configuration under their existing scope; this feature adds no CallerKey write route. Steward charity request adaptation remains read-only even though model settings can be edited.
+Owner personal-model create, PATCH and detail DTOs and authorized management charity-model DTOs include `session_headers`. Existing ownership, model-setting authority, revision checks, strict JSON parsing and idempotency rules apply. Steward changes require the applicable `charity.create` or `charity.model_settings` grant and current source/model scope. Authorized CallerKey model reads include the saved configuration under their existing scope; this feature adds no CallerKey write route. The separate charity request-adaptation editor requires `charity.request_adaptation` for steward writes.
 
 ```json
 {

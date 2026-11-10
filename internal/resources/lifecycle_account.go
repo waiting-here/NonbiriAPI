@@ -30,6 +30,7 @@ type LifecycleEndpoint struct {
 	ConnectionID   *string
 	NativeServices []string
 	RerankFormat   string
+	RerankPath     string
 	ID             string
 	ConnectorType  string
 	BaseURL        string
@@ -53,6 +54,10 @@ type LifecycleEndpointKey struct {
 	ForceStoreFalse                                bool
 	MaxConcurrency                                 int64
 	MaxRPM                                         int64
+	ConcurrencyOverflow                            string
+	RPMOverflow                                    string
+	ConcurrencyQueueLimit                          int64
+	RPMQueueLimit                                  int64
 	SuspensionState                                string
 	CreatedAt                                      int64
 	UpdatedAt                                      int64
@@ -150,7 +155,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_key_current_credentials k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
+       e.connection_id,e.native_service_mask,e.rerank_format,e.rerank_path,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e
 WHERE e.user_id=?
 ORDER BY e.id
@@ -188,7 +193,7 @@ LIMIT ?`, userID, limit+1)
 			return empty, err
 		}
 		item := LifecycleEndpoint{
-			ConnectionID: endpoint.ConnectionID, NativeServices: nativeServiceStrings(endpoint.NativeServices), RerankFormat: string(endpoint.RerankFormat),
+			ConnectionID: endpoint.ConnectionID, NativeServices: nativeServiceStrings(endpoint.NativeServices), RerankFormat: string(endpoint.RerankFormat), RerankPath: endpoint.RerankPath,
 			ID: endpoint.ID, ConnectorType: endpoint.ConnectorType, BaseURL: endpoint.BaseURL,
 			Origin: endpoint.Origin, Note: endpoint.Note, Enabled: endpoint.Enabled, CreatedAt: endpoint.CreatedAt,
 			UpdatedAt: endpoint.UpdatedAt, Keys: make([]LifecycleEndpointKey, 0, len(keys)),
@@ -199,6 +204,7 @@ LIMIT ?`, userID, limit+1)
 				ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail, Note: key.Note,
 				Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse,
 				MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM,
+				ConcurrencyOverflow: key.ConcurrencyOverflow, RPMOverflow: key.RPMOverflow, ConcurrencyQueueLimit: key.ConcurrencyQueueLimit, RPMQueueLimit: key.RPMQueueLimit,
 				SuspensionState: key.SuspensionState, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
 			})
 			if len(empty.CatalogPairs) == limit {

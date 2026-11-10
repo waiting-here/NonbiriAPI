@@ -47,6 +47,7 @@ func (v *optionalTime) UnmarshalJSON(data []byte) error {
 }
 
 type endpointInput struct {
+	RerankPath     string                 `json:"rerank_path,omitempty"`
 	NativeServices nativeServiceSelection `json:"native_services,omitempty"`
 	RerankFormat   rerankSelection        `json:"rerank_format,omitempty"`
 	ConnectorType  string                 `json:"connector_type"`
@@ -65,6 +66,10 @@ type keyInput struct {
 	ForceStoreFalse         bool                      `json:"force_store_false"`
 	MaxConcurrency          int64                     `json:"max_concurrency"`
 	MaxRPM                  int64                     `json:"max_rpm"`
+	ConcurrencyOverflow     overflowBehavior          `json:"concurrency_overflow,omitempty"`
+	RPMOverflow             overflowBehavior          `json:"rpm_overflow,omitempty"`
+	ConcurrencyQueueLimit   queueLimit                `json:"concurrency_queue_limit,omitempty"`
+	RPMQueueLimit           queueLimit                `json:"rpm_queue_limit,omitempty"`
 	AuthorizedExpiresAt     *int64                    `json:"authorized_expires_at"`
 	ExpiresAt               optionalTime              `json:"expires_at"`
 	PriceLimit              *string                   `json:"price_limit"`

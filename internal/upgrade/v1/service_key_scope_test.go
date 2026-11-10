@@ -164,6 +164,7 @@ func TestServiceKeyScopeSchema39UpgradePreservesApprovedPendingAndCatalog(t *tes
 	}
 	// A source retained only by approved uses still needs pair isolation.
 	hostileMustExec(t, store.DB(), `DELETE FROM endpoint_key_discovery_sources`)
+	columns := legacyConnectionColumns(t, store.DB())
 	preserved := gatewayRows(t, store.DB())
 	assertRetainedManifest(t, store.DB(), db.Schema39ManifestHash)
 	store.Close()
@@ -205,7 +206,7 @@ func TestServiceKeyScopeSchema39UpgradePreservesApprovedPendingAndCatalog(t *tes
 		t.Fatal(err)
 	}
 	defer store.Close()
-	after := gatewayRows(t, store.DB())
+	after := gatewayRowsWithColumns(t, store.DB(), columns)
 	for _, table := range []string{"endpoint_keys", "models", "model_bindings", "model_binding_targets", "donations", "donation_keys", "donation_key_memberships", "donation_uses", "donation_quota_rules", "donation_quota_epochs", "donation_quota_periods"} {
 		if !reflect.DeepEqual(preserved[table], after[table]) {
 			t.Fatalf("migration changed stable identities, ordering or budgets in %s", table)

@@ -430,6 +430,7 @@ test('administrator mainstream channel CRUD keeps channel details and archive co
   await page.getByLabel('Channel name').fill('Fixture channel');
   await page.getByRole('combobox', { name: 'Category', exact: true }).selectOption('api_platform');
   await page.getByRole('button', { name: connectionCopy.addEntry, exact: true }).click();
+  await page.getByText(connectionCopy.protocolSettings, { exact: true }).click();
   await page
     .getByRole('combobox', { name: connectionCopy.protocol, exact: true })
     .selectOption('anthropic-compatible');
@@ -1392,7 +1393,7 @@ test('administrator charity provenance grouping and report lineage expose safe d
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
-  await page.getByRole('tab', { name: 'Browse by source' }).click();
+  await page.getByRole('tab', { name: 'Donated resources' }).click();
   await page.getByRole('button', { name: /Hosted channel/ }).click();
   const sourceRow = page.locator('.charity-source-browser__source');
   await expect(sourceRow).toContainText('Hosted channel');

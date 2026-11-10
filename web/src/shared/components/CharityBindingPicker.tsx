@@ -825,6 +825,7 @@ function CharityBindingPickerBody({
                                 <KeyLimitSummary
                                   concurrency={entry.max_concurrency}
                                   rpm={entry.max_rpm}
+                                  queue={entry}
                                   readOnly
                                 />
                                 {entry.rate_limited_until !== null || entry.smart_backoff ? (

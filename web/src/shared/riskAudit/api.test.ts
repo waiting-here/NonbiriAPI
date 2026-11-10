@@ -6,6 +6,40 @@ vi.mock('@shared/query/http', async (load) => ({
   apiFetch: fetcher,
 }));
 beforeEach(() => vi.clearAllMocks());
+it.each([3, undefined])(
+  'retains the frozen shared-IP threshold when present: %s',
+  async (threshold) => {
+    fetcher.mockResolvedValue({
+      items: [
+        {
+          id: 'scn_AAAAAAAAAAAAAAAAAAAAAA',
+          kind: 'shared_ips',
+          call_kind: 'total',
+          state: 'completed',
+          status: 'completed',
+          reason: '',
+          from: 1,
+          to: 2,
+          model: '',
+          candidates: '0',
+          scanned: '0',
+          scanned_candidates: '0',
+          matched: 0,
+          rule_count: 0,
+          created_at: 2,
+          updated_at: 3,
+          expires_at: 86403,
+          filter_revision: 1,
+          changed: false,
+          coverage: 'complete',
+          shared_ip_users: threshold,
+        },
+      ],
+    });
+    const scans = await riskAPI('steward').recentTasks();
+    expect(scans[0].shared_ip_users).toBe(threshold);
+  },
+);
 it('preserves a historical Discord window, original accounts and partial coverage without an active-user lookup', async () => {
   const scan = {
     id: 'scn_AAAAAAAAAAAAAAAAAAAAAA',

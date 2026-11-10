@@ -25,6 +25,7 @@ type streamWriter struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	started, terminal bool
+	heartbeatArmed    bool
 	err               error
 	lastWrite         time.Time
 	deadline          time.Time
@@ -32,10 +33,11 @@ type streamWriter struct {
 	done              chan struct{}
 }
 
-func newStreamWriter(ctx context.Context, writer http.ResponseWriter, interval time.Duration) (*streamWriter, context.Context) {
+func newStreamWriter(ctx context.Context, writer http.ResponseWriter, interval time.Duration, deferHeartbeat ...bool) (*streamWriter, context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	w := &streamWriter{writer: writer, header: writer.Header().Clone(), ctx: ctx, cancel: cancel,
-		lastWrite: time.Now(), stop: make(chan struct{}), done: make(chan struct{})}
+		lastWrite: time.Now(), stop: make(chan struct{}), done: make(chan struct{}),
+		heartbeatArmed: len(deferHeartbeat) == 0 || !deferHeartbeat[0]}
 	go func() {
 		defer close(w.done)
 		timer := time.NewTimer(interval)
@@ -48,7 +50,7 @@ func newStreamWriter(ctx context.Context, writer http.ResponseWriter, interval t
 				return
 			case <-timer.C:
 				w.mu.Lock()
-				if !w.terminal && time.Since(w.lastWrite) >= interval && ctx.Err() == nil {
+				if w.heartbeatArmed && !w.terminal && time.Since(w.lastWrite) >= interval && ctx.Err() == nil {
 					// Do not read the connector's Header map from this goroutine.
 					if !w.started {
 						if err := w.setDeadlineLocked(true); err != nil {
@@ -74,6 +76,15 @@ func newStreamWriter(ctx context.Context, writer http.ResponseWriter, interval t
 		}
 	}()
 	return w, ctx
+}
+
+func (w *streamWriter) armHeartbeat() {
+	w.mu.Lock()
+	if !w.heartbeatArmed {
+		w.heartbeatArmed = true
+		w.lastWrite = time.Now()
+	}
+	w.mu.Unlock()
 }
 
 func (w *streamWriter) Header() http.Header { return w.header }

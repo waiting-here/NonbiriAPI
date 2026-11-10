@@ -3,6 +3,9 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEndpoint,
+  createEndpointKey,
+  patchEndpointKey,
+  patchEndpoint,
   createManualEntries,
   getBindingCandidates,
   getCatalog,
@@ -40,6 +43,39 @@ function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}):
 }
 
 describe('core API wire contract', () => {
+  it('preserves omitted queue defaults on create and supports a queue-only key patch', async () => {
+    const key = fixture('internal/resources/testdata/endpoint_key.json');
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(key, 201))
+      .mockResolvedValueOnce(jsonResponse(key, 200));
+    vi.stubGlobal('fetch', fetchMock);
+    await createEndpointKey(
+      '11',
+      {
+        secret: 'synthetic-upstream-secret',
+        note: '',
+        enabled: true,
+        force_store_false: false,
+        ownership_confirmed: true,
+      },
+      operation,
+    );
+    const created = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(created).not.toHaveProperty('concurrency_overflow');
+    expect(created).not.toHaveProperty('rpm_queue_limit');
+    await patchEndpointKey(
+      '11',
+      '21',
+      { expected_revision: '4', concurrency_overflow: 'queue', concurrency_queue_limit: 9 },
+      operation,
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      expected_revision: '4',
+      concurrency_overflow: 'queue',
+      concurrency_queue_limit: 9,
+    });
+  });
   it('uses the home paths, typed responses and bodyless check-in mutation', async () => {
     const suffix = 'A'.repeat(22);
     const announcement = {
@@ -180,6 +216,45 @@ describe('core API wire contract', () => {
       code: 'invalid_request',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends a custom rerank path and preserves an explicit empty path when clearing it', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) =>
+      jsonResponse(
+        {
+          ...(fixture('internal/resources/testdata/endpoint.json') as Record<string, unknown>),
+          rerank_path: '/compatible-api/v1/reranks',
+          rerank_url: 'https://example.com/compatible-api/v1/reranks',
+          rerank_path_configurable: true,
+        },
+        init?.method === 'POST' ? 201 : 200,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const created = await createEndpoint(
+      {
+        source: 'custom',
+        connector_type: 'openai-compatible',
+        base_url: 'https://example.com/v1',
+        note: 'Rerank service',
+        enabled: true,
+        rerank_path: '/compatible-api/v1/reranks',
+      },
+      operation,
+    );
+    expect(created).toMatchObject({
+      rerank_path: '/compatible-api/v1/reranks',
+      rerank_url: 'https://example.com/compatible-api/v1/reranks',
+      rerank_path_configurable: true,
+    });
+    await patchEndpoint('11', { expected_revision: '1', rerank_path: '' }, operation);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)).rerank_path).toBe(
+      '/compatible-api/v1/reranks',
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]![1]?.body))).toEqual({
+      expected_revision: '1',
+      rerank_path: '',
+    });
   });
 
   it('sends the mainstream union without client connector or URL fields', async () => {

@@ -36,7 +36,7 @@ LEFT JOIN donation_key_manual_models dm ON dm.donation_key_id=dk.id AND dm.norma
 
 func adminBindingsQuery() string {
 	return `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,t.upstream_model_id,` + automaticCatalogSupportSQL("t.upstream_model_id") + `,` + manualCatalogSupportSQL("t.upstream_model_id") + `,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),gm.policy_json,
+dk.display_head,dk.display_tail,t.upstream_model_id,` + automaticCatalogSupportSQL("t.upstream_model_id") + `,` + manualCatalogSupportSQL("t.upstream_model_id") + `,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0),gm.policy_json,
 t.id,t.revision,t.native_service_mask,k.endpoint_id
 FROM charity_model_bindings b
 JOIN charity_binding_targets t ON t.binding_id=b.id

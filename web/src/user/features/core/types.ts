@@ -1,3 +1,4 @@
+import type { KeyQueueConfig } from '@shared/operations/keyQueue';
 import type {
   NativeServiceOption,
   ServiceProjection,
@@ -141,7 +142,7 @@ export interface ModelBrowse {
   preview: KeyBindingView[];
 }
 
-export interface KeyBindingView {
+export interface KeyBindingView extends Partial<KeyQueueConfig> {
   target_id?: string;
   id: string;
   model_id: string;
@@ -167,6 +168,9 @@ export interface Endpoint {
   configuration_type?: ConnectorType;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
+  rerank_path?: string;
+  rerank_url?: string;
+  rerank_path_configurable?: boolean;
 
   id: string;
   connector_type: ConnectorType;
@@ -181,7 +185,7 @@ export interface Endpoint {
   browse?: EndpointBrowse;
 }
 
-export interface EndpointKey {
+export interface EndpointKey extends Partial<KeyQueueConfig> {
   credential_available?: boolean;
   discovery_source_id?: string | null;
   credential_id?: string;
@@ -379,18 +383,20 @@ export type EndpointCreateInput = (
   connection_id?: string;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
+  rerank_path?: string;
 };
 
 export interface EndpointPatchInput {
   connection_id?: string;
   native_services?: NativeService[];
   rerank_format?: RerankFormat | '';
+  rerank_path?: string;
   note?: string;
   enabled?: boolean;
   expected_revision: string;
 }
 
-export interface EndpointKeyCreateInput {
+export interface EndpointKeyCreateInput extends Partial<KeyQueueConfig> {
   discovery_source_id?: string | null;
   secret?: string;
   credential_id?: string;
@@ -403,7 +409,7 @@ export interface EndpointKeyCreateInput {
   max_rpm?: number;
 }
 
-export interface EndpointKeyPatchInput {
+export interface EndpointKeyPatchInput extends Partial<KeyQueueConfig> {
   discovery_source_id?: string | null;
   credential_id?: string;
   native_services?: NativeService[];
@@ -601,7 +607,7 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export const ACCOUNT_EXPORT_VERSIONS = [
   11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
-  35,
+  35, 36,
 ] as const;
 
 export interface AccountExportAttachment {

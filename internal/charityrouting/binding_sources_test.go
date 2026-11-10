@@ -37,7 +37,7 @@ func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) 
 	if _, err := env.store.DB().Exec(`UPDATE endpoints SET note='private-endpoint-label'; UPDATE endpoint_keys SET note='private-key-label'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.store.DB().Exec(`INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,max_rpm) SELECT id,3,45 FROM endpoint_keys`); err != nil {
+	if _, err := env.store.DB().Exec(`INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,max_rpm,concurrency_overflow,rpm_overflow,concurrency_queue_limit,rpm_queue_limit) SELECT id,3,45,'queue','reject',7,8 FROM endpoint_keys`); err != nil {
 		t.Fatal(err)
 	}
 	api := httpAPI{service: env.service}
@@ -82,7 +82,7 @@ func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) 
 	if keyPage.Code != 200 || len(keyData.Data) != 1 || keyData.Data[0].Note != "safe label" {
 		t.Fatal("reviewed key projection missing")
 	}
-	if keyData.Data[0].Source.MaxConcurrency != 3 || keyData.Data[0].Source.MaxRPM != 45 {
+	if keyData.Data[0].Source.MaxConcurrency != 3 || keyData.Data[0].Source.MaxRPM != 45 || keyData.Data[0].Source.ConcurrencyOverflow != "queue" || keyData.Data[0].Source.RPMOverflow != "reject" || keyData.Data[0].Source.ConcurrencyQueueLimit != 7 || keyData.Data[0].Source.RPMQueueLimit != 8 {
 		t.Fatal("steward did not receive current owner limits")
 	}
 	for _, body := range []string{first.Body.String(), keyPage.Body.String()} {

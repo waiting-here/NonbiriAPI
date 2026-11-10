@@ -256,12 +256,16 @@ type StewardCharityModel struct {
 }
 
 type CandidateSource struct {
-	ConnectorType    string `json:"connector_type"`
-	CanonicalBaseURL string `json:"canonical_base_url"`
-	DisplayHead      string `json:"display_head"`
-	DisplayTail      string `json:"display_tail"`
-	MaxConcurrency   int64  `json:"max_concurrency"`
-	MaxRPM           int64  `json:"max_rpm"`
+	ConnectorType         string `json:"connector_type"`
+	CanonicalBaseURL      string `json:"canonical_base_url"`
+	DisplayHead           string `json:"display_head"`
+	DisplayTail           string `json:"display_tail"`
+	MaxConcurrency        int64  `json:"max_concurrency"`
+	MaxRPM                int64  `json:"max_rpm"`
+	ConcurrencyOverflow   string `json:"concurrency_overflow"`
+	RPMOverflow           string `json:"rpm_overflow"`
+	ConcurrencyQueueLimit int64  `json:"concurrency_queue_limit"`
+	RPMQueueLimit         int64  `json:"rpm_queue_limit"`
 }
 
 type AdminBindingCandidate struct {
@@ -275,12 +279,16 @@ type AdminBindingCandidate struct {
 }
 
 type StewardCandidateSource struct {
-	ConnectorType    string `json:"connector_type"`
-	CanonicalBaseURL string `json:"canonical_base_url"`
-	DisplayHead      string `json:"display_head"`
-	DisplayTail      string `json:"display_tail"`
-	MaxConcurrency   int64  `json:"max_concurrency"`
-	MaxRPM           int64  `json:"max_rpm"`
+	ConnectorType         string `json:"connector_type"`
+	CanonicalBaseURL      string `json:"canonical_base_url"`
+	DisplayHead           string `json:"display_head"`
+	DisplayTail           string `json:"display_tail"`
+	MaxConcurrency        int64  `json:"max_concurrency"`
+	MaxRPM                int64  `json:"max_rpm"`
+	ConcurrencyOverflow   string `json:"concurrency_overflow"`
+	RPMOverflow           string `json:"rpm_overflow"`
+	ConcurrencyQueueLimit int64  `json:"concurrency_queue_limit"`
+	RPMQueueLimit         int64  `json:"rpm_queue_limit"`
 }
 
 type StewardBindingCandidate struct {

@@ -6,7 +6,7 @@ NonbiriAPI separates **startup security roots** from **runtime site settings**. 
 
 Model APIs configure `role_policy` separately for each model. Native/empty rules preserve the connector's default behavior. Personal automation uses the existing CallerKey and requires no additional startup token or charge configuration.
 
-Administrator risk-audit configuration adds `user_ip_window_hours` (integer 1–720, default 24) and `user_ip_min_ips` (2–1000, default 3), alongside existing thresholds/revision. It flags one Discord identity using at least that many trusted API addresses in a rolling window across old/current accounts. Shared-IP counts deduplicate Discord identities. Full stewards can read the settings; only administrators change them. Scans never impose a penalty.
+Risk-audit configuration includes `user_ip_window_hours` (integer 1–720, default 24) and `user_ip_min_ips` (2–1000, default 3), alongside existing thresholds/revision. It flags one Discord identity using at least that many trusted API addresses in a rolling window across old/current accounts. Shared-IP counts deduplicate Discord identities. Administrators and level-6 stewards can change the settings. Level-5 stewards need the separate `risk.configure` grant, which is disabled by default; `risk.read` alone provides read-only access. Existing thresholds are preserved during upgrades. Scans never impose a penalty.
 
 Lake Notes is a permanent free minigame with four independently configured exchanges. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
 
@@ -324,7 +324,7 @@ The Gacha Simulator entry is hidden by default and can be shown in its administr
 
 ## Managed session headers
 
-Personal and charity model settings use the same managed-header fields and save them with the model. Request adaptation saves separately, with request-header and request-body groups. Owners edit their personal models; administrator authority or the applicable `charity.create`/`charity.model_settings` grant edits charity settings; steward charity request adaptation remains read-only.
+Personal and charity model settings use the same managed-header fields and save them with the model. Request adaptation saves separately, with request-header and request-body groups. Owners edit their personal models; administrator authority or the applicable `charity.create`/`charity.model_settings` grant edits charity settings. Stewards need `charity.request_adaptation` to edit charity request adaptation.
 
 Each header selects `uuid_v4`, `hex_32`, `opencode_session`, `opencode_message` or `opencode_part`. Idle lifetime accepts 0–86,400 seconds; omission or a blank browser field uses 300. Zero generates a new value for each logical request, reused by its internal retries, without an absolute uniqueness guarantee. Positive lifetimes reuse a value for the same user/model/header until idle expiry. See [field defaults, precedence, export and lifecycle](charity-session-headers.md).
 
@@ -346,8 +346,10 @@ header payloads under legal hold. Lowering it below usage stops new captures
 until capacity becomes available, without evicting retained captures. See
 [header capture and privacy](api-contract.md#11-restricted-diagnostics-and-manual-risk-auditing).
 
-Price templates are shared resources managed by administrators and readable by
-steward browser sessions with `charity.price_templates.read`. Applying one copies the complete price/reward, Token
+Price templates are shared resources managed by administrators and steward
+browser sessions with `charity.price_templates.manage`. That grant or
+`charity.price_templates.read` permits reading enabled templates; reading disabled
+templates requires management permission. Applying one copies the complete price/reward, Token
 reserve, context and discount values into a model form, including clearing
 disabled settings. Model save remains explicit. There is no template CallerKey
 scope or automatic propagation to existing models. Saving the model requires

@@ -4,6 +4,36 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+## Charity log search combinations
+
+Model-name search now reuses the same bounded historical-name lookup when
+combined with status, time, identity, attempt and diagnostic filters. The lookup,
+exact count and page share the authorized read transaction. Up to 4,096 distinct
+route/name pairs are enumerated through the existing index; larger histories
+fall back within the original query deadline without dropping matches. There is
+no separate 64-match limit, new index or cross-request authorization cache.
+
+`BenchmarkCharityModelCombination` and `BenchmarkCharityModelBroadMatches` compare
+the previous row-by-row substring predicate with the complete lookup, exact count
+and consumed 50-row page. A Windows/amd64 run with Go 1.26.10, SQLite 3.54.1,
+`GOMAXPROCS=2` and three iterations per case produced these local results:
+
+| Synthetic distribution               |      Rows |    Previous |     Revised |
+| ------------------------------------ | --------: | ----------: | ----------: |
+| Sparse model + status 400            | 1,600,000 |   403.63 ms |    15.79 ms |
+| Same filter with a wide time range   | 1,600,000 |   207.97 ms |    16.40 ms |
+| Same filter with a narrow time range | 1,600,000 |     2.44 ms |     6.77 ms |
+| No matching model + status 400       | 1,600,000 |   201.98 ms |     4.18 ms |
+| Broad match across 100 names         | 1,600,000 | 1,718.36 ms | 1,548.37 ms |
+| Broad match across 4,096 names       |   160,000 |    29.54 ms |    48.18 ms |
+
+Counts and page IDs match in every pair. Sparse combinations use exact
+`(route_kind, model)` index seeks; the optimizer may choose a scan for broad
+matches. A narrow time range can already be selective, so enumeration adds work.
+High-cardinality fallback added about 8 ms in the measured narrow-range case.
+Exact counting and sorting still grow with the matching history; these results
+do not guarantee arbitrary-scale searches or represent production HTTP latency.
+
 ## v1.3.6 database follow-up
 
 A read-only review of v1.3.5 fixed-label runtime counters covered 644 minute
@@ -29,11 +59,11 @@ attendance integration. One Windows/amd64, Go 1.26.10 run used 100 iterations
 per case and `GOMAXPROCS=2`:
 
 | Seats / elapsed seconds | Repeated query | Reused snapshot | Bytes before / after |
-| --- | ---: | ---: | ---: |
-| 1 / 1 | 58.3 µs | 68.1 µs | 5,667 / 5,672 |
-| 1 / 19 | 410.8 µs | 51.0 µs | 59,566 / 5,664 |
-| 9 / 1 | 86.3 µs | 87.8 µs | 21,294 / 21,296 |
-| 9 / 19 | 741.4 µs | 76.5 µs | 309,246 / 21,293 |
+| ----------------------- | -------------: | --------------: | -------------------: |
+| 1 / 1                   |        58.3 µs |         68.1 µs |        5,667 / 5,672 |
+| 1 / 19                  |       410.8 µs |         51.0 µs |       59,566 / 5,664 |
+| 9 / 1                   |        86.3 µs |         87.8 µs |      21,294 / 21,296 |
+| 9 / 19                  |       741.4 µs |         76.5 µs |     309,246 / 21,293 |
 
 The one-second cases show no improvement. This is a narrow idle-batch
 microbenchmark, not a mixed-load or production throughput claim. The regression
@@ -138,6 +168,15 @@ test phase disables only the duplicate automatic vet pass. Standalone test and
 race commands retain their own vet behavior. Timing hints balance the live test
 catalog; they do not select coverage. Keep complete checks and failure reporting
 when changing scheduling, and measure runner queue/setup costs before adding jobs.
+
+Race preparation and workers use the same cache key inputs: Go sources, module
+files, the runner script, and files embedded by the default build. This lets the
+preparation job publish its current compiled packages before workers start. A
+module-only key can restore an older build cache and prevent the newly compiled
+entries from being saved, causing every worker to compile the changes again.
+Keep both input lists aligned; include embedded inputs without invalidating this
+cache for unrelated UI assets. The first run for changed inputs pays one cold
+preparation cost, which must be included when comparing complete CI durations.
 
 For focused read-path measurements, start with the bounded SQLite benchmarks:
 
@@ -348,3 +387,38 @@ data-preservation matrices run in the ordinary suite; race coverage retains
 competing operations, upgrade progress and interrupted transactions. CI may
 skip duplicate vet in prepared race shards only because its required ordinary
 Go job vets the same package set. Standalone race commands retain vet by default.
+
+RPS matching probes for three unexpired queue entries before acquiring the
+writer. Ranking expiry probes for due, applied facts; both paths reselect and
+validate work in their original writer transactions. Later queue arrivals are
+handled on the next pass. Held-writer and concurrent maintenance-change tests
+cover empty passes and the read-to-write boundary; matching cancellation,
+rollback and exact ranking expiry remain covered separately. Measure reader
+waiting alongside writer savings when evaluating this change under load.
+
+Connection-store tests also reuse a closed schema image, retaining the exact
+test DDL. Each fixture opens its own private file with foreign keys enabled and
+an in-memory journal. The cache stores bytes, not a live database handle or a
+temporary path whose owner may finish first. Isolation and rollback regressions
+cover use after the image builder's temporary directory has been removed.
+
+CI timing updates must identify the successful measured suite and use each
+command's own test interval; report unrelated failures in its workflow separately.
+Separate upgrade checks must not overwrite ordinary package timings. Existing
+per-package group caps can separate long race matrices without
+adding runners or workers. Evaluate the longest scheduled group, command count
+and cold fixture cost, not only equal shard weights. A scheduling simulation is
+an estimate until a later authorized CI run measures the changed layout. Exact
+serial exclusions retain ordinary coverage, and the live catalog continues to
+include new tests even when no historical weight exists.
+
+Independent rollback scenarios may use separate top-level tests so the existing
+planner can distribute them across shards. Each must keep its own database,
+vault, cleanup and complete rollback/retry assertions; splitting does not add
+in-process parallelism. Schema33 partial DDL, target mismatch, index cancellation
+and pre-commit cancellation follow this arrangement. Schema37 success, partial
+DDL, target mismatch and pre-commit cancellation also run independently, with
+all four retained in race. Their former combined command reached its 30-minute
+deadline while building the fourth fixture; the deadline remains unchanged.
+Initial per-scenario weights are conservative estimates until separately
+measured, and the complete data-preservation and retry assertions remain.

@@ -19,10 +19,12 @@ therefore acts on levels 1–4 and cannot assign level 5 or 6. Level 6 acts on l
 existing broader scope. Level 5 can never edit another steward's permissions.
 
 Administrator-only operations remain exclusive: donation-credit changes,
-Discord login policy, blacklist removal, disabling maintenance, abuse-audit
-configuration changes, price-template maintenance, request-adaptation writes,
-model affinity TTL, and general site administration. Stewards gain no account
+Discord login policy, blacklist removal, disabling maintenance and general site administration. Stewards gain no account
 export/deletion or legal-hold management route.
+
+Level 6 has all charity-model configuration operations, including request
+adaptation, affinity duration and price-template maintenance. Level 5 requires
+the corresponding grants below; its existing resource scopes still apply.
 
 ## Read and replace a policy
 
@@ -56,7 +58,7 @@ their existing distinct errors.
 
 ## Actions and defaults
 
-There are 51 independent boolean permissions.
+There are 55 independent boolean permissions.
 
 | Permission | Allows | Level-5 default |
 |---|---|---|
@@ -90,11 +92,14 @@ There are 51 independent boolean permissions.
 | `charity.create` | Create charity models including initial settings/pricing | false |
 | `charity.delete` | Delete charity models | false |
 | `charity.model_settings` | Edit non-price model settings; read request-adaptation configuration | false |
+| `charity.request_adaptation` | Read and edit model/binding request adaptation | false |
+| `charity.affinity` | Set model affinity duration | false |
 | `charity.pricing` | Edit pricing, discounts, recurring discounts and token reserve | false |
 | `charity.non_mainstream` | Use non-mainstream charity model targets | false |
 | `charity.presets` | Read/update/apply channel binding presets | false |
 | `charity.backoff` | Read/update endpoint backoff policy | false |
-| `charity.price_templates.read` | Read price templates | false |
+| `charity.price_templates.read` | Read enabled price templates | false |
+| `charity.price_templates.manage` | Read all price templates; create, edit and delete templates | false |
 | `logs.read` | Request log list/detail/export | true |
 | `logs.unredacted` | Full upstream diagnostic text | false |
 | `diagnostics.read` | Independent diagnostics and detailed request diagnostics | true |
@@ -102,6 +107,7 @@ There are 51 independent boolean permissions.
 | `access_events.read` | Access events and summary | false |
 | `risk.read` | Abuse audit users/shared IP/config/scan results | false |
 | `risk.manage` | Abuse scan creation/cancel and client rules | false |
+| `risk.configure` | Read and change audit thresholds | false |
 | `announcements.read` | Announcement management reads | false |
 | `announcements.manage` | Draft/preview/edit/publish/withdraw/delete announcements | false |
 | `maintenance.read` | Maintenance state | false |
@@ -111,6 +117,18 @@ There are 51 independent boolean permissions.
 | `ai.chat` | Use the operator's management-assistant conversation | true |
 | `ai.review.read` | Read automatic-review history and details | false |
 | `ai.memory.edit` | Read and edit the two shared assistant memories | false |
+
+The three charity configuration grants above are false for new level-5 defaults
+and are added as false when upgrading existing saved policies. Existing grants,
+scope, limits, revision and timestamps are preserved. Request-adaptation or
+affinity permission also allows model and connection reads within the current
+scope. Explicit affinity changes require their own grant, including during model
+creation; omitting the field retains the default or existing value.
+
+The separate audit threshold grant is also added as false to existing saved
+level-5 policies. Level 6 can change thresholds by default. `risk.read` allows
+reading the configuration without editing; `risk.configure` permits configuration
+reads and writes without exposing audit identities, results or scan operations.
 
 These assistant defaults apply to accounts without a saved custom policy.
 Upgrading a custom policy adds all three assistant grants as false and preserves
@@ -153,8 +171,13 @@ Permissions remain independent when an operation has several effects:
   binding action, within the current model/source scope.
 - A model PATCH checks its supplied fields: `role_policy` requires
   `charity.manage`; pricing, discounts and `token_reserve_credits` require
-  `charity.pricing`; other editable settings require
-  `charity.model_settings`. Creation uses `charity.create`.
+  `charity.pricing`; `affinity_ttl_seconds` requires `charity.affinity`; other
+  editable settings require `charity.model_settings`. Creation uses
+  `charity.create` and also requires `charity.affinity` when that field is supplied.
+- Request-adaptation GET accepts `charity.model_settings` or
+  `charity.request_adaptation`; PUT requires the latter. Model-level writes check
+  all affected binding sources, and binding writes check that connection's source.
+  Current permissions and scopes are checked before receipt replay.
 
 ## Donation scope and endpoint access
 

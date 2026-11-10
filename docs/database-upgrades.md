@@ -2,7 +2,7 @@
 
 ## Supported databases
 
-The service opens only the exact current schema **50**, or initializes current
+The service opens only the exact current schema **51**, or initializes current
 storage when the database and its sidecars are absent. An existing zero-byte,
 partial or unknown database is not a fresh instance. Older and newer schemas are
 rejected before migration, repair, WAL checkpoint or unfinished-work recovery.
@@ -11,7 +11,7 @@ version, with the explicit upgrade entry point. Current-schema identity,
 structure, configuration and encryption-root checks remain required.
 
 The standalone Go upgrader accepts exact registered schema **16–26** and
-**33–49** sources and targets schema 50. Schemas 27–32 and unregistered layouts
+**33–50** sources and targets schema 51. Schemas 27–32 and unregistered layouts
 are not supported. A developer or deployer must deliberately invoke the matching
 tool; the service, startup scripts and deployment helpers must not run
 `--apply` implicitly. Preserve the complete matching recovery set before any
@@ -24,7 +24,7 @@ also rejected by the upgrader. Failure or cancellation rolls back the conversion
 Do not replace newly accepted data with an old snapshot.
 
 SQLite identity remains `application_id=0x4E425249`, `user_version=2`. Account
-exports use format **35**, independently of the storage schema. Schema versions
+exports use format **36**, independently of the storage schema. Schema versions
 advance when storage changes require it, not with every software patch.
 
 ```sh
@@ -34,11 +34,11 @@ advance when storage changes require it, not with every software patch.
 
 Both commands read compiled metadata without loading application configuration
 or opening a database. Their format-version-1 descriptors identify the same
-target schema and hashes. The service reports `schema_version=50`,
-`minimum_schema_version=50`, `startup_policy="exact"` and
+target schema and hashes. The service reports `schema_version=51`,
+`minimum_schema_version=51`, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The upgrader adds
-28 `offline_conversions` entries, one for each supported source, with its tool
+29 `offline_conversions` entries, one for each supported source, with its tool
 name, source commit, source version, pinned manifest hash and target version.
 An empty service list does not remove the separate upgrader.
 
@@ -48,6 +48,22 @@ It must not infer permission to migrate from the upgrader's advertised sources,
 parse Go files or derive schema versions from array lengths.
 
 ## Schema changes
+
+Schema 51 adds optional HTTP rerank paths to endpoints, submitted donation-use
+revisions and dispatch-claim targets, plus a nullable charity-use override.
+Existing paths initialize to the empty default and overrides to null, preserving
+the original base URL plus `/rerank`. Credential grants and origin fingerprints
+remain unchanged. The registered schema-50 source is
+`23afcd9fc058721f649ff352b216578c447f332b`. Account export 36 includes the owner's
+endpoint and donation-use path settings; dispatch claims remain internal.
+
+The conversion also preserves existing caller-parameter receipts while extending
+their closed error-code constraint for recognized input-length errors. Saved
+level-5 policies gain `charity.request_adaptation`, `charity.affinity`, and
+`charity.price_templates.manage` as false. Their prior grants, scope, limits,
+revision, timestamps and history are preserved; the live catalog has 54 actions.
+Request-adaptation audits retain their existing rows and lifecycle while accepting
+the actual level-5/6 actor roles for newly authorized charity writes.
 
 Schema 50 adds independent cumulative token counters and limits per donated key
 and exact upstream model. Existing whole-key rules and in-flight reservations
@@ -217,7 +233,7 @@ lifecycle. See [data lifecycle](data-lifecycle-checklist.md#management-assistant
 
 Existing custom steward policies gain `ai.chat,ai.review.read,ai.memory.edit` as
 false, preserving their prior 48 grants, six limits, donation scope, revision,
-timestamps and audit history. The live catalog has 51 actions; accounts without
+timestamps and audit history. That schema expanded the catalog to 51 actions; accounts without
 a custom policy use defaults with only `ai.chat` enabled among the three.
 The separate chat switch and driver readiness remain required.
 
@@ -302,7 +318,7 @@ review HMACs, generated session headers, deployment settings and internal dispat
 authorizations. See [service connections](service-connections.md) and the
 [data lifecycle](data-lifecycle-checklist.md).
 
-The registered offline sources are schemas 16–26 and 33–49 with their exact
+The registered offline sources are schemas 16–26 and 33–50 with their exact
 manifests. Other intermediate database layouts are not supported sources.
 
 Schema 26 adds shared channel binding presets and their ordered upstream-model
@@ -403,7 +419,7 @@ donation terminal clocks, expiry, balances or historical settlements.
 ## One-time conversion
 
 Build `./cmd/nonbiri-upgrade-v1` from the same commit as the target application.
-The converter accepts exact registered schema 16–26 and 33–49 structures. For rc.7,
+The converter accepts exact registered schema 16–26 and 33–50 structures. For rc.7,
 the reference source is `82f1711b674425745a768f781e0e0c34dcb37ac3`. The database
 manifest determines eligibility, not a guess based on a release label.
 
@@ -415,7 +431,7 @@ repeated immediately before conversion. Ordinary `--apply` validates the exact
 source, encryption-root identity, required configuration and migration-affected relationships, without scanning
 unrelated historical tables. Run it with the service stopped and its existing
 master key available. The converter acquires exclusive
-database access and converts the source to schema 50 in one transaction. A matching
+database access and converts the source to schema 51 in one transaction. A matching
 current schema is a no-op; structural drift, an unknown source or a wrong key is
 rejected. Failure or cancellation rolls back.
 

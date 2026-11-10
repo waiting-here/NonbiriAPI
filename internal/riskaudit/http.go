@@ -264,10 +264,6 @@ func serve(repository *Repository, action string, actor Actor, w http.ResponseWr
 	case "config":
 		output, err = repository.GetConfig(ctx, actor)
 	case "update_config":
-		if !actor.Admin {
-			auditError(w, ErrForbidden)
-			return
-		}
 		var value Config
 		err = decodeBody(w, r, &value)
 		if err == nil {

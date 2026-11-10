@@ -11,6 +11,7 @@ import (
 )
 
 type createEndpointRequest struct {
+	RerankPath      requestField[string]                   `json:"rerank_path,omitempty"`
 	ConnectionID    requestField[string]                   `json:"connection_id"`
 	ChannelEntryID  requestField[string]                   `json:"channel_entry_id"`
 	ChannelRevision requestField[string]                   `json:"channel_revision"`
@@ -25,6 +26,7 @@ type createEndpointRequest struct {
 }
 
 type createEndpointCanonical struct {
+	RerankPath      string                    `json:"rerank_path,omitempty"`
 	ConnectionID    string                    `json:"connection_id,omitempty"`
 	ChannelEntryID  string                    `json:"channel_entry_id,omitempty"`
 	ChannelRevision string                    `json:"channel_revision,omitempty"`
@@ -39,6 +41,7 @@ type createEndpointCanonical struct {
 }
 
 type patchEndpointRequest struct {
+	RerankPath       requestField[string]                   `json:"rerank_path,omitempty"`
 	ConnectionID     requestField[string]                   `json:"connection_id"`
 	NativeServices   requestField[[]contract.NativeService] `json:"native_services"`
 	RerankFormat     requestField[contract.RerankFormat]    `json:"rerank_format"`
@@ -48,6 +51,7 @@ type patchEndpointRequest struct {
 }
 
 type patchEndpointCanonical struct {
+	RerankPath       *string                   `json:"rerank_path,omitempty"`
 	ConnectionID     *string                   `json:"connection_id,omitempty"`
 	NativeServices   *[]contract.NativeService `json:"native_services,omitempty"`
 	RerankFormat     *contract.RerankFormat    `json:"rerank_format,omitempty"`
@@ -65,53 +69,69 @@ type expectedRevisionCanonical struct {
 }
 
 type createEndpointKeyRequest struct {
-	CredentialID       requestField[string]                   `json:"credential_id"`
-	NativeServices     requestField[[]contract.NativeService] `json:"native_services"`
-	DiscoverySourceID  httpapi.NullableField[string]          `json:"discovery_source_id"`
-	Secret             requestField[string]                   `json:"secret"`
-	Note               requestField[string]                   `json:"note"`
-	Enabled            requestField[bool]                     `json:"enabled"`
-	ForceStoreFalse    requestField[bool]                     `json:"force_store_false"`
-	OwnershipConfirmed requestField[bool]                     `json:"ownership_confirmed"`
-	MaxConcurrency     requestField[int64]                    `json:"max_concurrency"`
-	MaxRPM             requestField[int64]                    `json:"max_rpm"`
+	CredentialID          requestField[string]                   `json:"credential_id"`
+	NativeServices        requestField[[]contract.NativeService] `json:"native_services"`
+	DiscoverySourceID     httpapi.NullableField[string]          `json:"discovery_source_id"`
+	Secret                requestField[string]                   `json:"secret"`
+	Note                  requestField[string]                   `json:"note"`
+	Enabled               requestField[bool]                     `json:"enabled"`
+	ForceStoreFalse       requestField[bool]                     `json:"force_store_false"`
+	OwnershipConfirmed    requestField[bool]                     `json:"ownership_confirmed"`
+	MaxConcurrency        requestField[int64]                    `json:"max_concurrency"`
+	MaxRPM                requestField[int64]                    `json:"max_rpm"`
+	ConcurrencyOverflow   requestField[string]                   `json:"concurrency_overflow"`
+	RPMOverflow           requestField[string]                   `json:"rpm_overflow"`
+	ConcurrencyQueueLimit requestField[int64]                    `json:"concurrency_queue_limit"`
+	RPMQueueLimit         requestField[int64]                    `json:"rpm_queue_limit"`
 }
 
 type createEndpointKeyCanonical struct {
-	CredentialID       *string                   `json:"credential_id,omitempty"`
-	NativeServices     *[]contract.NativeService `json:"native_services,omitempty"`
-	DiscoverySourceID  **string                  `json:"discovery_source_id,omitempty"`
-	Secret             string                    `json:"secret"`
-	Note               string                    `json:"note"`
-	Enabled            bool                      `json:"enabled"`
-	ForceStoreFalse    bool                      `json:"force_store_false"`
-	OwnershipConfirmed bool                      `json:"ownership_confirmed"`
-	MaxConcurrency     int64                     `json:"max_concurrency,omitempty"`
-	MaxRPM             int64                     `json:"max_rpm,omitempty"`
+	CredentialID          *string                   `json:"credential_id,omitempty"`
+	NativeServices        *[]contract.NativeService `json:"native_services,omitempty"`
+	DiscoverySourceID     **string                  `json:"discovery_source_id,omitempty"`
+	Secret                string                    `json:"secret"`
+	Note                  string                    `json:"note"`
+	Enabled               bool                      `json:"enabled"`
+	ForceStoreFalse       bool                      `json:"force_store_false"`
+	OwnershipConfirmed    bool                      `json:"ownership_confirmed"`
+	MaxConcurrency        int64                     `json:"max_concurrency,omitempty"`
+	MaxRPM                int64                     `json:"max_rpm,omitempty"`
+	ConcurrencyOverflow   string                    `json:"concurrency_overflow,omitempty"`
+	RPMOverflow           string                    `json:"rpm_overflow,omitempty"`
+	ConcurrencyQueueLimit int64                     `json:"concurrency_queue_limit,omitempty"`
+	RPMQueueLimit         int64                     `json:"rpm_queue_limit,omitempty"`
 }
 
 type patchEndpointKeyRequest struct {
-	CredentialID      requestField[string]                   `json:"credential_id"`
-	NativeServices    requestField[[]contract.NativeService] `json:"native_services"`
-	DiscoverySourceID httpapi.NullableField[string]          `json:"discovery_source_id"`
-	Note              requestField[string]                   `json:"note"`
-	Enabled           requestField[bool]                     `json:"enabled"`
-	ForceStoreFalse   requestField[bool]                     `json:"force_store_false"`
-	ExpectedRevision  requestField[string]                   `json:"expected_revision"`
-	MaxConcurrency    requestField[int64]                    `json:"max_concurrency"`
-	MaxRPM            requestField[int64]                    `json:"max_rpm"`
+	CredentialID          requestField[string]                   `json:"credential_id"`
+	NativeServices        requestField[[]contract.NativeService] `json:"native_services"`
+	DiscoverySourceID     httpapi.NullableField[string]          `json:"discovery_source_id"`
+	Note                  requestField[string]                   `json:"note"`
+	Enabled               requestField[bool]                     `json:"enabled"`
+	ForceStoreFalse       requestField[bool]                     `json:"force_store_false"`
+	ExpectedRevision      requestField[string]                   `json:"expected_revision"`
+	MaxConcurrency        requestField[int64]                    `json:"max_concurrency"`
+	MaxRPM                requestField[int64]                    `json:"max_rpm"`
+	ConcurrencyOverflow   requestField[string]                   `json:"concurrency_overflow"`
+	RPMOverflow           requestField[string]                   `json:"rpm_overflow"`
+	ConcurrencyQueueLimit requestField[int64]                    `json:"concurrency_queue_limit"`
+	RPMQueueLimit         requestField[int64]                    `json:"rpm_queue_limit"`
 }
 
 type patchEndpointKeyCanonical struct {
-	CredentialID      *string                   `json:"credential_id,omitempty"`
-	NativeServices    *[]contract.NativeService `json:"native_services,omitempty"`
-	DiscoverySourceID **string                  `json:"discovery_source_id,omitempty"`
-	Note              *string                   `json:"note,omitempty"`
-	Enabled           *bool                     `json:"enabled,omitempty"`
-	ForceStoreFalse   *bool                     `json:"force_store_false,omitempty"`
-	ExpectedRevision  string                    `json:"expected_revision"`
-	MaxConcurrency    *int64                    `json:"max_concurrency,omitempty"`
-	MaxRPM            *int64                    `json:"max_rpm,omitempty"`
+	CredentialID          *string                   `json:"credential_id,omitempty"`
+	NativeServices        *[]contract.NativeService `json:"native_services,omitempty"`
+	DiscoverySourceID     **string                  `json:"discovery_source_id,omitempty"`
+	Note                  *string                   `json:"note,omitempty"`
+	Enabled               *bool                     `json:"enabled,omitempty"`
+	ForceStoreFalse       *bool                     `json:"force_store_false,omitempty"`
+	ExpectedRevision      string                    `json:"expected_revision"`
+	MaxConcurrency        *int64                    `json:"max_concurrency,omitempty"`
+	MaxRPM                *int64                    `json:"max_rpm,omitempty"`
+	ConcurrencyOverflow   *string                   `json:"concurrency_overflow,omitempty"`
+	RPMOverflow           *string                   `json:"rpm_overflow,omitempty"`
+	ConcurrencyQueueLimit *int64                    `json:"concurrency_queue_limit,omitempty"`
+	RPMQueueLimit         *int64                    `json:"rpm_queue_limit,omitempty"`
 }
 
 func (api *httpAPI) listEndpoints(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -152,7 +172,7 @@ func (api *httpAPI) createEndpoint(writer http.ResponseWriter, request *http.Req
 	}
 	canonical := createEndpointCanonical{
 		ConnectionID: body.ConnectionID.Value, ChannelEntryID: body.ChannelEntryID.Value, ChannelRevision: body.ChannelRevision.Value,
-		NativeServices: optionalPointer(body.NativeServices), RerankFormat: body.RerankFormat.Value,
+		NativeServices: optionalPointer(body.NativeServices), RerankFormat: body.RerankFormat.Value, RerankPath: body.RerankPath.Value,
 		Source: body.Source.Value, ChannelID: body.ChannelID.Value,
 		ConnectorType: body.ConnectorType.Value, BaseURL: body.BaseURL.Value,
 		Note: body.Note.Value, Enabled: body.Enabled.Value,
@@ -185,7 +205,7 @@ func (api *httpAPI) createEndpoint(writer http.ResponseWriter, request *http.Req
 	}
 	result, err := api.repository.CreateEndpoint(request.Context(), principal.UserID, mutation, CreateEndpointInput{
 		ConnectionID: optionalIDValue(connectionID), ChannelEntryID: optionalIDValue(entryID), ChannelRevision: optionalIDValue(channelRevision),
-		NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat,
+		NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat, RerankPath: canonical.RerankPath,
 		Source: canonical.Source, ChannelID: canonical.ChannelID,
 		ConnectorType: canonical.ConnectorType, BaseURL: canonical.BaseURL,
 		Note: canonical.Note, Enabled: canonical.Enabled,
@@ -220,12 +240,12 @@ func (api *httpAPI) patchEndpoint(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	revision, ok := canonicalExpectedRevision(body.ExpectedRevision)
-	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ConnectionID.Set && !body.NativeServices.Set && !body.RerankFormat.Set) {
+	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ConnectionID.Set && !body.NativeServices.Set && !body.RerankFormat.Set && !body.RerankPath.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := patchEndpointCanonical{
-		ConnectionID: optionalPointer(body.ConnectionID), NativeServices: optionalPointer(body.NativeServices), RerankFormat: optionalPointer(body.RerankFormat),
+		ConnectionID: optionalPointer(body.ConnectionID), NativeServices: optionalPointer(body.NativeServices), RerankFormat: optionalPointer(body.RerankFormat), RerankPath: optionalPointer(body.RerankPath),
 		Note: optionalPointer(body.Note), Enabled: optionalPointer(body.Enabled),
 		ExpectedRevision: body.ExpectedRevision.Value,
 	}
@@ -239,7 +259,7 @@ func (api *httpAPI) patchEndpoint(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	result, err := api.repository.PatchEndpoint(request.Context(), principal.UserID, endpointID, mutation, PatchEndpointInput{
-		ConnectionID: connectionID, NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat,
+		ConnectionID: connectionID, NativeServices: canonical.NativeServices, RerankFormat: canonical.RerankFormat, RerankPath: canonical.RerankPath,
 		Note: canonical.Note, Enabled: canonical.Enabled, ExpectedRevision: revision,
 	})
 	if err != nil {
@@ -311,7 +331,8 @@ func (api *httpAPI) createEndpointKey(writer http.ResponseWriter, request *http.
 		return
 	}
 	if body.Secret.Set == body.CredentialID.Set || !body.Note.Set || !body.Enabled.Set || !body.ForceStoreFalse.Set ||
-		!body.OwnershipConfirmed.Set || !body.OwnershipConfirmed.Value {
+		!body.OwnershipConfirmed.Set || !body.OwnershipConfirmed.Value ||
+		body.ConcurrencyOverflow.Set && !validKeyOverflow(body.ConcurrencyOverflow.Value) || body.RPMOverflow.Set && !validKeyOverflow(body.RPMOverflow.Value) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
@@ -326,6 +347,7 @@ func (api *httpAPI) createEndpointKey(writer http.ResponseWriter, request *http.
 		Secret: body.Secret.Value, Note: body.Note.Value, Enabled: body.Enabled.Value,
 		ForceStoreFalse: body.ForceStoreFalse.Value, OwnershipConfirmed: body.OwnershipConfirmed.Value,
 		MaxConcurrency: body.MaxConcurrency.Value, MaxRPM: body.MaxRPM.Value,
+		ConcurrencyOverflow: body.ConcurrencyOverflow.Value, RPMOverflow: body.RPMOverflow.Value, ConcurrencyQueueLimit: body.ConcurrencyQueueLimit.Value, RPMQueueLimit: body.RPMQueueLimit.Value,
 	}
 	if body.DiscoverySourceID.Set {
 		canonical.DiscoverySourceID = &body.DiscoverySourceID.Value
@@ -343,6 +365,7 @@ func (api *httpAPI) createEndpointKey(writer http.ResponseWriter, request *http.
 		Secret: secretBytes, Note: canonical.Note, Enabled: canonical.Enabled,
 		ForceStoreFalse: canonical.ForceStoreFalse, OwnershipConfirmed: canonical.OwnershipConfirmed,
 		MaxConcurrency: canonical.MaxConcurrency, MaxRPM: canonical.MaxRPM,
+		ConcurrencyOverflow: canonical.ConcurrencyOverflow, RPMOverflow: canonical.RPMOverflow, ConcurrencyQueueLimit: canonical.ConcurrencyQueueLimit, RPMQueueLimit: canonical.RPMQueueLimit,
 	})
 	if err != nil {
 		writeResourceError(writer, err)
@@ -365,7 +388,7 @@ func (api *httpAPI) patchEndpointKey(writer http.ResponseWriter, request *http.R
 		return
 	}
 	revision, ok := canonicalExpectedRevision(body.ExpectedRevision)
-	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ForceStoreFalse.Set && !body.MaxConcurrency.Set && !body.MaxRPM.Set && !body.CredentialID.Set && !body.NativeServices.Set && !body.DiscoverySourceID.Set) {
+	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ForceStoreFalse.Set && !body.MaxConcurrency.Set && !body.MaxRPM.Set && !body.ConcurrencyOverflow.Set && !body.RPMOverflow.Set && !body.ConcurrencyQueueLimit.Set && !body.RPMQueueLimit.Set && !body.CredentialID.Set && !body.NativeServices.Set && !body.DiscoverySourceID.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
@@ -384,6 +407,7 @@ func (api *httpAPI) patchEndpointKey(writer http.ResponseWriter, request *http.R
 		Note: optionalPointer(body.Note), Enabled: optionalPointer(body.Enabled),
 		ForceStoreFalse: optionalPointer(body.ForceStoreFalse), ExpectedRevision: body.ExpectedRevision.Value,
 		MaxConcurrency: optionalPointer(body.MaxConcurrency), MaxRPM: optionalPointer(body.MaxRPM),
+		ConcurrencyOverflow: optionalPointer(body.ConcurrencyOverflow), RPMOverflow: optionalPointer(body.RPMOverflow), ConcurrencyQueueLimit: optionalPointer(body.ConcurrencyQueueLimit), RPMQueueLimit: optionalPointer(body.RPMQueueLimit),
 	}
 	if body.DiscoverySourceID.Set {
 		canonical.DiscoverySourceID = &body.DiscoverySourceID.Value
@@ -396,6 +420,7 @@ func (api *httpAPI) patchEndpointKey(writer http.ResponseWriter, request *http.R
 		CredentialID: credentialPointer, NativeServices: canonical.NativeServices, DiscoverySourceID: sourceID,
 		Note: canonical.Note, Enabled: canonical.Enabled, ForceStoreFalse: canonical.ForceStoreFalse,
 		MaxConcurrency: canonical.MaxConcurrency, MaxRPM: canonical.MaxRPM,
+		ConcurrencyOverflow: canonical.ConcurrencyOverflow, RPMOverflow: canonical.RPMOverflow, ConcurrencyQueueLimit: canonical.ConcurrencyQueueLimit, RPMQueueLimit: canonical.RPMQueueLimit,
 		ExpectedRevision: revision,
 	})
 	if err != nil {

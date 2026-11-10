@@ -121,8 +121,8 @@ describe('personal model role editor', () => {
     await view.user.type(screen.getByRole('textbox', { name: 'Model name' }), 'primary');
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
-    expect(screen.queryByRole('radiogroup', { name: 'Streaming' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Advanced behavior')).not.toBeInTheDocument();
+    expect(screen.getByText('Advanced behavior', { selector: 'strong' })).toBeVisible();
+    expect(screen.getByRole('radiogroup', { name: 'Streaming' })).not.toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(f.writes).toHaveLength(1));
     expect(f.writes[0].model_types).toEqual(['chat_completions', 'responses']);

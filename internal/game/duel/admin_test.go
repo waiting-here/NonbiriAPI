@@ -23,6 +23,8 @@ import (
 type adminContextKey struct{}
 type adminAuthorization struct{ denied atomic.Bool }
 
+const adminExportPageSize = 25
+
 func (a *adminAuthorization) AuthorizeAdminMutation(ctx context.Context, _ *sql.Tx) error {
 	if ctx.Value(adminContextKey{}) != "admin" || a.denied.Load() {
 		return authz.ErrForbidden
@@ -167,28 +169,15 @@ func TestAdminRecentExportOrderHighWaterRetryAndExpiry(t *testing.T) {
 		t.Fatal("cross-kind cursor", err)
 	}
 	page, err := f.s.AdminExport(ctx, duel.AdminExportInput{Dataset: "recent"})
-	if err != nil || len(page.Items) != 100 || page.NextCursor == nil {
+	if err != nil || len(page.Items) != adminExportPageSize || page.NextCursor == nil {
 		t.Fatal(len(page.Items), err)
 	}
 	saveAdminWireFixture(t, page, "recent")
-	for i, raw := range page.Items {
-		var item struct {
-			Kind     string `json:"kind"`
-			MatchRef string `json:"match_ref"`
-			RoundNo  int    `json:"round_no"`
-		}
-		if json.Unmarshal(raw, &item) != nil {
-			t.Fatal("invalid export")
-		}
-		if item.MatchRef != ids[i/2] || i%2 == 0 && item.Kind != "match" || i%2 == 1 && (item.Kind != "round" || item.RoundNo != 1) {
-			t.Fatal("header/round ordering", i, item)
-		}
-	}
 	f.clock.Add(6)
 	later := f.terminalMatch(true, 1)
 	input := duel.AdminExportInput{Dataset: "recent", Cursor: page.NextCursor}
 	second, err := f.s.AdminExport(ctx, input)
-	if err != nil || len(second.Items) != 2 || second.NextCursor != nil {
+	if err != nil || len(second.Items) != adminExportPageSize || second.NextCursor == nil {
 		t.Fatal(len(second.Items), err)
 	}
 	encoded, _ := json.Marshal(second)
@@ -202,6 +191,37 @@ func TestAdminRecentExportOrderHighWaterRetryAndExpiry(t *testing.T) {
 	again, _ := json.Marshal(retry)
 	if string(encoded) != string(again) {
 		t.Fatal("read-only retry drifted")
+	}
+	all := append([]json.RawMessage{}, page.Items...)
+	all = append(all, second.Items...)
+	seen := map[string]bool{*page.NextCursor: true}
+	for cursor := second.NextCursor; cursor != nil; {
+		if seen[*cursor] {
+			t.Fatal("export cursor did not advance")
+		}
+		seen[*cursor] = true
+		next, err := f.s.AdminExport(ctx, duel.AdminExportInput{Dataset: "recent", Cursor: cursor})
+		if err != nil || len(next.Items) > adminExportPageSize {
+			t.Fatal("export continuation", len(next.Items), err)
+		}
+		all = append(all, next.Items...)
+		cursor = next.NextCursor
+	}
+	if len(all) != len(ids)*2 {
+		t.Fatal("incomplete snapshot export", len(all))
+	}
+	for i, raw := range all {
+		var item struct {
+			Kind     string `json:"kind"`
+			MatchRef string `json:"match_ref"`
+			RoundNo  int    `json:"round_no"`
+		}
+		if json.Unmarshal(raw, &item) != nil {
+			t.Fatal("invalid export")
+		}
+		if item.MatchRef != ids[i/2] || i%2 == 0 && item.Kind != "match" || i%2 == 1 && (item.Kind != "round" || item.RoundNo != 1) {
+			t.Fatal("header/round ordering", i, item)
+		}
 	}
 	for _, changed := range []duel.AdminExportInput{{Dataset: "anonymous", Cursor: page.NextCursor}, {Dataset: "recent", Cursor: page.NextCursor, Selection: duel.AdminSelection{Mode: "quick"}}} {
 		if _, err := f.s.AdminExport(ctx, changed); !errors.Is(err, duel.ErrInvalidRequest) {
@@ -279,7 +299,7 @@ func TestAnonymousExportHighWaterPrivacyAndCompleteRoundPages(t *testing.T) {
 		t.Fatal("anonymous outcome filter", len(filtered.Items), err)
 	}
 	page, err := f.s.AdminExport(ctx, duel.AdminExportInput{Dataset: "anonymous"})
-	if err != nil || len(page.Items) != 100 || page.NextCursor == nil {
+	if err != nil || len(page.Items) != adminExportPageSize || page.NextCursor == nil {
 		t.Fatal(len(page.Items), err)
 	}
 	saveAdminWireFixture(t, page, "anonymous")
@@ -435,13 +455,19 @@ func TestAdminExportStopsPartialMatchAtRetentionBoundary(t *testing.T) {
 	}
 	f.clock.Store(100 + duel.RetentionSeconds - 1)
 	page, err := f.s.AdminExport(adminContext(), duel.AdminExportInput{Dataset: "recent"})
-	if err != nil || len(page.Items) != 100 || page.NextCursor == nil {
+	if err != nil || len(page.Items) != adminExportPageSize || page.NextCursor == nil {
 		t.Fatal(len(page.Items), err)
+	}
+	for count := len(page.Items); count < 100; count += len(page.Items) {
+		page, err = f.s.AdminExport(adminContext(), duel.AdminExportInput{Dataset: "recent", Cursor: page.NextCursor})
+		if err != nil || len(page.Items) != adminExportPageSize || page.NextCursor == nil {
+			t.Fatal("partial-match page boundary", len(page.Items), err)
+		}
 	}
 	var last struct {
 		Kind string `json:"kind"`
 	}
-	if json.Unmarshal(page.Items[99], &last) != nil || last.Kind != "match" {
+	if json.Unmarshal(page.Items[len(page.Items)-1], &last) != nil || last.Kind != "match" {
 		t.Fatal("fixture did not stop inside a match")
 	}
 	f.clock.Store(400 + duel.RetentionSeconds)
@@ -550,7 +576,7 @@ func TestAdminHistoryLargeDataset(t *testing.T) {
 	}
 	startedRecent := time.Now()
 	recent, err := f.s.AdminExport(ctx, duel.AdminExportInput{Dataset: "recent"})
-	if err != nil || len(recent.Items) != 100 || recent.NextCursor == nil {
+	if err != nil || len(recent.Items) != adminExportPageSize || recent.NextCursor == nil {
 		t.Fatal("large recent export", len(recent.Items), err)
 	}
 	t.Logf("recent export=%s records=%d", time.Since(startedRecent), len(recent.Items))
@@ -565,7 +591,7 @@ func TestAdminHistoryLargeDataset(t *testing.T) {
 	}
 	started := time.Now()
 	page, err := f.s.AdminExport(ctx, duel.AdminExportInput{Dataset: "anonymous"})
-	if err != nil || len(page.Items) != 100 || page.NextCursor == nil || time.Since(started) > 5*time.Second {
+	if err != nil || len(page.Items) != adminExportPageSize || page.NextCursor == nil || time.Since(started) > 5*time.Second {
 		t.Fatal("large export", len(page.Items), time.Since(started), err)
 	}
 	t.Logf("export=%s records=%d", time.Since(started), len(page.Items))

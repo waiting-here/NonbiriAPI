@@ -162,10 +162,17 @@ describe('resource browse summary normalizers', () => {
     const endpoint = normalizeEndpoint({ ...OLD_ENDPOINT, browse: endpointBrowse() });
     const key = normalizeEndpointKey({ ...OLD_KEY, browse: keyBrowse() });
     const model = normalizeModel({ ...OLD_MODEL, browse: modelBrowse() });
+    const binding = {
+      ...BASE_BINDING,
+      concurrency_overflow: 'reject',
+      rpm_overflow: 'reject',
+      concurrency_queue_limit: 0,
+      rpm_queue_limit: 0,
+    };
 
     expect(endpoint.browse).toEqual({ ...endpointBrowse(), mainstream_categories: [] });
-    expect(key.browse).toEqual({ ...keyBrowse(), preview: [BASE_BINDING] });
-    expect(model.browse).toEqual({ ...modelBrowse(), preview: [BASE_BINDING] });
+    expect(key.browse).toEqual({ ...keyBrowse(), preview: [binding] });
+    expect(model.browse).toEqual({ ...modelBrowse(), preview: [binding] });
   });
 
   it('strips unused browse fields and rejects invalid binding view state', () => {

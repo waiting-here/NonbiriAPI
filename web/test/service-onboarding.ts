@@ -103,10 +103,6 @@ export async function submitService(
 ) {
   const copy = serviceCopy(locale);
   const services = (locale === 'zh' ? zh : en).user.services;
-  const check = panel.getByRole('button', {
-    name: (locale === 'zh' ? commonZh : commonEn).common.connections.checkResult,
-    exact: true,
-  });
   const submit = panel
     .getByRole('button', { name: services.addAndFetch, exact: true })
     .or(panel.getByRole('button', { name: copy.continueService, exact: true }));
@@ -114,10 +110,11 @@ export async function submitService(
     if (await panel.getByText(copy.serviceReady, { exact: true }).isVisible()) break;
     await expect(submit).toBeEnabled();
     await submit.click();
+    // Lost POST responses still have readable receipts; observe automatic
+    // reconciliation without issuing competing checks from the polling loop.
     if (recoverLost)
       await expect
         .poll(async () => {
-          if ((await check.isVisible()) && (await check.isEnabled())) await check.click();
           return (
             (await panel.getByText(copy.serviceReady, { exact: true }).isVisible()) ||
             (await submit.evaluateAll((buttons) =>

@@ -173,10 +173,17 @@ jobs:
         with:
           go-version: 1.26.10
           cache: true
+          # Publish the current compiled source before race workers restore it.
           cache-dependency-path: |
             go.mod
             go.sum
             scripts/race-check.sh
+            **/*.go
+            internal/**
+            docs/*.md
+            web/stub/**
+            web/src/shared/styles/tokens.css
+            web/src/shared/styles/ui.css
       - name: Require this run's empty database artifact
         env:
           ARTIFACT_ID: ${{ needs.plan.outputs.template_artifact_id }}
@@ -231,10 +238,17 @@ jobs:
         with:
           go-version: 1.26.10
           cache: true
+          # Publish the current compiled source before race workers restore it.
           cache-dependency-path: |
             go.mod
             go.sum
             scripts/race-check.sh
+            **/*.go
+            internal/**
+            docs/*.md
+            web/stub/**
+            web/src/shared/styles/tokens.css
+            web/src/shared/styles/ui.css
       - name: Require prepared race artifact
         env:
           ARTIFACT_ID: ${{ needs.race_prepare.outputs.artifact_id }}

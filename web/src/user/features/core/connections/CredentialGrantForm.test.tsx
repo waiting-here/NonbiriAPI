@@ -77,6 +77,24 @@ async function setup(lost = false) {
   return { ...view, writes };
 }
 describe('adding a service key', () => {
+  it('includes independent queue settings when adding a key', async () => {
+    const view = await setup();
+    await view.user.type(
+      screen.getByLabelText(common.common.connections.secret),
+      'synthetic-queued-key',
+    );
+    await view.user.click(screen.getByText(user.user.services.keySettings, { selector: 'strong' }));
+    await view.user.selectOptions(
+      screen.getByLabelText(common.common.keyLimits.rpmOverflow),
+      'queue',
+    );
+    await view.user.clear(screen.getByLabelText(common.common.keyLimits.rpmQueueLimit));
+    await view.user.type(screen.getByLabelText(common.common.keyLimits.rpmQueueLimit), '7');
+    await view.user.click(screen.getByRole('button', { name: user.user.services.addKeyAndFetch }));
+    await screen.findByText('Pair model maintenance');
+    expect(view.writes[0]!.body).toMatchObject({ rpm_overflow: 'queue', rpm_queue_limit: 7 });
+    expect(view.writes[0]!.body).not.toHaveProperty('concurrency_overflow');
+  });
   it('saves a new secret in one submission and opens pair model maintenance', async () => {
     const view = await setup();
     await view.user.type(

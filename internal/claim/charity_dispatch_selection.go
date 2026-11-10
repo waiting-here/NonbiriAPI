@@ -89,6 +89,7 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 		return choices[i].order < choices[j].order
 	})
 	last := ErrNotFound
+	var queued []ClaimInput
 	for _, choice := range choices {
 		if _, err := tx.ExecContext(ctx, `SAVEPOINT balanced_candidate`); err != nil {
 			return Handle{}, fmt.Errorf("claim: begin balanced candidate: %w", err)
@@ -112,10 +113,23 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 			return Handle{}, fmt.Errorf("claim: close balanced candidate: %w", err)
 		}
 		if errors.Is(claimErr, ErrNotFound) || errors.Is(claimErr, ErrKeyRateLimited) || errors.Is(claimErr, donationquota.ErrLimited) {
+			if choice.preferred && !input.skipAffinityQueue && len(KeyQueueCandidates(claimErr)) > 0 {
+				// A still-valid affinity may wait before using another physical
+				// key. If queue admission fails, retry the complete candidate set
+				// without this preference before considering ordinary queues.
+				fallback := input
+				fallback.skipAffinityQueue = true
+				selected.queueFallback = &fallback
+				return Handle{}, &keyQueueError{candidates: []ClaimInput{selected}}
+			}
+			queued = append(queued, KeyQueueCandidates(claimErr)...)
 			last = claimErr
 			continue
 		}
 		return Handle{}, claimErr
+	}
+	if len(queued) > 0 {
+		return Handle{}, &keyQueueError{candidates: queued}
 	}
 	return Handle{}, last
 }

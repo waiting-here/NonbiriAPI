@@ -636,7 +636,7 @@ for (const scenario of cases) {
       .locator('.nb-fold')
       .filter({ has: page.locator('summary', { hasText: text.advanced }) });
     if (!(await advanced.evaluate((element) => (element as HTMLDetailsElement).open))) {
-      await advanced.locator('summary').click();
+      await advanced.locator(':scope > summary').click();
     }
     await expect(
       editor.getByRole('switch', { name: core('models.silentRetry'), exact: true }),

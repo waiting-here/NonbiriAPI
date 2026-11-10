@@ -471,7 +471,7 @@ describe('managed donation page integration', () => {
             '/charity?tab=charity&charity_section=models&models_page=2&model_q=Model&charity_model=1&donation_keys_page=9',
         },
       );
-      await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
+      await view.user.click(await screen.findByRole('button', { name: 'Manage donated key #31' }));
       const selected = await screen.findByRole('heading', { name: 'Service key head31…tail' });
       expect(selected.closest('section.is-selected')).toBeVisible();
       expect(
@@ -509,12 +509,14 @@ describe('managed donation page integration', () => {
           route: '/charity?charity_section=models&charity_model=1',
         },
       );
-      await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
+      await view.user.click(await screen.findByRole('button', { name: 'Manage donated key #31' }));
       await waitFor(() => expect(lost).toHaveBeenCalled());
       expect(
         screen.queryByRole('heading', { name: 'Service key head31…tail' }),
       ).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Manage key #31' })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Manage donated key #31' }),
+      ).not.toBeInTheDocument();
       expect(screen.queryByText('Synthetic donor')).not.toBeInTheDocument();
     },
   );
@@ -694,7 +696,7 @@ describe('managed donation page integration', () => {
         route: `/charity?charity_section=sources&sources_page=2&source_key=${sourceKey(0)}&source_keys_page=2&source_scope=all`,
       },
     );
-    await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Manage donated key #31' }));
     await waitFor(() =>
       expect(
         requests.some(
@@ -707,7 +709,7 @@ describe('managed donation page integration', () => {
     expect(screen.getByTestId('url')).toHaveTextContent('donation_id=7');
     expect(screen.getByTestId('url')).toHaveTextContent('donation_key=31');
     await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
-    expect(await screen.findByRole('button', { name: 'Manage key #31' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Manage donated key #31' })).toBeVisible();
     const params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
     expect(params.get('sources_page')).toBe('2');
     expect(params.get('source_keys_page')).toBe('2');

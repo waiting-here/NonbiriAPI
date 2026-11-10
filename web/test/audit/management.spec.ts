@@ -419,6 +419,153 @@ test('administrator follows retained request identity through deletion history a
   }
 });
 
+test('audit thresholds support level six and an independent level five grant', async ({
+  browser,
+}) => {
+  const state = fixture();
+  const admin = await session(browser, 'admin');
+  const steward = await session(browser, 6);
+  const trainee = await session(browser, 5);
+  const configPath = '/api/steward/abuse-audit/config';
+  const adminConfigPath = '/admin/api/abuse-audit/config';
+  const policyPath =
+    '/admin/api/users/' + state.users.find((user) => user.level === 5)!.id + '/steward-permissions';
+  const original = await read(admin, state.admin_url, adminConfigPath);
+  const originalPolicy = await read(admin, state.admin_url, policyPath);
+  let policyChanged = false;
+  try {
+    const denied = await trainee.request.put(state.user_url + configPath, {
+      headers: { Origin: state.user_url },
+      data: original,
+    });
+    expect(denied.status()).toBe(403);
+
+    const page = await steward.newPage();
+    await page.goto(state.user_url + '/steward?tab=risk&audit_tab=config');
+    const threshold = page.getByLabel('Shared IP identity threshold', { exact: true });
+    await expect(threshold).toBeEnabled();
+    const nextThreshold = original.shared_ip_users === 5 ? 6 : 5;
+    await threshold.fill(String(nextThreshold));
+    const saved = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === configPath && response.request().method() === 'PUT',
+    );
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    expect((await read(steward, state.user_url, configPath)).shared_ip_users).toBe(nextThreshold);
+
+    for (const role of ['admin', 'steward'] as const) {
+      const context = role === 'admin' ? admin : steward;
+      const origin = role === 'admin' ? state.admin_url : state.user_url;
+      const route = role === 'admin' ? '/abuse-audit?' : '/steward?tab=risk&';
+      const view = await context.newPage();
+      for (const tab of ['config', 'ips']) {
+        await view.goto(origin + route + 'audit_tab=' + tab);
+        if (tab === 'config')
+          await expect(
+            view.getByLabel('Shared IP identity threshold', { exact: true }),
+          ).toHaveValue(String(nextThreshold));
+        else
+          await expect(
+            view.getByText(
+              `New scans require at least ${nextThreshold} distinct Discord identities per IP.`,
+              { exact: false },
+            ),
+          ).toBeVisible();
+        for (const theme of ['light', 'dark']) {
+          await view.evaluate((value) => {
+            document.documentElement.dataset.theme = value;
+          }, theme);
+          for (const width of [1440, 390]) {
+            await view.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+            expect(
+              await view.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            if (process.env.NONBIRI_VISUAL_DIR)
+              await view.screenshot({
+                path: resolve(
+                  process.env.NONBIRI_VISUAL_DIR,
+                  `audit-${role}-${tab}-${theme}-${width}.jpg`,
+                ),
+                type: 'jpeg',
+                quality: 85,
+                fullPage: true,
+                animations: 'disabled',
+              });
+          }
+        }
+      }
+      await view.close();
+    }
+
+    const permissions = Object.fromEntries(
+      Object.keys(originalPolicy.permissions).map((key) => [key, key === 'risk.configure']),
+    );
+    const grant = await admin.request.put(state.admin_url + policyPath, {
+      headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+      data: {
+        expected_revision: originalPolicy.revision,
+        donation_scope: originalPolicy.donation_scope,
+        permissions,
+        limits: originalPolicy.limits,
+      },
+    });
+    expect(grant.status()).toBe(200);
+    policyChanged = true;
+    const configOnly = await trainee.newPage();
+    const auditRequests: string[] = [];
+    configOnly.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith('/api/steward/abuse-audit/')) auditRequests.push(path);
+    });
+    await configOnly.goto(
+      state.user_url +
+        '/steward?tab=risk&audit_tab=ips&audit_user=' +
+        state.management.trainee_target_id,
+    );
+    await expect(
+      configOnly.getByLabel('Shared IP identity threshold', { exact: true }),
+    ).toBeEnabled();
+    await expect(configOnly.getByRole('tab', { name: 'Account links', exact: true })).toHaveCount(
+      0,
+    );
+    await configOnly.getByLabel('Shared IP identity threshold', { exact: true }).fill('2');
+    const savedByFive = configOnly.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === configPath && response.request().method() === 'PUT',
+    );
+    await configOnly.getByRole('button', { name: 'Save', exact: true }).click();
+    expect((await savedByFive).status()).toBe(200);
+    expect((await read(trainee, state.user_url, configPath)).shared_ip_users).toBe(2);
+    expect(auditRequests.length).toBeGreaterThan(0);
+    expect(auditRequests.every((path) => path === configPath)).toBe(true);
+    expect(
+      (await trainee.request.get(state.user_url + '/api/steward/abuse-audit/users')).status(),
+    ).toBe(403);
+  } finally {
+    if (policyChanged) {
+      const current = await read(admin, state.admin_url, policyPath);
+      const restored = await admin.request.put(state.admin_url + policyPath, {
+        headers: { Origin: state.admin_url, 'Idempotency-Key': randomUUID() },
+        data: {
+          expected_revision: current.revision,
+          donation_scope: originalPolicy.donation_scope,
+          permissions: originalPolicy.permissions,
+          limits: originalPolicy.limits,
+        },
+      });
+      expect(restored.status()).toBe(200);
+    }
+    const current = await read(admin, state.admin_url, adminConfigPath);
+    const restored = await admin.request.put(state.admin_url + adminConfigPath, {
+      headers: { Origin: state.admin_url },
+      data: { ...original, revision: current.revision },
+    });
+    expect(restored.status()).toBe(200);
+    await Promise.all([admin.close(), steward.close(), trainee.close()]);
+  }
+});
+
 test('level 5 saves only message-role fields, reads logs and cannot open abuse audits', async ({
   browser,
 }, info) => {
@@ -432,7 +579,11 @@ test('level 5 saves only message-role fields, reads logs and cannot open abuse a
         state.management.charity_model_id,
     );
     const fallback = page.getByLabel('Default action for unlisted roles');
-    await page.locator('details').filter({ has: fallback }).locator('summary').click();
+    await expect(fallback).toBeAttached();
+    for (const fold of await page.locator('details').filter({ has: fallback }).all()) {
+      if ((await fold.getAttribute('open')) === null)
+        await fold.locator(':scope > summary').click();
+    }
     await expect(fallback).toBeVisible();
     await expect(fallback).toHaveValue('native');
     await page.getByRole('button', { name: 'Add a role rule', exact: true }).click();
@@ -1023,7 +1174,9 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       );
       await expect(row).toContainText(commonEn.gatewayCapabilities.cacheOptions.anthropic);
       await row.getByRole('button', { name: 'Request headers and body', exact: true }).click();
-      await page.getByText('Request adaptation', { exact: true }).last().click();
+      await page
+        .getByText(commonEn.common.operations.charity.adaptationSettings, { exact: true })
+        .click();
       const editor = page.locator('section.core-card').last();
       const defaults = editor.getByRole('group', {
         name: 'Body defaults (only when absent)',
@@ -1064,15 +1217,14 @@ for (const connectorType of ['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)
       await stewardRow
         .getByRole('button', { name: 'Request headers and body', exact: true })
         .click();
-      await stewardPage.getByText('Request adaptation', { exact: true }).last().click();
-      const readOnly = stewardPage.locator('section.core-card').last();
+      await stewardPage
+        .getByText(commonEn.common.operations.charity.adaptationSettings, { exact: true })
+        .click();
+      const stewardEditor = stewardPage.locator('section.core-card').last();
+      await expect(stewardEditor.getByLabel(commonEn.requestAdaptation.cache.label)).toBeEnabled();
       await expect(
-        readOnly.getByText('This setting is read-only for your role.', { exact: true }),
+        stewardEditor.getByRole('button', { name: 'Save request adaptation', exact: true }),
       ).toBeVisible();
-      await expect(readOnly.getByLabel(commonEn.requestAdaptation.cache.label)).toBeDisabled();
-      await expect(
-        readOnly.getByRole('button', { name: 'Save request adaptation', exact: true }),
-      ).toHaveCount(0);
       expect(
         await read(
           steward,
@@ -1210,6 +1362,12 @@ test('charity settings keep grouped controls, readable model sources, and action
       );
       const settings = page.locator('.charity-model-access-routing');
       await expect(settings).toBeVisible();
+      const advanced = page
+        .locator('details')
+        .filter({ has: page.getByText(copy.operations.charity.advancedRequests, { exact: true }) })
+        .last();
+      if ((await advanced.getAttribute('open')) === null)
+        await advanced.locator(':scope > summary').click();
       await capture('groups', async () => {
         await settings.scrollIntoViewIfNeeded();
         const groups = await settings
@@ -1235,7 +1393,10 @@ test('charity settings keep grouped controls, readable model sources, and action
               .map((node) => node.tagName),
           );
         expect(overflow).toEqual([]);
-        const segmented = settings.getByRole('radiogroup');
+        const segmented = page.getByRole('radiogroup', {
+          name: copy.transportRule.label,
+          exact: true,
+        });
         await segmented.scrollIntoViewIfNeeded();
         const choices = await segmented.evaluate((node) => {
           const bounds = node.getBoundingClientRect();

@@ -16,6 +16,8 @@
       "TestDiscordGatePolicyPreservesAccountAndConfiguration",
       "TestDualAssetSeeds",
       "TestEmbeddingRouteChecksAcceptOnlyKnownOperations",
+      "TestExactStartupRejectsHistoricalAndNewerSchemasBeforeWriting",
+      "TestExactStartupRejectsUnknownOrModifiedHistoricalSources",
       "TestGenerationTwoBootstrapFreshRequiresAbsentSidecarsAndSeedsIdentity",
       "TestGenerationTwoCanonicalDDLExecutes",
       "TestGenerationTwoCurrentEnabledRPSSnapshotReopensWithSameVault",

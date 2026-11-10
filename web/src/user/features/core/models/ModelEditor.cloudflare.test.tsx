@@ -39,6 +39,8 @@ describe('personal model Cloudflare editor', () => {
       { station: 'user' },
     );
     view.queryClient.setQueryData(coreKeys.session, { user });
+    const advanced = screen.getByText('Advanced behavior', { selector: 'strong' });
+    if (!advanced.closest('details')?.open) await view.user.click(advanced);
     const toggle = screen.getByRole('switch', { name: 'Cloudflare forwarding' });
     expect(toggle).toBeChecked();
     await view.user.click(toggle);
@@ -71,6 +73,8 @@ describe('personal model Cloudflare editor', () => {
       { station: 'user' },
     );
     view.queryClient.setQueryData(coreKeys.session, { user });
+    const advanced = screen.getByText('Advanced behavior', { selector: 'strong' });
+    if (!advanced.closest('details')?.open) await view.user.click(advanced);
     const toggle = screen.getByRole('switch', { name: 'Cloudflare forwarding' });
     expect(toggle).not.toBeChecked();
     await view.user.click(toggle);

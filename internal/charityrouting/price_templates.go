@@ -106,12 +106,16 @@ func (s *Service) priceTemplates(ctx context.Context, role roleKind, actorID int
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, _, err := s.beginRoleTransaction(ctx, role, actorID, true)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, 0, true, true)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	if role == roleSteward && state != "enabled" {
+	manage, err := priceTemplateAccessTx(ctx, tx, role, scope.ActorID, false)
+	if err != nil {
+		return empty, err
+	}
+	if !manage && state != "enabled" {
 		return empty, ErrForbidden
 	}
 	selection, args := `SELECT `+priceTemplateColumns+` FROM charity_price_templates WHERE (instr(lower(name),lower(?))>0 OR instr(lower(description),lower(?))>0)`, []any{query, query}
@@ -147,16 +151,20 @@ func (s *Service) priceTemplate(ctx context.Context, role roleKind, actorID, id 
 	if ctx == nil || id <= 0 {
 		return empty, ErrInvalidRequest
 	}
-	tx, _, err := s.beginRoleTransaction(ctx, role, actorID, true)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, 0, true, true)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
+	manage, err := priceTemplateAccessTx(ctx, tx, role, scope.ActorID, false)
+	if err != nil {
+		return empty, err
+	}
 	out, err := readPriceTemplate(ctx, tx, id)
 	if err != nil {
 		return empty, err
 	}
-	if role == roleSteward && !out.Enabled {
+	if !manage && !out.Enabled {
 		return empty, ErrNotFound
 	}
 	return out, tx.Commit()
@@ -191,13 +199,22 @@ func scanPriceTemplate(scan func(...any) error) (PriceTemplate, error) {
 }
 
 func (s *Service) mutatePriceTemplate(ctx context.Context, id int64, expected string, mutation resources.ControlMutation, input *PriceTemplateInput) (resources.MutationResult[PriceTemplate], error) {
+	return s.mutatePriceTemplateAs(ctx, roleAdmin, 0, id, expected, mutation, input)
+}
+func (s *Service) mutatePriceTemplateAs(ctx context.Context, role roleKind, actorID, id int64, expected string, mutation resources.ControlMutation, input *PriceTemplateInput) (resources.MutationResult[PriceTemplate], error) {
 	var empty resources.MutationResult[PriceTemplate]
 	var value PriceTemplate
 	var err error
 	method, route := http.MethodPost, routeAdminPriceTemplates
+	if role == roleSteward {
+		route = routeStewardPriceTemplates
+	}
 	var ids []int64
 	if id != 0 {
 		method, route, ids = http.MethodPut, routeAdminPriceTemplate, []int64{id}
+		if role == roleSteward {
+			route = routeStewardPriceTemplate
+		}
 		if input == nil {
 			method = http.MethodDelete
 		}
@@ -224,12 +241,16 @@ func (s *Service) mutatePriceTemplate(ctx context.Context, id int64, expected st
 	if err != nil {
 		return empty, err
 	}
-	tx, actorID, err := s.beginRoleTx(ctx, roleAdmin, 0)
+	tx, scope, err := s.beginManagementTx(ctx, role, actorID, 0, true, false)
 	if err != nil {
 		return empty, err
 	}
 	defer tx.Rollback()
-	decision, err := beginMutation(ctx, tx, roleAdmin, actorID, mutation, now)
+	actorID = scope.ActorID
+	if _, err := priceTemplateAccessTx(ctx, tx, role, actorID, true); err != nil {
+		return empty, err
+	}
+	decision, err := beginMutation(ctx, tx, roleKind(scope.AuditRole(role == roleAdmin)), actorID, mutation, now)
 	if err != nil {
 		return empty, err
 	}

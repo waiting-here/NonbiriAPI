@@ -164,7 +164,7 @@ for (const width of [1440, 390])
         .click();
       await expect(page.getByRole('heading', { name: 'Edit price template' })).toBeVisible();
       const verifyLeavePrompt = async () => {
-        await page.getByRole('tab', { name: 'Browse by source', exact: true }).click();
+        await page.getByRole('tab', { name: 'Donated resources', exact: true }).click();
         const prompt = page.getByRole('alertdialog', { name: 'Leave this page?' });
         await expect(prompt).toHaveCount(1);
         await shot('leave');

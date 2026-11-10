@@ -278,6 +278,7 @@ export function ModelEditor({
       ].filter(Boolean).length
     : 0;
   const isDefault =
+    sessionHeaders.length === 0 &&
     !silentRetry &&
     !flattenTools &&
     transportRule === 'passthrough' &&
@@ -348,22 +349,6 @@ export function ModelEditor({
             disabled={hasAttempt}
             showError={showTypeError}
           />
-          <CloudflareProxyField
-            enabled={cloudflareProxy}
-            mode={initial?.cloudflare_proxy_mode}
-            disabled={hasAttempt}
-            onChange={setCloudflareProxy}
-          />
-          <SessionHeaderFields
-            value={sessionHeaders}
-            onChange={setSessionHeaders}
-            disabled={hasAttempt}
-          />
-          {headersInvalid ? (
-            <p className="core-inline-error" role="alert">
-              {sharedText('common.operations.charity.validation.sessionHeaders')}
-            </p>
-          ) : null}
           <div className="core-model-preview">
             <span>{textModel('clientValue')}</span>
             <SafeCopyValue
@@ -373,42 +358,54 @@ export function ModelEditor({
           </div>
         </PanelBody>
       </Panel>
-      {initial ? (
-        <>
-          {sources?.(strategy, setStrategy, hasAttempt)}
-          <Fold
-            title={textModel('advanced')}
-            summary={textModel('advancedHelp')}
-            persistKey="model-advanced"
-            meta={textModel(isDefault ? 'default' : 'customized')}
-          >
-            <Toggle
-              label={t('models.silentRetry')}
-              description={textModel('retryHelp')}
-              checked={silentRetry}
+      {initial ? sources?.(strategy, setStrategy, hasAttempt) : null}
+      <Fold
+        title={textModel('advanced')}
+        summary={textModel('advancedHelp')}
+        defaultOpen={Boolean(sessionHeaders.length || headersInvalid)}
+        meta={textModel(isDefault ? 'default' : 'customized')}
+      >
+        <CloudflareProxyField
+          enabled={cloudflareProxy}
+          mode={initial?.cloudflare_proxy_mode}
+          disabled={hasAttempt}
+          onChange={setCloudflareProxy}
+        />
+        <SessionHeaderFields
+          value={sessionHeaders}
+          onChange={setSessionHeaders}
+          disabled={hasAttempt}
+        />
+        {headersInvalid ? (
+          <p className="core-inline-error" role="alert">
+            {sharedText('common.operations.charity.validation.sessionHeaders')}
+          </p>
+        ) : null}
+        <Toggle
+          label={t('models.silentRetry')}
+          description={textModel('retryHelp')}
+          checked={silentRetry}
+          disabled={hasAttempt}
+          onChange={setSilentRetry}
+        />
+        {modelTypes.includes('chat_completions') || modelTypes.includes('responses') ? (
+          <>
+            <TransportRuleField
+              value={transportRule}
+              onChange={setTransportRule}
               disabled={hasAttempt}
-              onChange={setSilentRetry}
             />
-            {modelTypes.includes('chat_completions') || modelTypes.includes('responses') ? (
-              <>
-                <TransportRuleField
-                  value={transportRule}
-                  onChange={setTransportRule}
-                  disabled={hasAttempt}
-                />
-                <Toggle
-                  label={t('models.flattenTools')}
-                  description={textModel('toolsHelp')}
-                  checked={flattenTools}
-                  disabled={hasAttempt}
-                  onChange={setFlattenTools}
-                />
-                <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
-              </>
-            ) : null}
-          </Fold>
-        </>
-      ) : null}
+            <Toggle
+              label={t('models.flattenTools')}
+              description={textModel('toolsHelp')}
+              checked={flattenTools}
+              disabled={hasAttempt}
+              onChange={setFlattenTools}
+            />
+            <RolePolicyEditor value={roleDraft} onChange={setRoleDraft} disabled={hasAttempt} />
+          </>
+        ) : null}
+      </Fold>
       {validation ? (
         <p className="core-inline-error" role="alert">
           {t('models.invalidName')}

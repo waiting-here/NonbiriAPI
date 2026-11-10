@@ -60,7 +60,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 	}
 	ep, err := s.resources.CreateEndpointInTransaction(ctx, tx, userID, resources.CreateEndpointInput{
 		Source: "custom", ConnectorType: input.Endpoint.ConnectorType, BaseURL: input.Endpoint.BaseURL, Note: input.Endpoint.Note, Enabled: enabled(input.Endpoint.Enabled),
-		NativeServices: input.Endpoint.NativeServices.pointer(), RerankFormat: contract.RerankFormat(input.Endpoint.RerankFormat),
+		NativeServices: input.Endpoint.NativeServices.pointer(), RerankFormat: contract.RerankFormat(input.Endpoint.RerankFormat), RerankPath: input.Endpoint.RerankPath,
 	})
 	if err != nil {
 		return nil, atStep("endpoint", err)
@@ -74,7 +74,7 @@ func (s *Service) create(ctx context.Context, userID int64, key string, canonica
 	for index, item := range input.Keys {
 		secret := []byte(item.Secret)
 		physical, createErr := s.resources.CreateEndpointKeyInTransaction(ctx, tx, userID, endpointID, resources.CreateEndpointKeyInput{
-			Secret: secret, Note: item.Note, Enabled: enabled(item.Enabled), ForceStoreFalse: item.ForceStoreFalse, OwnershipConfirmed: true, MaxConcurrency: item.MaxConcurrency, MaxRPM: item.MaxRPM,
+			Secret: secret, Note: item.Note, Enabled: enabled(item.Enabled), ForceStoreFalse: item.ForceStoreFalse, OwnershipConfirmed: true, MaxConcurrency: item.MaxConcurrency, MaxRPM: item.MaxRPM, ConcurrencyOverflow: string(item.ConcurrencyOverflow), RPMOverflow: string(item.RPMOverflow), ConcurrencyQueueLimit: int64(item.ConcurrencyQueueLimit), RPMQueueLimit: int64(item.RPMQueueLimit),
 			NativeServices: item.NativeServices.pointer(),
 		})
 		clear(secret)

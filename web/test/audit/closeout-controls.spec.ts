@@ -583,11 +583,11 @@ test('matching presets remain suggestions until an entry is explicitly selected'
         .getByLabel(channels.form.name, { exact: true })
         .fill('Matching preset ' + suffix + ' ' + index);
       await form.getByRole('button', { name: c.addEntry, exact: true }).click();
-      const group = form.getByRole('group', {
-        name: c.presetEntry.replace('{{number}}', '1'),
-        exact: true,
-      });
+      const group = form
+        .locator('details')
+        .filter({ has: adminPage.getByLabel(c.entryURL, { exact: true }) });
       await group.getByLabel(c.name, { exact: true }).fill('Matching entry ' + index);
+      await group.getByText(c.protocolSettings, { exact: true }).click();
       await group
         .getByLabel(c.protocol, { exact: true })
         .selectOption({ label: channels.connector.openaiCompatible });

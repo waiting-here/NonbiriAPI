@@ -49,7 +49,13 @@ type Context struct {
 	// UnchangedCallerParameter proves that a supported native parameter came
 	// from the caller and has the same raw JSON value in the final wire body.
 	UnchangedCallerParameter func(string) bool
-	responseStatus           int
+	// GatewayCallerInput proves the relevant caller values survived native
+	// Gateway translation without configured request rewriting.
+	GatewayCallerInput GatewayCallerInput
+	// InputLengthErrors enables structured input-length classification for JSON
+	// requests independently of caller-field rewriting.
+	InputLengthErrors bool
+	responseStatus    int
 }
 
 func (Context) String() string         { return "[redacted error context]" }
@@ -141,6 +147,11 @@ func (c Context) Parse(body []byte) Detail {
 	cleanCode := c.clean(code)
 	if cleanCode != code || !codePattern.MatchString(cleanCode) {
 		cleanCode = ""
+	}
+	if caller.inputLength {
+		// This discriminator comes from the fixed input-length code allowlist.
+		// Preserve it when configured-value guards suppress arbitrary detail.
+		cleanCode = caller.code
 	}
 	if !caller.Matches(c.responseStatus, cleanCode) {
 		caller = CallerFault{}

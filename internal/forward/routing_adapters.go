@@ -30,6 +30,12 @@ func (adapter *ClaimServiceAdapter) Claim(ctx context.Context, input claim.Claim
 	return adapter.service.Claim(ctx, input)
 }
 
+func (adapter *ClaimServiceAdapter) WaitForKey(ctx context.Context, candidates []claim.ClaimInput) (claim.Handle, error) {
+	return adapter.service.WaitForKey(ctx, candidates)
+}
+
+func (adapter *ClaimServiceAdapter) StopKeyWaiters() { adapter.service.StopKeyWaiters() }
+
 func (adapter *ClaimServiceAdapter) TakeForDispatch(ctx context.Context, handle claim.Handle) (DispatchGrant, error) {
 	return adapter.service.TakeForDispatch(ctx, handle)
 }

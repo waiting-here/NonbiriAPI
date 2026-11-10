@@ -140,8 +140,19 @@ export function TaskScans<T>({
       rpm: t('common.auditScans.highRpm'),
       concurrency: t('common.auditScans.highConcurrency'),
     })[value] ?? value;
-  const frozenLabel = (value: TaskScan) =>
-    `${value.user_id ? `${t('common.audit.selectedAccount', { user: value.user_id })} · ` : ''}${callKindLabel(value.call_kind)} · ${kind === 'users' ? `${signalLabel(value.signal)} · ` : ''}${formatDateTime(value.from)} – ${formatDateTime(value.to)}`;
+  const frozenLabel = (value: TaskScan) => {
+    const parts = [callKindLabel(value.call_kind)];
+    if (value.user_id) parts.unshift(t('common.audit.selectedAccount', { user: value.user_id }));
+    if (kind === 'users') parts.push(signalLabel(value.signal));
+    if (kind === 'shared_ips')
+      parts.push(
+        value.shared_ip_users === undefined
+          ? t('common.audit.sharedIPThresholdUnavailable')
+          : t('common.audit.sharedIPThreshold', { count: value.shared_ip_users }),
+      );
+    parts.push(`${formatDateTime(value.from)} – ${formatDateTime(value.to)}`);
+    return parts.join(' · ');
+  };
   return (
     <div className="ops-stack">
       <Card>

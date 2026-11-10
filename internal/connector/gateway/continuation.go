@@ -116,10 +116,74 @@ func replayContinuation(extra []byte, expected []any) ([]any, error) {
 		return expected, nil
 	}
 	outer, err := parseObject(extra)
-	if err != nil || !continuation.ValidExtra(outer, "gateway") {
+	if err != nil || !only(outer, "gateway", "google", "nonbiri") {
 		return nil, errRequest
 	}
-	native, err := parseObject(outer["gateway"])
+	if _, valid := continuation.ID(extra); !valid {
+		return nil, errRequest
+	}
+	var google object
+	if raw, exists := outer["google"]; exists {
+		google, err = parseObject(raw)
+		if err != nil || len(google) == 0 || !only(google, "thought_signature", "parts") {
+			return nil, googleContinuationError("expected a thought signature or supported native parts")
+		}
+	}
+	parts := expected
+	field := "extra_content.gateway"
+	if raw, native := google["parts"]; native {
+		if outer["gateway"] != nil {
+			return nil, googleContinuationError("multiple native continuation representations are ambiguous")
+		}
+		parts, err = googleContinuationParts(raw, expected)
+		field = "extra_content.google.parts"
+	} else if _, native := outer["gateway"]; native {
+		parts, err = gatewayContinuationParts(outer["gateway"])
+	} else if google == nil {
+		return nil, errRequest
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := matchContinuation(parts, expected, field); err != nil {
+		return nil, err
+	}
+	// A native replay may split text or interleave calls. Merge standard Chat
+	// signatures only after matching its public projection, without reordering it.
+	if err := replayToolSignatures(parts, expected); err != nil {
+		return nil, err
+	}
+	if raw, present := google["thought_signature"]; present {
+		signature, err := googleThoughtSignature(raw)
+		if err != nil {
+			return nil, err
+		}
+		// Chat places visible content after reasoning. Native replay can
+		// interleave them, but must not move a visible-text signature to thought.
+		kind := ""
+		for i := len(expected) - 1; i >= 0; i-- {
+			part := expected[i].(map[string]any)
+			if part["type"] == "text" || part["type"] == "reasoning" {
+				kind = part["type"].(string)
+				break
+			}
+		}
+		for i := len(parts) - 1; i >= 0; i-- {
+			part := parts[i].(map[string]any)
+			if part["type"] == kind {
+				if err := setGoogleSignature(part, signature); err != nil {
+					return nil, err
+				}
+				return parts, nil
+			}
+		}
+		return nil, googleContinuationError("message signature requires a text or reasoning part")
+	}
+	return parts, nil
+}
+
+func gatewayContinuationParts(raw []byte) ([]any, error) {
+	native, err := parseObject(raw)
 	if err != nil || !only(native, "content") {
 		return nil, errRequest
 	}
@@ -146,6 +210,10 @@ func replayContinuation(extra []byte, expected []any) ([]any, error) {
 		}
 		parts = append(parts, value)
 	}
+	return parts, nil
+}
+
+func matchContinuation(parts, expected []any, field string) error {
 	project := func(parts []any) ([]byte, error) {
 		var content, reasoning strings.Builder
 		calls := []any{}
@@ -169,9 +237,9 @@ func replayContinuation(extra []byte, expected []any) ([]any, error) {
 	defer clear(actual)
 	defer clear(wanted)
 	if err != nil || expectedErr != nil || !sameJSON(actual, wanted) {
-		return nil, reject("protocol preflight", "extra_content.gateway", "continuation parts must match the assistant message")
+		return reject("protocol preflight", field, "continuation parts must match the assistant message")
 	}
-	return parts, nil
+	return nil
 }
 
 func mergeContinuationMetadata(part map[string]any, raw []byte) error {

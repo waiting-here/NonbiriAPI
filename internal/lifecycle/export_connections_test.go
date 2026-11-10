@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
@@ -54,7 +55,7 @@ func TestConnectionExportOwnsExactPublicVersionsAndHealth(t *testing.T) {
 	}
 }
 
-func seedExportConnection(t *testing.T, tx *sql.Tx, owner int64) {
+func seedExportConnection(t *testing.T, tx *sql.Tx, owner int64, rerankPath ...string) {
 	t.Helper()
 	execute := func(query string, args ...any) sql.Result {
 		result, err := tx.ExecContext(t.Context(), query, args...)
@@ -63,9 +64,17 @@ func seedExportConnection(t *testing.T, tx *sql.Tx, owner int64) {
 		}
 		return result
 	}
-	endpoint, err := testseed.InsertEndpointTx(t.Context(), tx, testseed.EndpointInput{OwnerUserID: owner, Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://export.example/v1", At: 1})
+	endpointInput := testseed.EndpointInput{OwnerUserID: owner, Type: connectorcontract.TypeOpenAICompatible, BaseURL: "https://export.example/v1", At: 1}
+	if len(rerankPath) > 0 {
+		endpointInput.NativeServices, _ = connectorcontract.SupportedNativeServices(endpointInput.Type)
+		endpointInput.RerankFormat = connectorcontract.RerankFormatGeneric
+	}
+	endpoint, err := testseed.InsertEndpointTx(t.Context(), tx, endpointInput)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(rerankPath) > 0 {
+		execute("UPDATE endpoints SET rerank_path=? WHERE id=?", rerankPath[0], endpoint)
 	}
 	secret := execute("INSERT INTO endpoint_key_secrets(context_id,encrypted_secret,key_body_review_hmac,created_at) VALUES(?,'nbsec:v2:secret-sentinel',?,1)", bytes.Repeat([]byte{byte(owner)}, 16), bytes.Repeat([]byte{byte(owner)}, 32))
 	secretID, err := secret.LastInsertId()
@@ -107,6 +116,18 @@ func seedExportConnection(t *testing.T, tx *sql.Tx, owner int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(rerankPath) > 0 {
+		var useID, revision int64
+		if err := tx.QueryRowContext(t.Context(), "SELECT id,revision FROM donation_uses WHERE donation_key_id=? AND native_service_bit=16384", member).Scan(&useID, &revision); err != nil {
+			t.Fatal(err)
+		}
+		next, err := connectionstore.StagePendingUseRevisionTx(t.Context(), tx, connectionstore.StagePendingUseRevisionInput{UseID: useID, ExpectedRevision: revision, GrantRevisionID: key.GrantRevisionID, Origin: connectionstore.UseOriginServiceExpansion, At: 3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		execute("UPDATE donation_use_revisions SET review_state='approved',reviewed_at=3 WHERE id=?", next.RevisionID)
+		execute("UPDATE donation_uses SET current_approved_revision_id=?,current_pending_revision_id=NULL,rerank_path_override='/managed/reranks',revision=revision+1 WHERE id=?", next.RevisionID, useID)
+	}
 	execute(`INSERT INTO donation_service_health(use_id,endpoint_key_id,native_service_bit,credential_version_id,streak_generation,failure_streak,failure_disabled,next_claim_seq,next_fold_seq,retry_after_until,backoff_generation,backoff_episode,backoff_period,backoff_source,backoff_stage,backoff_retry_at,updated_at)
  VALUES(?,?,1,?,?,?,0,?,?,10,1,1,'day','builtin',1,20,3)`, uses[0], key.KeyID, key.CredentialVersionID, one, two, zero, zero)
 }
@@ -114,7 +135,45 @@ func seedExportConnection(t *testing.T, tx *sql.Tx, owner int64) {
 func TestConnectionExportFieldSetsAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, CredentialExport{}, "id", "connection_id", "note", "enabled", "revision", "credential_version", "deleted_at", "created_at", "updated_at")
 	assertClosedJSONKeys(t, CredentialVersionExport{}, "credential_id", "credential_version", "display_head", "display_tail", "enabled", "revision", "created_at", "retired_at")
-	assertClosedJSONKeys(t, DonationUseExport{}, "id", "donation_id", "donation_key_id", "native_services", "enabled", "discovery_enabled", "revision", "approved_revision", "pending_revision", "created_at", "updated_at", "revisions", "health")
+	assertClosedJSONKeys(t, DonationUseExport{}, "id", "donation_id", "donation_key_id", "native_services", "enabled", "discovery_enabled", "revision", "approved_revision", "pending_revision", "created_at", "updated_at", "revisions", "health", "rerank_path_override")
 	assertClosedJSONKeys(t, DonationUseHealthExport{}, "credential_id", "credential_version", "failure_streak", "failure_disabled", "retry_after_until", "backoff_retry_at", "backoff_period", "backoff_source", "backoff_stage", "updated_at")
 	assertClosedJSONKeys(t, SourceRevisionExport{}, "discovery_source_id", "discovery_source_revision", "credential_id", "credential_version", "base_url", "list_format", "created_at")
+}
+
+func TestRerankPathExportAndUseDeletion(t *testing.T) {
+	fixture := newLifecycleTestFixture(t, 100)
+	owner := seedLifecycleUser(t, fixture.store.DB(), "rerank-export-owner", false, 1)
+	tx, err := fixture.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	seedExportConnection(t, tx, owner, "/submitted/reranks")
+	if _, err = tx.ExecContext(t.Context(), "UPDATE endpoints SET rerank_path='/self/reranks' WHERE user_id=?", owner); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exportConnections(t.Context(), tx, ExportRequest{UserID: owner, Limit: 10000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, use := range out.DonationUses {
+		if len(use.NativeServices) != 1 || use.NativeServices[0] != "rerank" {
+			continue
+		}
+		found = true
+		if use.RerankPathOverride == nil || *use.RerankPathOverride != "/managed/reranks" || len(use.Revisions) != 2 || use.Revisions[1].RerankPath != "/submitted/reranks" {
+			t.Fatalf("path export: %+v", use)
+		}
+	}
+	if !found {
+		t.Fatal("missing rerank use")
+	}
+	if _, err = tx.ExecContext(t.Context(), "DELETE FROM donations WHERE user_id=?", owner); err != nil {
+		t.Fatal(err)
+	}
+	out, err = exportConnections(t.Context(), tx, ExportRequest{UserID: owner, Limit: 10000})
+	if err != nil || len(out.DonationUses) != 0 {
+		t.Fatal("deleted paths retained", err)
+	}
 }

@@ -573,16 +573,16 @@ function setupFor(station: 'admin' | 'user'): StationSetup {
       theme: 'light',
       width: 1_280,
       marker: ADMIN_MARKER,
-      sourceTab: 'Browse by source',
+      sourceTab: 'Donated resources',
       managementTab: '',
-      searchSources: 'Search sources',
+      searchSources: 'Search service sources',
       searchKeys: 'Search keys',
       scope: 'Source scope',
       applySearch: 'Search',
-      backToSources: 'Back to sources',
+      backToSources: 'Back to service sources',
       next: 'Next',
       retry: /^Retry$/,
-      manageKey: /^Manage key #99$/,
+      manageKey: /^Manage donated key #99$/,
       safeNote: 'Review note',
       saveKeyLimits: 'Save key limits',
       returnToList: 'Return to list',
@@ -597,16 +597,16 @@ function setupFor(station: 'admin' | 'user'): StationSetup {
     theme: 'dark',
     width: 390,
     marker: STEWARD_MARKER,
-    sourceTab: '按来源查看',
+    sourceTab: '捐赠资源',
     managementTab: '公益管理',
-    searchSources: '搜索来源',
+    searchSources: '搜索服务来源',
     searchKeys: '搜索密钥',
     scope: '来源范围',
     applySearch: '搜索',
-    backToSources: '返回来源列表',
+    backToSources: '返回服务来源',
     next: '下一页',
     retry: /^重试$/,
-    manageKey: /^管理密钥 #99$/,
+    manageKey: /^管理捐赠密钥 #99$/,
     safeNote: '审核备注',
     saveKeyLimits: '保存密钥限制',
     returnToList: '返回列表',
@@ -642,9 +642,7 @@ async function exerciseManagedSourceBrowser(
 
   const browser = page.locator('.charity-source-browser');
   await expect(browser).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: /按来源查看公益资源|Browse charity by source/ }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /捐赠资源|Donated resources/ })).toBeVisible();
   await expect.poll(() => fixture.donationListReads.length).toBeGreaterThan(0);
   await expect.poll(() => fixture.sourceReads.length).toBeGreaterThan(0);
   await expect(page.getByRole('combobox', { name: setup.scope, exact: true })).toHaveValue('all');
@@ -740,7 +738,7 @@ async function exerciseManagedSourceBrowser(
   expect(fixture.sourceKeyReads.at(-1)).toContain('page=2');
   await expect(keysSection.getByRole('button', { name: setup.manageKey })).toBeVisible();
   await expect(keySearch).toHaveValue('key-needle');
-  await expect(keysSection.locator('.nb-key-limits__summary')).toContainText('2147483647');
+  await expect(keysSection.locator('.nb-key-limits__summary')).toContainText('2,147,483,647');
   await assertNoHorizontalOverflow(page);
   await saveScreenshot(page, `${setup.station}-source-page-2-${setup.locale}-${setup.theme}`);
 

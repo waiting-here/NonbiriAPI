@@ -420,12 +420,14 @@ describe('Risk audit access and evidence presentation', () => {
     expect(screen.getByText(/not proof of identity or misuse/)).toBeVisible();
     expect(screen.getByText(/Incomplete minutes/)).toBeVisible();
   });
-  it('exposes thresholds as read-only for a steward', async () => {
+  it('exposes thresholds as read-only without a configuration grant', async () => {
     const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
       station: 'user',
     });
     await view.user.click(screen.getByRole('tab', { name: 'Thresholds' }));
-    expect(await screen.findByText('Only administrators can change thresholds.')).toBeVisible();
+    expect(
+      await screen.findByText('Changing thresholds requires the audit threshold permission.'),
+    ).toBeVisible();
     for (const input of screen.getAllByRole('spinbutton')) expect(input).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
@@ -450,6 +452,65 @@ describe('Risk audit access and evidence presentation', () => {
     expect(screen.getAllByLabelText('Match value')).toHaveLength(8);
   });
 });
+
+it.each(['admin', 'steward'] as const)(
+  'separates new shared-IP thresholds from a selected frozen scan for %s',
+  async (role) => {
+    const frozen = { ...scan, kind: 'shared_ips', shared_ip_users: 3 };
+    api.config.mockResolvedValue({
+      threshold_percent: 80,
+      consecutive_minutes: 5,
+      shared_ip_hours: 24,
+      shared_ip_users: 5,
+      user_ip_window_hours: 24,
+      user_ip_min_ips: 3,
+      revision: 2,
+      updated_at: 1,
+    });
+    api.recentTasks.mockResolvedValue([frozen]);
+    api.taskResults.mockResolvedValue({
+      scan: frozen,
+      items: [],
+      page: '1',
+      page_size: 20,
+      total_items: '0',
+      total_pages: '1',
+      coverage: 'complete',
+    });
+    const view = await renderWithProviders(<RiskAuditPanel role={role} scopeKey="operator" />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role: role === 'admin' ? 'admin' : 'user',
+      route: '/abuse-audit?audit_tab=ips&audit_ips_scan=' + scanID,
+    });
+    expect(
+      await screen.findByText(/New scans require at least 5 distinct Discord identities per IP\./),
+    ).toBeVisible();
+    expect(
+      await screen.findByText(
+        /Frozen conditions for this scan:.*At least 3 distinct Discord identities/,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText(/The default window is the last 24 hours/)).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(api.createTask).not.toHaveBeenCalled();
+    const legacyScan = { ...frozen, shared_ip_users: undefined };
+    api.taskResults.mockResolvedValue({
+      scan: legacyScan,
+      items: [],
+      page: '1',
+      page_size: 20,
+      total_items: '0',
+      total_pages: '1',
+      coverage: 'complete',
+    });
+    await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(
+      await screen.findByText(
+        /Frozen conditions for this scan:.*Identity threshold unavailable for this scan/,
+      ),
+    ).toBeVisible();
+  },
+);
 
 it('uses server-relative quick ranges even when the browser clock is ahead', async () => {
   const view = await renderWithProviders(<RiskAuditPanel role="admin" scopeKey="operator" />, {

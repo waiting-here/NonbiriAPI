@@ -251,6 +251,9 @@ func publicFlowHandler(flow *flowcontrol.Controller, next http.Handler) (http.Ha
 }
 
 func (runtime *publicForwardRuntime) BeginShutdown() {
+	if runtime != nil && runtime.service != nil {
+		runtime.service.BeginShutdown()
+	}
 	if runtime != nil && runtime.lifecycle != nil {
 		_ = runtime.lifecycle.Close()
 	}

@@ -27,7 +27,7 @@
 }
 .gacha-admin-covers {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 12rem));
   gap: 0.6rem;
 }
 .gacha-admin-covers button {
@@ -90,12 +90,15 @@
   gap: 1rem;
 }
 .gacha-admin-roster > div {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
 }
 .gacha-admin-roster label {
   display: grid;
+  flex: 1 1 10rem;
+  min-width: 0;
+  max-width: min(100%, 12rem);
   gap: 0.4rem;
 }
 .gacha-admin-roster label img {
@@ -117,7 +120,7 @@
   transform: translateX(-50%);
   width: min(640px, 90vw);
 }
-@media (max-width: 600px) {
+@media (width < 40rem) {
   .gacha-admin-grid {
     grid-template-columns: 1fr;
   }
@@ -127,7 +130,8 @@
   .gacha-admin-pools article {
     grid-template-columns: 1fr;
   }
-  .gacha-admin-roster > div {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .gacha-admin-roster label {
+    flex-basis: 8rem;
+    max-width: min(100%, 10rem);
   }
 }

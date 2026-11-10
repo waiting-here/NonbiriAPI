@@ -41,6 +41,12 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 		path = "/chat/completions"
 	}
 	url := strings.TrimSuffix(client.BaseURL(), "/") + path
+	if request.operation == contract.OperationRerank {
+		url, err = contract.RerankURL(client.BaseURL(), target.rerankPath)
+		if err != nil {
+			return result
+		}
+	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
@@ -75,7 +81,7 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	errorGuard := newSensitiveGuard(materials...)
 	defer errorGuard.Clear()
 	clear(identifier)
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), InputLengthErrors: len(request.parts) == 0 && (kind == contract.TypeOpenAICompatible || kind == contract.TypeOpenAIResponses || kind == contract.TypeOpenAIChatCompletions), Rules: smartbackoff.RulesFromContext(ctx), BaseURL: target.baseURL, PrivateModel: target.upstreamModel, ContainsSecret: func(value []byte) bool {
 		scanner := errorGuard.clone()
 		defer scanner.Clear()
 		return scanner.Contains(value)

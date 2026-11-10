@@ -1,3 +1,4 @@
+import { keyQueueFields, keyQueuePatch } from '@shared/operations/keyQueue';
 import { normalizeNativeServices, normalizeRerankFormat } from '@shared/connections';
 import { normalizeSessionHeaders } from '@shared/sessionHeaders';
 import { queryPath } from '@shared/operations/api';
@@ -483,6 +484,9 @@ function endpointScopeInput(source: Record<string, unknown>) {
     ...(source.rerank_format === undefined
       ? {}
       : { rerank_format: normalizeRerankFormat(source.rerank_format) }),
+    ...(source.rerank_path === undefined
+      ? {}
+      : { rerank_path: validateScalarInput(source.rerank_path, 2048, 'rerank path') }),
   };
 }
 function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
@@ -500,6 +504,7 @@ function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput 
       'connection_id',
       'native_services',
       'rerank_format',
+      'rerank_path',
     ],
     'endpoint creation input',
   );
@@ -508,6 +513,7 @@ function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput 
     'connection_id',
     'native_services',
     'rerank_format',
+    'rerank_path',
     'channel_entry_id',
     'channel_revision',
   ])
@@ -561,12 +567,12 @@ export async function patchEndpoint(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['note', 'enabled', 'connection_id', 'native_services', 'rerank_format'],
+    ['note', 'enabled', 'connection_id', 'native_services', 'rerank_format', 'rerank_path'],
     'endpoint update input',
   );
   if (
-    !['note', 'enabled', 'connection_id', 'native_services', 'rerank_format'].some((key) =>
-      Object.hasOwn(record, key),
+    !['note', 'enabled', 'connection_id', 'native_services', 'rerank_format', 'rerank_path'].some(
+      (key) => Object.hasOwn(record, key),
     )
   ) {
     throw new ApiError('invalid_request', 'Invalid endpoint update input.', 400);
@@ -643,6 +649,7 @@ export async function createEndpointKey(
       'discovery_source_id',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
     ],
     'endpoint key creation input',
   );
@@ -670,6 +677,7 @@ export async function createEndpointKey(
     enabled: exactBooleanInput(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBooleanInput(record.force_store_false, 'endpoint key store policy'),
     ownership_confirmed: true,
+    ...keyQueuePatch(record),
     ...(record.max_concurrency !== undefined
       ? { max_concurrency: keyLimitInput(record.max_concurrency) }
       : {}),
@@ -704,6 +712,7 @@ export async function patchEndpointKey(
       'force_store_false',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
       'credential_id',
       'native_services',
       'discovery_source_id',
@@ -717,6 +726,7 @@ export async function patchEndpointKey(
       'force_store_false',
       'max_concurrency',
       'max_rpm',
+      ...keyQueueFields,
       'credential_id',
       'native_services',
       'discovery_source_id',
@@ -740,6 +750,7 @@ export async function patchEndpointKey(
       ? {}
       : { native_services: normalizeNativeServices(record.native_services) }),
     expected_revision: revisionField(record.expected_revision, 'endpoint key revision', true),
+    ...keyQueuePatch(record),
     ...(Object.hasOwn(record, 'max_concurrency')
       ? { max_concurrency: keyLimitInput(record.max_concurrency) }
       : {}),

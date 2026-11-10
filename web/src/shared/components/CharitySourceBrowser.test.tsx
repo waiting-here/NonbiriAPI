@@ -286,7 +286,7 @@ describe('CharitySourceBrowser', () => {
     );
     expect(onOpenDonation).toHaveBeenCalledWith('7');
     await view.user.click(
-      within(keyPane(view.container)).getByRole('button', { name: /Manage key #11/ }),
+      within(keyPane(view.container)).getByRole('button', { name: /Manage donated key #11/ }),
     );
     expect(onOpenDonation).toHaveBeenCalledWith('7', '11');
   });
@@ -301,7 +301,7 @@ describe('CharitySourceBrowser', () => {
     await within(pane).findByRole('button', {
       name: /Custom endpoint: https:\/\/source-0\.example\.test\/v1/,
     });
-    const input = within(view.container).getByRole('searchbox', { name: 'Search sources' });
+    const input = within(view.container).getByRole('searchbox', { name: 'Search service sources' });
     await view.user.type(input, 'provider');
     await view.user.click(within(view.container).getByRole('button', { name: 'Search' }));
     await waitFor(() =>
@@ -333,7 +333,7 @@ describe('CharitySourceBrowser', () => {
     await within(sourcePane(view.container)).findByRole('button', {
       name: /Custom endpoint: https:\/\/source-0\.example\.test\/v1/,
     });
-    const search = within(view.container).getByRole('searchbox', { name: 'Search sources' });
+    const search = within(view.container).getByRole('searchbox', { name: 'Search service sources' });
     const value = '😀'.repeat(128);
     fireEvent.change(search, { target: { value } });
     await view.user.click(within(view.container).getByRole('button', { name: 'Search' }));
@@ -363,7 +363,7 @@ describe('CharitySourceBrowser', () => {
     await within(sourcePane(view.container)).findByRole('button', {
       name: /Custom endpoint: https:\/\/source-0\.example\.test\/v1/,
     });
-    const search = within(view.container).getByRole('searchbox', { name: 'Search sources' });
+    const search = within(view.container).getByRole('searchbox', { name: 'Search service sources' });
     const requestCount = requests.length;
     const invalidValues = ['bad\u0001search', 'bad\u0085search', 'bad\ud800search'];
 
@@ -489,7 +489,7 @@ describe('CharitySourceBrowser', () => {
     expect(requests.some((request) => request.searchParams.get('page') === '2')).toBe(true);
 
     await view.user.click(
-      within(keyPane(view.container)).getByRole('button', { name: 'Back to sources' }),
+      within(keyPane(view.container)).getByRole('button', { name: 'Back to service sources' }),
     );
     await waitFor(() => expect(currentSearch()).not.toContain('source_key='));
     const search = new URLSearchParams(currentSearch());
@@ -515,7 +515,7 @@ describe('CharitySourceBrowser', () => {
       { station: 'admin', role: 'admin', route: '/charity?source_scope=all' },
     );
     const pane = sourcePane(view.container);
-    expect(await within(pane).findByText('No source groups')).toBeVisible();
+    expect(await within(pane).findByText('No service sources')).toBeVisible();
     expect(within(pane).queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
     expect(requests).toHaveLength(1);
     expect(requests[0]?.searchParams.get('scope')).toBe('all');
@@ -557,7 +557,7 @@ describe('CharitySourceBrowser', () => {
       name: /Manage donation #7/,
     });
     const manageKey = within(keyPane(view.container)).getByRole('button', {
-      name: /Manage key #11/,
+      name: /Manage donated key #11/,
     });
     expect(manageDonation).toBeDisabled();
     expect(manageKey).toBeDisabled();

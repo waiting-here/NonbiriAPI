@@ -541,6 +541,9 @@ for (const scenario of scenarios) {
     const editor = page.locator('.card').filter({
       has: page.getByRole('heading', { name: MODEL_NAME, exact: true }),
     });
+    await editor
+      .getByText(chinese ? '高级请求设置' : 'Advanced request settings', { exact: true })
+      .click();
     const transport = editor.getByRole('radiogroup', { name: ruleLabel });
     await expect(transport.getByRole('radio', { name: options[0], exact: true })).toBeChecked();
     await expect(transport.locator('label')).toHaveText(options);

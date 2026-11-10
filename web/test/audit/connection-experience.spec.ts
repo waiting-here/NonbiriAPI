@@ -16,7 +16,7 @@ import userEn from '../../src/user/i18n/en.json' with { type: 'json' };
 import bindingCopy from '../../src/user/features/core/models/binding-copy/en.json' with { type: 'json' };
 import type { NativeService } from '../../src/shared/nativeServices';
 import type { DonationUse } from '../../src/shared/operations/donationUses';
-import { submitService } from '../service-onboarding';
+import { fillService, submitService } from '../service-onboarding';
 
 const c = common.common.connections;
 const native = common.common.modelTypes;
@@ -555,6 +555,220 @@ async function approve(context: BrowserContext, owner: BrowserContext, donation:
   );
   expect(result.status).toBe('approved');
 }
+
+test('dedicated HTTP rerank service creation accepts a custom path without a format choice', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 'owner');
+  const r = common.common.nativeServices;
+  const tag = 'Dedicated rerank ' + randomUUID().slice(0, 8);
+  try {
+    const group = await connection(owner, tag);
+    await credential(owner, group, tag, 'synthetic-dedicated-rerank');
+    const base = await baseURL(owner);
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
+    await fillService(form, { name: tag, url: base, discovery: false });
+    await form
+      .getByRole('combobox', { name: c.protocol, exact: true })
+      .selectOption('cohere-rerank');
+    await openFold(form, r.rerankSettings);
+    await form.getByLabel(r.rerankPath, { exact: false }).fill('/custom/reranks');
+    await expect(form.getByRole('combobox', { name: r.rerankFormat, exact: true })).toHaveCount(0);
+    await submitService(form);
+    const endpoint = (
+      await userAPI<Numbered<Entry & { rerank_path: string; rerank_url: string }>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data.find((row) => row.note === tag)!;
+    expect(endpoint).toMatchObject({
+      native_services: ['rerank'],
+      rerank_path: '/custom/reranks',
+      rerank_url: new URL(base).origin + '/custom/reranks',
+    });
+  } finally {
+    await owner.close();
+  }
+});
+
+test('custom rerank paths keep self-use separate from charity overrides and donated inheritance', async ({
+  browser,
+}, info) => {
+  const owner = await session(browser, 'owner');
+  const admin = await session(browser, 'admin');
+  const junior = await session(browser, 5);
+  const senior = await session(browser, 6);
+  const r = common.common.nativeServices;
+  const tag = 'Rerank paths ' + randomUUID().slice(0, 8);
+  let donationId: string | undefined;
+  try {
+    const group = await connection(owner, tag);
+    await credential(owner, group, tag, 'synthetic-rerank-credential');
+    const base = await baseURL(owner);
+    const origin = new URL(base).origin;
+    const donatedPath = '/compatible-api/v1/reranks';
+    const page = await owner.newPage();
+    await page.goto(fixture().user_url + '/endpoints?connection_id=' + group.id);
+    await page.getByRole('button', { name: c.addEntry, exact: true }).click();
+    const form = page.getByRole('dialog', { name: c.addEntry, exact: true });
+    await fillService(form, { name: tag, url: base, discovery: false });
+    await openFold(form, r.rerankSettings);
+    await form.getByLabel(r.rerankPath, { exact: false }).fill(donatedPath);
+    await expect(form.getByText(origin + donatedPath, { exact: true })).toBeVisible();
+    await submitService(form);
+    type RerankEntry = Entry & {
+      rerank_path: string;
+      rerank_url: string;
+      rerank_path_configurable: boolean;
+    };
+    const endpoint = (
+      await userAPI<Numbered<RerankEntry>>(
+        owner,
+        '/api/connections/' + group.id + '/entries?page=1&page_size=20',
+      )
+    ).data.find((row) => row.note === tag)!;
+    expect(endpoint).toMatchObject({
+      rerank_path: donatedPath,
+      rerank_url: origin + donatedPath,
+      rerank_path_configurable: true,
+    });
+    const key = (
+      await userAPI<Numbered<Key>>(
+        owner,
+        '/api/endpoints/' + endpoint.id + '/keys?page=1&page_size=20',
+      )
+    ).data[0]!;
+    const donation = await donate(owner, key, ['chat_completions', 'rerank'], tag);
+    donationId = donation.id;
+
+    await page.goto(
+      fixture().user_url +
+        '/endpoints?connection_id=' +
+        group.id +
+        '&connection_view=entries&endpoint_id=' +
+        endpoint.id,
+    );
+    const settings = await openFold(page, services.endpointSettings);
+    const path = settings.getByLabel(r.rerankPath, { exact: false });
+    await expect(path).toHaveValue(donatedPath);
+    await path.fill('/self/reranks');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(page, info, 'rerank-service-settings', width, theme, path, {
+          source: 'self',
+          baseURL: base,
+        });
+    const saved = responseFor(page, 'PATCH', '/api/endpoints/' + endpoint.id);
+    await settings.getByRole('button', { name: c.save, exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    expect(
+      (await uses(owner, donation.id)).find((row) => row.native_service === 'rerank'),
+    ).toMatchObject({ rerank_path_override: null, effective_rerank_url: origin + donatedPath });
+
+    const reviewer = await admin.newPage();
+    await reviewer.goto(
+      fixture().admin_url + '/charity?charity_section=donations&donation_id=' + donation.id,
+    );
+    const materials = await openFold(reviewer, c.donationMaterials);
+    const charity = materials
+      .locator('form')
+      .filter({ has: reviewer.getByRole('group', { name: r.charityRerankSettings, exact: true }) });
+    await charity
+      .getByRole('combobox', { name: r.charityRerankSource, exact: true })
+      .selectOption('custom');
+    await charity.getByLabel(r.rerankPath, { exact: false }).fill('/charity/reranks');
+    for (const width of [1440, 390])
+      for (const theme of ['light', 'dark'] as const)
+        await screenshot(reviewer, info, 'rerank-approval-settings', width, theme, charity, {
+          role: 'admin',
+          scope: 'charity',
+        });
+    const rerankUse = (await uses(owner, donation.id)).find(
+      (row) => row.native_service === 'rerank',
+    )!;
+    const overrideSaved = responseFor(
+      reviewer,
+      'PATCH',
+      '/admin/api/donations/' + donation.id + '/uses/' + rerankUse.id,
+    );
+    await charity.getByRole('button', { name: r.saveCharityRerank, exact: true }).click();
+    const overrideReceipt = await overrideSaved;
+    expect(overrideReceipt.status()).toBe(200);
+    expect(overrideReceipt.request().postDataJSON()).toEqual({
+      expected_revision: rerankUse.revision,
+      rerank_path_override: '/charity/reranks',
+    });
+    await expect(
+      charity.getByRole('button', { name: r.saveCharityRerank, exact: true }),
+    ).toBeDisabled();
+    await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    await expect
+      .poll(async () => (await userAPI<Donation>(owner, '/api/donations/' + donation.id)).status)
+      .toBe('approved');
+    await qualifyForSteward(admin, donation, donation.keys[0]!.id, randomUUID().slice(0, 8));
+
+    for (const [context, level] of [
+      [junior, 5],
+      [senior, 6],
+    ] as const) {
+      const manager = await context.newPage();
+      await manager.goto(
+        fixture().user_url +
+          '/steward?tab=charity&charity_section=donations&donation_id=' +
+          donation.id,
+      );
+      const details = await openFold(manager, c.donationMaterials);
+      const control = details.locator('form').filter({
+        has: manager.getByRole('group', { name: r.charityRerankSettings, exact: true }),
+      });
+      const select = control.getByRole('combobox', { name: r.charityRerankSource, exact: true });
+      await expect(select).toHaveValue('custom');
+      await control.getByLabel(r.rerankPath, { exact: false }).fill('');
+      const button = control.getByRole('button', { name: r.saveCharityRerank, exact: true });
+      await button.click();
+      await expect(button).toBeDisabled();
+      const standard = (await uses(owner, donation.id)).find(
+        (row) => row.native_service === 'rerank',
+      )!;
+      expect(standard).toMatchObject({
+        rerank_path_override: '',
+        effective_rerank_url: base.replace(/\/+$/, '') + '/rerank',
+      });
+      for (const width of [1440, 390])
+        for (const theme of ['light', 'dark'] as const)
+          await screenshot(manager, info, 'rerank-steward-' + level, width, theme, control, {
+            role: level,
+            scope: 'charity',
+          });
+      await select.selectOption('inherit');
+      await button.click();
+      await expect(button).toBeDisabled();
+      expect(
+        (await uses(owner, donation.id)).find((row) => row.native_service === 'rerank'),
+      ).toMatchObject({ rerank_path_override: null, effective_rerank_url: origin + donatedPath });
+      if (level === 5) {
+        await select.selectOption('custom');
+        await control.getByLabel(r.rerankPath, { exact: false }).fill('/senior-review/reranks');
+        await button.click();
+        await expect(button).toBeDisabled();
+      }
+    }
+    expect(await userAPI<RerankEntry>(owner, '/api/endpoints/' + endpoint.id)).toMatchObject({
+      rerank_path: '/self/reranks',
+      rerank_url: origin + '/self/reranks',
+    });
+    await noSecrets(page, ['synthetic-rerank-credential']);
+  } finally {
+    try {
+      if (donationId) await endDonation(owner, donationId);
+    } finally {
+      await Promise.all([owner, admin, junior, senior].map((context) => context.close()));
+    }
+  }
+});
 
 for (const configuredCatalog of [false, true]) {
   test(`donation catalog ${configuredCatalog ? 'configured' : 'standard'} works before and after approval without sharing consent`, async ({
@@ -1168,6 +1382,7 @@ test('additional services stay pending with their old budget and redacted stewar
       expect(row.capabilities).toEqual({
         can_review: false,
         can_manage: false,
+        can_edit_rerank_path: false,
         can_reset_failures: false,
         can_discover: false,
         can_bind: false,
@@ -1225,7 +1440,7 @@ async function openTargetEditor(page: Page, title: string, charity: boolean) {
     .first()
     .getByRole('button', { name: c.editBindingSources, exact: true })
     .click();
-  return page.getByRole('region', { name: c.editBindingSources, exact: true });
+  return page.getByRole('dialog', { name: new RegExp('^' + c.editBindingSources) });
 }
 async function addGroup(
   page: Page,
@@ -1688,11 +1903,12 @@ test('connection lists return to the requested page and mainstream mappings use 
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
     await form.getByRole('button', { name: c.addEntry, exact: true }).click();
     for (const index of [0, 1]) {
-      const group = form.getByRole('group', {
-        name: c.presetEntry.replace('{{number}}', String(index + 1)),
-        exact: true,
-      });
+      const group = form
+        .locator('details')
+        .filter({ has: manager.getByLabel(c.entryURL, { exact: true }) })
+        .nth(index);
       await group.getByLabel(c.name, { exact: true }).fill(name + ' ' + String(index + 1));
+      await openFold(group, c.protocolSettings);
       const protocol = group.getByLabel(c.protocol, { exact: true });
       await protocol.selectOption({ label: channels.connector.openaiCompatible });
       await expect(protocol.locator('option:checked')).toHaveText(
@@ -1710,6 +1926,20 @@ test('connection lists return to the requested page and mainstream mappings use 
     await suggestion.getByLabel(c.addDiscoverySuggestion, { exact: true }).check();
     await suggestion.getByLabel(c.discoveryBaseURL, { exact: true }).fill(base);
     await suggestion.getByLabel(c.listFormat, { exact: true }).selectOption('openai');
+    const firstEntry = form
+      .locator('details')
+      .filter({ has: manager.getByLabel(c.entryURL, { exact: true }) })
+      .first();
+    const entryURL = firstEntry.getByLabel(c.entryURL, { exact: true });
+    await entryURL.fill('invalid-url');
+    await firstEntry.locator(':scope > summary').click();
+    await form.getByRole('button', { name: channels.actions.create, exact: true }).click();
+    await expect(firstEntry).toHaveAttribute('open');
+    await expect(entryURL).toBeFocused();
+    expect(await entryURL.evaluate((input: HTMLInputElement) => input.validationMessage)).not.toBe(
+      '',
+    );
+    await entryURL.fill(base);
     const created = responseFor(manager, 'POST', '/admin/api/mainstream-channels');
     await form.getByRole('button', { name: channels.actions.create, exact: true }).click();
     const createdResponse = await created;
@@ -1754,6 +1984,29 @@ test('connection lists return to the requested page and mainstream mappings use 
       .nth(1);
     for (const option of await secondSelection.getByRole('checkbox').all()) await option.uncheck();
     await secondSelection.getByLabel(native.responses, { exact: true }).check();
+    expect(await firstSelection.getByRole('checkbox').count()).toBeGreaterThan(4);
+    for (const theme of ['light', 'dark'] as const)
+      for (const width of [1440, 390]) {
+        await screenshot(
+          manager,
+          info,
+          'mainstream-all-native-interfaces',
+          width,
+          theme,
+          firstSelection,
+          { options: await firstSelection.getByRole('checkbox').count() },
+        );
+        const boxes = await firstSelection
+          .locator('.model-types-field__choices > .nb-field')
+          .evaluateAll((nodes) =>
+            nodes.map((node) => {
+              const { x, y, width, height } = node.getBoundingClientRect();
+              return { x, y, width, height };
+            }),
+          );
+        expect(boxes.every((box) => box.width > 150 && box.height > 40)).toBe(true);
+        if (width === 390) expect(new Set(boxes.map((box) => Math.round(box.x))).size).toBe(1);
+      }
     const edited = responseFor(manager, 'PATCH', '/admin/api/mainstream-channels/' + channel.id);
     await form.getByRole('button', { name: channels.actions.save, exact: true }).click();
     const savedResponse = await edited;

@@ -151,7 +151,7 @@ func TestPersonalSharedAdmissionCancelCloseAndStableDiscovery(t *testing.T) {
 
 func TestPersonalImportDeduplicatesBodyAndPreservesExistingMetadata(t *testing.T) {
 	f := newPersonalFixture(t)
-	body := `{"ownership_confirmed":true,"keys":[{"secret":"same-body","note":"original","enabled":false,"max_rpm":9},{"secret":"same-body","note":"changed","enabled":true},{"secret":"second-body"}]}`
+	body := `{"ownership_confirmed":true,"keys":[{"secret":"same-body","note":"original","enabled":false,"max_rpm":9,"concurrency_overflow":"queue","rpm_overflow":"queue","concurrency_queue_limit":8,"rpm_queue_limit":9},{"secret":"same-body","note":"changed","enabled":true},{"secret":"second-body"}]}`
 	out := decodeBatch(t, f.request(f.ctx, "POST", f.importPath(), strings.Repeat("a", 22), body), 200)
 	if out.Results[0].Outcome != "created" || out.Results[1].Outcome != "existing" || out.Results[0].EndpointKeyID != out.Results[1].EndpointKeyID || out.Results[2].Outcome != "created" {
 		t.Fatalf("outcomes: %+v", out.Results)
@@ -159,7 +159,7 @@ func TestPersonalImportDeduplicatesBodyAndPreservesExistingMetadata(t *testing.T
 	if got := f.count(t, `SELECT COUNT(*) FROM endpoint_keys WHERE endpoint_id=?`, f.endpointID); got != 2 {
 		t.Fatalf("keys=%d", got)
 	}
-	if got := f.count(t, `SELECT COUNT(*) FROM endpoint_keys k JOIN endpoint_key_limits l ON l.endpoint_key_id=k.id WHERE k.id=? AND k.note='original' AND k.enabled=0 AND l.max_rpm=9`, out.Results[0].EndpointKeyID); got != 1 {
+	if got := f.count(t, `SELECT COUNT(*) FROM endpoint_keys k JOIN endpoint_key_limits l ON l.endpoint_key_id=k.id WHERE k.id=? AND k.note='original' AND k.enabled=0 AND l.max_rpm=9 AND l.concurrency_overflow='queue' AND l.rpm_overflow='queue' AND l.concurrency_queue_limit=8 AND l.rpm_queue_limit=9`, out.Results[0].EndpointKeyID); got != 1 {
 		t.Fatal("existing key was overwritten")
 	}
 	f.exec(t, `UPDATE site_config SET value='2' WHERE key='default_endpoint_key_limit'`)

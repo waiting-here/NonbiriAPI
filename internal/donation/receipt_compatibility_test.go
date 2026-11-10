@@ -42,6 +42,9 @@ func TestManagementReceiptAddsSafeFieldsWithoutChangingStoredResult(t *testing.T
 				fields := item.(map[string]any)
 				delete(fields, "binding_count")
 				delete(fields, "idle")
+				for _, name := range []string{"concurrency_overflow", "rpm_overflow", "concurrency_queue_limit", "rpm_queue_limit"} {
+					delete(fields, name)
+				}
 			}
 			if role == reviewerSteward {
 				legacy["owner"] = map[string]any{"user_id": strconv.FormatInt(owner, 10), "display_name": "private historical owner"}

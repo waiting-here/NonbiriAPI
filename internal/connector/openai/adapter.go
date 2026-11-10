@@ -81,6 +81,7 @@ func (Credential) LogValue() slog.Value {
 type Target struct {
 	baseURL       string
 	upstreamModel string
+	rerankPath    string
 	credential    Credential
 }
 
@@ -90,6 +91,8 @@ type Target struct {
 func NewTarget(baseURL, upstreamModel string, credential Credential) Target {
 	return Target{baseURL: baseURL, upstreamModel: upstreamModel, credential: credential}
 }
+
+func (t Target) WithRerankPath(path string) Target { t.rerankPath = path; return t }
 
 func (Target) String() string   { return "[redacted upstream target]" }
 func (Target) GoString() string { return "[redacted upstream target]" }
@@ -270,7 +273,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, safetyMaterial}, sentSecrets...)...)
 	clear(safetyMaterial)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), InputLengthErrors: true, Rules: smartbackoff.RulesFromContext(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()

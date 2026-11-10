@@ -226,15 +226,15 @@ export function PriceConfigFields({
         open={discountOpen || discountError}
         onOpenChange={setDiscountOpen}
       >
+        <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
+        <Toggle
+          disabled={disabled}
+          label={t(charityCopyKey(role, 'discountEnabled'))}
+          checked={value.discountEnabled}
+          onChange={(discountEnabled) => set({ discountEnabled })}
+        />
         <Fields>
-          <TimeContextNotice station={role === 'admin' ? 'admin' : 'steward'} />
-          <Toggle
-            disabled={disabled}
-            label={t(charityCopyKey(role, 'discountEnabled'))}
-            checked={value.discountEnabled}
-            onChange={(discountEnabled) => set({ discountEnabled })}
-          />
-          <Field label={t(charityCopyKey(role, 'discountPercent'))}>
+          <Field size="short" label={t(charityCopyKey(role, 'discountPercent'))}>
             {(props) => (
               <input
                 {...props}
@@ -246,6 +246,8 @@ export function PriceConfigFields({
               />
             )}
           </Field>
+        </Fields>
+        <Fields columns={2}>
           <TimeInput
             label={t(charityCopyKey(role, 'discountStart'))}
             station={role === 'admin' ? 'admin' : 'steward'}

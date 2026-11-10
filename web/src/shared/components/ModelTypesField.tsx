@@ -62,7 +62,7 @@ export function ModelTypesField({
     <fieldset className="model-types-field" disabled={disabled}>
       <legend>{t('common.modelTypes.title')}</legend>
       <p className="nb-sub">{t('common.modelTypes.help')}</p>
-      <div className="model-types-field__choices">
+      <div className="model-types-field__choices" data-count={COMMON_MODEL_TYPES.size}>
         {MODEL_TYPE_CHOICES.filter((type) => COMMON_MODEL_TYPES.has(type)).map(choice)}
       </div>
       <details
@@ -71,7 +71,10 @@ export function ModelTypesField({
         onToggle={(event) => setMoreOpen(event.currentTarget.open)}
       >
         <summary>{t('common.modelTypes.more')}</summary>
-        <div className="model-types-field__choices">
+        <div
+          className="model-types-field__choices"
+          data-count={MODEL_TYPE_CHOICES.filter((type) => !COMMON_MODEL_TYPES.has(type)).length}
+        >
           {MODEL_TYPE_CHOICES.filter((type) => !COMMON_MODEL_TYPES.has(type)).map(choice)}
         </div>
       </details>

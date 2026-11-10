@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note } from '@shared/components/ui';
+import { useState } from 'react';
+import { RERANK_FORMAT_LABEL_KEYS } from '@shared/nativeServices';
+import { Field, Fold, Note, Toggle } from '@shared/components/ui';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import {
@@ -21,20 +23,36 @@ export function MainstreamEntries({
   options,
   disabled,
   connectorLabels,
+  showErrors = false,
 }: {
   value: MainstreamLayout;
   onChange: (value: MainstreamLayout) => void;
   options: NativeServiceOption[];
   disabled: boolean;
   connectorLabels: Record<string, string>;
+  showErrors?: boolean;
 }) {
   const { t } = useTranslation();
+  const [openEntries, setOpenEntries] = useState<Record<string, boolean>>({});
+  const [changedEntries, setChangedEntries] = useState<string[]>([]);
+  const [previousShowErrors, setPreviousShowErrors] = useState(showErrors);
+  const entryKey = (entry: MainstreamEntry, index: number) => entry.id ?? `new:${index}`;
+  if (previousShowErrors !== showErrors) {
+    setPreviousShowErrors(showErrors);
+    if (showErrors)
+      setOpenEntries((current) => ({
+        ...current,
+        ...Object.fromEntries(changedEntries.map((key) => [key, true])),
+      }));
+  }
   const protocols = options.filter(
     (row, index, rows) =>
       rows.findIndex((other) => other.configuration_type === row.configuration_type) === index,
   );
   const patch = (index: number, change: Partial<MainstreamEntry>) => {
     const entry = value.entries[index]!;
+    const key = entryKey(entry, index);
+    setChangedEntries((current) => (current.includes(key) ? current : [...current, key]));
     const protocol = options.find(
       (row) => row.connector_type === (change.connector_type ?? entry.connector_type),
     );
@@ -60,93 +78,127 @@ export function MainstreamEntries({
       <Note>{t('common.connections.presetNoAutoGrant')}</Note>
       {value.entries.map((entry, index) => {
         const metadata = options.find((row) => row.connector_type === entry.connector_type);
+        const key = entryKey(entry, index);
+        const protocolSummary = [
+          t(connectorLabels[metadata?.configuration_type ?? entry.connector_type]),
+          entry.rerank_format ? t(RERANK_FORMAT_LABEL_KEYS[entry.rerank_format]) : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
         return (
-          <fieldset key={entry.id ?? 'new:' + index} className="nb-stack" disabled={disabled}>
-            <legend>{t('common.connections.presetEntry', { number: index + 1 })}</legend>
-            <Field label={t('common.connections.name')}>
-              {(props) => (
-                <input
-                  {...props}
-                  value={entry.name}
-                  onChange={(event) => patch(index, { name: event.target.value })}
-                />
-              )}
-            </Field>
-            <Field label={t('common.connections.protocol')}>
-              {(props) => (
-                <select
-                  {...props}
-                  value={entry.connector_type}
-                  onChange={(event) => {
-                    const choice = options.find((row) => row.connector_type === event.target.value);
-                    if (choice)
-                      patch(index, {
-                        connector_type: choice.connector_type,
-                        native_services: choice.native_services.slice(),
-                        rerank_format: choice.rerank_formats.includes('generic') ? 'generic' : '',
-                      });
-                  }}
-                >
-                  {!protocols.some((row) => row.connector_type === entry.connector_type) ? (
-                    <option value={entry.connector_type}>
-                      {t(connectorLabels[entry.connector_type])}
-                    </option>
-                  ) : null}
-                  {protocols.map((row) => (
-                    <option key={row.connector_type} value={row.connector_type}>
-                      {t(connectorLabels[row.configuration_type])}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <Field label={t('common.connections.entryURL')}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="url"
-                  value={entry.base_url}
-                  onChange={(event) => patch(index, { base_url: event.target.value })}
-                />
-              )}
-            </Field>
-            <ProtocolRerankField
-              formats={metadata?.rerank_formats}
-              value={entry.rerank_format || null}
-              onChange={(format) => patch(index, { rerank_format: format })}
-              disabled={disabled}
-            />
-            <Field label={t('common.connections.enabled')}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="checkbox"
-                  checked={entry.enabled}
-                  onChange={(event) => patch(index, { enabled: event.target.checked })}
-                />
-              )}
-            </Field>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              onClick={() =>
-                onChange({
-                  ...value,
-                  entries: value.entries.filter((_, i) => i !== index),
-                  model_mappings: entry.id
-                    ? value.model_mappings
-                        .map((row) => ({
-                          ...row,
-                          entries: row.entries.filter((item) => item.entry_id !== entry.id),
-                        }))
-                        .filter((row) => row.entries.length)
-                    : value.model_mappings,
-                })
-              }
+          <div
+            key={key}
+            onInvalidCapture={(event) => {
+              const input = event.target as HTMLInputElement;
+              if (input.closest('details')?.open) return;
+              event.preventDefault();
+              setOpenEntries((current) => ({ ...current, [key]: true }));
+              requestAnimationFrame(() => {
+                input.focus();
+                input.reportValidity();
+              });
+            }}
+          >
+            <Fold
+              title={entry.name || t('common.connections.presetEntry', { number: index + 1 })}
+              summary={[entry.base_url, protocolSummary].filter(Boolean).join(' · ')}
+              open={openEntries[key] ?? (!entry.id || !entry.name || !entry.base_url)}
+              onOpenChange={(open) => setOpenEntries((current) => ({ ...current, [key]: open }))}
             >
-              {t('common.connections.removeEntry')}
-            </button>
-          </fieldset>
+              <fieldset className="nb-stack ops-unframed" disabled={disabled}>
+                <Field label={t('common.connections.name')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      value={entry.name}
+                      onChange={(event) => patch(index, { name: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('common.connections.entryURL')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="url"
+                      value={entry.base_url}
+                      onChange={(event) => patch(index, { base_url: event.target.value })}
+                    />
+                  )}
+                </Field>
+                <Fold
+                  title={t('common.connections.protocolSettings')}
+                  summary={protocolSummary}
+                  defaultOpen={Boolean(entry.rerank_format && entry.rerank_format !== 'generic')}
+                >
+                  <Field label={t('common.connections.protocol')}>
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={entry.connector_type}
+                        onChange={(event) => {
+                          const choice = options.find(
+                            (row) => row.connector_type === event.target.value,
+                          );
+                          if (choice)
+                            patch(index, {
+                              connector_type: choice.connector_type,
+                              native_services: choice.native_services.slice(),
+                              rerank_format: choice.rerank_formats.includes('generic')
+                                ? 'generic'
+                                : '',
+                            });
+                        }}
+                      >
+                        {!protocols.some((row) => row.connector_type === entry.connector_type) ? (
+                          <option value={entry.connector_type}>
+                            {t(connectorLabels[entry.connector_type])}
+                          </option>
+                        ) : null}
+                        {protocols.map((row) => (
+                          <option key={row.connector_type} value={row.connector_type}>
+                            {t(connectorLabels[row.configuration_type])}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <ProtocolRerankField
+                    formats={metadata?.rerank_formats}
+                    value={entry.rerank_format || null}
+                    onChange={(format) => patch(index, { rerank_format: format })}
+                    disabled={disabled}
+                  />
+                </Fold>
+                <Toggle
+                  label={t('common.connections.enabled')}
+                  disabled={disabled}
+                  checked={entry.enabled}
+                  onChange={(enabled) => patch(index, { enabled })}
+                />
+
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      entries: value.entries.filter((_, i) => i !== index),
+                      model_mappings: entry.id
+                        ? value.model_mappings
+                            .map((row) => ({
+                              ...row,
+                              entries: row.entries.filter((item) => item.entry_id !== entry.id),
+                            }))
+                            .filter((row) => row.entries.length)
+                        : value.model_mappings,
+                    })
+                  }
+                >
+                  {t('common.connections.removeEntry')}
+                </button>
+              </fieldset>
+            </Fold>
+          </div>
         );
       })}
       <button

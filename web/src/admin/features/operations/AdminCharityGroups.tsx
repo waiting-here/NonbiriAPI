@@ -202,7 +202,12 @@ function GroupKey({
             : formatDateTime(keyValue.authorized_expires_at)}
         </dd>
       </dl>
-      <KeyLimitSummary concurrency={keyValue.max_concurrency} rpm={keyValue.max_rpm} readOnly />
+      <KeyLimitSummary
+        concurrency={keyValue.max_concurrency}
+        rpm={keyValue.max_rpm}
+        queue={keyValue}
+        readOnly
+      />
       {blocked ? <p className="inline-notice">{blocked}</p> : null}
       {endedReason ? (
         <p className="inline-notice">

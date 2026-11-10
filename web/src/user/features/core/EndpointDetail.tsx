@@ -1,3 +1,4 @@
+import { keyQueueDraft, keyQueueChanges } from '@shared/operations/keyQueue';
 import { EntryScope, KeyCredentialScope } from './connections/EntryScope';
 import { ServiceModelSetup } from './connections/ServiceModelSetup';
 import { useTranslation } from 'react-i18next';
@@ -79,6 +80,8 @@ const pageCopyKeys = {
   'user.services.catalogRequired': 'user.services.catalogRequired',
   'user.services.catalogConnectionRequired': 'user.services.catalogConnectionRequired',
   'common.keyLimits.unlimited': 'common.keyLimits.unlimited',
+  'user.charity.backToDonation': 'user.charity.backToDonation',
+  'user.charity.backToDonations': 'user.charity.backToDonations',
   'user.services.adaptation': 'user.services.adaptation',
   'user.services.adaptationCount': 'user.services.adaptationCount',
   'user.services.adaptationHelp': 'user.services.adaptationHelp',
@@ -149,6 +152,7 @@ function AddEndpointKeyForm({
   const [forceStoreFalse, setForceStoreFalse] = useState(false);
   const [maxConcurrency, setMaxConcurrency] = useState('0');
   const [maxRPM, setMaxRPM] = useState('0');
+  const [queue, setQueue] = useState(() => keyQueueDraft());
   const retryAllowed = useRef(false);
   const [needsSecret, setNeedsSecret] = useState(false);
   const { t: text } = useQuickstartCopy();
@@ -240,6 +244,7 @@ function AddEndpointKeyForm({
             ownership_confirmed: true as const,
             max_concurrency: Number(maxConcurrency),
             max_rpm: Number(maxRPM),
+            ...keyQueueChanges(queue, {}),
           };
     await operation.run(input, draft.secret).catch(() => undefined);
   };
@@ -288,6 +293,8 @@ function AddEndpointKeyForm({
       <KeyLimitFields
         concurrency={maxConcurrency}
         rpm={maxRPM}
+        queue={queue}
+        onQueue={setQueue}
         onConcurrency={setMaxConcurrency}
         onRPM={setMaxRPM}
         disabled={hasAttempt}
@@ -952,9 +959,11 @@ function EndpointKeyCard({
   suppressRoutePanel = false,
   onChooseConnection,
   initialModelsOpen = false,
+  initialEditing = false,
   onModelsLockChange,
 }: {
   initialModelsOpen?: boolean;
+  initialEditing?: boolean;
   onModelsLockChange?: (locked: boolean) => void;
   accountId: string;
   onChooseConnection: () => void;
@@ -975,13 +984,14 @@ function EndpointKeyCard({
   const queryClient = useQueryClient();
   const evidence = keyData.browse?.discovery;
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing && keyData.suspension_state === 'none');
   const [editorVisited, setEditorVisited] = useState(false);
   if (editing && !editorVisited) setEditorVisited(true);
   const [note, setNote] = useState(keyData.note);
   const [editRevision, setEditRevision] = useState(keyData.revision);
   const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
   const [maxRPM, setMaxRPM] = useState(String(keyData.max_rpm));
+  const [queue, setQueue] = useState(() => keyQueueDraft(keyData));
   const [modelsOpen, setModelsOpen] = useState(initialModelsOpen);
   const [modelsVisited, setModelsVisited] = useState(initialModelsOpen);
   const [catalogReveal, setCatalogReveal] = useState(0);
@@ -1156,6 +1166,7 @@ function EndpointKeyCard({
       setEditRevision(keyData.revision);
       setMaxConcurrency(String(keyData.max_concurrency));
       setMaxRPM(String(keyData.max_rpm));
+      setQueue(keyQueueDraft(keyData));
     }
     setEditing(true);
   };
@@ -1226,10 +1237,17 @@ function EndpointKeyCard({
           </button>
         </td>
         <td data-cell="meta" data-label={ui('user.services.keyLimits')}>
-          {keyData.max_concurrency === 0 && keyData.max_rpm === 0 ? (
+          {keyData.max_concurrency === 0 &&
+          keyData.max_rpm === 0 &&
+          keyData.concurrency_overflow !== 'queue' &&
+          keyData.rpm_overflow !== 'queue' ? (
             ui('common.keyLimits.unlimited')
           ) : (
-            <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
+            <KeyLimitSummary
+              concurrency={keyData.max_concurrency}
+              rpm={keyData.max_rpm}
+              queue={keyData}
+            />
           )}
         </td>
         <td data-cell="meta" data-label={ui('user.services.inUse')}>
@@ -1262,6 +1280,7 @@ function EndpointKeyCard({
                     setEditRevision(keyData.revision);
                     setMaxConcurrency(String(keyData.max_concurrency));
                     setMaxRPM(String(keyData.max_rpm));
+                    setQueue(keyQueueDraft(keyData));
                     setEditing(true);
                   },
                 },
@@ -1447,6 +1466,7 @@ function EndpointKeyCard({
                     note,
                     max_concurrency: Number(maxConcurrency),
                     max_rpm: Number(maxRPM),
+                    ...keyQueueChanges(queue, keyData),
                     expected_revision: editRevision,
                   },
                 });
@@ -1468,6 +1488,8 @@ function EndpointKeyCard({
               <KeyLimitFields
                 concurrency={maxConcurrency}
                 rpm={maxRPM}
+                queue={queue}
+                onQueue={setQueue}
                 onConcurrency={setMaxConcurrency}
                 onRPM={setMaxRPM}
                 disabled={busy || Boolean(replayAttempt)}
@@ -1493,7 +1515,8 @@ function EndpointKeyCard({
                     Boolean(replayAttempt) ||
                     (note === keyData.note &&
                       Number(maxConcurrency) === keyData.max_concurrency &&
-                      Number(maxRPM) === keyData.max_rpm)
+                      Number(maxRPM) === keyData.max_rpm &&
+                      Object.keys(keyQueueChanges(queue, keyData)).length === 0)
                   }
                 >
                   {t('common.save')}
@@ -1562,7 +1585,12 @@ export function EndpointDetail({
   useResourceListScroll(accountId, Boolean(keys.data) && !keys.isFetching);
   const [addingKey, setAddingKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const returnTo = listReturnPath(location.state, '/endpoints');
+  const donorReturn = location.state?.donationReturnTo;
+  const donationReturnTo =
+    typeof donorReturn === 'string' && /^\/charity(?:\/donations\/[1-9]\d*)?$/.test(donorReturn)
+      ? donorReturn
+      : null;
+  const returnTo = donationReturnTo ?? listReturnPath(location.state, '/endpoints');
   type Intent =
     { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
   const retryAllowed = useRef(false);
@@ -1726,7 +1754,13 @@ export function EndpointDetail({
           description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
           back={
             <Link to={returnTo} state={location.state}>
-              {t('endpoints.title')}
+              {donationReturnTo
+                ? ui(
+                    donationReturnTo === '/charity'
+                      ? 'user.charity.backToDonations'
+                      : 'user.charity.backToDonation',
+                  )
+                : t('endpoints.title')}
             </Link>
           }
           actions={
@@ -2097,10 +2131,12 @@ function FocusedEndpointKey({
   const { t } = useCoreCopy();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
+  const editKey = params.get('edit_key') === '1';
   params.delete('focus_key_id');
   params.delete('key_id');
+  params.delete('edit_key');
   const current = useQuery({
-    queryKey: [...coreKeys.account(accountId), 'focused-key', endpoint.id, keyId],
+    queryKey: [...coreKeys.endpointKeysRoot(accountId, endpoint.id), 'focused', keyId],
     queryFn: ({ signal }) => readEndpointKey(endpoint.id, keyId, signal),
   });
   return (
@@ -2127,7 +2163,8 @@ function FocusedEndpointKey({
                 keyData={current.data}
                 onRefresh={() => void current.refetch()}
                 onChooseConnection={onChooseConnection}
-                initialModelsOpen
+                initialModelsOpen={!editKey}
+                initialEditing={editKey}
                 onModelsLockChange={onModelsLockChange}
               />
             </tbody>

@@ -36,13 +36,13 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 		name  string
 		value any
 	}{
-		{"endpoint.json", Endpoint{ConnectionID: pointer("9"), ConfigurationType: "openai-compatible", NativeServices: nativeServices,
+		{"endpoint.json", Endpoint{ConnectionID: pointer("9"), ConfigurationType: "openai-compatible", NativeServices: nativeServices, RerankURL: "https://example.com/v1/rerank", RerankPathConfigurable: true,
 			ID: "11", ConnectorType: "openai-compatible", BaseURL: "https://example.com/v1", Origin: EndpointOrigin{Kind: "custom"}, Note: "endpoint note",
 			Enabled: true, Revision: "3", KeyCount: "2", CreatedAt: 1_700_000_000, UpdatedAt: 1_700_000_010,
 		}},
 		{"endpoint_key.json", EndpointKey{CredentialAvailable: true, CredentialID: "7", CredentialVersion: "2", GrantRevision: "3", NativeServices: nativeServices, DiscoverySourceID: pointer("17"),
 			ID: "21", EndpointID: "11", DisplayHead: "head", DisplayTail: "tail", Note: "key note",
-			Enabled: true, ForceStoreFalse: false, SuspensionState: "none", Revision: "4",
+			Enabled: true, ForceStoreFalse: false, ConcurrencyOverflow: "reject", RPMOverflow: "reject", SuspensionState: "none", Revision: "4",
 			CreatedAt: 1_700_000_001, UpdatedAt: 1_700_000_011,
 		}},
 		{"caller_key_null.json", (*CallerKeyMetadata)(nil)},

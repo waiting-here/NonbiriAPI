@@ -450,6 +450,29 @@ test('does not resend a lost generation response and asks for confirmation befor
     theme: 'light',
     width: 390,
   });
+  const pagination = { page: '1', page_size: 10, total_items: '0', total_pages: '1' };
+  const homeFixtures: Record<string, unknown> = {
+    '/api/models': { data: [], next_cursor: null, pagination },
+    '/api/charity/models': {
+      models: [],
+      pagination,
+      donation_intake: 'open',
+      server_now: 1_800_000_000,
+    },
+    '/api/checkin': { enabled: false },
+    '/api/checkin/game': { enabled: false },
+    '/api/home/game-summary': { continue: [], pending_results: [] },
+    '/api/announcements': { data: [], next_cursor: null },
+  };
+  await page.route(`${USER_ORIGIN}/api/**`, async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    if (request.method() === 'GET' && Object.hasOwn(homeFixtures, pathname)) {
+      await route.fulfill({ headers: JSON_HEADERS, json: homeFixtures[pathname] });
+      return;
+    }
+    await route.fallback();
+  });
   await installCallerKeyServer(page, server);
   await page.goto(`${USER_ORIGIN}/keys`);
   await expect(page.getByText(current.display, { exact: true })).toBeVisible();
@@ -470,7 +493,18 @@ test('does not resend a lost generation response and asks for confirmation befor
 
   await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect.poll(() => server.getCount).toBeGreaterThan(1);
-  await page.goto(`${USER_ORIGIN}/`);
+  // Complete the intervening page's reads so the round trip does not race its mount.
+  await Promise.all([
+    ...Object.keys(homeFixtures).map(async (path) => {
+      const response = await page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.origin === USER_ORIGIN && url.pathname === path;
+      });
+      expect(response.status()).toBe(200);
+    }),
+    page.goto(`${USER_ORIGIN}/`),
+  ]);
+  await expect(page.getByRole('heading', { name: 'Get started', exact: true })).toBeVisible();
   await page.goto(`${USER_ORIGIN}/keys`);
   await expect(page.getByText(current.display, { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Replace key…', exact: true })).toBeEnabled();

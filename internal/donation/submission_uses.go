@@ -144,9 +144,13 @@ JOIN endpoint_key_secrets s ON s.id=v.secret_ref_id LEFT JOIN donation_key_revie
 		if err != nil || useID <= 0 {
 			return ErrInvariant
 		}
+		rerankPath := ""
+		if service == contract.NativeServiceRerank {
+			rerankPath = g.RerankPath
+		}
 		result, err = tx.ExecContext(ctx, `INSERT INTO donation_use_revisions
-(use_id,use_revision,grant_revision_id,discovery_source_revision_id,source_grant_revision_id,source_discovery_revision_id,credential_id_snapshot,credential_version,grant_revision,display_head,display_tail,report_fingerprint,key_body_review_hmac,origin,review_state,review_reason,review_requirement_revision,created_at,reviewed_at)
-VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,'initial','pending','',?,?,NULL)`, useID, g.GrantRevisionID, submission.sourceRevisionID, g.GrantRevisionID, submission.sourceRevisionID, g.CredentialID, g.CredentialVersion, g.GrantRevision, head, tail, fingerprint, bodyHMAC, requirement, now)
+(use_id,use_revision,grant_revision_id,discovery_source_revision_id,source_grant_revision_id,source_discovery_revision_id,credential_id_snapshot,credential_version,grant_revision,display_head,display_tail,report_fingerprint,key_body_review_hmac,rerank_path,origin,review_state,review_reason,review_requirement_revision,created_at,reviewed_at)
+VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,?,'initial','pending','',?,?,NULL)`, useID, g.GrantRevisionID, submission.sourceRevisionID, g.GrantRevisionID, submission.sourceRevisionID, g.CredentialID, g.CredentialVersion, g.GrantRevision, head, tail, fingerprint, bodyHMAC, rerankPath, requirement, now)
 		if err != nil {
 			return err
 		}

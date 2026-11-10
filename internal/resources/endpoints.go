@@ -44,6 +44,7 @@ type endpointRow struct {
 	connectionName            string
 	nativeServiceMask         int64
 	rerankFormat              connectorcontract.RerankFormat
+	rerankPath                string
 	id                        int64
 	connectorType             string
 	baseURL                   string
@@ -73,6 +74,16 @@ func (row endpointRow) dto() (Endpoint, error) {
 	if err != nil || connectorcontract.ValidateNativeServices(kind, services, row.rerankFormat) != nil {
 		return Endpoint{}, ErrUnavailable
 	}
+	if connectorcontract.ValidateRerankPath(row.rerankPath) != nil || row.rerankPath != "" && !connectorcontract.SupportsRerankPath(kind) {
+		return Endpoint{}, ErrUnavailable
+	}
+	rerankURL := ""
+	if connectorcontract.SupportsRerankPath(kind) {
+		rerankURL, err = connectorcontract.RerankURL(row.baseURL, row.rerankPath)
+		if err != nil {
+			return Endpoint{}, ErrUnavailable
+		}
+	}
 	var origin EndpointOrigin
 	fields := []bool{row.mainstreamChannelID.Valid, row.mainstreamChannelRevision.Valid, row.mainstreamChannelName.Valid, row.mainstreamChannelCategory.Valid}
 	if fields[0] || fields[1] || fields[2] || fields[3] {
@@ -86,7 +97,7 @@ func (row endpointRow) dto() (Endpoint, error) {
 		origin = EndpointOrigin{Kind: "custom"}
 	}
 	return Endpoint{
-		ConnectionID: connectionID, ConnectionName: row.connectionName, ConfigurationType: string(kind.ConfigurationType()), NativeServices: services.Services(), RerankFormat: row.rerankFormat,
+		ConnectionID: connectionID, ConnectionName: row.connectionName, ConfigurationType: string(kind.ConfigurationType()), NativeServices: services.Services(), RerankFormat: row.rerankFormat, RerankPath: row.rerankPath, RerankURL: rerankURL, RerankPathConfigurable: connectorcontract.SupportsRerankPath(kind),
 		ID: id, ConnectorType: row.connectorType, BaseURL: row.baseURL, Origin: origin, Note: row.note,
 		Enabled: row.enabled == 1, Revision: strconv.FormatInt(row.revision, 10),
 		KeyCount: strconv.FormatInt(row.keyCount, 10), CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
@@ -98,7 +109,7 @@ func scanEndpoint(scanner interface{ Scan(...any) error }) (Endpoint, error) {
 	if err := scanner.Scan(&row.id, &row.connectorType, &row.baseURL, &row.note, &row.enabled,
 		&row.revision, &row.keyCount, &row.createdAt, &row.updatedAt,
 		&row.mainstreamChannelID, &row.mainstreamChannelRevision, &row.mainstreamChannelName, &row.mainstreamChannelCategory,
-		&row.connectionID, &row.nativeServiceMask, &row.rerankFormat, &row.connectionName); err != nil {
+		&row.connectionID, &row.nativeServiceMask, &row.rerankFormat, &row.rerankPath, &row.connectionName); err != nil {
 		return Endpoint{}, err
 	}
 	return row.dto()
@@ -129,7 +140,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
+       e.connection_id,e.native_service_mask,e.rerank_format,e.rerank_path,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e
 WHERE e.user_id=?
   AND (?=0 OR e.updated_at<? OR (e.updated_at=? AND e.id<?))
@@ -175,7 +186,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
+       e.connection_id,e.native_service_mask,e.rerank_format,e.rerank_path,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -318,6 +329,9 @@ func (r *Repository) CreateEndpointInTransaction(ctx context.Context, tx *sql.Tx
 	if err != nil {
 		return Endpoint{}, err
 	}
+	if connectorcontract.ValidateRerankPath(input.RerankPath) != nil || input.RerankPath != "" && !connectorcontract.SupportsRerankPath(connectorcontract.Type(connectorType)) {
+		return Endpoint{}, ErrInvalidRequest
+	}
 	var endpointLimit sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=? AND is_admin=0`, userID).Scan(&endpointLimit); errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -354,8 +368,8 @@ func (r *Repository) CreateEndpointInTransaction(ctx context.Context, tx *sql.Tx
 		origin = "user"
 	}
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at,connection_id,native_service_mask,rerank_format,capability_origin)
-VALUES(?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now, connectionID, services.Mask(), input.RerankFormat, origin)
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at,connection_id,native_service_mask,rerank_format,capability_origin,rerank_path)
+VALUES(?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now, connectionID, services.Mask(), input.RerankFormat, origin, input.RerankPath)
 	if err != nil {
 		return Endpoint{}, fmt.Errorf("resources: create endpoint: %w", err)
 	}
@@ -372,7 +386,7 @@ VALUES(?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, i
 
 func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64, mutation ControlMutation, input PatchEndpointInput) (MutationResult[Endpoint], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || mutation.Route != routeEndpoint || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, endpointID) || mutation.Query != "" ||
-		(input.Note == nil && input.Enabled == nil && input.ConnectionID == nil && input.NativeServices == nil && input.RerankFormat == nil) || input.ExpectedRevision < 1 ||
+		(input.Note == nil && input.Enabled == nil && input.ConnectionID == nil && input.NativeServices == nil && input.RerankFormat == nil && input.RerankPath == nil) || input.ExpectedRevision < 1 ||
 		(input.Note != nil && !validateNote(*input.Note)) || (input.ConnectionID != nil && *input.ConnectionID <= 0) {
 		return MutationResult[Endpoint]{}, ErrInvalidRequest
 	}
@@ -414,6 +428,13 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 	}
 	if input.Enabled != nil {
 		enabled = *input.Enabled
+	}
+	rerankPath := current.RerankPath
+	if input.RerankPath != nil {
+		rerankPath = *input.RerankPath
+	}
+	if connectorcontract.ValidateRerankPath(rerankPath) != nil || rerankPath != "" && !connectorcontract.SupportsRerankPath(connectorcontract.Type(current.ConnectorType)) {
+		return MutationResult[Endpoint]{}, ErrInvalidRequest
 	}
 	connectionID, format := current.ConnectionID, current.RerankFormat
 	if input.ConnectionID != nil {
@@ -471,9 +492,9 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 		}
 	}
 	result, err := tx.ExecContext(ctx, `
-UPDATE endpoints SET note=?,enabled=?,revision=revision+1,updated_at=?,connection_id=?,native_service_mask=?,rerank_format=?,
+UPDATE endpoints SET note=?,enabled=?,revision=revision+1,updated_at=?,connection_id=?,native_service_mask=?,rerank_format=?,rerank_path=?,
 capability_origin=CASE WHEN ? THEN 'user' ELSE capability_origin END
-WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, connectionID, services.Mask(), format,
+WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, connectionID, services.Mask(), format, rerankPath,
 		input.NativeServices != nil || input.RerankFormat != nil, endpointID, userID, input.ExpectedRevision)
 	if err != nil {
 		return MutationResult[Endpoint]{}, fmt.Errorf("resources: patch endpoint: %w", err)
@@ -624,7 +645,7 @@ SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
        e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
        e.mainstream_channel_name,e.mainstream_channel_category,
-       e.connection_id,e.native_service_mask,e.rerank_format,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
+       e.connection_id,e.native_service_mask,e.rerank_format,e.rerank_path,COALESCE((SELECT name FROM service_connections WHERE id=e.connection_id),'')
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -796,6 +817,8 @@ type endpointKeyRow struct {
 	discoverySourceID                                                 sql.NullInt64
 	id, endpointID, revision, createdAt, updatedAt                    int64
 	maxConcurrency, maxRPM                                            int64
+	concurrencyOverflow, rpmOverflow                                  string
+	concurrencyQueueLimit, rpmQueueLimit                              int64
 	displayHead, displayTail, note                                    string
 	credentialNote                                                    string
 	enabled, forceStoreFalse, suspended                               int
@@ -829,6 +852,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 		ID: id, EndpointID: endpointID, DisplayHead: row.displayHead, DisplayTail: row.displayTail,
 		Note: row.note, Enabled: row.enabled == 1, ForceStoreFalse: row.forceStoreFalse == 1,
 		MaxConcurrency: row.maxConcurrency, MaxRPM: row.maxRPM,
+		ConcurrencyOverflow: row.concurrencyOverflow, RPMOverflow: row.rpmOverflow, ConcurrencyQueueLimit: row.concurrencyQueueLimit, RPMQueueLimit: row.rpmQueueLimit,
 		SuspensionState: state, Revision: strconv.FormatInt(row.revision, 10),
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
@@ -837,7 +861,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, error) {
 	var row endpointKeyRow
 	if err := scanner.Scan(&row.id, &row.endpointID, &row.displayHead, &row.displayTail, &row.note,
-		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable, &row.credentialNote); err != nil {
+		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.concurrencyOverflow, &row.rpmOverflow, &row.concurrencyQueueLimit, &row.rpmQueueLimit, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable, &row.credentialNote); err != nil {
 		return EndpointKey{}, err
 	}
 	return row.dto()
@@ -848,7 +872,7 @@ const endpointKeyCredentialAvailableSQL = `EXISTS(SELECT 1 FROM credentials cr J
 const endpointKeySelect = `
 SELECT k.id,k.endpoint_id,k.display_head,k.display_tail,k.note,k.enabled,k.force_store_false,
        EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),
+       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0),
        k.credential_id,k.credential_version,k.grant_revision,k.native_service_mask,ks.source_id,
  ` + endpointKeyCredentialAvailableSQL + `,
  COALESCE((SELECT note FROM credentials WHERE id=k.credential_id),'')
@@ -970,7 +994,9 @@ func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID i
 
 func validCreateEndpointKey(input CreateEndpointKeyInput) bool {
 	return input.OwnershipConfirmed && ((input.CredentialID == 0 && validateEndpointSecretPlaintext(input.Secret)) || (input.CredentialID > 0 && len(input.Secret) == 0)) && validateNote(input.Note) &&
-		validKeyLimit(input.MaxConcurrency) && validKeyLimit(input.MaxRPM)
+		validKeyLimit(input.MaxConcurrency) && validKeyLimit(input.MaxRPM) &&
+		validKeyOverflow(keyOverflowDefault(input.ConcurrencyOverflow)) && validKeyOverflow(keyOverflowDefault(input.RPMOverflow)) &&
+		validKeyLimit(input.ConcurrencyQueueLimit) && validKeyLimit(input.RPMQueueLimit)
 }
 
 // CreateEndpointKeyInTransaction keeps the secret, key protection and catalog
@@ -1045,7 +1071,7 @@ VALUES(?,?,?,?,?,1,?,?)`, endpointID, grantID, input.Note, boolInt(input.Enabled
 	if err := initializeKeySourceTx(ctx, tx, userID, keyID, credentialID, versionID, endpoint, input.DiscoverySourceID, now); err != nil {
 		return EndpointKey{}, err
 	}
-	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM); err != nil {
+	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM, keyOverflowDefault(input.ConcurrencyOverflow), keyOverflowDefault(input.RPMOverflow), input.ConcurrencyQueueLimit, input.RPMQueueLimit); err != nil {
 		return EndpointKey{}, err
 	}
 	if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
@@ -1068,8 +1094,8 @@ VALUES(?,?,?,?,?,1,?,?)`, endpointID, grantID, input.Note, boolInt(input.Enabled
 
 func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, input PatchEndpointKeyInput) (MutationResult[EndpointKey], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || mutation.Route != routeEndpointKey || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, endpointID, keyID) || mutation.Query != "" ||
-		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil && input.CredentialID == nil && input.NativeServices == nil && input.DiscoverySourceID == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
-		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) || (input.CredentialID != nil && *input.CredentialID <= 0) {
+		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil && input.ConcurrencyOverflow == nil && input.RPMOverflow == nil && input.ConcurrencyQueueLimit == nil && input.RPMQueueLimit == nil && input.CredentialID == nil && input.NativeServices == nil && input.DiscoverySourceID == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
+		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) || (input.CredentialID != nil && *input.CredentialID <= 0) || !validPatchKeyQueue(input) {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -1109,6 +1135,21 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 	}
 	note, enabled, forceStore := current.Note, current.Enabled, current.ForceStoreFalse
 	maxConcurrency, maxRPM := current.MaxConcurrency, current.MaxRPM
+	concurrencyOverflow, rpmOverflow := current.ConcurrencyOverflow, current.RPMOverflow
+	concurrencyQueueLimit, rpmQueueLimit := current.ConcurrencyQueueLimit, current.RPMQueueLimit
+	if input.ConcurrencyOverflow != nil {
+		concurrencyOverflow = *input.ConcurrencyOverflow
+	}
+	if input.RPMOverflow != nil {
+		rpmOverflow = *input.RPMOverflow
+	}
+	if input.ConcurrencyQueueLimit != nil {
+		concurrencyQueueLimit = *input.ConcurrencyQueueLimit
+	}
+	if input.RPMQueueLimit != nil {
+		rpmQueueLimit = *input.RPMQueueLimit
+	}
+
 	if input.MaxConcurrency != nil {
 		maxConcurrency = *input.MaxConcurrency
 	}
@@ -1158,7 +1199,7 @@ WHERE id=? AND endpoint_id=? AND revision=?`, note, boolInt(enabled), boolInt(fo
 			return MutationResult[EndpointKey]{}, err
 		}
 	}
-	if err := writeKeyLimitsTx(ctx, tx, keyID, maxConcurrency, maxRPM); err != nil {
+	if err := writeKeyLimitsTx(ctx, tx, keyID, maxConcurrency, maxRPM, concurrencyOverflow, rpmOverflow, concurrencyQueueLimit, rpmQueueLimit); err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
 	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, affectedModels); err != nil {

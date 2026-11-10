@@ -127,7 +127,7 @@ const candidateUnboundPredicate = `AND NOT EXISTS(SELECT 1 FROM charity_model_bi
 
 func candidatePageSelection(modelID, now int64, query CandidateQuery) (string, []any) {
 	return candidateSelection(modelID, now, query, `dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
-pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)`)
+pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0)`)
 }
 
 func candidateCountSelection(modelID, now int64, query CandidateQuery) (string, []any) {
@@ -226,7 +226,7 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		var item AdminBindingCandidate
 		var keyID, donationID, automatic, manual int64
 		if err := rows.Scan(&keyID, &donationID, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL,
-			&item.Source.DisplayHead, &item.Source.DisplayTail, &item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM); err != nil {
+			&item.Source.DisplayHead, &item.Source.DisplayTail, &item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &item.Source.ConcurrencyOverflow, &item.Source.RPMOverflow, &item.Source.ConcurrencyQueueLimit, &item.Source.RPMQueueLimit); err != nil {
 			return empty, err
 		}
 		item.DonationKeyID = strconv.FormatInt(keyID, 10)
@@ -283,7 +283,7 @@ func (s *Service) bindingSourcesPage(ctx context.Context, role roleKind, actorID
 	order := ` ORDER BY d.id`
 	if donationID > 0 {
 		selection = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,
-COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_note` + from + ` AND d.id=?`
+COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0),d.description,d.review_note` + from + ` AND d.id=?`
 		args = append(args, donationID)
 		order = ` ORDER BY dk.id`
 	}
@@ -309,7 +309,7 @@ COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),d.description,d.review_not
 			donations.Data = append(donations.Data, item)
 		} else {
 			var item BindingSourceKey
-			if err := rows.Scan(&id, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail, &item.Note, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &item.DonationNote, &item.ApprovalNote); err != nil {
+			if err := rows.Scan(&id, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail, &item.Note, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &item.Source.ConcurrencyOverflow, &item.Source.RPMOverflow, &item.Source.ConcurrencyQueueLimit, &item.Source.RPMQueueLimit, &item.DonationNote, &item.ApprovalNote); err != nil {
 				return donations, keys, err
 			}
 			item.DonationKeyID = strconv.FormatInt(id, 10)

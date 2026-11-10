@@ -217,6 +217,77 @@ async function fillCustom(
   return view;
 }
 describe('service setup as one task', () => {
+  it('creates a dedicated HTTP rerank service using its registered path capability', async () => {
+    const dedicated = { ...options.native_service_options[0]! };
+    Object.assign(dedicated, {
+      connector_type: 'cohere-rerank',
+      configuration_type: 'cohere-rerank',
+      native_services: ['rerank'],
+      default_native_services: ['rerank'],
+      rerank_formats: ['cohere'],
+    });
+    options.native_service_options.push(dedicated);
+    try {
+      const view = await fillCustom();
+      await view.user.click(
+        screen.getByText(userEn.user.services.advancedSetup, { selector: 'strong' }),
+      );
+      await view.user.selectOptions(
+        screen.getByRole('combobox', { name: common.common.connections.protocol }),
+        'cohere-rerank',
+      );
+      await view.user.click(screen.getByText('Rerank settings', { selector: 'strong' }));
+      await view.user.type(
+        screen.getByRole('textbox', { name: /Rerank interface path/ }),
+        '/custom/reranks',
+      );
+      expect(screen.queryByRole('combobox', { name: 'Rerank format' })).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+      await screen.findByText(userEn.user.workflows.serviceReady);
+      expect(
+        mocks.execute.mock.calls.find(([intent]) => intent.kind === 'endpoint')![0].input,
+      ).toMatchObject({
+        connector_type: 'cohere-rerank',
+        rerank_path: '/custom/reranks',
+        native_services: ['rerank'],
+      });
+    } finally {
+      options.native_service_options.pop();
+    }
+  });
+  it('creates a rerank service with a custom path from the existing advanced settings', async () => {
+    const protocol = options.native_service_options.find(
+      (row) => row.connector_type === 'openai-compatible',
+    )!;
+    const saved = { ...protocol };
+    Object.assign(protocol, {
+      native_services: ['chat_completions', 'responses', 'rerank'],
+      rerank_formats: ['generic', 'cohere'],
+    });
+    try {
+      const view = await fillCustom();
+      await view.user.click(
+        screen.getByText(userEn.user.services.advancedSetup, { selector: 'strong' }),
+      );
+      await view.user.click(screen.getByText('Rerank settings', { selector: 'strong' }));
+      await view.user.type(
+        screen.getByRole('textbox', { name: /Rerank interface path/ }),
+        '/compatible-api/v1/reranks',
+      );
+      await view.user.selectOptions(
+        screen.getByRole('combobox', { name: 'Rerank format' }),
+        'cohere',
+      );
+      expect(screen.getByText('https://service.example/compatible-api/v1/reranks')).toBeVisible();
+      await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+      await screen.findByText(userEn.user.workflows.serviceReady);
+      expect(
+        mocks.execute.mock.calls.find(([intent]) => intent.kind === 'endpoint')![0].input,
+      ).toMatchObject({ rerank_path: '/compatible-api/v1/reranks', rerank_format: 'cohere' });
+    } finally {
+      Object.assign(protocol, saved);
+    }
+  });
   async function systemOneForm() {
     const view = await fillCustom();
     await view.user.click(
@@ -339,6 +410,18 @@ describe('service setup as one task', () => {
       screen.getByLabelText(userEn.user.services.additionalKey.replace('{{number}}', '2')),
       'synthetic-second-key',
     );
+    await view.user.click(
+      screen.getByText(userEn.user.services.keySettings, { selector: 'strong' }),
+    );
+    await view.user.selectOptions(
+      screen.getByLabelText(common.common.keyLimits.concurrencyOverflow),
+      'queue',
+    );
+    await view.user.clear(screen.getByLabelText(common.common.keyLimits.concurrencyQueueLimit));
+    await view.user.type(
+      screen.getByLabelText(common.common.keyLimits.concurrencyQueueLimit),
+      '11',
+    );
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
     await screen.findByText(userEn.user.workflows.serviceReady);
     expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
@@ -351,6 +434,10 @@ describe('service setup as one task', () => {
     ]);
     const grants = mocks.execute.mock.calls.filter(([intent]) => intent.kind === 'key');
     expect(grants.map(([intent]) => intent.input.credential_id)).toEqual(['21', '22']);
+    expect(grants.map(([intent]) => intent.input)).toEqual([
+      expect.objectContaining({ concurrency_overflow: 'queue', concurrency_queue_limit: 11 }),
+      expect.objectContaining({ concurrency_overflow: 'queue', concurrency_queue_limit: 11 }),
+    ]);
     expect(grants.every(([intent]) => !('discovery_source_id' in intent.input))).toBe(true);
     expect(
       mocks.execute.mock.calls

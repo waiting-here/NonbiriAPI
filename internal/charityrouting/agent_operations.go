@@ -206,8 +206,10 @@ func (s *Service) agentScope(ctx context.Context, tx *sql.Tx, actor agentplan.Ac
 	if op.Kind == "charity.model.create" && scope.Trainee && !in.create.IsMainstream {
 		return role, scope, authz.ErrPermissionDenied
 	}
-	if role != roleAdmin && (in.create.AffinityTTLSeconds != nil || in.patch.AffinityTTLSeconds != nil) {
-		return role, scope, ErrForbidden
+	if role != roleAdmin && in.create.AffinityTTLSeconds != nil {
+		if err := authz.RequireStewardPermission(ctx, tx, actor.ID, "charity.affinity"); err != nil {
+			return role, scope, err
+		}
 	}
 	return role, scope, nil
 }

@@ -1050,6 +1050,7 @@ function DonationReview({
                     <KeyLimitSummary
                       concurrency={entry.max_concurrency}
                       rpm={entry.max_rpm}
+                      queue={entry}
                       readOnly
                     />
                     <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
@@ -2289,9 +2290,7 @@ function CharityManagementAccount({
   const [params, setParams] = useSearchState();
   const rawSection = oneParam(params, 'charity_section');
   const section =
-    rawSection === 'models' ||
-    rawSection === 'sources' ||
-    (frame === 'admin' && rawSection === 'templates')
+    rawSection === 'models' || rawSection === 'sources' || rawSection === 'templates'
       ? rawSection
       : 'donations';
   const has = (key: StewardPermission) =>
@@ -2315,10 +2314,13 @@ function CharityManagementAccount({
           has('donations.discover') ||
           has('donations.recurring'))
       : section === 'models'
-        ? has('charity.read') || has('charity.create')
+        ? has('charity.read') ||
+          has('charity.create') ||
+          has('charity.affinity') ||
+          has('charity.request_adaptation')
         : section === 'sources'
           ? donationsAllowed && has('donations.manage_keys')
-          : has('charity.price_templates.read');
+          : has('charity.price_templates.manage');
   const setSection = (nextSection: 'donations' | 'models' | 'sources' | 'templates') =>
     setParams((current) => {
       const next = new URLSearchParams(current);
@@ -2327,7 +2329,8 @@ function CharityManagementAccount({
     });
   const [modelsVisited, setModelsVisited] = useState(section === 'models');
   if (section === 'models' && !modelsVisited) setModelsVisited(true);
-  const keepModelDraft = frame === 'admin' && section === 'templates' && modelsVisited;
+  const keepModelDraft =
+    has('charity.price_templates.manage') && section === 'templates' && modelsVisited;
   const workspace = useRef<HTMLDivElement>(null);
   const revealSelectedTab = useCallback(() => {
     const tab = workspace.current?.querySelector<HTMLElement>(`#charity-tab-${section}`);
@@ -2406,7 +2409,7 @@ function CharityManagementAccount({
                 panelId: 'charity-panel',
               },
             ] as const
-          ).filter((tab) => frame === 'admin' || tab.value !== 'templates')}
+          ).filter((tab) => tab.value !== 'templates' || has('charity.price_templates.manage'))}
         />
         <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
           {!sectionAllowed ? <StewardPermissionNotice /> : null}
@@ -2425,16 +2428,32 @@ function CharityManagementAccount({
                     onCapabilityLoss={clearCapability}
                   />
                 )}
-                renderScopedKeys={(props) => <ScopedKeyBrowser key={props.modelID} {...props} />}
+                renderScopedKeys={(props) =>
+                  has('charity.read') ? <ScopedKeyBrowser key={props.modelID} {...props} /> : null
+                }
                 role={frame}
                 accountId={accountId}
-                canRead={has('charity.read')}
+                canRead={
+                  has('charity.read') ||
+                  has('charity.request_adaptation') ||
+                  has('charity.affinity')
+                }
+                canEditAffinity={has('charity.affinity')}
+                canEditAdaptation={has('charity.request_adaptation')}
+                canReadAdaptation={
+                  has('charity.model_settings') || has('charity.request_adaptation')
+                }
+                canManageTemplates={has('charity.price_templates.manage')}
                 onCapabilityLoss={clearCapability}
               />
             ) : null}
           </div>
-          {section === 'templates' && frame === 'admin' ? (
-            <PriceTemplateManagement accountId={accountId} onCapabilityLoss={clearCapability} />
+          {section === 'templates' && sectionAllowed ? (
+            <PriceTemplateManagement
+              role={frame}
+              accountId={accountId}
+              onCapabilityLoss={clearCapability}
+            />
           ) : null}
           {sectionAllowed && section === 'sources' && donationScope === 'standard' ? (
             <Note

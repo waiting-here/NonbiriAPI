@@ -71,7 +71,7 @@ func migrationIndex(t *testing.T, from int) int {
 func oldStewardPolicyForTest(t *testing.T) string {
 	t.Helper()
 	grants := authz.DefaultStewardPermissions(5).Permissions
-	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"} {
 		delete(grants, key)
 	}
 	i := 0
@@ -555,12 +555,20 @@ func testSchema33OfflineUpgradeRollback(t *testing.T, failure string) {
 	store.Close()
 }
 
-func TestSchema33OfflineUpgradeRollsBackAndRetries(t *testing.T) {
-	for _, failure := range []string{"partial-ddl", "target-mismatch", "cancel-during-index", "cancel-before-commit"} {
-		t.Run(failure, func(t *testing.T) {
-			testSchema33OfflineUpgradeRollback(t, failure)
-		})
-	}
+func TestSchema33OfflineUpgradeRollsBackAndRetriesPartialDDL(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "partial-ddl")
+}
+
+func TestSchema33OfflineUpgradeRollsBackAndRetriesTargetMismatch(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "target-mismatch")
+}
+
+func TestSchema33OfflineUpgradeRollsBackAndRetriesCancelDuringIndex(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "cancel-during-index")
+}
+
+func TestSchema33OfflineUpgradeRollsBackAndRetriesCancelBeforeCommit(t *testing.T) {
+	testSchema33OfflineUpgradeRollback(t, "cancel-before-commit")
 }
 
 func TestSchema34OfflineCatalogUpgradePreservesRowsAndRetries(t *testing.T) {
@@ -715,7 +723,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 		var before, after map[string]bool
 		json.Unmarshal([]byte(original), &before)
 		json.Unmarshal([]byte(body), &after)
-		if len(after) != 51 {
+		if len(after) != 55 {
 			t.Fatal("not current", after)
 		}
 		for key, value := range before {
@@ -723,7 +731,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 				t.Fatal("authority changed", key)
 			}
 		}
-		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"} {
 			if after[key] {
 				t.Fatal("new grant enabled", key)
 			}

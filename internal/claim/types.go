@@ -177,14 +177,17 @@ type Request struct {
 }
 
 type ClaimInput struct {
-	discovery        *DiscoveryClaimInput
-	RequestID        string
-	ActorUserID      int64
-	AttemptSeq       int
-	Purpose          Purpose
-	Candidate        Candidate
-	DonationKeyID    int64
-	OutputTokenFloor int64
+	discovery         *DiscoveryClaimInput
+	queueTicket       *keyWaiter
+	queueFallback     *ClaimInput
+	skipAffinityQueue bool
+	RequestID         string
+	ActorUserID       int64
+	AttemptSeq        int
+	Purpose           Purpose
+	Candidate         Candidate
+	DonationKeyID     int64
+	OutputTokenFloor  int64
 	// PersonalModelID associates routed personal attempts with their owner-scoped model.
 	PersonalModelID int64
 	// BalancedCandidates are already weighted into a random order by the
@@ -202,6 +205,7 @@ type BalancedCandidate struct {
 // repository cannot manufacture a credential lookup from endpoint/key IDs.
 // Accessors expose only safe routing metadata needed by the forwarder.
 type Handle struct {
+	keyWaiter          *keyWaiter
 	claimID            string
 	requestID          string
 	attemptSeq         int
@@ -219,7 +223,7 @@ func (h Handle) EndpointKeyID() int64                       { return h.candidate
 func (h Handle) DonationKeyID() int64                       { return h.donationKeyID }
 func (h Handle) Authorization() routing.TargetAuthorization { return h.candidate.Authorization }
 func (h Handle) Target() connectorcontract.Target {
-	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID)
+	return connectorcontract.NewTarget(h.candidate.ConnectorType, h.candidate.CanonicalBaseURL, h.candidate.UpstreamModelID).WithRerankPath(h.candidate.Authorization.RerankPath)
 }
 func (h Handle) Policy() connectorcontract.AttemptPolicy { return h.candidate.Policy }
 func (Handle) String() string                            { return "[redacted dispatch claim]" }

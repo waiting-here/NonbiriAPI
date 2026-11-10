@@ -38,7 +38,7 @@ func TestAgentOfflineSchema36PreservesPolicyRepresentationAndFacts(t *testing.T)
 	}
 	policy.Permissions["users.read"] = true
 	policy.DonationScope = authz.DonationScopeEnhanced
-	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"} {
 		delete(policy.Permissions, key)
 	}
 	permissions, _ := json.Marshal(policy.Permissions)
@@ -97,7 +97,7 @@ func TestAgentOfflineSchema36PreservesPolicyRepresentationAndFacts(t *testing.T)
 	if err != nil || revision != 3 || created != 2 || updated != 3 || gotLimits != string(limits) || scope != "enhanced" {
 		t.Fatal("stored metadata changed", current, err)
 	}
-	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit"} {
+	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"} {
 		if current.Permissions[key] {
 			t.Fatal("old custom acquired new privilege", key)
 		}

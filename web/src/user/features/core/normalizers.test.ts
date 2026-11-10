@@ -31,6 +31,35 @@ function jsonFixture(path: string): unknown {
 }
 
 describe('core wire normalizers', () => {
+  it('reads queue settings and keeps old key receipts readable with rejection defaults', () => {
+    const key = jsonFixture('internal/resources/testdata/endpoint_key.json') as Record<
+      string,
+      unknown
+    >;
+    const legacy = { ...key };
+    for (const field of [
+      'concurrency_overflow',
+      'rpm_overflow',
+      'concurrency_queue_limit',
+      'rpm_queue_limit',
+    ])
+      delete legacy[field];
+    expect(normalizeEndpointKey(legacy)).toMatchObject({
+      concurrency_overflow: 'reject',
+      rpm_overflow: 'reject',
+      concurrency_queue_limit: 0,
+      rpm_queue_limit: 0,
+    });
+    expect(
+      normalizeEndpointKey({
+        ...key,
+        concurrency_overflow: 'queue',
+        concurrency_queue_limit: 2_147_483_647,
+        rpm_overflow: 'reject',
+        rpm_queue_limit: 0,
+      }),
+    ).toMatchObject({ concurrency_overflow: 'queue', concurrency_queue_limit: 2_147_483_647 });
+  });
   it.each(['ai-sdk-gateway-v3', 'ai-sdk-gateway-v4'] as const)(
     'preserves %s and the complete native base URL',
     (connector_type) => {

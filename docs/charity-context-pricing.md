@@ -180,8 +180,10 @@ the complete pricing fields. A model draft remains available while visiting the
 template manager and returning to that model. Model forms select an existing
 template and keep their own draft values until explicitly saved.
 
-Administrator-maintained price templates can fill the pricing section of a new
-or existing model for administrators and stewards with `charity.price_templates.read`. They copy the
+Price templates can fill the pricing section of a new or existing model for
+administrators and stewards with `charity.price_templates.read` or
+`charity.price_templates.manage`. Administrators and stewards with the management
+grant can create, edit, disable and delete templates. They copy the
 billing mode, all active user prices and donor rewards, Token reserve override,
 input/output modality settings, long-context threshold/alternate prices and
 optional rewards, penalty threshold/fine, and every

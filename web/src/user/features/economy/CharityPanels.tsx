@@ -837,6 +837,18 @@ export function DonationKeyPanel({
             ))}
         </div>
       </div>
+      {accountID && donationKey.endpointId && donationKey.endpointKeyId ? (
+        <Link
+          className="nb-btn nb-btn--secondary"
+          to={`/endpoints/${encodeURIComponent(donationKey.endpointId)}?focus_key_id=${encodeURIComponent(donationKey.endpointKeyId)}&edit_key=1`}
+          state={{
+            returnTo,
+            donationReturnTo: donationId ? `/charity/donations/${donationId}` : '/charity',
+          }}
+        >
+          {t('user.charity.editSharedKeyLimits')}
+        </Link>
+      ) : null}
       <KeyRateLimitTime
         until={donationKey.rateLimitedUntil}
         smartBackoff={donationKey.smartBackoff}
