@@ -95,9 +95,16 @@ increase a binding's weight. Existing protocol, body and transport checks still
 apply; a service declaration does not promise arbitrary lossless conversion.
 See [direct inference](direct-inference.md) for the supported operation matrix.
 
-A model list belongs to one endpoint/key pair. Its advanced settings can specify
-a different complete base URL and list format, using that pair's credential
-version. Even when two endpoints use the same key and list URL, their fetched
+A model list belongs to one endpoint/key pair. Its advanced settings specify
+the complete request URL and list format, using that pair's credential version.
+For example, enter `https://api.example.com/v1/models` for an OpenAI list or
+`https://gateway.example.com/ai/config` for a Gateway directory. The displayed
+request address is used directly; discovery does not append a path. Standard
+defaults already include the appropriate path. This setting is independent of
+the inference entry's base URL. Existing URL, credential and outbound protections
+continue to apply.
+
+Even when two endpoints use the same key and list URL, their fetched
 and manual lists are independent. A list refresh does not
 send a paid inference request. Recognized Gateway model types and Gemini methods
 provide service suggestions; an ordinary OpenAI model ID alone does not prove
@@ -109,6 +116,10 @@ fetch reports added/removed counts and replaces only fetched entries, including
 when the new result is empty. Manual entries are never removed by a refresh.
 
 Mainstream presets may suggest entries, a directory and per-model mappings.
+Directory suggestions also contain the complete request URL. Discovery API
+fields keep their existing names: `base_url` stores this complete address and
+`models_url` displays it. This meaning applies only to discovery settings and
+directory presets; inference endpoint `base_url` keeps its original meaning.
 Existing entry IDs are retained when editing; save new entries before assigning
 model mappings to them. Updating a preset does not change existing destinations,
 expand grants or approve donations.
