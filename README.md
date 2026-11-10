@@ -4,12 +4,15 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.7** adds independent token limits for each upstream model in a donated key, precise request-rejection diagnostics, and per-user daily Lake Notes exchange limits. The barbed hook follows common fish only. Background maintenance and charity routing reduce repeated database work. Database schema is 50 and account export is format 35; existing databases on an earlier schema require the explicit offline upgrade before starting this version. Build instructions are below; version history is in [CHANGELOG](CHANGELOG.md). Source availability does not establish instance deployment status.
-
-The unreleased source adds optional HTTP rerank paths and independent charity
-overrides. It uses schema 51 and account export format 36; see
-[service connections](docs/service-connections.md) and
-[database upgrades](docs/database-upgrades.md).
+**v1.3.8** adds optional HTTP rerank paths, independent charity overrides, and
+shared upstream-key FIFO queues with optional caps. It preserves Google Chat
+thought signatures on compatible services, recognizes more caller-input errors,
+and improves charity management, form layout, log searches and idle database
+work. Database schema is 51 and account export is format 36; existing databases
+on an earlier schema require the explicit offline upgrade before starting this
+version. See [service connections](docs/service-connections.md),
+[database upgrades](docs/database-upgrades.md) and [CHANGELOG](CHANGELOG.md).
+Source availability does not establish instance deployment status.
 
 ## Architecture
 

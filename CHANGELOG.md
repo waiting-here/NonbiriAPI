@@ -4,8 +4,18 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.3.8 — 2026-11-10
 
+- Add independent reject or FIFO queue behavior for each upstream key's
+  concurrency and RPM limits, with optional queue caps. Donors and authorized
+  donation managers edit the same settings for personal and charity calls.
+  Valid session affinity takes priority when using cache-balanced routing;
+  other selection first tries connections that can dispatch immediately.
+- Preserve opaque message and tool extensions on native Chat routes. Translate
+  Google thought signatures and supported ordered history through Gateway v3/v4,
+  including signatures received in later streaming tool events.
+- Keep indexed historical model-name lookup when request-log searches combine
+  model names with status, dates or other filters.
 - Add optional same-origin paths for HTTP rerank, including Aliyun Bailian's
   `/compatible-api/v1/reranks`. Existing entries retain their default paths.
 - Keep donated rerank settings separate from personal settings. Authorized
@@ -34,8 +44,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Key shared race caches by Go source and embedded inputs so workers reuse the
   current preparation job's compilation instead of rebuilding changed packages.
 - Advance the database to schema 51 and account export to format 36. Existing
-  databases require an explicit offline upgrade; existing rerank behavior is
-  preserved by default.
+  databases require an explicit offline upgrade. Existing rerank behavior and
+  rejection on key limit overflow are preserved by default.
 
 ## 1.3.7 — 2026-11-09
 

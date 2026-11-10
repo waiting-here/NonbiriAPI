@@ -130,6 +130,30 @@ protocol's full service set. Switching back to **Custom** preserves the address,
 protocol and note. Saving remains a separate action. Empty or unavailable suggestions do not block custom
 creation, and adopting a preset does not attach credentials or approve donations.
 
+## Key capacity and queues
+
+Each saved key has shared concurrency and requests-per-minute limits. For each
+limit, choose **Reject request** (the default) or **Wait in queue**. Queue
+length is optional; leaving it empty allows waiting without that length cap.
+A full queue returns a platform HTTP 429 before sending the new request upstream.
+If both limits block a request, both must allow queueing, and both applicable
+caps are checked against the key's total number of waiting requests.
+
+Personal and charity calls use one FIFO queue for the key. Donors can edit their
+own key from its donation details; administrators and stewards with key-management
+permission can edit the same settings. These edits affect both kinds of calls.
+Waiting requests do not consume key concurrency or RPM slots, but retain the
+request's total timeout and other platform admission limits. Cancellation or
+shutdown ends the wait; requests are not replayed after a restart.
+
+Cache-balanced routing preserves an existing valid session binding by waiting
+on its key when necessary. Other strategies, and cache-balanced requests without
+a valid binding, first try connections that can send immediately. An unavailable
+preferred binding or full queue also falls back to those connections. If none can
+send immediately, the strategy selects an eligible queue. Once a
+request joins a queue, it does not move merely because another key becomes free.
+FIFO controls dispatch permission, not upstream response order.
+
 ## Key changes and donations
 
 Changing a secret creates a new immutable version. Personal grants and current
