@@ -92,8 +92,7 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 	if err != nil {
 		return nil, err
 	}
-	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
-WHERE (l.completed_at IS NULL OR l.completed_at>?)`
+	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
 	if useOperationRange(normalized) {
@@ -148,7 +147,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	}
 	query += modelPredicate
 	args = append(args, modelArgs...)
-	query += ` ORDER BY l.started_at ASC,l.id ASC LIMIT ?`
+	query = logExportQuery(commonListColumns+`,`+callerIdentityColumns+`,l.user_id`, callerIdentityJoin, query)
 	args = append(args, maxExportRows+1)
 	finishRows := observeLogRead(ctx, "rows")
 	defer func() { finishRows(resultErr) }()
