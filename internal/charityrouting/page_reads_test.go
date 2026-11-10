@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -198,6 +199,7 @@ func TestManagementPageHTTPRejectsMixedWindowsAndPreservesCursor(t *testing.T) {
 }
 
 func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
+	started := time.Now()
 	env := newRoutingTestEnv(t)
 	env.seedUser(t, true, nil)
 	model := env.createModel(t, 'S')
@@ -208,14 +210,15 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	models := make([]testseed.DiscoveryModel, 10000)
+	models := make([]testseed.DiscoveryModel, candidatePageAutomaticModels)
 	for i := range models {
 		models[i] = testseed.DiscoveryModel{ID: fmt.Sprintf("pair-%05d", i)}
 	}
 	if _, err := testseed.SeedDiscoveryCatalogTx(context.Background(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: physical, ListFormat: "openai", Models: models, At: routingTestNow}); err != nil {
 		t.Fatal(err)
 	}
-	for i := 10000; i < 10017; i++ {
+	total := len(models) + 17
+	for i := len(models); i < total; i++ {
 		if _, err := tx.Exec(`INSERT INTO donation_key_manual_models(donation_key_id,normalized_model_id,display_name,revision,created_at,updated_at) VALUES(?1,?2,?2,1,?3,?3)`, member, fmt.Sprintf("pair-%05d", i), routingTestNow); err != nil {
 			t.Fatal(err)
 		}
@@ -223,18 +226,21 @@ func TestCandidatePagesUseIndexedPairOrderAtScale(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("seeded %d automatic and 17 manual models in %s", len(models), time.Since(started))
 	for _, size := range []int{10, 20, 50, 100} {
+		pageStarted := time.Now()
 		out, err := env.service.candidatesPage(context.Background(), roleAdmin, 0, modelID, CandidateQuery{KeyState: "available"}, pagination.Request{Page: pagination.MaxPage, Size: size})
+		t.Logf("deep page size=%d elapsed=%s", size, time.Since(pageStarted))
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("deep page size=%d: %v", size, err)
 		}
-		last := (10017 + size - 1) / size
-		if out.Pagination.TotalItems != "10017" || out.Pagination.Page != strconv.Itoa(last) || len(out.Data) != 10017-(last-1)*size || out.Data[len(out.Data)-1].UpstreamModelID != "pair-10016" {
+		last := (total + size - 1) / size
+		if out.Pagination.TotalItems != strconv.Itoa(total) || out.Pagination.Page != strconv.Itoa(last) || len(out.Data) != total-(last-1)*size || out.Data[len(out.Data)-1].UpstreamModelID != fmt.Sprintf("pair-%05d", total-1) {
 			t.Fatalf("scale window: %+v rows=%d", out.Pagination, len(out.Data))
 		}
 	}
 	selection, args := candidatePageSelection(modelID, routingTestNow, CandidateQuery{KeyState: "available"})
-	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+selection+` ORDER BY dk.id,pc.normalized_model_id LIMIT 100 OFFSET 9900`, args...)
+	rows, err := env.store.DB().Query(`EXPLAIN QUERY PLAN `+selection+` ORDER BY dk.id,pc.normalized_model_id LIMIT 100 OFFSET ?`, append(args, len(models)-100)...)
 	if err != nil {
 		t.Fatal(err)
 	}
