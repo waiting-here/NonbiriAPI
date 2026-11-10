@@ -1264,8 +1264,10 @@ describe('experimental policy and charity controls', () => {
     const nameInput = createForm.getByLabelText('Model name') as HTMLInputElement;
     expect(providerInput.maxLength).toBeGreaterThanOrEqual(provider.length);
     expect(nameInput.maxLength).toBeGreaterThanOrEqual(name.length);
-    await rendered.user.type(providerInput, provider);
-    await rendered.user.type(nameInput, name);
+    await rendered.user.click(providerInput);
+    await rendered.user.paste(provider);
+    await rendered.user.click(nameInput);
+    await rendered.user.paste(name);
     expect(providerInput).toHaveValue(provider);
     expect(nameInput).toHaveValue(name);
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));

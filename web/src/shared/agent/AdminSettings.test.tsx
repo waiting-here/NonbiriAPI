@@ -209,10 +209,7 @@ describe('Agent administrator settings', () => {
     );
     expect(description).toHaveValue(settings.tool_descriptions!.donations);
     await view.user.clear(description);
-    await view.user.type(
-      description,
-      'Read the specified donation and report facts missing from its catalog.',
-    );
+    await view.user.paste('Read the specified donation and report facts missing from its catalog.');
     await view.user.click(
       screen
         .getAllByRole('button', { name: 'Save' })

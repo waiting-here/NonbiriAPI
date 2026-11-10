@@ -294,10 +294,8 @@ describe('CharityBindingPicker numbered source flow', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(44);
     await view.user.click(within(candidatePager()).getByRole('button', { name: 'Previous' }));
     expect(await screen.findByRole('checkbox', { name: /provider\/model-000/ })).toBeChecked();
-    await view.user.type(
-      screen.getByRole('searchbox', { name: 'Search selected upstream IDs' }),
-      'model-143',
-    );
+    await view.user.click(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' }));
+    await view.user.paste('model-143');
     await view.user.click(
       screen.getByRole('button', { name: 'Remove selected provider/model-143-2026-10' }),
     );
