@@ -14,7 +14,7 @@ func TestContinuationCannotCrossProtocolCandidates(t *testing.T) {
 		kind    contract.Type
 		message string
 	}{
-		{contract.TypeGoogleGemini, `{"role":"assistant","content":"answer","extra_content":{"google":{"thought_signature":"YWJj"}}}`},
+		{contract.TypeGoogleGemini, `{"role":"assistant","content":"answer","extra_content":{"google":{"parts":[{"text":"answer","thoughtSignature":"YWJj"}]}}}`},
 		{contract.TypeOpenAIResponses, `{"role":"assistant","content":"answer","extra_content":{"openai":{"reasoning":[{"type":"reasoning","id":"rs_a","summary":[],"encrypted_content":"opaque"}]}}}`},
 	} {
 		request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"public","messages":[`+tc.message+`,{"role":"user","content":"continue"}]}`), 0)
@@ -25,6 +25,38 @@ func TestContinuationCannotCrossProtocolCandidates(t *testing.T) {
 		for _, kind := range registry.Types() {
 			if got := registry.SupportsRequest(kind, request); got != (kind == tc.kind) {
 				t.Errorf("source %s target %s support %t", tc.kind, kind, got)
+			}
+		}
+	}
+}
+
+func TestGoogleChatSignaturesRemainOnRepresentableProtocols(t *testing.T) {
+	registry := NewDefaultRegistry()
+	for _, message := range []string{
+		`{"role":"assistant","content":"answer","extra_content":{"google":{"thought_signature":"YWJj"}}}`,
+		`{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"clock","arguments":"{}"},"extra_content":{"google":{"thought_signature":"YWJj"}}}]}`,
+	} {
+		history := message
+		if strings.Contains(message, `"tool_calls"`) {
+			history += `,{"role":"tool","tool_call_id":"call_1","content":"done"}`
+		}
+		history += `,{"role":"user","content":"continue"}`
+		request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"public","messages":[`+history+`]}`), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer request.Clear()
+		for _, kind := range []contract.Type{contract.TypeOpenAICompatible, contract.TypeOpenAIChatCompletions, contract.TypeGoogleGemini} {
+			if !registry.SupportsRequest(kind, request) {
+				t.Fatalf("Google Chat signature rejected by %s", kind)
+			}
+			if err := registry.CheckTargetRequest(contract.NewTarget(kind, "https://upstream.example", "gemini"), contract.OperationChatCompletions, request, nil, contract.AttemptPolicy{}); err != nil {
+				t.Fatalf("Google Chat signature preflight %s: %v", kind, err)
+			}
+		}
+		for _, kind := range []contract.Type{contract.TypeAnthropicCompatible, contract.TypeOpenAIResponses, contract.TypeAISDKGatewayV3, contract.TypeAISDKGatewayV4} {
+			if registry.SupportsRequest(kind, request) {
+				t.Fatalf("Google Chat signature admitted to an incompatible protocol %s", kind)
 			}
 		}
 	}

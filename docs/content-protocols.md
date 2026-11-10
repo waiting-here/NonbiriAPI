@@ -15,6 +15,14 @@ These connectors use the shared outbound boundary, cancellation, timeouts, concu
 
 ## Gemini Chat
 
+Google's OpenAI-compatible Chat API uses
+`extra_content.google.thought_signature` on assistant messages and tool calls.
+OpenAI-compatible and dedicated Chat bindings preserve this extension unchanged,
+including JSON and SSE responses. The native Gemini connector can translate the
+same signature into GenerateContent. Native `google.parts` histories keep their
+original ordered-part replay through Gemini; they are not silently flattened or
+sent to an incompatible protocol. See [Google's compatibility documentation](https://ai.google.dev/gemini-api/docs/openai).
+
 Gemini rejects tool-call flattening during candidate preflight because the text tool format cannot retain Google thought signatures. Both JSON and SSE calls require this option to be disabled.
 
 Configure the complete API mount, for example `https://generativelanguage.googleapis.com/v1beta`. The connector authenticates with `x-goog-api-key`. An explicit operator-configured [Cloudflare route](cloudflare-egress.md) can move this credential into a private outbound query parameter when required by the gateway. Direct requests retain header authentication. Model IDs are one path segment, optionally prefixed once with `models/`.
