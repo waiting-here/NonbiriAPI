@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
@@ -54,7 +55,14 @@ func SeedDiscoverySourceTx(ctx context.Context, tx *sql.Tx, in DiscoverySourceIn
 		}
 		base := in.BaseURL
 		if base == "" {
+			suffix := "/models"
+			if in.ListFormat == "ai-sdk-gateway-v3" || in.ListFormat == "ai-sdk-gateway-v4" {
+				suffix = "/config"
+			}
 			base = endpointBase
+			if !strings.HasSuffix(strings.TrimRight(base, "/"), suffix) {
+				base = strings.TrimRight(base, "/") + suffix
+			}
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO discovery_sources(id,user_id,current_revision_id,created_at,updated_at) VALUES(?,?,?,?,?)", out.SourceID, owner, out.SourceRevisionID, in.At, in.At); err != nil {
 			return out, err

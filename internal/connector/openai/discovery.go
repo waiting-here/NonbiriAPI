@@ -71,7 +71,7 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 		}
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "model discovery is unavailable")
 	}
-	client, err := input.Backend.Open(input.Target.BaseURL())
+	client, err := backend.OpenDiscovery(input.Backend, input.Target.BaseURL())
 	if err != nil || nilEndpointClient(client) {
 		input.Credential.Clear()
 		if kind, failed := discoveryContextFailure(ctx, err); failed {
@@ -94,7 +94,7 @@ func (d ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.D
 	clear(ciphertext)
 	defer clear(plaintext)
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelsURL(client.BaseURL()), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL(), nil)
 	if err != nil {
 		if kind, failed := discoveryContextFailure(ctx, err); failed {
 			return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
@@ -243,10 +243,6 @@ func containsSensitiveDiscoveryText(guard *sensitiveGuard, value string) bool {
 	matched := guard.Contains(data)
 	clear(data)
 	return matched
-}
-
-func ModelsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + "/models"
 }
 
 // ParseModels strictly validates an OpenAI-compatible list-models response.

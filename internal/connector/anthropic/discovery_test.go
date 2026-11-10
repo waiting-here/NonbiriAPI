@@ -47,7 +47,7 @@ func discoveryInput(client backend.EndpointClient, plaintext, ciphertext []byte)
 		Backend: fakeBackend{open: func(string) (backend.EndpointClient, error) { return client, nil }},
 		Target: connectorcontract.NewTarget(
 			connectorcontract.TypeAnthropicCompatible,
-			"https://api.example/v1",
+			"https://api.example/v1/models",
 			"",
 		),
 		Credential: connectorcontract.NewShortLivedSecret(plaintext, ciphertext),
@@ -80,7 +80,7 @@ func (body *unreadDiscoveryBody) Close() error {
 
 func TestModelDiscoveryPaginationHeadersAndCredentialLifetime(t *testing.T) {
 	requests := 0
-	client := &fakeEndpointClient{baseURL: "https://api.example/v1"}
+	client := &fakeEndpointClient{baseURL: "https://api.example/v1/models"}
 	client.do = func(request *http.Request) (*http.Response, error) {
 		requests++
 		if request.Method != http.MethodGet || request.URL.Path != "/v1/models" {
@@ -131,7 +131,7 @@ func TestModelDiscoveryPaginationHeadersAndCredentialLifetime(t *testing.T) {
 }
 
 func TestModelDiscoveryTypedSuccessAllowsEmptyModels(t *testing.T) {
-	client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+	client := &fakeEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 		return fakeResponse(http.StatusOK, "application/json", modelsPage(nil, false)), nil
 	}}
 	plaintext := []byte("sk-empty")
@@ -148,7 +148,7 @@ func TestModelDiscoveryTypedSuccessAllowsEmptyModels(t *testing.T) {
 
 func TestModelDiscoveryDoesNotReadFailureBody(t *testing.T) {
 	body := &unreadDiscoveryBody{}
-	client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+	client := &fakeEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusUnauthorized, Header: make(http.Header), Body: body}, nil
 	}}
 	plaintext := []byte("sk-unread")
@@ -229,7 +229,7 @@ func TestModelDiscoveryFailureBoundaries(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			calls := 0
-			client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(request *http.Request) (*http.Response, error) {
+			client := &fakeEndpointClient{baseURL: "https://api.example/v1/models", do: func(request *http.Request) (*http.Response, error) {
 				calls++
 				return test.do(request)
 			}}
@@ -294,7 +294,7 @@ func TestModelDiscoveryCountPageCursorAndDuplicateLimits(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			calls := 0
-			client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(request *http.Request) (*http.Response, error) {
+			client := &fakeEndpointClient{baseURL: "https://api.example/v1/models", do: func(request *http.Request) (*http.Response, error) {
 				calls++
 				return test.do(calls, request)
 			}}
@@ -338,7 +338,7 @@ func TestModelDiscoveryRejectsCredentialReflectionBeforeCache(t *testing.T) {
 			if test.name == "JSON surrogate pair" {
 				plain = "model-😀"
 			}
-			client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+			client := &fakeEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 				return fakeResponse(http.StatusOK, "application/json", test.body), nil
 			}}
 			result := (ModelDiscoverer{}).Discover(context.Background(), discoveryInput(client, []byte(plain), []byte(cipher)))
@@ -406,7 +406,7 @@ func TestParseModelsPageRejectsInvalidPaginationAndModelInfo(t *testing.T) {
 }
 
 func TestModelsPageURLAddsEncodedCursor(t *testing.T) {
-	got, err := modelsPageURL("https://api.example/v1", "claude/a b")
+	got, err := modelsPageURL("https://api.example/v1/models", "claude/a b")
 	if err != nil {
 		t.Fatal(err)
 	}

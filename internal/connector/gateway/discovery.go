@@ -35,12 +35,12 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	if ctx.Err() != nil {
 		return result
 	}
-	client, err := input.Backend.Open(input.Target.BaseURL())
+	client, err := backend.OpenDiscovery(input.Backend, input.Target.BaseURL())
 	if err != nil {
 		result.Failure = contract.DiscoveryFailureTransport
 		return result
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, ModelsURL(client.BaseURL()), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL(), nil)
 	if err != nil {
 		return result
 	}
@@ -166,6 +166,3 @@ func (ModelDiscoverer) Discover(ctx context.Context, input contract.DiscoveryInp
 	result.Diagnostic = ""
 	return result
 }
-
-// ModelsURL is the catalog endpoint before pagination parameters are added.
-func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/config" }

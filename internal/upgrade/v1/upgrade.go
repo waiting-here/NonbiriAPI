@@ -97,8 +97,10 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 	{from: 49, version: 50, manifest: db.Schema50ManifestHash, sql: db.ModelQuotaSQL + db.LakeExchangeDailyIndexSQL, impact: &migrationImpact{
 		addedTables: []string{"donation_model_quotas"}, constraintTables: []string{"donation_quota_rules", "donation_usage_reservations"},
 		indexedTables: []string{"donation_quota_rules", "donation_usage_reservations", "lake_notes_exchange_receipts"}, credentials: credentialsUnchanged}},
-	{from: 50, version: 51, manifest: db.PinnedGenerationTwoManifestHash, sql: db.RerankPathSQL + db.CallerParameterLengthSQL + db.StewardCharityPermissionsSQL + db.CharityAdaptationAuditSQL + db.KeyQueueSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardCharityPermissions(ctx, tx) }, impact: &migrationImpact{
+	{from: 50, version: 51, manifest: db.Schema51ManifestHash, sql: db.RerankPathSQL + db.CallerParameterLengthSQL + db.StewardCharityPermissionsSQL + db.CharityAdaptationAuditSQL + db.KeyQueueSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardCharityPermissions(ctx, tx) }, impact: &migrationImpact{
 		controlTables: []string{"endpoints", "donation_uses", "donation_use_revisions", "dispatch_claim_targets", "steward_permissions", "endpoint_key_limits"}, rebuiltTables: []string{"dispatch_caller_parameter_errors", "request_adaptation_audits"}, credentials: credentialsUnchanged}},
+	{from: 51, version: 52, manifest: db.PinnedGenerationTwoManifestHash, apply: completeDiscoveryURLs, impact: &migrationImpact{
+		controlTables: []string{"discovery_source_revisions", "mainstream_channel_discovery_presets"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -151,6 +153,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{48, db.Schema48ManifestHash, "9be4a03b9054f70d8a44ac7389378e4fe93dce0a"},
 		{49, db.Schema49ManifestHash, "4fd81dd0fd48b82e0ee55c562a9ea4f92b18eeca"},
 		{50, db.Schema50ManifestHash, "23afcd9fc058721f649ff352b216578c447f332b"},
+		{51, db.Schema51ManifestHash, "b0f488b08153d8cca7fb54f4d095f7e4feeb3fa1"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
@@ -183,11 +186,16 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 	}
 	sourceVersion := db.CurrentSchemaVersion
 	invalidLegacyConfiguration := false
+	var discoveryURLProblem error
 	needed, err := convertOffline(ctx, path, vault, sources, options.Apply, true, func(ctx context.Context, database *sql.DB) error {
 		if err := database.QueryRowContext(ctx, "SELECT version FROM schema_state WHERE id=1").Scan(&sourceVersion); err != nil {
 			return err
 		}
 		if sourceVersion != 16 {
+			if sourceVersion >= 33 {
+				discoveryURLProblem = checkCompleteDiscoveryURLs(ctx, database)
+				return discoveryURLProblem
+			}
 			return nil
 		}
 		var initialized int
@@ -211,6 +219,9 @@ func run(ctx context.Context, path string, vault *secret.Vault, options Options,
 		return nil
 	})
 	if err != nil {
+		if errors.Is(discoveryURLProblem, errDiscoveryURLTooLong) {
+			return Result{}, discoveryURLProblem
+		}
 		if invalidLegacyConfiguration {
 			return Result{}, errors.New("legacy Gateway model configuration is invalid")
 		}

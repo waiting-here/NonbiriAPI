@@ -56,7 +56,7 @@ func TestDiscoverySafeErrorsPreserveOnlyPrivateRawDiagnostics(t *testing.T) {
 				return &http.Response{StatusCode: test.status, Header: http.Header{"Content-Type": {test.media}}, Body: io.NopCloser(strings.NewReader(test.body)), Request: r}, nil
 			}}
 			credential := contract.NewShortLivedSecret([]byte("secret-value"), nil)
-			result := (ModelDiscoverer{}).Discover(ctx, contract.DiscoveryInput{Backend: outbound, Target: contract.NewTarget(contract.TypeGoogleGemini, "https://provider.example/v1beta", ""), Credential: credential})
+			result := (ModelDiscoverer{}).Discover(ctx, contract.DiscoveryInput{Backend: outbound, Target: contract.NewTarget(contract.TypeGoogleGemini, "https://provider.example/v1beta/models", ""), Credential: credential})
 			if result.Failure != test.want || result.UpstreamStatus != test.status || !result.ResponseReceived || len(result.Models) != 0 {
 				t.Fatalf("wrong safe result %+v", result)
 			}
@@ -92,7 +92,7 @@ func TestDiscoveryCancellationAndTimeoutRemainDistinct(t *testing.T) {
 			}
 			return nil, errors.New("synthetic transport failure")
 		}}
-		result := (ModelDiscoverer{}).Discover(ctx, contract.DiscoveryInput{Backend: outbound, Target: contract.NewTarget(contract.TypeGoogleGemini, "https://provider.example/v1beta", ""), Credential: contract.NewShortLivedSecret([]byte("secret-value"), nil)})
+		result := (ModelDiscoverer{}).Discover(ctx, contract.DiscoveryInput{Backend: outbound, Target: contract.NewTarget(contract.TypeGoogleGemini, "https://provider.example/v1beta/models", ""), Credential: contract.NewShortLivedSecret([]byte("secret-value"), nil)})
 		cancel()
 		if result.Failure != want || result.ResponseReceived {
 			t.Fatalf("wrong cancellation/transport result %+v", result)

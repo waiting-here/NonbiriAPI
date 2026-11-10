@@ -63,6 +63,24 @@ func (b *LocalBackend) Open(baseURL string) (EndpointClient, error) {
 	return b.stack.NewClient(baseURL)
 }
 
+func (b *LocalBackend) OpenDiscovery(catalogURL string) (EndpointClient, error) {
+	if b == nil || b.stack == nil {
+		return nil, errors.New("backend: local backend is unavailable")
+	}
+	return b.stack.NewDiscoveryClient(catalogURL)
+}
+
+// OpenDiscovery uses the production catalog boundary. Small protocol test
+// backends can continue to supply the same narrow EndpointClient contract.
+func OpenDiscovery(b Backend, catalogURL string) (EndpointClient, error) {
+	if discovery, ok := b.(interface {
+		OpenDiscovery(string) (EndpointClient, error)
+	}); ok {
+		return discovery.OpenDiscovery(catalogURL)
+	}
+	return b.Open(catalogURL)
+}
+
 // MaxResponseBytes reports the shared cumulative response ceiling enforced by
 // every client the Stack created.
 func (b *LocalBackend) MaxResponseBytes() int64 {

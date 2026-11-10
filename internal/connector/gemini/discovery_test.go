@@ -18,7 +18,7 @@ type discoveryBackend struct {
 
 func (b discoveryBackend) Open(string) (backend.EndpointClient, error) { return b, nil }
 func (discoveryBackend) MaxResponseBytes() int64                       { return 1 << 20 }
-func (discoveryBackend) BaseURL() string                               { return "https://provider.example/v1beta" }
+func (discoveryBackend) BaseURL() string                               { return "https://provider.example/v1beta/models" }
 func (b discoveryBackend) Do(r *http.Request) (*http.Response, error)  { return b.do(r) }
 func TestGeminiDiscoveryPaginationMethodFilterAndSecretGuard(t *testing.T) {
 	for _, mode := range []string{"valid", "cycle", "secret", "oversized", "unsupported"} {
@@ -48,7 +48,7 @@ func TestGeminiDiscoveryPaginationMethodFilterAndSecretGuard(t *testing.T) {
 				}
 				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 			}}
-			result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: outbound, Target: contract.NewTarget(contract.TypeGoogleGemini, "https://provider.example/v1beta", ""), Credential: contract.NewShortLivedSecret([]byte("secret-value"), nil)})
+			result := (ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: outbound, Target: contract.NewTarget(contract.TypeGoogleGemini, "https://provider.example/v1beta/models", ""), Credential: contract.NewShortLivedSecret([]byte("secret-value"), nil)})
 			if mode == "valid" {
 				if result.Failure != contract.DiscoveryFailureNone || len(result.Models) != 2 || fmt.Sprint(result.Models[0]) == "" || calls != 2 {
 					t.Fatal(result, calls)
