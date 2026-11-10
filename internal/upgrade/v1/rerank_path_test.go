@@ -66,6 +66,10 @@ ALTER TABLE dispatch_claim_targets DROP COLUMN rerank_path;
 ALTER TABLE donation_uses DROP COLUMN rerank_path_override;
 ALTER TABLE donation_use_revisions DROP COLUMN rerank_path;
 ALTER TABLE endpoints DROP COLUMN rerank_path;
+ALTER TABLE endpoint_key_limits DROP COLUMN rpm_queue_limit;
+ALTER TABLE endpoint_key_limits DROP COLUMN concurrency_queue_limit;
+ALTER TABLE endpoint_key_limits DROP COLUMN rpm_overflow;
+ALTER TABLE endpoint_key_limits DROP COLUMN concurrency_overflow;
 `)
 	assertRetainedManifest(t, database, db.Schema50ManifestHash)
 }
@@ -79,6 +83,7 @@ func TestRerankPathUpgradeIsExplicitAtomicAndPreservesFacts(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	key := seedEndpointKeyHistory(t, store.DB(), vault, 'R')
+	hostileMustExec(t, store.DB(), "INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,max_rpm) VALUES(?,3,17) ON CONFLICT(endpoint_key_id) DO UPDATE SET max_concurrency=3,max_rpm=17", key)
 	var owner, endpoint int64
 	if err = store.DB().QueryRow("SELECT user_id,id FROM endpoints WHERE id=(SELECT endpoint_id FROM endpoint_keys WHERE id=?)", key).Scan(&owner, &endpoint); err != nil {
 		t.Fatal(err)
@@ -167,6 +172,26 @@ func TestRerankPathUpgradeIsExplicitAtomicAndPreservesFacts(t *testing.T) {
 	defer store.Close()
 	if after := endpointKeyHistoryDigests(t, store.DB()); !reflect.DeepEqual(before, after) {
 		t.Fatal("credential or claim history changed")
+	}
+	var concurrency, rpm, concurrencyQueue, rpmQueue int64
+	var concurrencyOverflow, rpmOverflow string
+	if err = store.DB().QueryRow(`SELECT max_concurrency,max_rpm,concurrency_overflow,rpm_overflow,concurrency_queue_limit,rpm_queue_limit FROM endpoint_key_limits WHERE endpoint_key_id=?`, key).
+		Scan(&concurrency, &rpm, &concurrencyOverflow, &rpmOverflow, &concurrencyQueue, &rpmQueue); err != nil {
+		t.Fatal(err)
+	}
+	if concurrency != 3 || rpm != 17 || concurrencyOverflow != "reject" || rpmOverflow != "reject" || concurrencyQueue != 0 || rpmQueue != 0 {
+		t.Fatal("existing key limits changed during upgrade", concurrency, rpm, concurrencyOverflow, rpmOverflow, concurrencyQueue, rpmQueue)
+	}
+	for _, query := range []string{
+		`UPDATE endpoint_key_limits SET concurrency_overflow='unknown'`,
+		`UPDATE endpoint_key_limits SET rpm_overflow=NULL`,
+		`UPDATE endpoint_key_limits SET concurrency_queue_limit=-1`,
+		`UPDATE endpoint_key_limits SET rpm_queue_limit=1.5`,
+		`UPDATE endpoint_key_limits SET rpm_queue_limit=2147483648`,
+	} {
+		if _, err := store.DB().Exec(query); err == nil {
+			t.Fatal("accepted invalid queue policy", query)
+		}
 	}
 	var endpointPath string
 	var nondefault int
