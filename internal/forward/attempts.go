@@ -41,6 +41,7 @@ func (service *Service) runAttempts(
 ) attemptRun {
 	var run attemptRun
 	keyLimited := false
+	var queueCandidates []claim.ClaimInput
 	remaining := append([]RouteCandidate(nil), plan.candidates...)
 	balancedPlan := plan.charity && plan.charityStrategy == charityrouting.RouteCacheBalanced ||
 		!plan.charity && plan.strategy == "cache_balanced"
@@ -61,7 +62,7 @@ func (service *Service) runAttempts(
 			safetyByBaseURL[candidate.CanonicalBaseURL] = safety
 		}
 	}
-	for index := range plan.candidates {
+	for index := 0; index < len(plan.candidates); index++ {
 		if executionContext.Err() != nil {
 			break
 		}
@@ -117,7 +118,44 @@ func (service *Service) runAttempts(
 		}
 		handle, err := service.claims.Claim(executionContext, claimInput)
 		if err != nil {
-			if plan.charity && errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable) {
+			queueCandidates = append(queueCandidates, claim.KeyQueueCandidates(err)...)
+			if len(queueCandidates) > 0 && (balanced || index == len(plan.candidates)-1) &&
+				(errors.Is(err, claim.ErrKeyRateLimited) || errors.Is(err, claim.ErrNotFound) || errors.Is(err, donationquota.ErrLimited)) {
+				if queue, ok := service.claims.(interface {
+					WaitForKey(context.Context, []claim.ClaimInput) (claim.Handle, error)
+				}); ok {
+					handle, err = queue.WaitForKey(executionContext, queueCandidates)
+					if executionContext.Err() != nil && err != nil {
+						break
+					}
+					if errors.Is(err, claim.ErrDependencyUnavailable) {
+						if !run.dispatched {
+							value := failureForError(err, plan.charity)
+							run.failure = &value
+						}
+						break
+					}
+					if err == nil && !balanced {
+						index = handle.AttemptSeq() - 1
+						if index < 0 || index >= len(plan.candidates) {
+							run.handleDispatchFailure(parent, service, handle, claim.ErrInvariant)
+							break
+						}
+						candidate = plan.candidates[index]
+						origin, originErr := canonicalOrigin(candidate.CanonicalBaseURL)
+						if originErr == nil {
+							safety, originErr = service.safety.Generate(userID, origin)
+						}
+						if originErr != nil {
+							run.handleDispatchFailure(parent, service, handle, originErr)
+							break
+						}
+					}
+				}
+			}
+		}
+		if err != nil {
+			if errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable) {
 				if plan.charity || !run.dispatched {
 					value := failureForError(err, plan.charity)
 					run.failure = &value
@@ -137,7 +175,7 @@ func (service *Service) runAttempts(
 				}
 				continue
 			}
-			if errors.Is(err, donationquota.ErrCapacity) || errors.Is(err, claim.ErrRoutingBusy) {
+			if errors.Is(err, donationquota.ErrCapacity) || errors.Is(err, claim.ErrRoutingBusy) || errors.Is(err, claim.ErrDependencyUnavailable) {
 				if !run.dispatched {
 					value := failureForError(err, plan.charity)
 					run.failure = &value
@@ -147,6 +185,7 @@ func (service *Service) runAttempts(
 			run.err = err
 			break
 		}
+		queueCandidates = nil
 		if balanced {
 			selected := -1
 			for position, choice := range remaining {
@@ -180,6 +219,9 @@ func (service *Service) runAttempts(
 			break
 		}
 		run.dispatched = true
+		if stream, ok := writer.(*streamWriter); ok {
+			stream.armHeartbeat()
+		}
 		prepared := candidate.prepared
 		attemptRequest := prepared.source(request).CloneForAttempt()
 		if attemptRequest == nil {

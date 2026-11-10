@@ -43,6 +43,7 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (_ Att
 		return Attempt{}, err
 	}
 	if record.state == StateReleased {
+		s.finishKeyHandoff(handle)
 		return releasedAttempt(record), nil
 	}
 	if record.state == StateCommitted {
@@ -58,6 +59,7 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, handle Handle) (_ Att
 	if err := tx.Commit(); err != nil {
 		return Attempt{}, fmt.Errorf("claim: commit undispatched release: %w", err)
 	}
+	s.finishKeyHandoff(handle)
 	return result, nil
 }
 
@@ -84,7 +86,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, handle Handle, outcome At
 	ctx = headerfacts.PrepareResponse(ctx, handle.requestID, handle.attemptSeq)
 	value, err := s.submitCompletion(ctx, "claim_attempt", func(ctx context.Context, tx *sql.Tx) (any, error) {
 		return s.checkAttemptCompletionTx(ctx, tx, handle, outcome, at)
-	})
+	}, func() { s.NotifyKey(handle.candidate.EndpointKeyID) })
 	if err != nil {
 		return Attempt{}, err
 	}

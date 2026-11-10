@@ -25,6 +25,7 @@ import (
 const maxUnixSecond = int64(253402300799)
 
 type Service struct {
+	keyQueue     keyQueue
 	completion   completionQueue
 	performance  *observability.Performance
 	observations *observability.Repository
@@ -177,6 +178,8 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (_ Handle, result
 	if s == nil || s.db == nil || ctx == nil || !validClaimInput(input) {
 		return Handle{}, ErrInvalidInput
 	}
+	committed := false
+	defer func() { s.finishKeyClaim(input.queueTicket, committed) }()
 	claimID, err := db.GenerateOpaqueID("clm_")
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: generate claim identity: %w", err)
@@ -207,6 +210,8 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (_ Handle, result
 	if err := tx.Commit(); err != nil {
 		return Handle{}, fmt.Errorf("claim: commit claim: %w", err)
 	}
+	committed = true
+	handle.keyWaiter = input.queueTicket
 	return handle, nil
 }
 
@@ -372,7 +377,7 @@ SELECT 1 FROM dispatch_claims WHERE logical_request_id=? AND attempt_seq=?)`,
 		donorState = RewardPending
 	}
 	if input.Candidate.EndpointKeyID > 0 {
-		if err := checkKeyLimitsTx(ctx, tx, input.Candidate.EndpointKeyID, at, input.Purpose); err != nil {
+		if err := s.checkKeyLimitsTx(ctx, tx, input, at); err != nil {
 			return Handle{}, err
 		}
 	}
@@ -601,6 +606,7 @@ SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, hand
 		return nil, fmt.Errorf("claim: commit dispatch marker: %w", err)
 	}
 	finish(nil)
+	s.finishKeyHandoff(handle)
 	if err := ctx.Err(); err != nil {
 		clear(contextID)
 		clear(encrypted)

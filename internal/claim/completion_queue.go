@@ -24,6 +24,7 @@ type completionResult struct {
 }
 
 type completionJob struct {
+	committed func()
 	ctx       context.Context
 	operation string
 	run       func(context.Context, *sql.Tx) (any, error)
@@ -51,7 +52,11 @@ func (s *Service) completionContext(ctx context.Context) context.Context {
 
 // submitCompletion waits for durable completion. Only transaction-local,
 // idempotent bodies belong here; acceptance and dispatch remain independent.
-func (s *Service) submitCompletion(ctx context.Context, operation string, run func(context.Context, *sql.Tx) (any, error)) (_ any, resultErr error) {
+func (s *Service) submitCompletion(ctx context.Context, operation string, run func(context.Context, *sql.Tx) (any, error), committed ...func()) (_ any, resultErr error) {
+	var onCommit func()
+	if len(committed) > 0 {
+		onCommit = committed[0]
+	}
 	ctx = s.completionContext(ctx)
 	finished := observability.DatabaseOperation(ctx, operation)
 	defer func() { finished(resultErr) }()
@@ -75,10 +80,10 @@ func (s *Service) submitCompletion(ctx context.Context, operation string, run fu
 			q.mu.Unlock()
 		}()
 		observability.CompletionStage(ctx, "overflow")(nil)
-		result := s.completeOne(&completionJob{ctx: ctx, operation: operation, run: run})
+		result := s.completeOne(&completionJob{ctx: ctx, operation: operation, run: run, committed: onCommit})
 		return result.value, result.err
 	}
-	job := &completionJob{ctx: ctx, operation: operation, run: run,
+	job := &completionJob{ctx: ctx, operation: operation, run: run, committed: onCommit,
 		done: make(chan completionResult, 1), queued: observability.DatabasePhase(ctx, operation, "queue")}
 	job.element = q.pending.PushBack(job)
 	if !q.running {
@@ -161,6 +166,9 @@ func (s *Service) completeOne(job *completionJob) completionResult {
 		result.err = commitCompletion(job.ctx, tx, job.operation)
 	}
 	finish(result.err)
+	if result.err == nil && job.committed != nil {
+		job.committed()
+	}
 	return result
 }
 
@@ -228,6 +236,13 @@ func (s *Service) completeBatch(first *completionJob) {
 		err = commitCompletion(first.ctx, tx, "claim_batch")
 	}
 	finish(err) // release before any independent retry
+	if err == nil {
+		for i, item := range jobs {
+			if results[i].err == nil && item.committed != nil {
+				item.committed()
+			}
+		}
+	}
 	observability.CompletionStage(first.ctx, "batch_"+strconv.Itoa(len(jobs)))(err)
 	if err != nil {
 		fallback := observability.CompletionStage(context.WithoutCancel(first.ctx), "fallback")
@@ -253,6 +268,7 @@ func (s *Service) CloseContext(ctx context.Context) (resultErr error) {
 	if ctx == nil {
 		return ErrInvalidInput
 	}
+	s.StopKeyWaiters()
 	finished := observability.CompletionStage(s.completionContext(ctx), "close")
 	defer func() { finished(resultErr) }()
 	q := &s.completion

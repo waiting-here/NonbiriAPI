@@ -323,6 +323,7 @@ func (s *Service) RevokeUndelivered(ctx context.Context, handle Handle) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("claim: commit undelivered revoke: %w", err)
 	}
+	s.NotifyKey(handle.candidate.EndpointKeyID)
 	return nil
 }
 
