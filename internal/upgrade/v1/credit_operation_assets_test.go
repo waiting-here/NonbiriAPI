@@ -72,6 +72,7 @@ VALUES(?,?,'user',?,1,?)`, id, line, asset, hostileBlob16(1))
 		t.Fatal(err)
 	}
 	defer store.Close()
+	assertCreditOperationAssetsProjectionForTest(t, store.DB())
 	var count int
 	if err := store.DB().QueryRow(`SELECT count(*) FROM credit_operation_assets WHERE operation_id=? AND ledger_seq=1 AND created_at=0 AND kind='admin_user_adjustment'`, id).Scan(&count); err != nil || count != 2 {
 		t.Fatal(count, err)
