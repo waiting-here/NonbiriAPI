@@ -49,7 +49,8 @@ func buildConnectionFixtureImage(path string) ([]byte, error) {
 	defer database.Close()
 	schema := string(body) + db.ServiceKeyScopeSQL + db.ManagementOperationsSQL +
 		strings.Split(db.ManagementDetailsSQL, "\nCREATE TRIGGER")[0] +
-		strings.Split(db.RerankPathSQL, "\nDROP TRIGGER management_capture_donation_uses_update;")[0]
+		strings.Split(db.RerankPathSQL, "\nDROP TRIGGER management_capture_donation_uses_update;")[0] +
+		db.CompleteDiscoveryURLSQL
 	if _, err := database.Exec(schema); err != nil {
 		return nil, err
 	}
