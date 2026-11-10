@@ -222,8 +222,8 @@ func (s *Service) ListAvailableModels(ctx context.Context, userID, decisionNow i
 		}
 		return []AvailableModel{}, nil
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.provider,cm.full_name,cm.created_at FROM charity_models cm
-JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowed_level_mask & ?)<>0 ORDER BY cm.full_name,cm.id LIMIT ?`, 1<<(level-1), limit+1)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT cm.id,cm.provider,cm.full_name,cm.created_at FROM charity_models cm
+JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowed_level_mask & ?)<>0 ORDER BY cm.full_name,cm.id LIMIT ?`, `ORDER BY full_name,id`), 1<<(level-1), limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("charity routing: read available model list: %w", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math"
 	"net/http"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -51,7 +51,7 @@ func (s *Service) ListBlacklist(ctx context.Context, adminID int64, q string, pa
 		selection += " WHERE b.discord_id=?"
 		args = append(args, q)
 	}
-	statement, args, meta, err := listPageQuery(ctx, tx, selection, " ORDER BY b.created_at DESC,b.discord_id DESC", args, &page, page.Size)
+	statement, args, meta, err := listPageQuery(ctx, tx, selection, " ORDER BY b.created_at DESC,b.discord_id DESC", " ORDER BY created_at DESC,discord_id DESC", args, &page, page.Size)
 	if err != nil {
 		return empty, err
 	}

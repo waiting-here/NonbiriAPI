@@ -537,8 +537,11 @@ func readDonationKeysTx(ctx context.Context, tx *sql.Tx, donationID int64, donat
 // transaction. Service health is included only when the caller preloaded it;
 // mutation receipts and exports keep the compact common projection.
 func readDonationKeySelectionTx(ctx context.Context, tx *sql.Tx, donationID int64, _ string, now int64, selectedIDs []int64, preloaded ...map[int64][]donationstate.ServiceStatus) ([]AdminDonationKey, error) {
-	where := `dk.donation_id=?`
-	args := []any{donationID}
+	return readDonationKeysWhereTx(ctx, tx, `dk.donation_id=?`, []any{donationID}, now, selectedIDs, preloaded...)
+}
+
+// The caller supplies an authorized selection in the current transaction.
+func readDonationKeysWhereTx(ctx context.Context, tx *sql.Tx, where string, args []any, now int64, selectedIDs []int64, preloaded ...map[int64][]donationstate.ServiceStatus) ([]AdminDonationKey, error) {
 	if selectedIDs != nil {
 		if len(selectedIDs) == 0 {
 			return []AdminDonationKey{}, nil
@@ -575,7 +578,8 @@ CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.rpm_queue_limit,0) END,
 k.revision,cooldown.rate_limited_until,COALESCE(sb.period,''),COALESCE(sb.source,''),sb.retry_at,sb.trial_claim_id IS NOT NULL,
 (SELECT COUNT(DISTINCT binding_id) FROM charity_binding_targets b WHERE b.donation_key_id=dk.id),
 dk.key_body_review_hmac IS NOT NULL,COALESCE(rr.required,0),rr.revision,
-`+manageableKeySQL+`,CASE WHEN e.user_id=d.user_id THEN e.id END,`+donationstate.SQL()+`
+`+manageableKeySQL+`,CASE WHEN e.user_id=d.user_id THEN e.id END,`+donationstate.SQL()+`,
+dk.input_token_limit_mag,dk.output_token_limit_mag,dk.input_token_reserve,dk.output_token_reserve,dk.input_tokens_used,dk.output_tokens_used,dk.input_tokens_reserved,dk.output_tokens_reserved,dk.breakdown_started_at,dk.unattributed_total_tokens
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN donation_key_review_requirements rr ON rr.hmac=dk.key_body_review_hmac
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
@@ -592,6 +596,7 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)
 	keyIDs := make([]int64, 0)
 	for rows.Next() {
 		var item AdminDonationKey
+		var split splitTokenProjection
 		var bperiod, bsource string
 		var until *int64
 		var probing bool
@@ -614,7 +619,7 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)
 			&channelName, &channelCategory, &tags, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &failureDisabled, &streak,
-			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &item.MaxConcurrency, &item.MaxRPM, &item.ConcurrencyOverflow, &item.RPMOverflow, &item.ConcurrencyQueueLimit, &item.RPMQueueLimit, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID, &item.CharityState); err != nil {
+			&generation, &item.FailureDisableThreshold, &item.SafeNote, &authorizedExpires, &expires, &ended, &item.MaxConcurrency, &item.MaxRPM, &item.ConcurrencyOverflow, &item.RPMOverflow, &item.ConcurrencyQueueLimit, &item.RPMQueueLimit, &item.KeyLimitsRevision, &item.RateLimitedUntil, &bperiod, &bsource, &until, &probing, &bindingCount, &item.Review.MaterialAvailable, &item.Review.Required, &reviewRevision, &item.CanManage, &endpointID, &item.CharityState, &split.inLimit, &split.outLimit, &split.inReserve, &split.outReserve, &split.inUsed, &split.outUsed, &split.inReserved, &split.outReserved, &item.BreakdownStartedAt, &split.unattributed); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.Projection = smartbackoff.DecodeProjection(bperiod, bsource, until, probing, now)
@@ -704,7 +709,7 @@ WHERE `+where+` ORDER BY dk.id`, append([]any{now, now, now, now, now}, args...)
 			value := ended.String
 			item.EndedReason = &value
 		}
-		if err := readSplitTokenProjection(ctx, tx, id, &item); err != nil {
+		if err := split.apply(&item); err != nil {
 			return nil, err
 		}
 		if item.RateLimitedUntil != nil && *item.RateLimitedUntil <= now {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -24,9 +25,13 @@ func (s *Service) beginListRead(ctx context.Context, adminID int64) (*sql.Tx, er
 	return s.beginManagement(ctx, adminID, roleAdmin, true)
 }
 
-func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order, pageOrder string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
 	if requested == nil {
-		return selection + order + ` LIMIT ?`, append(args, limit+1), nil, nil
+		statement := selection + order + ` LIMIT ?`
+		if pageOrder != "" {
+			statement = db.MaterializePage(statement, pageOrder)
+		}
+		return statement, append(args, limit+1), nil, nil
 	}
 	var total int64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
@@ -36,5 +41,9 @@ func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order string, arg
 	if err != nil {
 		return "", nil, nil, ErrInvariant
 	}
-	return selection + order + ` LIMIT ? OFFSET ?`, append(args, requested.Size, offset), &metadata, nil
+	statement := selection + order + ` LIMIT ? OFFSET ?`
+	if pageOrder != "" {
+		statement = db.MaterializePage(statement, pageOrder)
+	}
+	return statement, append(args, requested.Size, offset), &metadata, nil
 }

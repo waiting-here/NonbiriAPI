@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -178,7 +179,7 @@ func (s *Service) AutomationModels(ctx context.Context, actorID int64, query str
 	if err != nil {
 		return empty, err
 	}
-	rows, err := tx.QueryContext(ctx, selection+` ORDER BY id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+` ORDER BY id LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, err
 	}

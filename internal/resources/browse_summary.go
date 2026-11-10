@@ -272,7 +272,7 @@ func (r *Repository) ListKeyBindingsPage(ctx context.Context, userID, endpointID
 		const order = "t.upstream_model_id,b.id,t.id"
 		// Count and order only target identities. Hydrate the selected page in
 		// this same snapshot and deadline, without evaluating skipped states.
-		selected, err := readNumberedPage(ctx, tx, page, ownedBindingIDSelect+scope, order, args, func(s pageScanner) (int64, error) {
+		selected, err := readNumberedPage(ctx, tx, page, ownedBindingIDSelect+scope, order, "id", args, func(s pageScanner) (int64, error) {
 			var targetID int64
 			err := s.Scan(&targetID)
 			return targetID, err

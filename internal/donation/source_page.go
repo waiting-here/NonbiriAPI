@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -219,7 +220,7 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 	if err != nil {
 		return empty, ErrInvalidRequest
 	}
-	rows, err := tx.QueryContext(ctx, grouped+` ORDER BY `+sourceGroupColumns+` LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(grouped+` ORDER BY `+sourceGroupColumns+` LIMIT ? OFFSET ?`, `ORDER BY `+sourceGroupColumns), append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, err
 	}
@@ -249,15 +250,43 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 	if err != nil {
 		return empty, err
 	}
-	for i := range result.Data {
-		item := &result.Data[i]
-		item.SafeSource, err = sourcePreviewTx(ctx, tx, previews[i])
+	previewSources := make(map[int64]SafeSource, len(previews))
+	previewKeys := make(map[int64]string, len(previews))
+	if len(previews) > 0 {
+		values := make([]any, len(previews))
+		for i, id := range previews {
+			values[i] = id
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.mainstream_channel_id,dk.mainstream_channel_name,`+sourceIdentitySQL+` FROM donation_keys dk WHERE dk.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(previews)), ",")+`)`, values...)
 		if err != nil {
 			return empty, err
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT `+sourceIdentitySQL+` FROM donation_keys dk WHERE dk.id=?`, previews[i]).Scan(&item.SourceKey); err != nil {
+		for rows.Next() {
+			var id int64
+			var source SafeSource
+			var key string
+			if err := rows.Scan(&id, &source.ConnectorType, &source.BaseURL, &source.ChannelID, &source.Name, &key); err != nil {
+				rows.Close()
+				return empty, err
+			}
+			source.Kind = "custom"
+			if source.ChannelID != nil {
+				source.Kind = "mainstream"
+			}
+			previewSources[id], previewKeys[id] = source, key
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
 			return empty, err
 		}
+		if len(previewSources) != len(previews) {
+			return empty, ErrInvariant
+		}
+	}
+	for i := range result.Data {
+		item := &result.Data[i]
+		item.SafeSource, item.SourceKey = previewSources[previews[i]], previewKeys[previews[i]]
 		if !usableCandidates[i] {
 			item.UsableKeyCount = "0"
 			continue
@@ -328,31 +357,78 @@ func (s *Service) sourceKeysPage(ctx context.Context, role reviewerRole, userID 
 		return empty, err
 	}
 	result := Page[ManagedKeySummary]{Data: make([]ManagedKeySummary, 0, len(ids)), Pagination: &metadata}
+	if len(ids) == 0 {
+		if err := tx.Commit(); err != nil {
+			return empty, err
+		}
+		return result, nil
+	}
 	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, ids, now)
 	if err != nil {
 		return empty, err
 	}
-	for _, keyID := range ids {
-		var donationID int64
-		if err := tx.QueryRowContext(ctx, `SELECT donation_id FROM donation_keys WHERE id=?`, keyID).Scan(&donationID); err != nil {
+	keyGroups := make(map[int64][]int64)
+	values := make([]any, len(ids))
+	for i, id := range ids {
+		values[i] = id
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id,donation_id FROM donation_keys WHERE id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, values...)
+	if err != nil {
+		return empty, err
+	}
+	for rows.Next() {
+		var id, donationID int64
+		if err := rows.Scan(&id, &donationID); err != nil {
+			rows.Close()
 			return empty, err
 		}
-		header, err := logicalHeaderTx(ctx, tx, donationID, now)
+		keyGroups[donationID] = append(keyGroups[donationID], id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return empty, err
+	}
+	donationIDs := make([]int64, 0, len(keyGroups))
+	for donationID := range keyGroups {
+		donationIDs = append(donationIDs, donationID)
+	}
+	headers, err := readDonationPageHeadersTx(ctx, tx, donationIDs, now)
+	if err != nil {
+		return empty, err
+	}
+	keys, err := readDonationKeysWhereTx(ctx, tx, `1=1`, nil, now, ids, statuses)
+	if err != nil {
+		return empty, err
+	}
+	keysByID := make(map[int64]AdminDonationKey, len(ids))
+	headersByKey := make(map[int64]AdminDonation, len(ids))
+	for _, key := range keys {
+		id, err := strconv.ParseInt(key.ID, 10, 64)
 		if err != nil {
-			return empty, err
-		}
-		keys, err := readDonationKeySelectionTx(ctx, tx, donationID, header.Status, now, []int64{keyID}, statuses)
-		if err != nil {
-			return empty, err
-		}
-		if len(keys) != 1 {
 			return empty, ErrInvariant
 		}
+		keysByID[id] = key
+	}
+	for donationID, selected := range keyGroups {
+		header, ok := headers[strconv.FormatInt(donationID, 10)]
+		if !ok {
+			return empty, ErrInvariant
+		}
+		for _, id := range selected {
+			headersByKey[id] = header.header
+		}
+	}
+	if len(keysByID) != len(ids) {
+		return empty, ErrInvariant
+	}
+	for _, keyID := range ids {
+		key, header := keysByID[keyID], headersByKey[keyID]
 		rules, err := recurringSummaryTx(ctx, tx, keyID, now)
 		if err != nil {
 			return empty, err
 		}
-		value := managedKeySummary(keys[0], header, rules)
+		value := managedKeySummary(key, header, rules)
 		value.CanManage = value.CanManage && canManage
 		if scope.Redact {
 			value.EndpointKeyID = nil

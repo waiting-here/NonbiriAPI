@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -66,7 +67,7 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 	if err != nil {
 		return empty, err
 	}
-	rows, err := tx.QueryContext(ctx, selection+` ORDER BY id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+` ORDER BY id LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, err
 	}
@@ -216,7 +217,7 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	selection, args := candidatePageSelection(modelID, now, query)
-	rows, err := tx.QueryContext(ctx, selection+` ORDER BY dk.id,pc.normalized_model_id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+` ORDER BY dk.id,pc.normalized_model_id LIMIT ? OFFSET ?`, `ORDER BY id,normalized_model_id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, err
 	}
@@ -291,7 +292,7 @@ COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_ov
 	if err != nil {
 		return donations, keys, err
 	}
-	rows, err := tx.QueryContext(ctx, selection+order+` LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+order+` LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return donations, keys, err
 	}
