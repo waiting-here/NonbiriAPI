@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -163,6 +164,7 @@ export function ReportsPage() {
           <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
         ) : reports.data ? (
           <div className="ops-stack" aria-busy={reports.isFetching}>
+            <QueryFeedback query={reports} />
             {reports.error ? (
               <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
             ) : null}

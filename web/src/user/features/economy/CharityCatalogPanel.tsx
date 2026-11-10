@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { formatLevelRanges } from '@shared/utils/levels';
@@ -356,6 +357,7 @@ export function CharityCatalogPanel({
         onModelTypeChange={changeModelType}
         onClear={clearFilters}
       />
+      <QueryFeedback query={catalog} />
       {catalog.isPending && !pageData ? (
         <LoadingState />
       ) : catalog.error ? (

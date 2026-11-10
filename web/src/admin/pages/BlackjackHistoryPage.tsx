@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -113,6 +115,13 @@ export function BlackjackHistoryPage() {
   const cursor = cursors.at(-1) ?? null;
   const page = useQuery({
     queryKey: ['admin', session.data?.admin.username, 'blackjack', dataset, 'history', cursor],
+    placeholderData: retainQueryScope([
+      'admin',
+      session.data?.admin.username,
+      'blackjack',
+      dataset,
+      'history',
+    ]),
     queryFn: ({ signal }) => getBlackjackHistory(dataset, cursor, signal),
     retry: false,
   });
@@ -146,6 +155,7 @@ export function BlackjackHistoryPage() {
         <Detail dataset={dataset} id={selected} back={() => setSelected(null)} />
       ) : (
         <Card>
+          <QueryFeedback query={page} />
           {page.isPending ? (
             <LoadingState />
           ) : page.error ? (
@@ -174,11 +184,15 @@ export function BlackjackHistoryPage() {
                 ))}
               </div>
               {!page.data.items.length && (
-                <EmptyState title={text('admin.gameHistory.emptyTitle')} body={text('admin.gameHistory.emptyBody')} />
+                <EmptyState
+                  title={text('admin.gameHistory.emptyTitle')}
+                  body={text('admin.gameHistory.emptyBody')}
+                />
               )}
             </>
           )}
           <SimplePager
+            disabled={page.isFetching}
             page={cursors.length}
             hasMore={Boolean(page.data?.next_cursor)}
             onPrev={() => setCursors((v) => v.slice(0, -1))}

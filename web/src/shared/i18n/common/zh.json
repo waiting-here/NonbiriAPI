@@ -3152,6 +3152,16 @@
       "save": "保存模型额度",
       "retry": "重试同一次保存",
       "saved": "模型额度已保存。"
+    },
+    "insufficientBalance": "实际可用余额不足，请减少数量或补充余额。",
+    "featureDisabled": "此功能当前未开放。",
+    "charitySuspended": "当前账号的公益调用已暂停。",
+    "checkinCapReached": "余额已达到签到上限。",
+    "query": {
+      "updating": "正在更新结果… 查询完成前显示上次结果。",
+      "stillUpdating": "查询仍在进行，完成前继续显示上次结果。",
+      "stillLoading": "查询仍在进行，请稍候。",
+      "failedRetained": "本次查询失败，当前显示上次结果。"
     }
   },
   "logs": {

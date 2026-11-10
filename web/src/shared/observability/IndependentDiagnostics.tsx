@@ -60,6 +60,7 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
   const [position, setPosition] = useState<DiagnosticPosition>({ page: 1, cursors: [undefined] });
   const lastQuery = useRef<DiagnosticQuery | null>(null);
   const [busy, setBusy] = useState(false);
+  const [readerGeneration, setReaderGeneration] = useState(0);
   const [failure, setFailure] = useState<unknown>();
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
@@ -87,8 +88,8 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
     const request = new AbortController();
     controller.current = request;
     lastQuery.current = { filter, position: target };
-    // Unmount all detail readers before a refresh can reuse the same row IDs.
-    setPage(undefined);
+    // Keep list metadata visible, but discard sensitive body readers before refreshing.
+    setReaderGeneration((generation) => generation + 1);
     setApplied(filter);
     setPosition(target);
     setBusy(true);
@@ -154,6 +155,8 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
         )}
       </p>
       <FilterBar
+        query={{ isFetching: busy, data: page }}
+        submitDisabled={busy}
         activeCount={0}
         onSubmit={() => search()}
         onReset={() => {
@@ -266,12 +269,12 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
           </>
         }
       />
-      {busy && <LoadingState />}
+      {busy && !page && <LoadingState />}
       {failure != null && <ErrorState error={failure} onRetry={retry} />}
       {page?.data.length === 0 && (
         <p>{words('No matching diagnostics.', '没有符合条件的诊断。')}</p>
       )}
-      <div key={applied ? JSON.stringify(applied) : 'empty'}>
+      <div key={readerGeneration} aria-busy={busy}>
         {page?.data.map((entry) => (
           <details key={entry.id}>
             <summary>
@@ -286,7 +289,9 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
             {entry.save_state !== 'saved' && (
               <OmittedBody state={entry.save_state} reason={entry.failure_reason} />
             )}
-            <Detail role={role} id={entry.id} synthetic={entry.synthetic} onReadFailure={fail} />
+            {!busy ? (
+              <Detail role={role} id={entry.id} synthetic={entry.synthetic} onReadFailure={fail} />
+            ) : null}
           </details>
         ))}
       </div>

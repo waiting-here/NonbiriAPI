@@ -292,6 +292,7 @@ export function AdminCharityGroupsPanel() {
   return (
     <Card>
       <FilterBar
+        query={donations}
         activeCount={status ? 1 : 0}
         onSubmit={() => {}}
         search={

@@ -404,3 +404,22 @@ describe('independent management diagnostics', () => {
     ).toThrow();
   });
 });
+
+it('keeps prior diagnostic metadata visible while a replacement query is pending', async () => {
+  let finish!: (value: unknown) => void;
+  request.apiFetch.mockResolvedValueOnce(page()).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<IndependentDiagnostics role="admin" accountId="a" scopeReady />);
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  await screen.findByText(/img_AAAAA.*Attempt 3/);
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  expect(screen.getByText(/img_AAAAA.*Attempt 3/)).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Updating results');
+  expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+  finish(page([entry('2')]));
+  await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+});

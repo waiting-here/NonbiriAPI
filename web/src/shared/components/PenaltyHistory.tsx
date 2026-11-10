@@ -431,6 +431,7 @@ function PenaltyList({ scope }: { scope: Scope }) {
   return (
     <>
       <FilterBar
+        query={query}
         activeCount={Object.values(filter).filter(Boolean).length}
         onSubmit={() => {}}
         search={

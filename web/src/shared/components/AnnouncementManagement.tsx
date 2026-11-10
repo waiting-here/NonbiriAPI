@@ -341,6 +341,7 @@ export function AnnouncementManagement({
       ) : null}
       <Card>
         <FilterBar
+          query={list}
           activeCount={[state, severity].filter(Boolean).length}
           onSubmit={() => {}}
           search={

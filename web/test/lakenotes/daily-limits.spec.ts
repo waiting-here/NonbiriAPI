@@ -72,7 +72,7 @@ test('daily exchange spending, configuration and remaining allowance in both scr
     await exchangePage.getByRole('button', { name: u.exchangeConfirm, exact: true }).click();
     await expect(exchangePage.getByText(u.exchangeSaved, { exact: true })).toBeVisible();
     await expect(exchangePage.locator('.lake-daily-allowance')).toContainText(
-      'Available to spend today:',
+      'Remaining daily exchange allowance:',
     );
     await expect(
       exchangePage.getByRole('button', { name: u.exchangeConfirm, exact: true }),
@@ -118,7 +118,7 @@ test('daily exchange spending, configuration and remaining allowance in both scr
         await page.getByLabel(u.direction, { exact: true }).selectOption('general_to_coins');
         await page.getByRole('button', { name: u.quote, exact: true }).click();
         await expect(page.locator('.lake-daily-allowance')).toContainText(
-          'Available to spend today:',
+          'Remaining daily exchange allowance:',
         );
         await expect(page.locator('.lake-daily-allowance')).toContainText(c.general);
         await expect(
@@ -176,6 +176,60 @@ test('daily exchange spending, configuration and remaining allowance in both scr
       })
     ).json();
     expect(unlimited.daily_source_remaining).toBeNull();
+  } finally {
+    const current = await (
+      await api(admin, '/admin/api/games/config', 'GET', undefined, true)
+    ).json();
+    const restored = await api(
+      admin,
+      '/admin/api/games/config',
+      'PATCH',
+      {
+        expected_revision: current.revision,
+        master_enabled: initial.master_enabled,
+        lakenotes: initial.lakenotes,
+      },
+      true,
+    );
+    const status = restored.status(),
+      message = await restored.text();
+    await Promise.all([user.close(), admin.close()]);
+    expect(status, message).toBe(200);
+  }
+});
+
+test('insufficient exchange balance is a definite business rejection and preserves the form and session', async ({
+  browser,
+}) => {
+  const admin = await context(browser, true);
+  const user = await context(browser);
+  const initial = await (
+    await api(admin, '/admin/api/games/config', 'GET', undefined, true)
+  ).json();
+  try {
+    await cap(admin, '');
+    const page = await user.newPage();
+    await page.goto(fixture().user_url + '/games/lake-notes');
+    await page.getByLabel(u.direction, { exact: true }).selectOption('general_to_coins');
+    const batches = page.getByLabel(u.batches, { exact: true });
+    await batches.fill('1000000000000');
+    await page.getByRole('button', { name: u.quote, exact: true }).click();
+    await expect(page.locator('.lake-source-balance')).toContainText('Available balance:');
+    const failure = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === base + '/exchange' &&
+        response.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: u.exchangeConfirm, exact: true }).click();
+    const rejected = await failure;
+    expect(rejected.status()).toBe(403);
+    expect((await rejected.json()).error.code).toBe('insufficient_credits');
+    await expect(page.getByRole('alert')).toContainText(commonEn.common.insufficientBalance);
+    await expect(batches).toHaveValue('1000000000000');
+    await batches.fill('1');
+    await page.getByRole('button', { name: u.quote, exact: true }).click();
+    await page.getByRole('button', { name: u.exchangeConfirm, exact: true }).click();
+    await expect(page.getByText(u.exchangeSaved, { exact: true })).toBeVisible();
   } finally {
     const current = await (
       await api(admin, '/admin/api/games/config', 'GET', undefined, true)

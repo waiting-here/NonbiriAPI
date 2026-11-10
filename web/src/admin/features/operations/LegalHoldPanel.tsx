@@ -579,6 +579,7 @@ function LegalHoldSessionPanel({
         <h2>{t('admin.legalHolds.title')}</h2>
         <p>{t('admin.legalHolds.description')}</p>
         <FilterBar
+          query={list}
           activeCount={Number(Boolean(state)) + Number(Boolean(kind))}
           onSubmit={() => {}}
           search={

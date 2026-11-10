@@ -865,6 +865,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
         <PanelHead title={t('admin.activities.pools.title')} />
         <PanelBody>
           <FilterBar
+            query={pools}
             activeCount={Number(Boolean(poolType)) + Number(Boolean(poolState))}
             onSubmit={() => {}}
             search={

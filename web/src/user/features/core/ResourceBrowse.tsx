@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -117,6 +118,7 @@ function KeyBindingPages({
   if (!query.data) return <CoreLoading compact />;
   return (
     <div aria-busy={query.isFetching}>
+      <QueryFeedback query={query} />
       <BindingPreviewList items={query.data.data} />
       <PagePagination
         metadata={query.data.pagination}

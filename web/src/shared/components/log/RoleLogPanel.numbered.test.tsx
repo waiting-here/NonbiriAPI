@@ -683,3 +683,38 @@ describe('numbered role log panel', () => {
     expect(emptyResult?.getAttribute('aria-busy')).toBe('false');
   });
 });
+
+it('retries an identical requested log page after a transient failure without claiming it was clamped', async () => {
+  const next: JsonFetchFixture = {
+    method: 'GET',
+    path: '/admin/api/logs?page=2&page_size=20',
+    status: 503,
+    body: { error: { code: 'service_unavailable', message: 'The query timed out.' } },
+  };
+  const fetchMock = installJsonFetchFixtures([
+    timeZoneFixture('/admin/api/time-zones'),
+    {
+      method: 'GET',
+      path: '/admin/api/logs?page=1&page_size=20',
+      body: listBody([adminRow(1)], pagination('1', 20, 21, 2)),
+    },
+    next,
+  ]);
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs',
+  });
+  await screen.findByText('#2', { exact: true });
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await screen.findByText('The query timed out.');
+  expect(screen.getByText('#2', { exact: true })).toBeVisible();
+  expect(screen.queryByText('That page is no longer available. Showing page 1.')).toBeNull();
+  next.status = 200;
+  next.body = listBody([adminRow(2)], pagination('2', 20, 21, 2));
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await screen.findByText('#3', { exact: true });
+  expect(
+    fetchMock.mock.calls.filter(([path]) => String(path).includes('/logs?page=2')),
+  ).toHaveLength(2);
+});

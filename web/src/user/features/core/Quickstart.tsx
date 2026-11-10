@@ -798,6 +798,7 @@ export function Quickstart({
               ) : (
                 <>
                   <FilterBar
+                    query={endpoints}
                     activeCount={serviceQuery ? 1 : 0}
                     onSubmit={() => setServiceQuery(serviceQueryDraft.trim())}
                     onReset={() => {
@@ -951,6 +952,7 @@ export function Quickstart({
               ) : (
                 <>
                   <FilterBar
+                    query={keys}
                     activeCount={keyQuery ? 1 : 0}
                     onSubmit={() => setKeyQuery(keyQueryDraft.trim())}
                     onReset={() => {
@@ -1105,6 +1107,7 @@ export function Quickstart({
                           })}
                         </h2>
                         <FilterBar
+                          query={catalog}
                           activeCount={modelQuery ? 1 : 0}
                           onSubmit={() => setModelQuery(modelQueryDraft.trim())}
                           onReset={() => {

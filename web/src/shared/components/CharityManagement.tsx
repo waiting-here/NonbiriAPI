@@ -1750,6 +1750,7 @@ function DonationsPanel({
           <Card>
             <div className="charity-donation-toolbar">
               <FilterBar
+                query={list}
                 onReset={() => {
                   setQueryDraft('');
                   setDonorDraft({ userID: '', discordID: '', user: '', discord: '' });

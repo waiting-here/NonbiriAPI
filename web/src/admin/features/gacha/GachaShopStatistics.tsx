@@ -58,11 +58,7 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
       listShopCardStatistics({ page: pager.page, pageSize: pager.pageSize }, q, sort, signal),
     enabled: Boolean(accountKey),
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[3] === accountKey &&
-      previousQuery.queryKey[5] === q &&
-      previousQuery.queryKey[6] === sort
-        ? previous
-        : undefined,
+      previousQuery?.queryKey[3] === accountKey ? previous : undefined,
   });
   const change = (key: string, value: string) =>
     setParams((previous) => {
@@ -170,6 +166,7 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
               </div>
               <h3>{t('admin.gachaShopStats.cardsTitle')}</h3>
               <FilterBar
+                query={query}
                 ariaLabel={t('admin.gachaStats.cardFilters')}
                 activeCount={q || sort !== 'count' ? 1 : 0}
                 secondaryAlwaysVisible

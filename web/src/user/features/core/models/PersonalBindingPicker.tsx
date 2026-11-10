@@ -204,6 +204,7 @@ export function PersonalBindingPicker({
   return (
     <div className="personal-binding-picker nb-stack">
       <FilterBar
+        query={services}
         as="div"
         ariaLabel={copy.filterService}
         activeCount={service ? 1 : 0}
@@ -456,6 +457,7 @@ export function PersonalBindingPicker({
                 <span className="nb-small nb-muted">{endpoint.base_url}</span>
               </div>
               <FilterBar
+                query={candidates}
                 as="div"
                 ariaLabel={copy.models}
                 activeCount={source ? 1 : 0}

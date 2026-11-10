@@ -748,3 +748,55 @@ describe('credit history numbered page controls', () => {
     writePageSizePreference('user', 'credit-history', 20);
   });
 });
+
+it('retries a failed numbered credit page with its current anchor and no false clamped notice', async () => {
+  const anchor = 'op_' + 'A'.repeat(22);
+  let secondReads = 0;
+  const anchors: (string | null)[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request) => {
+      const path = requestPath(input);
+      if (path === '/api/time-zones')
+        return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+      const url = new URL(path, window.location.origin);
+      if (url.pathname === '/api/credits/history') {
+        if (url.searchParams.get('page') === '2') {
+          anchors.push(url.searchParams.get('anchor'));
+          secondReads++;
+          return secondReads === 1
+            ? jsonResponse(
+                { error: { code: 'service_unavailable', message: 'The query timed out.' } },
+                503,
+              )
+            : jsonResponse(historyPage([entry(2, 'checkin_award', '-3')], '2', 20, 21, anchor));
+        }
+        return jsonResponse(
+          historyPage(
+            Array.from({ length: 20 }, (_, index) => entry(index + 1)),
+            '1',
+            20,
+            21,
+            anchor,
+          ),
+        );
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    }),
+  );
+  const view = await renderWithProviders(<SessionCredits />, {
+    station: 'user',
+    route: '/credits?page=1&page_size=20',
+  });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await screen.findByText('The query timed out.');
+  expect(view.container.querySelectorAll('.credit-history__table tbody tr')).toHaveLength(20);
+  expect(screen.queryByText('That page is no longer available. Showing page 1.')).toBeNull();
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await waitFor(() =>
+    expect(view.container.querySelector('.credit-change')).toHaveTextContent('−3'),
+  );
+  expect(secondReads).toBe(2);
+  expect(anchors).toEqual([anchor, anchor]);
+});

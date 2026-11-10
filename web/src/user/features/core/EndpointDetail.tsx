@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { keyQueueDraft, keyQueueChanges } from '@shared/operations/keyQueue';
 import { EntryScope, KeyCredentialScope } from './connections/EntryScope';
 import { ServiceModelSetup } from './connections/ServiceModelSetup';
@@ -854,6 +855,7 @@ export function PairManualCatalog({
 
   return (
     <section className="core-card" aria-busy={busy || catalog.isFetching}>
+      <QueryFeedback query={catalog} />
       <div className="core-card__header">
         <div>
           <h3>{t('endpoints.manualTitle')}</h3>
@@ -1930,6 +1932,7 @@ export function EndpointDetail({
       ) : null}
       {!focusKeyId ? (
         <section className="core-card" aria-busy={keys.isFetching}>
+          <QueryFeedback query={keys} />
           <div className="core-card__header">
             <h2>{t('endpoints.key')}</h2>
           </div>

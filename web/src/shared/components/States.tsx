@@ -1,3 +1,4 @@
+import { useLongPending } from './QueryFeedback';
 import { Button } from '@shared/components/ui/Button';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -81,6 +82,7 @@ export function SectionHead({
 
 export function LoadingState({ label }: { label?: string }) {
   const { t } = useTranslation();
+  const long = useLongPending(true);
   return (
     <div className="state-panel nb-state" role="status" aria-live="polite">
       <span className="nb-state__icon">
@@ -88,7 +90,7 @@ export function LoadingState({ label }: { label?: string }) {
       </span>
       <span className="nb-state__body">
         <span className="loading-dot" aria-hidden="true" />
-        <span>{label ?? t('common.loading')}</span>
+        <span>{long ? t('common.query.stillLoading') : (label ?? t('common.loading'))}</span>
       </span>
     </div>
   );
@@ -127,6 +129,15 @@ function errorMessage(error: unknown, translate: (key: string) => string): strin
     switch (error.code) {
       case 'mfa_required':
         return translate('mfa.requiredError');
+      case 'insufficient_credits':
+      case 'insufficient_balance':
+        return translate('common.insufficientBalance');
+      case 'feature_disabled':
+        return translate('common.featureDisabled');
+      case 'charity_suspended':
+        return translate('common.charitySuspended');
+      case 'checkin_cap_reached':
+        return translate('common.checkinCapReached');
       case 'network_error':
         return translate('common.networkError');
       case 'rate_limited':
