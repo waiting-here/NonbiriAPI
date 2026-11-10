@@ -14,3 +14,39 @@
 .charity-binding-key-shortcuts .nb-btn {
   white-space: nowrap;
 }
+
+.charity-binding-selection {
+  padding: var(--nb-space-4);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+}
+.charity-binding-selection__list {
+  padding: 0;
+  max-height: 24rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  list-style: none;
+}
+.charity-binding-selection__list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  padding-block: var(--nb-space-3);
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.charity-binding-selection__metadata {
+  display: grid;
+  gap: var(--nb-space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.charity-binding-selection__metadata > span {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.charity-binding-selection__list > li > .model-types-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+}

@@ -1924,7 +1924,7 @@ test('connection lists return to the requested page and mainstream mappings use 
     await expect(mappings.getByText(c.saveEntriesBeforeMappings, { exact: true })).toBeVisible();
     const suggestion = await openFold(form, c.discoverySuggestion);
     await suggestion.getByLabel(c.addDiscoverySuggestion, { exact: true }).check();
-    await suggestion.getByLabel(c.discoveryBaseURL, { exact: true }).fill(base);
+    await suggestion.getByLabel(c.discoveryBaseURL, { exact: true }).fill(base + '/models');
     await suggestion.getByLabel(c.listFormat, { exact: true }).selectOption('openai');
     const firstEntry = form
       .locator('details')
@@ -2032,7 +2032,7 @@ test('connection lists return to the requested page and mainstream mappings use 
       model_mappings: unknown[];
     }>(admin, '/admin/api/mainstream-channels/' + channel.id);
     expect(saved.entries.map((row) => row.id)).toEqual(channel.entries.map((row) => row.id));
-    expect(saved.discovery_source).toEqual({ base_url: base, list_format: 'openai' });
+    expect(saved.discovery_source).toEqual({ base_url: base + '/models', list_format: 'openai' });
     expect(saved.model_mappings).toEqual(submitted.model_mappings);
     await manager.reload();
     await expect(manager.getByRole('table', { name: channels.title, exact: true })).toBeVisible();
@@ -2302,7 +2302,7 @@ test('mainstream authorization isolates endpoint catalogs and lets users decline
           rerank_format: '',
           enabled: true,
         })),
-        discovery_source: { base_url: base, list_format: 'openai' },
+        discovery_source: { base_url: base + '/models', list_format: 'openai' },
         model_mappings: [],
       },
     );
@@ -2399,7 +2399,7 @@ test('mainstream authorization isolates endpoint catalogs and lets users decline
       expect(sources.find((source) => source.id === key.discovery_source_id)).toMatchObject({
         credential_id: saved.id,
         credential_version: saved.credential_version,
-        base_url: base,
+        base_url: base + '/models',
         list_format: 'openai',
       });
 
@@ -2532,7 +2532,9 @@ test('a key without a catalog can recover, show a readable failure and load mode
       .getByRole('button', { name: userEn.user.services.chooseCatalog, exact: true })
       .click();
     const grant = await openFold(page, services.modelListSettings);
-    await expect(grant.getByLabel(c.discoveryBaseURL, { exact: true })).toHaveValue(base);
+    await expect(grant.getByLabel(c.discoveryBaseURL, { exact: true })).toHaveValue(
+      base + '/models',
+    );
     await expect(grant.getByRole('table', { name: c.chooseCredential, exact: true })).toHaveCount(
       0,
     );

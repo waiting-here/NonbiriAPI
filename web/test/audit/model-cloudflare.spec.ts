@@ -501,7 +501,7 @@ test('shared connection preserves explicit OpenAI, Anthropic, and Gateway v4 gra
     for (const [index, entry] of entries.entries()) {
       const source = await create('/api/connections/' + connectionId + '/discovery-sources', {
         name: name + ' catalog ' + index,
-        base_url: 'https://api.example.com/v1',
+        base_url: 'https://api.example.com/v1/models',
         list_format: 'openai',
         credential_id: sharedCredential,
         enabled: true,

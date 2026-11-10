@@ -88,6 +88,14 @@ export function CredentialGrantForm({
           />
         )
       ) : null}
+      {discoveryPreset ? (
+        <dl className="nb-facts">
+          <div>
+            <dt>{t('common.connections.modelsURL')}</dt>
+            <dd className="mono">{discoveryPreset.base_url}</dd>
+          </div>
+        </dl>
+      ) : null}
       <form
         className="nb-form"
         onSubmit={(event) => {

@@ -507,7 +507,10 @@ export function ServiceCreateForm({
                         )}
                       </Field>
                       {selected[entry.id!] && channel.discovery_source ? (
-                        <Field label={t('common.connections.useSuggestedCatalog')}>
+                        <Field
+                          label={t('common.connections.useSuggestedCatalog')}
+                          help={<span className="mono">{channel.discovery_source.base_url}</span>}
+                        >
                           {(props) => (
                             <input
                               {...props}
@@ -669,10 +672,8 @@ export function ServiceCreateForm({
                     onChange={(event) =>
                       setDiscoveryOverride(
                         event.target.checked
-                          ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ?? {
-                              base_url: address.trim(),
-                              list_format: 'openai',
-                            })
+                          ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ??
+                              defaultDiscovery('openai-compatible', address))
                           : null,
                       )
                     }
