@@ -15,7 +15,7 @@ func TestAutomationCreateFreezesRerankPathWithoutManagementOverride(t *testing.T
 	f.exec(t, "UPDATE users SET level=6 WHERE id=?", f.userID)
 	f.exec(t, "UPDATE site_config SET value='1' WHERE key IN ('donation_accept_enabled','charity_enabled')")
 	ctx := authz.WithStewardCaller(t.Context(), authz.StewardCaller{UserID: f.userID, Generation: 1})
-	body := `{"discord_public_thanks":false,"description":"Rerank path","review_note":"Approved","endpoint":{"connector_type":"cohere-rerank","base_url":"https://rerank.example.test/v1","native_services":["rerank"],"rerank_path":"/compatible-api/v1/reranks"},"keys":[{"secret":"fixture-rerank-credential","native_services":["rerank"]}]}`
+	body := `{"discord_public_thanks":false,"description":"Rerank path","review_note":"Approved","endpoint":{"connector_type":"cohere-rerank","base_url":"https://rerank.example.test/v1","native_services":["rerank"],"rerank_path":"/compatible-api/v1/reranks"},"keys":[{"secret":"fixture-rerank-credential","native_services":["rerank"],"concurrency_overflow":"queue","rpm_overflow":"queue","concurrency_queue_limit":12,"rpm_queue_limit":13}]}`
 	response := f.request(ctx, http.MethodPost, DonationsPath, strings.Repeat("r", 22), body)
 	if response.Code != http.StatusCreated {
 		t.Fatal(response.Code, response.Body.String())
@@ -23,6 +23,14 @@ func TestAutomationCreateFreezesRerankPathWithoutManagementOverride(t *testing.T
 	var result createdDonation
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
+	}
+	var concurrencyOverflow, rpmOverflow string
+	var concurrencyCap, rpmCap int64
+	if err := f.store.DB().QueryRow(`SELECT concurrency_overflow,rpm_overflow,concurrency_queue_limit,rpm_queue_limit FROM endpoint_key_limits WHERE endpoint_key_id=?`, result.Keys[0].EndpointKeyID).Scan(&concurrencyOverflow, &rpmOverflow, &concurrencyCap, &rpmCap); err != nil {
+		t.Fatal(err)
+	}
+	if concurrencyOverflow != "queue" || rpmOverflow != "queue" || concurrencyCap != 12 || rpmCap != 13 {
+		t.Fatal("automation lost queue configuration")
 	}
 	var endpointPath, snapshot string
 	var override *string

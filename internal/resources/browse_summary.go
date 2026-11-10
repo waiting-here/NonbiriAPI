@@ -35,23 +35,27 @@ type ModelBrowse struct {
 // KeyBindingView contains only the current owner's resource labels. Its state
 // describes configured routing eligibility, not a promise that a call succeeds.
 type KeyBindingView struct {
-	TargetID        string `json:"target_id"`
-	ID              string `json:"id"`
-	ModelID         string `json:"model_id"`
-	ModelFullName   string `json:"model_full_name"`
-	EndpointID      string `json:"endpoint_id"`
-	EndpointKeyID   string `json:"endpoint_key_id"`
-	EndpointBaseURL string `json:"endpoint_base_url"`
-	ConnectorType   string `json:"connector_type"`
-	EndpointNote    string `json:"endpoint_note"`
-	DisplayHead     string `json:"display_head"`
-	DisplayTail     string `json:"display_tail"`
-	KeyNote         string `json:"key_note"`
-	UpstreamModelID string `json:"upstream_model_id"`
-	Ord             int    `json:"ord"`
-	MaxConcurrency  int64  `json:"max_concurrency"`
-	MaxRPM          int64  `json:"max_rpm"`
-	State           string `json:"state"`
+	TargetID              string `json:"target_id"`
+	ID                    string `json:"id"`
+	ModelID               string `json:"model_id"`
+	ModelFullName         string `json:"model_full_name"`
+	EndpointID            string `json:"endpoint_id"`
+	EndpointKeyID         string `json:"endpoint_key_id"`
+	EndpointBaseURL       string `json:"endpoint_base_url"`
+	ConnectorType         string `json:"connector_type"`
+	EndpointNote          string `json:"endpoint_note"`
+	DisplayHead           string `json:"display_head"`
+	DisplayTail           string `json:"display_tail"`
+	KeyNote               string `json:"key_note"`
+	UpstreamModelID       string `json:"upstream_model_id"`
+	Ord                   int    `json:"ord"`
+	MaxConcurrency        int64  `json:"max_concurrency"`
+	MaxRPM                int64  `json:"max_rpm"`
+	ConcurrencyOverflow   string `json:"concurrency_overflow"`
+	RPMOverflow           string `json:"rpm_overflow"`
+	ConcurrencyQueueLimit int64  `json:"concurrency_queue_limit"`
+	RPMQueueLimit         int64  `json:"rpm_queue_limit"`
+	State                 string `json:"state"`
 }
 
 const ownedBindingJoin = ` FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id
@@ -70,7 +74,7 @@ WHEN NOT EXISTS(SELECT 1 FROM self_grant_availability a WHERE a.endpoint_key_id=
 ELSE 'available' END`
 
 const ownedBindingSelect = `SELECT b.id,m.id,m.full_name,e.id,k.id,e.base_url,e.connector_type,e.note,
-k.display_head,k.display_tail,k.note,t.upstream_model_id,b.ord,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),` + ownedBindingState + `,t.id` + ownedBindingJoin
+k.display_head,k.display_tail,k.note,t.upstream_model_id,b.ord,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0),` + ownedBindingState + `,t.id` + ownedBindingJoin
 
 const ownedBindingIDSelect = `SELECT t.id` + ownedBindingJoin
 
@@ -81,7 +85,7 @@ func scanKeyBinding(s pageScanner) (KeyBindingView, error) {
 	var bindingID, modelID, endpointID, keyID int64
 	err := s.Scan(&bindingID, &modelID, &value.ModelFullName, &endpointID, &keyID,
 		&value.EndpointBaseURL, &value.ConnectorType, &value.EndpointNote, &value.DisplayHead, &value.DisplayTail,
-		&value.KeyNote, &value.UpstreamModelID, &value.Ord, &value.MaxConcurrency, &value.MaxRPM, &value.State, &value.TargetID)
+		&value.KeyNote, &value.UpstreamModelID, &value.Ord, &value.MaxConcurrency, &value.MaxRPM, &value.ConcurrencyOverflow, &value.RPMOverflow, &value.ConcurrencyQueueLimit, &value.RPMQueueLimit, &value.State, &value.TargetID)
 	if err != nil {
 		return value, err
 	}

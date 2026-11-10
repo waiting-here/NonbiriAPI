@@ -17,16 +17,16 @@ func TestEndpointKeyLimitsOwnerCASReplayExportAndDeletion(t *testing.T) {
 	eid := resourceTestID(t, endpoint.ID)
 	key := e.createEndpointKey(t, owner, eid, resourceTestKey('B'))
 	kid := resourceTestID(t, key.ID)
-	if key.MaxConcurrency != 0 || key.MaxRPM != 0 {
+	if key.MaxConcurrency != 0 || key.MaxRPM != 0 || key.ConcurrencyOverflow != "reject" || key.RPMOverflow != "reject" || key.ConcurrencyQueueLimit != 0 || key.RPMQueueLimit != 0 {
 		t.Fatal("limits must default to unlimited")
 	}
-	input := PatchEndpointKeyInput{MaxConcurrency: pointer(int64(2)), MaxRPM: pointer(int64(30)), ExpectedRevision: 1}
-	mutation := resourceTestMutation(t, resourceTestKey('C'), "PATCH", routeEndpointKey, []int64{eid, kid}, patchEndpointKeyCanonical{MaxConcurrency: input.MaxConcurrency, MaxRPM: input.MaxRPM, ExpectedRevision: "1"})
+	input := PatchEndpointKeyInput{MaxConcurrency: pointer(int64(2)), MaxRPM: pointer(int64(30)), ConcurrencyOverflow: pointer("queue"), RPMOverflow: pointer("queue"), ConcurrencyQueueLimit: pointer(int64(7)), RPMQueueLimit: pointer(int64(8)), ExpectedRevision: 1}
+	mutation := resourceTestMutation(t, resourceTestKey('C'), "PATCH", routeEndpointKey, []int64{eid, kid}, patchEndpointKeyCanonical{MaxConcurrency: input.MaxConcurrency, MaxRPM: input.MaxRPM, ConcurrencyOverflow: input.ConcurrencyOverflow, RPMOverflow: input.RPMOverflow, ConcurrencyQueueLimit: input.ConcurrencyQueueLimit, RPMQueueLimit: input.RPMQueueLimit, ExpectedRevision: "1"})
 	if _, err := e.repository.PatchEndpointKey(context.Background(), other, eid, kid, mutation, input); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner patch=%v", err)
 	}
 	got, err := e.repository.PatchEndpointKey(context.Background(), owner, eid, kid, mutation, input)
-	if err != nil || got.Value.MaxConcurrency != 2 || got.Value.MaxRPM != 30 || got.Value.Revision != "2" {
+	if err != nil || got.Value.MaxConcurrency != 2 || got.Value.MaxRPM != 30 || got.Value.Revision != "2" || got.Value.ConcurrencyOverflow != "queue" || got.Value.RPMOverflow != "queue" || got.Value.ConcurrencyQueueLimit != 7 || got.Value.RPMQueueLimit != 8 {
 		t.Fatalf("patch=%+v %v", got.Value, err)
 	}
 	replay, err := e.repository.PatchEndpointKey(context.Background(), owner, eid, kid, mutation, input)
@@ -44,7 +44,7 @@ func TestEndpointKeyLimitsOwnerCASReplayExportAndDeletion(t *testing.T) {
 	}
 	exported, err := e.repository.ExportLifecycleResources(context.Background(), tx, owner, resourceTestNow, 100)
 	tx.Rollback()
-	if err != nil || len(exported.Endpoints) != 1 || exported.Endpoints[0].Keys[0].MaxConcurrency != 2 || exported.Endpoints[0].Keys[0].MaxRPM != 30 {
+	if err != nil || len(exported.Endpoints) != 1 || exported.Endpoints[0].Keys[0].MaxConcurrency != 2 || exported.Endpoints[0].Keys[0].MaxRPM != 30 || exported.Endpoints[0].Keys[0].ConcurrencyOverflow != "queue" || exported.Endpoints[0].Keys[0].RPMOverflow != "queue" || exported.Endpoints[0].Keys[0].ConcurrencyQueueLimit != 7 || exported.Endpoints[0].Keys[0].RPMQueueLimit != 8 {
 		t.Fatalf("export limits lost: %+v %v", exported, err)
 	}
 	if _, err := e.store.DB().Exec(`DELETE FROM endpoint_keys WHERE id=?`, kid); err != nil {
@@ -69,29 +69,43 @@ func TestEndpointKeyLimitsHTTPValidationAndPartialPatch(t *testing.T) {
 	values := map[string]string{"id": endpoint.ID}
 	base := `"secret":"fixture-limit-secret","note":"","enabled":true,"force_store_false":false,"ownership_confirmed":true`
 	for i, value := range []string{"-1", "1.5", "null", "2147483648", `"2"`, "true"} {
-		for _, field := range []string{"max_concurrency", "max_rpm"} {
+		for _, field := range []string{"max_concurrency", "max_rpm", "concurrency_queue_limit", "rpm_queue_limit"} {
 			body := fmt.Sprintf(`{%s,"%s":%s}`, base, field, value)
 			response := resourceHTTPCall(t, create, principal, "POST", path, body, resourceTestKey(byte('C'+i)), values)
-			if response.Code != 400 {
-				t.Fatalf("%s=%s status=%d", field, value, response.Code)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("%s=%s: %d %s", field, value, response.Code, response.Body)
 			}
 		}
 	}
-	response := resourceHTTPCall(t, create, principal, "POST", path, `{`+base+`,"max_concurrency":3,"max_rpm":2147483647}`, resourceTestKey('M'), values)
+	for _, field := range []string{"concurrency_overflow", "rpm_overflow"} {
+		for _, value := range []string{`null`, `""`, `"Queue"`, `"wait"`, `1`, `true`} {
+			response := resourceHTTPCall(t, create, principal, "POST", path, fmt.Sprintf(`{%s,"%s":%s}`, base, field, value), resourceTestKey('L'), values)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("%s=%s: %d %s", field, value, response.Code, response.Body)
+			}
+		}
+	}
+	response := resourceHTTPCall(t, create, principal, "POST", path, `{`+base+`,"max_concurrency":3,"max_rpm":2147483647,"concurrency_overflow":"queue","rpm_overflow":"queue","concurrency_queue_limit":2147483647,"rpm_queue_limit":4}`, resourceTestKey('M'), values)
 	var key EndpointKey
-	if response.Code != 201 || json.Unmarshal(response.Body.Bytes(), &key) != nil || key.MaxConcurrency != 3 || key.MaxRPM != 2147483647 {
-		t.Fatalf("create=%d %s", response.Code, response.Body.String())
+	if response.Code != 201 || json.Unmarshal(response.Body.Bytes(), &key) != nil || key.MaxConcurrency != 3 || key.MaxRPM != 2147483647 || key.ConcurrencyOverflow != "queue" || key.RPMOverflow != "queue" || key.ConcurrencyQueueLimit != 2147483647 || key.RPMQueueLimit != 4 {
+		t.Fatalf("create=%d %s", response.Code, response.Body)
 	}
 	values["keyId"] = key.ID
 	patch := reg.handlers[http.MethodPatch+" "+routeEndpointKey]
 	response = resourceHTTPCall(t, patch, principal, "PATCH", path+"/"+key.ID, `{"max_concurrency":0,"expected_revision":"1"}`, resourceTestKey('N'), values)
-	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &key) != nil || key.MaxConcurrency != 0 || key.MaxRPM != 2147483647 {
-		t.Fatalf("partial patch=%d %s", response.Code, response.Body.String())
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &key) != nil || key.MaxConcurrency != 0 || key.MaxRPM != 2147483647 || key.ConcurrencyOverflow != "queue" || key.RPMOverflow != "queue" || key.ConcurrencyQueueLimit != 2147483647 || key.RPMQueueLimit != 4 {
+		t.Fatalf("partial patch=%d %s", response.Code, response.Body)
+	}
+	for _, field := range []string{"concurrency_overflow", "rpm_overflow", "concurrency_queue_limit", "rpm_queue_limit"} {
+		response = resourceHTTPCall(t, patch, principal, "PATCH", path+"/"+key.ID, fmt.Sprintf(`{"%s":null,"expected_revision":"2"}`, field), resourceTestKey('O'), values)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("patch %s=null: %d %s", field, response.Code, response.Body)
+		}
 	}
 	for i, value := range []string{"null", "-1", "0.5"} {
 		response = resourceHTTPCall(t, patch, principal, "PATCH", path+"/"+key.ID, `{"max_rpm":`+value+`,"expected_revision":"2"}`, resourceTestKey(byte('P'+i)), values)
-		if response.Code != 400 {
-			t.Fatalf("patch invalid=%d %s", response.Code, response.Body.String())
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("patch invalid=%d %s", response.Code, response.Body)
 		}
 	}
 }

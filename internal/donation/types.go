@@ -162,6 +162,10 @@ type AdminDonationKey struct {
 	SafeNote                string          `json:"safe_note"`
 	MaxConcurrency          *int64          `json:"max_concurrency"`
 	MaxRPM                  *int64          `json:"max_rpm"`
+	ConcurrencyOverflow     *string         `json:"concurrency_overflow"`
+	RPMOverflow             *string         `json:"rpm_overflow"`
+	ConcurrencyQueueLimit   *int64          `json:"concurrency_queue_limit"`
+	RPMQueueLimit           *int64          `json:"rpm_queue_limit"`
 	KeyLimitsRevision       *string         `json:"key_limits_revision"`
 	BindingCount            string          `json:"binding_count"`
 	Idle                    bool            `json:"idle"`
@@ -322,6 +326,10 @@ type KeyManagementInput struct {
 	ExpectedKeyLimitsRevision int64
 	MaxConcurrency            *int64
 	MaxRPM                    *int64
+	ConcurrencyOverflow       *string
+	RPMOverflow               *string
+	ConcurrencyQueueLimit     *int64
+	RPMQueueLimit             *int64
 	Enabled                   *bool
 	PriceLimit                **string
 	CallsLimit                **string

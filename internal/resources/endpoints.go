@@ -817,6 +817,8 @@ type endpointKeyRow struct {
 	discoverySourceID                                                 sql.NullInt64
 	id, endpointID, revision, createdAt, updatedAt                    int64
 	maxConcurrency, maxRPM                                            int64
+	concurrencyOverflow, rpmOverflow                                  string
+	concurrencyQueueLimit, rpmQueueLimit                              int64
 	displayHead, displayTail, note                                    string
 	credentialNote                                                    string
 	enabled, forceStoreFalse, suspended                               int
@@ -850,6 +852,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 		ID: id, EndpointID: endpointID, DisplayHead: row.displayHead, DisplayTail: row.displayTail,
 		Note: row.note, Enabled: row.enabled == 1, ForceStoreFalse: row.forceStoreFalse == 1,
 		MaxConcurrency: row.maxConcurrency, MaxRPM: row.maxRPM,
+		ConcurrencyOverflow: row.concurrencyOverflow, RPMOverflow: row.rpmOverflow, ConcurrencyQueueLimit: row.concurrencyQueueLimit, RPMQueueLimit: row.rpmQueueLimit,
 		SuspensionState: state, Revision: strconv.FormatInt(row.revision, 10),
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
@@ -858,7 +861,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, error) {
 	var row endpointKeyRow
 	if err := scanner.Scan(&row.id, &row.endpointID, &row.displayHead, &row.displayTail, &row.note,
-		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable, &row.credentialNote); err != nil {
+		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM, &row.concurrencyOverflow, &row.rpmOverflow, &row.concurrencyQueueLimit, &row.rpmQueueLimit, &row.credentialID, &row.credentialVersion, &row.grantRevision, &row.nativeServiceMask, &row.discoverySourceID, &row.credentialAvailable, &row.credentialNote); err != nil {
 		return EndpointKey{}, err
 	}
 	return row.dto()
@@ -869,7 +872,7 @@ const endpointKeyCredentialAvailableSQL = `EXISTS(SELECT 1 FROM credentials cr J
 const endpointKeySelect = `
 SELECT k.id,k.endpoint_id,k.display_head,k.display_tail,k.note,k.enabled,k.force_store_false,
        EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),
+       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0),COALESCE(kl.concurrency_overflow,'reject'),COALESCE(kl.rpm_overflow,'reject'),COALESCE(kl.concurrency_queue_limit,0),COALESCE(kl.rpm_queue_limit,0),
        k.credential_id,k.credential_version,k.grant_revision,k.native_service_mask,ks.source_id,
  ` + endpointKeyCredentialAvailableSQL + `,
  COALESCE((SELECT note FROM credentials WHERE id=k.credential_id),'')
@@ -991,7 +994,9 @@ func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID i
 
 func validCreateEndpointKey(input CreateEndpointKeyInput) bool {
 	return input.OwnershipConfirmed && ((input.CredentialID == 0 && validateEndpointSecretPlaintext(input.Secret)) || (input.CredentialID > 0 && len(input.Secret) == 0)) && validateNote(input.Note) &&
-		validKeyLimit(input.MaxConcurrency) && validKeyLimit(input.MaxRPM)
+		validKeyLimit(input.MaxConcurrency) && validKeyLimit(input.MaxRPM) &&
+		validKeyOverflow(keyOverflowDefault(input.ConcurrencyOverflow)) && validKeyOverflow(keyOverflowDefault(input.RPMOverflow)) &&
+		validKeyLimit(input.ConcurrencyQueueLimit) && validKeyLimit(input.RPMQueueLimit)
 }
 
 // CreateEndpointKeyInTransaction keeps the secret, key protection and catalog
@@ -1066,7 +1071,7 @@ VALUES(?,?,?,?,?,1,?,?)`, endpointID, grantID, input.Note, boolInt(input.Enabled
 	if err := initializeKeySourceTx(ctx, tx, userID, keyID, credentialID, versionID, endpoint, input.DiscoverySourceID, now); err != nil {
 		return EndpointKey{}, err
 	}
-	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM); err != nil {
+	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM, keyOverflowDefault(input.ConcurrencyOverflow), keyOverflowDefault(input.RPMOverflow), input.ConcurrencyQueueLimit, input.RPMQueueLimit); err != nil {
 		return EndpointKey{}, err
 	}
 	if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
@@ -1089,8 +1094,8 @@ VALUES(?,?,?,?,?,1,?,?)`, endpointID, grantID, input.Note, boolInt(input.Enabled
 
 func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, input PatchEndpointKeyInput) (MutationResult[EndpointKey], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || mutation.Route != routeEndpointKey || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, endpointID, keyID) || mutation.Query != "" ||
-		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil && input.CredentialID == nil && input.NativeServices == nil && input.DiscoverySourceID == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
-		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) || (input.CredentialID != nil && *input.CredentialID <= 0) {
+		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil && input.ConcurrencyOverflow == nil && input.RPMOverflow == nil && input.ConcurrencyQueueLimit == nil && input.RPMQueueLimit == nil && input.CredentialID == nil && input.NativeServices == nil && input.DiscoverySourceID == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
+		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) || (input.CredentialID != nil && *input.CredentialID <= 0) || !validPatchKeyQueue(input) {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -1130,6 +1135,21 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 	}
 	note, enabled, forceStore := current.Note, current.Enabled, current.ForceStoreFalse
 	maxConcurrency, maxRPM := current.MaxConcurrency, current.MaxRPM
+	concurrencyOverflow, rpmOverflow := current.ConcurrencyOverflow, current.RPMOverflow
+	concurrencyQueueLimit, rpmQueueLimit := current.ConcurrencyQueueLimit, current.RPMQueueLimit
+	if input.ConcurrencyOverflow != nil {
+		concurrencyOverflow = *input.ConcurrencyOverflow
+	}
+	if input.RPMOverflow != nil {
+		rpmOverflow = *input.RPMOverflow
+	}
+	if input.ConcurrencyQueueLimit != nil {
+		concurrencyQueueLimit = *input.ConcurrencyQueueLimit
+	}
+	if input.RPMQueueLimit != nil {
+		rpmQueueLimit = *input.RPMQueueLimit
+	}
+
 	if input.MaxConcurrency != nil {
 		maxConcurrency = *input.MaxConcurrency
 	}
@@ -1179,7 +1199,7 @@ WHERE id=? AND endpoint_id=? AND revision=?`, note, boolInt(enabled), boolInt(fo
 			return MutationResult[EndpointKey]{}, err
 		}
 	}
-	if err := writeKeyLimitsTx(ctx, tx, keyID, maxConcurrency, maxRPM); err != nil {
+	if err := writeKeyLimitsTx(ctx, tx, keyID, maxConcurrency, maxRPM, concurrencyOverflow, rpmOverflow, concurrencyQueueLimit, rpmQueueLimit); err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
 	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, affectedModels); err != nil {

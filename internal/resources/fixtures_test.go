@@ -42,7 +42,7 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 		}},
 		{"endpoint_key.json", EndpointKey{CredentialAvailable: true, CredentialID: "7", CredentialVersion: "2", GrantRevision: "3", NativeServices: nativeServices, DiscoverySourceID: pointer("17"),
 			ID: "21", EndpointID: "11", DisplayHead: "head", DisplayTail: "tail", Note: "key note",
-			Enabled: true, ForceStoreFalse: false, SuspensionState: "none", Revision: "4",
+			Enabled: true, ForceStoreFalse: false, ConcurrencyOverflow: "reject", RPMOverflow: "reject", SuspensionState: "none", Revision: "4",
 			CreatedAt: 1_700_000_001, UpdatedAt: 1_700_000_011,
 		}},
 		{"caller_key_null.json", (*CallerKeyMetadata)(nil)},

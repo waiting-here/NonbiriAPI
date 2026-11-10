@@ -54,6 +54,10 @@ type LifecycleEndpointKey struct {
 	ForceStoreFalse                                bool
 	MaxConcurrency                                 int64
 	MaxRPM                                         int64
+	ConcurrencyOverflow                            string
+	RPMOverflow                                    string
+	ConcurrencyQueueLimit                          int64
+	RPMQueueLimit                                  int64
 	SuspensionState                                string
 	CreatedAt                                      int64
 	UpdatedAt                                      int64
@@ -200,6 +204,7 @@ LIMIT ?`, userID, limit+1)
 				ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail, Note: key.Note,
 				Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse,
 				MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM,
+				ConcurrencyOverflow: key.ConcurrencyOverflow, RPMOverflow: key.RPMOverflow, ConcurrencyQueueLimit: key.ConcurrencyQueueLimit, RPMQueueLimit: key.RPMQueueLimit,
 				SuspensionState: key.SuspensionState, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
 			})
 			if len(empty.CatalogPairs) == limit {

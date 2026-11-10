@@ -350,7 +350,7 @@ func (s *Service) importKeys(ctx context.Context, userID, endpointID int64, key 
 		_, err = s.runItem(ctx, batch, index, "", nil, func(ctx context.Context, tx *sql.Tx) (resources.AutomationMutation, error) {
 			secret := []byte(*item.Secret)
 			defer clear(secret)
-			return s.resources.ImportEndpointKeyInTransaction(ctx, tx, userID, endpointID, resources.CreateEndpointKeyInput{Secret: secret, Note: item.Note, Enabled: enabled(item.Enabled), ForceStoreFalse: item.ForceStoreFalse, OwnershipConfirmed: true, MaxConcurrency: item.MaxConcurrency, MaxRPM: item.MaxRPM})
+			return s.resources.ImportEndpointKeyInTransaction(ctx, tx, userID, endpointID, resources.CreateEndpointKeyInput{Secret: secret, Note: item.Note, Enabled: enabled(item.Enabled), ForceStoreFalse: item.ForceStoreFalse, OwnershipConfirmed: true, MaxConcurrency: item.MaxConcurrency, MaxRPM: item.MaxRPM, ConcurrencyOverflow: string(item.ConcurrencyOverflow), RPMOverflow: string(item.RPMOverflow), ConcurrencyQueueLimit: int64(item.ConcurrencyQueueLimit), RPMQueueLimit: int64(item.RPMQueueLimit)})
 		})
 		if err != nil {
 			if isPersonalAuthorityError(err) {

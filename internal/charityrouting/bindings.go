@@ -77,7 +77,7 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 		var keyID, donationID int64
 		var automatic, manual int64
 		if err := rows.Scan(&keyID, &donationID, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL,
-			&item.Source.DisplayHead, &item.Source.DisplayTail, &item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM); err != nil {
+			&item.Source.DisplayHead, &item.Source.DisplayTail, &item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &item.Source.ConcurrencyOverflow, &item.Source.RPMOverflow, &item.Source.ConcurrencyQueueLimit, &item.Source.RPMQueueLimit); err != nil {
 			return nil, 0, "", fmt.Errorf("charity routing: scan binding candidate: %w", err)
 		}
 		item.DonationKeyID = strconv.FormatInt(keyID, 10)
@@ -597,7 +597,7 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 		var policy sql.NullString
 		if err := rows.Scan(&id, &item.Ord, &donationKeyID, &donationID, &item.Source.ConnectorType,
 			&item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail,
-			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &policy, &targetID, &targetRevision, &mask, &endpointID); err != nil {
+			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM, &item.Source.ConcurrencyOverflow, &item.Source.RPMOverflow, &item.Source.ConcurrencyQueueLimit, &item.Source.RPMQueueLimit, &policy, &targetID, &targetRevision, &mask, &endpointID); err != nil {
 			return AdminBindings{}, fmt.Errorf("charity routing: scan binding: %w", err)
 		}
 		if policy.Valid {
@@ -751,6 +751,7 @@ func stewardCandidate(value AdminBindingCandidate) StewardBindingCandidate {
 			ConnectorType: value.Source.ConnectorType, CanonicalBaseURL: value.Source.CanonicalBaseURL,
 			DisplayHead: value.Source.DisplayHead, DisplayTail: value.Source.DisplayTail,
 			MaxConcurrency: value.Source.MaxConcurrency, MaxRPM: value.Source.MaxRPM,
+			ConcurrencyOverflow: value.Source.ConcurrencyOverflow, RPMOverflow: value.Source.RPMOverflow, ConcurrencyQueueLimit: value.Source.ConcurrencyQueueLimit, RPMQueueLimit: value.Source.RPMQueueLimit,
 		},
 		UpstreamModelID: value.UpstreamModelID, SourceTypes: append([]string(nil), value.SourceTypes...),
 	}
@@ -767,6 +768,7 @@ func stewardBindings(value AdminBindings) StewardBindings {
 				ConnectorType: binding.Source.ConnectorType, CanonicalBaseURL: binding.Source.CanonicalBaseURL,
 				DisplayHead: binding.Source.DisplayHead, DisplayTail: binding.Source.DisplayTail,
 				MaxConcurrency: binding.Source.MaxConcurrency, MaxRPM: binding.Source.MaxRPM,
+				ConcurrencyOverflow: binding.Source.ConcurrencyOverflow, RPMOverflow: binding.Source.RPMOverflow, ConcurrencyQueueLimit: binding.Source.ConcurrencyQueueLimit, RPMQueueLimit: binding.Source.RPMQueueLimit,
 			},
 			UpstreamModelID: binding.UpstreamModelID, SourceTypes: append([]string{}, binding.SourceTypes...),
 		}
