@@ -41,6 +41,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Refresh CI timing weights from measured runs and rebalance long race groups
   within the existing runner budget. Two serial historical-schema rejection
   matrices keep full ordinary coverage; cancellation and recovery stay in race.
+- Schedule independent historical-upgrade scenarios separately to avoid one
+  combined race test exhausting its deadline, preserving every rollback,
+  cancellation and data-preservation check.
 - Key shared race caches by Go source and embedded inputs so workers reuse the
   current preparation job's compilation instead of rebuilding changed packages.
 - Advance the database to schema 51 and account export to format 36. Existing

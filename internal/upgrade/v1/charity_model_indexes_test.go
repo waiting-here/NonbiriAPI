@@ -56,76 +56,89 @@ func schema37Fixture(t *testing.T) (string, *secret.Vault, *db.Store) {
 	return path, vault, store
 }
 
-func TestSchema37OfflineIndexesPreserveFactsAndRetry(t *testing.T) {
-	for _, failure := range []string{"none", "partial-ddl", "target-mismatch", "cancel-before-commit"} {
-		t.Run(failure, func(t *testing.T) {
-			path, vault, source := schema37Fixture(t)
-			columns := legacyConnectionColumns(t, source.DB())
-			before := gatewayRows(t, source.DB())
-			if err := source.Close(); err != nil {
-				t.Fatal(err)
-			}
-			result, err := Run(t.Context(), path, vault, Options{})
-			if err != nil || result.Status != "ready" || result.SourceSchemaVersion != 37 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
-				t.Fatal(result, err)
-			}
-			if failure != "none" {
-				index := migrationIndex(t, 37)
-				original := storageSchema.versions[index].sql
-				defer func() { storageSchema.versions[index].sql = original }()
-				ctx, cancel := context.WithCancel(t.Context())
-				defer cancel()
-				var codec secret.GenerationTwoContextCodec = vault
-				switch failure {
-				case "partial-ddl":
-					storageSchema.versions[index].sql = strings.Split(original, ";")[0] + "; SELECT missing_migration_function();"
-				case "target-mismatch":
-					storageSchema.versions[index].sql = strings.Split(original, ";")[0] + ";"
-				case "cancel-before-commit":
-					codec = &cancelIndexUpgradeCodec{Vault: vault, cancel: cancel}
-				}
-				if err := upgradeWithCodec(ctx, path, codec); err == nil || failure == "cancel-before-commit" && !errors.Is(err, context.Canceled) {
-					t.Fatal("incomplete index migration succeeded or lost cancellation", err)
-				}
-				if err := db.InspectContext(t.Context(), path, vault, func(ctx context.Context, read *sql.DB) error {
-					assertExactPublishedSource(t, read, 37, db.Schema37ManifestHash, before)
-					return nil
-				}); err != nil {
-					t.Fatal(err)
-				}
-				storageSchema.versions[index].sql = original
-			}
-			result, err = Run(t.Context(), path, vault, Options{Apply: true})
-			if err != nil || result.Status != "converted" {
-				t.Fatal(result, err)
-			}
-			upgraded, err := db.Open(path, vault)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer upgraded.Close()
-			after := gatewayRowsWithColumns(t, upgraded.DB(), columns)
-			for table, rows := range before {
-				if table != "schema_state" && !reflect.DeepEqual(rows, after[table]) {
-					t.Fatal("index migration changed rows", table)
-				}
-			}
-			plan := endpointKeyDeletePlan(t, upgraded.DB(), "DELETE FROM charity_models WHERE id=?")
-			for _, index := range charityModelDeletionIndexes {
-				if !strings.Contains(plan, index) {
-					t.Fatal("index missing after upgrade", index, plan)
-				}
-			}
-			if strings.Contains(plan, "SCAN ") {
-				t.Fatal("model deletion still scans unrelated rows", plan)
-			}
-			if err := upgraded.Close(); err != nil {
-				t.Fatal(err)
-			}
-			result, err = Run(t.Context(), path, vault, Options{Apply: true})
-			if err != nil || result.Status != "current" {
-				t.Fatal("second apply was not current", result, err)
-			}
-		})
+func testSchema37OfflineIndexes(t *testing.T, failure string) {
+	t.Helper()
+	path, vault, source := schema37Fixture(t)
+	columns := legacyConnectionColumns(t, source.DB())
+	before := gatewayRows(t, source.DB())
+	if err := source.Close(); err != nil {
+		t.Fatal(err)
 	}
+	result, err := Run(t.Context(), path, vault, Options{})
+	if err != nil || result.Status != "ready" || result.SourceSchemaVersion != 37 || result.TargetSchemaVersion != db.CurrentSchemaVersion {
+		t.Fatal(result, err)
+	}
+	if failure != "none" {
+		index := migrationIndex(t, 37)
+		original := storageSchema.versions[index].sql
+		defer func() { storageSchema.versions[index].sql = original }()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		var codec secret.GenerationTwoContextCodec = vault
+		switch failure {
+		case "partial-ddl":
+			storageSchema.versions[index].sql = strings.Split(original, ";")[0] + "; SELECT missing_migration_function();"
+		case "target-mismatch":
+			storageSchema.versions[index].sql = strings.Split(original, ";")[0] + ";"
+		case "cancel-before-commit":
+			codec = &cancelIndexUpgradeCodec{Vault: vault, cancel: cancel}
+		}
+		if err := upgradeWithCodec(ctx, path, codec); err == nil || failure == "cancel-before-commit" && !errors.Is(err, context.Canceled) {
+			t.Fatal("incomplete index migration succeeded or lost cancellation", err)
+		}
+		if err := db.InspectContext(t.Context(), path, vault, func(ctx context.Context, read *sql.DB) error {
+			assertExactPublishedSource(t, read, 37, db.Schema37ManifestHash, before)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		storageSchema.versions[index].sql = original
+	}
+	result, err = Run(t.Context(), path, vault, Options{Apply: true})
+	if err != nil || result.Status != "converted" {
+		t.Fatal(result, err)
+	}
+	upgraded, err := db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	after := gatewayRowsWithColumns(t, upgraded.DB(), columns)
+	for table, rows := range before {
+		if table != "schema_state" && !reflect.DeepEqual(rows, after[table]) {
+			t.Fatal("index migration changed rows", table)
+		}
+	}
+	plan := endpointKeyDeletePlan(t, upgraded.DB(), "DELETE FROM charity_models WHERE id=?")
+	for _, index := range charityModelDeletionIndexes {
+		if !strings.Contains(plan, index) {
+			t.Fatal("index missing after upgrade", index, plan)
+		}
+	}
+	if strings.Contains(plan, "SCAN ") {
+		t.Fatal("model deletion still scans unrelated rows", plan)
+	}
+	if err := upgraded.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Run(t.Context(), path, vault, Options{Apply: true})
+	if err != nil || result.Status != "current" {
+		t.Fatal("second apply was not current", result, err)
+	}
+}
+
+func TestSchema37OfflineIndexesPreserveFactsAndReenter(t *testing.T) {
+	testSchema37OfflineIndexes(t, "none")
+}
+
+func TestSchema37OfflineIndexesRollBackAndRetryPartialDDL(t *testing.T) {
+	testSchema37OfflineIndexes(t, "partial-ddl")
+}
+
+func TestSchema37OfflineIndexesRollBackAndRetryTargetMismatch(t *testing.T) {
+	testSchema37OfflineIndexes(t, "target-mismatch")
+}
+
+func TestSchema37OfflineIndexesRollBackAndRetryCancelBeforeCommit(t *testing.T) {
+	testSchema37OfflineIndexes(t, "cancel-before-commit")
 }

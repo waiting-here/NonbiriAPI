@@ -18,14 +18,14 @@ the previous row-by-row substring predicate with the complete lookup, exact coun
 and consumed 50-row page. A Windows/amd64 run with Go 1.26.10, SQLite 3.54.1,
 `GOMAXPROCS=2` and three iterations per case produced these local results:
 
-| Synthetic distribution | Rows | Previous | Revised |
-| --- | ---: | ---: | ---: |
-| Sparse model + status 400 | 1,600,000 | 403.63 ms | 15.79 ms |
-| Same filter with a wide time range | 1,600,000 | 207.97 ms | 16.40 ms |
-| Same filter with a narrow time range | 1,600,000 | 2.44 ms | 6.77 ms |
-| No matching model + status 400 | 1,600,000 | 201.98 ms | 4.18 ms |
-| Broad match across 100 names | 1,600,000 | 1,718.36 ms | 1,548.37 ms |
-| Broad match across 4,096 names | 160,000 | 29.54 ms | 48.18 ms |
+| Synthetic distribution               |      Rows |    Previous |     Revised |
+| ------------------------------------ | --------: | ----------: | ----------: |
+| Sparse model + status 400            | 1,600,000 |   403.63 ms |    15.79 ms |
+| Same filter with a wide time range   | 1,600,000 |   207.97 ms |    16.40 ms |
+| Same filter with a narrow time range | 1,600,000 |     2.44 ms |     6.77 ms |
+| No matching model + status 400       | 1,600,000 |   201.98 ms |     4.18 ms |
+| Broad match across 100 names         | 1,600,000 | 1,718.36 ms | 1,548.37 ms |
+| Broad match across 4,096 names       |   160,000 |    29.54 ms |    48.18 ms |
 
 Counts and page IDs match in every pair. Sparse combinations use exact
 `(route_kind, model)` index seeks; the optimizer may choose a scan for broad
@@ -59,11 +59,11 @@ attendance integration. One Windows/amd64, Go 1.26.10 run used 100 iterations
 per case and `GOMAXPROCS=2`:
 
 | Seats / elapsed seconds | Repeated query | Reused snapshot | Bytes before / after |
-| --- | ---: | ---: | ---: |
-| 1 / 1 | 58.3 µs | 68.1 µs | 5,667 / 5,672 |
-| 1 / 19 | 410.8 µs | 51.0 µs | 59,566 / 5,664 |
-| 9 / 1 | 86.3 µs | 87.8 µs | 21,294 / 21,296 |
-| 9 / 19 | 741.4 µs | 76.5 µs | 309,246 / 21,293 |
+| ----------------------- | -------------: | --------------: | -------------------: |
+| 1 / 1                   |        58.3 µs |         68.1 µs |        5,667 / 5,672 |
+| 1 / 19                  |       410.8 µs |         51.0 µs |       59,566 / 5,664 |
+| 9 / 1                   |        86.3 µs |         87.8 µs |      21,294 / 21,296 |
+| 9 / 19                  |       741.4 µs |         76.5 µs |     309,246 / 21,293 |
 
 The one-second cases show no improvement. This is a narrow idle-batch
 microbenchmark, not a mixed-load or production throughput claim. The regression
@@ -416,4 +416,9 @@ Independent rollback scenarios may use separate top-level tests so the existing
 planner can distribute them across shards. Each must keep its own database,
 vault, cleanup and complete rollback/retry assertions; splitting does not add
 in-process parallelism. Schema33 partial DDL, target mismatch, index cancellation
-and pre-commit cancellation follow this arrangement.
+and pre-commit cancellation follow this arrangement. Schema37 success, partial
+DDL, target mismatch and pre-commit cancellation also run independently, with
+all four retained in race. Their former combined command reached its 30-minute
+deadline while building the fourth fixture; the deadline remains unchanged.
+Initial per-scenario weights are conservative estimates until separately
+measured, and the complete data-preservation and retry assertions remain.

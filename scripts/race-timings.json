@@ -58,7 +58,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/charity": 88,
     "github.com/waiting-here/NonbiriAPI/internal/connectionstore": 13,
     "github.com/waiting-here/NonbiriAPI/internal/game/duel": 62,
-    "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1": 46
+    "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1": 49
   },
   "split_group_caps": {
     "github.com/waiting-here/NonbiriAPI/internal/db": 1,
@@ -2244,7 +2244,10 @@
       "TestSchema33OfflineUpgradeRollsBackAndRetriesCancelDuringIndex": 424.62,
       "TestSchema33OfflineUpgradeRollsBackAndRetriesCancelBeforeCommit": 349.17,
       "TestSchema34OfflineCatalogUpgradePreservesRowsAndRetries": 621.95,
-      "TestSchema37OfflineIndexesPreserveFactsAndRetry": 1126.79,
+      "TestSchema37OfflineIndexesPreserveFactsAndReenter": 600,
+      "TestSchema37OfflineIndexesRollBackAndRetryPartialDDL": 600,
+      "TestSchema37OfflineIndexesRollBackAndRetryTargetMismatch": 600,
+      "TestSchema37OfflineIndexesRollBackAndRetryCancelBeforeCommit": 600,
       "TestServiceKeyScopeAssignsLegacyUnscopedEndpointAndSource": 209.37,
       "TestServiceKeyScopeSchema39UpgradePreservesApprovedPendingAndCatalog": 313.56,
       "TestSessionHeadersUpgradePreservesExistingConfigurationAndCache": 182.85,
@@ -4963,6 +4966,6 @@
     "attempt": 1,
     "measured_packages": 146,
     "measured_tests": 4211,
-    "note": "Observed Linux risk-race durations before fixture reuse changes. The four Schema33 rollback case weights use the successful race job 129449968140 in run 42701651800 at commit 15bf2abd82e69a20c9d58a075da93d94ddb80af0; that workflow's Web checks failed. Unobserved entries retain prior estimates; live discovery defines coverage."
+    "note": "Observed Linux risk-race durations before fixture reuse changes. The four Schema33 rollback case weights use the successful race job 129449968140 in run 42701651800 at commit 15bf2abd82e69a20c9d58a075da93d94ddb80af0; that workflow's Web checks failed. The four Schema37 scenario weights are conservative 600-second estimates, not individual measurements: their former combined test took 1703.04 seconds in run 42715118466 and exceeded its 1800-second command budget in run 42737558811. All four scenarios remain in race. Unobserved entries retain prior estimates; live discovery defines coverage."
   }
 }
