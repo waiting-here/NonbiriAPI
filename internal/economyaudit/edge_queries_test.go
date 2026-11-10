@@ -64,7 +64,7 @@ func TestPartialHoursMatchImmutableEntriesAcrossAssetsAndFilters(t *testing.T) {
 				}
 			}
 		}
-		rows, err := tx.QueryContext(f.ctx, "EXPLAIN QUERY PLAN "+edgeCountQuery, start+1, start+3599, start, start+3600, c.last)
+		rows, err := tx.QueryContext(f.ctx, "EXPLAIN QUERY PLAN "+edgeCountQuery, start+1, start+3599, string(ledger.General), start, start+3600, c.last)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,7 +81,7 @@ func TestPartialHoursMatchImmutableEntriesAcrossAssetsAndFilters(t *testing.T) {
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
 		}
-		if joined := strings.Join(plan, "\n"); !strings.Contains(joined, "COVERING INDEX idx_credit_operations_created") || strings.Contains(joined, "TEMP B-TREE") {
+		if joined := strings.Join(plan, "\n"); !strings.Contains(joined, "COVERING INDEX idx_credit_operation_assets_time") || strings.Contains(joined, "TEMP B-TREE") {
 			t.Fatal("edge selection loads operation records", joined)
 		}
 	})
