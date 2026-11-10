@@ -104,6 +104,11 @@ defaults already include the appropriate path. This setting is independent of
 the inference entry's base URL. Existing URL, credential and outbound protections
 continue to apply.
 
+Cloudflare discovery routing first checks the complete request address. Standard
+`/models` and `/config` addresses can also use a route configured for their
+inference base; custom directory paths require their own exact route. Conflicting
+base-route matches are rejected.
+
 Even when two endpoints use the same key and list URL, their fetched
 and manual lists are independent. A list refresh does not
 send a paid inference request. Recognized Gateway model types and Gemini methods

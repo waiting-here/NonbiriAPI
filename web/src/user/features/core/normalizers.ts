@@ -1609,13 +1609,13 @@ export function normalizeBindingCandidatePage(value: unknown): Page<BindingCandi
 
 export function canonicalBaseURLPreview(
   value: string,
-  { preserveTrailingSlash = false, maximumBytes = 4_096 } = {},
+  { preserveTrailingSlash = false } = {},
 ): string {
   const trimmed = value.trim();
   if (
     trimmed.length === 0 ||
-    Array.from(trimmed).length > maximumBytes ||
-    new TextEncoder().encode(trimmed).byteLength > maximumBytes ||
+    Array.from(trimmed).length > 4_096 ||
+    new TextEncoder().encode(trimmed).byteLength > 4_096 ||
     hasForbiddenScalar(trimmed)
   ) {
     throw new ApiError('invalid_request', 'Enter a valid endpoint URL.', 400);

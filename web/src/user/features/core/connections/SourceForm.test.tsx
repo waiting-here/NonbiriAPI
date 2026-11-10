@@ -51,6 +51,9 @@ describe('complete model list addresses', () => {
       />,
       { station: 'user', role: 'user' },
     );
+    view.queryClient.setQueryData(['user', 'session'], {
+      user: { id: '7', username: 'fixture', effective_level: 4 },
+    });
     expect(screen.getByLabelText(copy.discoveryBaseURL)).toHaveValue(address);
     expect(screen.getByLabelText(copy.discoveryBaseURL)).toHaveAccessibleDescription(
       copy.independentDiscovery,

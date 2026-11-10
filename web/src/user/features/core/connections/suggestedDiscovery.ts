@@ -14,7 +14,6 @@ export async function resolveSuggestedDiscovery(
     ...input,
     base_url: canonicalBaseURLPreview(input.base_url, {
       preserveTrailingSlash: true,
-      maximumBytes: 4_103,
     }),
   };
   const changed = () => new ApiError('conflict', 'The credential changed.', 409);

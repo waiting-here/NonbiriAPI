@@ -58,6 +58,10 @@ history are preserved. The charity catalog's default-source lookup follows the
 new URL representation. Account export remains format 36 with the same fields;
 discovery `base_url` now contains the complete request address. The registered
 schema-51 source is `b0f488b08153d8cca7fb54f4d095f7e4feeb3fa1`.
+The existing 4096-byte URL limit remains. If completing a legacy address would
+exceed it, the converter reports the affected source revision or channel and
+refuses the conversion without changing data. Correct that address before
+retrying the offline upgrade.
 
 Schema 51 adds optional HTTP rerank paths to endpoints, submitted donation-use
 revisions and dispatch-claim targets, plus a nullable charity-use override.
