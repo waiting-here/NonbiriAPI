@@ -112,7 +112,30 @@ func (g *Gate) Acquire(ctx context.Context, baseURL string) (*Permit, error) {
 	if err != nil {
 		return nil, err
 	}
+	return g.acquire(ctx, canonical, "")
+}
 
+// acquireAliases reserves both spellings of a standard catalog's former base
+// under one global permit. Ordinary inference still acquires a single key.
+func (g *Gate) acquireAliases(ctx context.Context, baseURL, aliasURL string) (*Permit, error) {
+	if ctx == nil {
+		return nil, errors.New("egress concurrency context is required")
+	}
+	canonical, _, _, _, err := canonicalizeBaseURL(baseURL, false)
+	if err != nil {
+		return nil, err
+	}
+	alias, _, _, _, err := canonicalizeBaseURL(aliasURL, false)
+	if err != nil {
+		return nil, err
+	}
+	if alias == canonical {
+		alias = ""
+	}
+	return g.acquire(ctx, canonical, alias)
+}
+
+func (g *Gate) acquire(ctx context.Context, canonical, alias string) (*Permit, error) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -123,12 +146,16 @@ func (g *Gate) Acquire(ctx context.Context, baseURL string) (*Permit, error) {
 			g.mu.Unlock()
 			return nil, ctxErr
 		}
-		if g.globalActive < g.limits.Global && g.perActive[canonical] < g.limits.PerEndpoint {
+		if g.globalActive < g.limits.Global && g.perActive[canonical] < g.limits.PerEndpoint &&
+			(alias == "" || g.perActive[alias] < g.limits.PerEndpoint) {
 			g.globalActive++
 			g.globalPeak = max(g.globalPeak, g.globalActive)
 			g.perActive[canonical]++
+			if alias != "" {
+				g.perActive[alias]++
+			}
 			g.mu.Unlock()
-			return &Permit{gate: g, key: canonical}, nil
+			return &Permit{gate: g, key: canonical, alias: alias}, nil
 		}
 		notify := g.notify
 		g.mu.Unlock()
@@ -141,9 +168,9 @@ func (g *Gate) Acquire(ctx context.Context, baseURL string) (*Permit, error) {
 	}
 }
 
-func (g *Gate) release(key string) {
+func (g *Gate) release(key, alias string) {
 	g.mu.Lock()
-	if g.globalActive <= 0 || g.perActive[key] <= 0 {
+	if g.globalActive <= 0 || g.perActive[key] <= 0 || (alias != "" && g.perActive[alias] <= 0) {
 		g.mu.Unlock()
 		panic("egress concurrency permit accounting underflow")
 	}
@@ -151,6 +178,12 @@ func (g *Gate) release(key string) {
 	g.perActive[key]--
 	if g.perActive[key] == 0 {
 		delete(g.perActive, key)
+	}
+	if alias != "" {
+		g.perActive[alias]--
+		if g.perActive[alias] == 0 {
+			delete(g.perActive, alias)
+		}
 	}
 	g.broadcastLocked()
 	g.mu.Unlock()
@@ -161,21 +194,22 @@ func (g *Gate) broadcastLocked() {
 	g.notify = make(chan struct{})
 }
 
-// Permit represents one global and one per-endpoint slot. Release is
+// Permit represents one global slot and its per-endpoint keys. Release is
 // idempotent so cancellation, EOF, and an explicit response-body Close may
 // safely converge on the same cleanup path.
 type Permit struct {
-	gate *Gate
-	key  string
-	once sync.Once
+	gate  *Gate
+	key   string
+	alias string
+	once  sync.Once
 }
 
-// Release returns both slots to the shared gate.
+// Release returns every reserved slot to the shared gate.
 func (p *Permit) Release() {
 	if p == nil {
 		return
 	}
 	p.once.Do(func() {
-		p.gate.release(p.key)
+		p.gate.release(p.key, p.alias)
 	})
 }

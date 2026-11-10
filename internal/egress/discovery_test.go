@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -54,36 +55,163 @@ func TestDiscoveryAddressLengthAndSharedSecurity(t *testing.T) {
 }
 
 func TestStandardDiscoverySharesInferenceConcurrency(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
 	defer server.Close()
 	stack := newLoopbackStack(t, []string{server.URL}, func(o *StackOptions) { o.Concurrency = ConcurrencyLimits{Global: 4, PerEndpoint: 1} })
-	permit, err := stack.gate.Acquire(t.Context(), server.URL+"/v1")
-	if err != nil {
-		t.Fatal(err)
+	for _, heldSuffix := range []string{"", "/"} {
+		t.Run("inference"+heldSuffix, func(t *testing.T) {
+			permit, err := stack.gate.Acquire(t.Context(), server.URL+"/v1"+heldSuffix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer permit.Release()
+			// Inference itself keeps the two spellings independent.
+			otherSuffix := "/"
+			if heldSuffix == "/" {
+				otherSuffix = ""
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			other, err := stack.gate.Acquire(ctx, server.URL+"/v1"+otherSuffix)
+			cancel()
+			if err != nil {
+				t.Fatal("inference keys were merged", err)
+			}
+			other.Release()
+			for _, suffix := range []string{"/models", "/models/", "/config"} {
+				client, err := stack.NewDiscoveryClient(server.URL + "/v1" + suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+				req, _ := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL(), nil)
+				_, err = client.Do(req)
+				cancel()
+				if !errors.Is(err, context.DeadlineExceeded) || calls.Load() != 0 {
+					t.Fatal("catalog bypassed an inference bucket", heldSuffix, suffix, err, calls.Load())
+				}
+				stack.gate.mu.Lock()
+				partial := stack.gate.globalActive != 1 || len(stack.gate.perActive) != 1
+				stack.gate.mu.Unlock()
+				if partial {
+					t.Fatal("canceled catalog retained a partial reservation")
+				}
+			}
+		})
 	}
-	defer permit.Release()
-	for _, suffix := range []string{"/models", "/models/", "/config"} {
-		client, err := stack.NewDiscoveryClient(server.URL + "/v1" + suffix)
+	stack.gate.mu.Lock()
+	leaked := stack.gate.globalActive != 0 || len(stack.gate.perActive) != 0
+	stack.gate.mu.Unlock()
+	if leaked {
+		t.Fatal("inference permits leaked")
+	}
+	// A custom catalog is still keyed by its complete configured address.
+	for _, suffix := range []string{"", "/"} {
+		permit, err := stack.gate.Acquire(t.Context(), server.URL+"/v1"+suffix)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL(), nil)
-		_, err = client.Do(req)
-		cancel()
+		defer permit.Release()
+	}
+	custom, err := stack.NewDiscoveryClient(server.URL + "/v1/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, custom.BaseURL(), nil)
+	response, err := custom.Do(req)
+	if err != nil {
+		t.Fatal("custom catalog shared a standard base bucket", err)
+	}
+	response.Body.Close()
+	if calls.Load() != 1 {
+		t.Fatal("custom catalog did not dispatch once", calls.Load())
+	}
+}
+
+func TestDiscoveryCancellationReleasesBothInferenceAliases(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "ready")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	stack := newLoopbackStack(t, []string{server.URL}, func(o *StackOptions) { o.Concurrency = ConcurrencyLimits{Global: 4, PerEndpoint: 1} })
+	client, err := stack.NewDiscoveryClient(server.URL + "/v1/models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, client.BaseURL(), nil)
+	response, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	stack.gate.mu.Lock()
+	wrong := stack.gate.globalActive != 1 || len(stack.gate.perActive) != 2
+	stack.gate.mu.Unlock()
+	if wrong {
+		t.Fatal("discovery must reserve two endpoint keys and one global slot")
+	}
+	for _, suffix := range []string{"", "/"} {
+		blocked, cancelWait := context.WithTimeout(t.Context(), 20*time.Millisecond)
+		permit, err := stack.gate.Acquire(blocked, server.URL+"/v1"+suffix)
+		cancelWait()
+		if permit != nil {
+			permit.Release()
+		}
 		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatal("catalog did not share standard inference bucket", suffix, err)
+			t.Fatal("inference bypassed discovery", suffix, err)
 		}
 	}
-	// Explicit inference trailing slashes retain their existing distinct key.
-	for _, path := range []string{"/v1/", "/v1/catalog.json"} {
-		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-		other, err := stack.gate.Acquire(ctx, server.URL+path)
-		cancel()
+	cancel()
+	response.Body.Close()
+	response.Body.Close()
+	stack.gate.mu.Lock()
+	leaked := stack.gate.globalActive != 0 || len(stack.gate.perActive) != 0
+	stack.gate.mu.Unlock()
+	if leaked {
+		t.Fatal("cancellation/body close did not release both aliases")
+	}
+	for _, suffix := range []string{"", "/"} {
+		available, cancelWait := context.WithTimeout(t.Context(), time.Second)
+		permit, err := stack.gate.Acquire(available, server.URL+"/v1"+suffix)
+		cancelWait()
 		if err != nil {
-			t.Fatal("unrelated gate semantics changed", err)
+			t.Fatal("released inference key remained blocked", suffix, err)
 		}
-		other.Release()
+		permit.Release()
+	}
+}
+
+func TestDiscoveryGateAliasesDeduplicateCanonicalKeys(t *testing.T) {
+	gate, err := NewGate(ConcurrencyLimits{Global: 2, PerEndpoint: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	permit, err := gate.acquireAliases(t.Context(), "https://EXAMPLE.com./v1", "https://example.com:443/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate.globalActive != 1 || len(gate.perActive) != 1 {
+		t.Fatal("equivalent aliases counted twice")
+	}
+	permit.Release()
+	permit.Release()
+	if gate.globalActive != 0 || len(gate.perActive) != 0 {
+		t.Fatal("deduplicated alias leaked")
+	}
+	if _, err := gate.acquireAliases(t.Context(), "https://example.com/v1", "invalid"); err == nil {
+		t.Fatal("invalid alias accepted")
+	}
+	if gate.globalActive != 0 || len(gate.perActive) != 0 {
+		t.Fatal("invalid alias partially acquired")
 	}
 }
 

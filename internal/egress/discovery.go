@@ -27,8 +27,8 @@ func (s *Stack) discoveryRoute(catalog *url.URL) (*cloudflareRoute, error) {
 	return slash, nil
 }
 
-// Standard catalogs share the inference base's concurrency bucket without a
-// trailing slash. Custom catalog paths retain their complete-address bucket.
+// Standard catalogs reserve both trailing-slash spellings of this inference
+// base. Custom catalog paths retain their complete-address bucket.
 func standardCatalogBase(catalog *url.URL) *url.URL {
 	path := strings.TrimRight(catalog.EscapedPath(), "/")
 	suffix := "/models"
