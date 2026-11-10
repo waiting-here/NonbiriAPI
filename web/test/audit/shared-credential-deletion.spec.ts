@@ -173,7 +173,7 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
       'POST',
       {
         name: tag + ' catalogue',
-        base_url: base,
+        base_url: `${base}/models`,
         list_format: 'openai',
         credential_id: shared.id,
         enabled: true,
