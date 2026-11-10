@@ -9,7 +9,13 @@ func restoreSchema52LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
 	hostileMustExec(t, database, `DROP TRIGGER credit_operation_assets_insert;
 DROP TRIGGER credit_operation_assets_delete;
-DROP TABLE credit_operation_assets;`)
+DROP TABLE credit_operation_assets;
+DROP INDEX idx_request_logs_user_started;
+CREATE INDEX idx_request_logs_user_started ON request_logs(user_id,started_at,id);
+DROP INDEX idx_image_activity_tasks_user;
+CREATE INDEX idx_image_activity_tasks_user ON image_activity_tasks(user_id,created_at,id);
+DROP INDEX idx_image_activity_tasks_unfinished;
+CREATE INDEX idx_image_activity_tasks_unfinished ON image_activity_tasks(user_id,finance_state,accepted_seq);`)
 	assertRetainedManifest(t, database, Schema52ManifestHash)
 }
 

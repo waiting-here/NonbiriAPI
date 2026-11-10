@@ -101,8 +101,8 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		controlTables: []string{"endpoints", "donation_uses", "donation_use_revisions", "dispatch_claim_targets", "steward_permissions", "endpoint_key_limits"}, rebuiltTables: []string{"dispatch_caller_parameter_errors", "request_adaptation_audits"}, credentials: credentialsUnchanged}},
 	{from: 51, version: 52, manifest: db.Schema52ManifestHash, apply: completeDiscoveryURLs, impact: &migrationImpact{
 		controlTables: []string{"discovery_source_revisions", "mainstream_channel_discovery_presets"}, credentials: credentialsUnchanged}},
-	{from: 52, version: 53, manifest: db.PinnedGenerationTwoManifestHash, sql: db.CreditOperationAssetsSQL, impact: &migrationImpact{
-		relationTables: []string{"credit_operation_assets"}, constraintTables: []string{"credit_entries"}, credentials: credentialsUnchanged}},
+	{from: 52, version: 53, manifest: db.PinnedGenerationTwoManifestHash, sql: db.CreditOperationAssetsSQL + db.RequestLogOwnerIndexSQL + db.ImageTaskQueryIndexesSQL, impact: &migrationImpact{
+		relationTables: []string{"credit_operation_assets"}, constraintTables: []string{"credit_entries"}, indexedTables: []string{"request_logs", "image_activity_tasks"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {

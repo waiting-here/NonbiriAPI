@@ -368,7 +368,9 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user, now int64,
 	if tx == nil || user <= 0 || limit < 1 || limit > lifecycle.CollectionLimit {
 		return out, ErrInvalid
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE user_id=? AND (completed_at IS NULL OR completed_at>?) ORDER BY accepted_seq LIMIT ?", user, now-taskLifetime, limit+1)
+	rows, err := tx.QueryContext(ctx, `WITH task_page AS MATERIALIZED (
+SELECT accepted_seq FROM image_activity_tasks WHERE user_id=? AND (completed_at IS NULL OR completed_at>?) ORDER BY accepted_seq LIMIT ?)
+SELECT `+taskColumns+` FROM image_activity_tasks WHERE accepted_seq IN (SELECT accepted_seq FROM task_page) ORDER BY accepted_seq`, user, now-taskLifetime, limit+1)
 	if err != nil {
 		return out, err
 	}
