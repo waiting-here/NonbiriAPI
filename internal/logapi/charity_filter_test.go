@@ -107,7 +107,7 @@ func TestCharityModelLookupBoundsFallBackWithoutDroppingMatches(t *testing.T) {
 		pattern   string
 		optimized bool
 	}{
-		{1, "historic", true}, {64, "historic", true}, {65, "historic", false},
+		{1, "historic", true}, {64, "historic", true}, {65, "historic", true}, {100, "historic", true}, {4096, "historic", true},
 		{4096, "historic-04095", true}, {4097, "historic-04096", false},
 		{4100, "historic-04099", false}, {4096, "absent", true}, {4097, "absent", false},
 	} {
@@ -173,7 +173,7 @@ func TestCharityModelLookupCancellationReturnsReader(t *testing.T) {
 	}
 }
 
-func TestCharityModelLookupKeepsDirectReaderAndDatePaths(t *testing.T) {
+func TestCharityModelLookupKeepsDirectReaderAndCombinesDateRange(t *testing.T) {
 	database := indexedCharityQueryDatabase(t, 3200)
 	pattern := "model-001"
 	predicate, _, err := charityModelFilter(t.Context(), database, ListFilter{CharityModel: &pattern})
@@ -187,8 +187,8 @@ func TestCharityModelLookupKeepsDirectReaderAndDatePaths(t *testing.T) {
 	defer tx.Rollback()
 	from := int64(1_800_000_050)
 	predicate, _, err = charityModelFilter(t.Context(), tx, ListFilter{CharityModel: &pattern, From: &from})
-	if err != nil || predicate != charityModelPredicate {
-		t.Fatalf("date search lost its selective path: %q %v", predicate, err)
+	if err != nil || strings.Contains(predicate, "instr(") {
+		t.Fatalf("same-snapshot date search still evaluates each row: %q %v", predicate, err)
 	}
 }
 

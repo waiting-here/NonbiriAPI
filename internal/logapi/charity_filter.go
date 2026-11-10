@@ -8,10 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
-const (
-	maxCharityModelPairs   = 4096
-	maxCharityModelMatches = 64
-)
+const maxCharityModelPairs = 4096
 
 // Walk distinct historical names through the existing (route_kind,model)
 // index. Each recursive step seeks past all repetitions of the previous name.
@@ -49,15 +46,13 @@ func charityModelFilter(ctx context.Context, reader logReadQueryer, filter ListF
 		}
 		return charityModelPredicate, []any{*filter.CharityModel}, nil
 	}
-	// Keep selective date, identity and attempt queries on their existing path.
+	// Every combination can reuse the historical names within this snapshot.
+	// The remaining predicates still constrain the selected logs independently.
 	// A direct reader cannot share a snapshot between discovery and selection.
-	if _, ok := reader.(*sql.Tx); !ok || filter.From != nil || filter.To != nil ||
-		filter.UserID != nil || filter.DiscordID != nil || filter.EndpointKeyID != nil ||
-		filter.EndpointBaseURL != nil || filter.UpstreamModel != nil ||
-		filter.Status != nil || filter.ErrorCode != nil || filter.UsageTotalMismatch != nil ||
-		filter.Phase != "" || filter.ErrorCategory != "" || filter.ErrorPhase != "" || filter.Cursor != "" {
+	if _, ok := reader.(*sql.Tx); !ok {
 		return fallback()
 	}
+
 	names, complete, err := matchingCharityModelNames(ctx, reader, *filter.CharityModel, kind)
 	if err != nil {
 		return "", nil, err
@@ -115,10 +110,6 @@ func matchingCharityModelNames(ctx context.Context, reader logReadQueryer, patte
 			if _, found := seen[name]; !found {
 				seen[name] = struct{}{}
 				names = append(names, name)
-				if len(names) > maxCharityModelMatches {
-					complete = false
-					break
-				}
 			}
 		}
 	}

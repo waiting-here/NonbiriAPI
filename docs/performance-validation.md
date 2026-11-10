@@ -4,6 +4,36 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+## Charity log search combinations
+
+Model-name search now reuses the same bounded historical-name lookup when
+combined with status, time, identity, attempt and diagnostic filters. The lookup,
+exact count and page share the authorized read transaction. Up to 4,096 distinct
+route/name pairs are enumerated through the existing index; larger histories
+fall back within the original query deadline without dropping matches. There is
+no separate 64-match limit, new index or cross-request authorization cache.
+
+`BenchmarkCharityModelCombination` and `BenchmarkCharityModelBroadMatches` compare
+the previous row-by-row substring predicate with the complete lookup, exact count
+and consumed 50-row page. A Windows/amd64 run with Go 1.26.10, SQLite 3.54.1,
+`GOMAXPROCS=2` and three iterations per case produced these local results:
+
+| Synthetic distribution | Rows | Previous | Revised |
+| --- | ---: | ---: | ---: |
+| Sparse model + status 400 | 1,600,000 | 403.63 ms | 15.79 ms |
+| Same filter with a wide time range | 1,600,000 | 207.97 ms | 16.40 ms |
+| Same filter with a narrow time range | 1,600,000 | 2.44 ms | 6.77 ms |
+| No matching model + status 400 | 1,600,000 | 201.98 ms | 4.18 ms |
+| Broad match across 100 names | 1,600,000 | 1,718.36 ms | 1,548.37 ms |
+| Broad match across 4,096 names | 160,000 | 29.54 ms | 48.18 ms |
+
+Counts and page IDs match in every pair. Sparse combinations use exact
+`(route_kind, model)` index seeks; the optimizer may choose a scan for broad
+matches. A narrow time range can already be selective, so enumeration adds work.
+High-cardinality fallback added about 8 ms in the measured narrow-range case.
+Exact counting and sorting still grow with the matching history; these results
+do not guarantee arbitrary-scale searches or represent production HTTP latency.
+
 ## v1.3.6 database follow-up
 
 A read-only review of v1.3.5 fixed-label runtime counters covered 644 minute

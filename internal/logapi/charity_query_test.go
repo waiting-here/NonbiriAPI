@@ -148,7 +148,7 @@ func BenchmarkLogCharityModelFilter(b *testing.B) {
 	}
 }
 
-func charityQueryPlan(t *testing.T, database *sql.DB, query string, args []any) string {
+func charityQueryPlan(t testing.TB, database *sql.DB, query string, args []any) string {
 	t.Helper()
 	rows, err := database.Query("EXPLAIN QUERY PLAN "+query, args...)
 	if err != nil {
