@@ -20,11 +20,6 @@ type accountState struct {
 	revision             []byte
 }
 
-func readAccount(ctx context.Context, tx *sql.Tx, userID int64) (accountState, error) {
-	var a accountState
-	err := tx.QueryRowContext(ctx, `SELECT u.id,u.is_admin,COALESCE(u.level,u.auto_level),u.is_banned,u.banned_until,u.ban_kind,u.revision,s.observation_started_at,s.last_active_at,s.activity_seq,s.activity_epoch,s.schedule_revision,s.next_due_at,s.last_decay_at FROM users u JOIN user_activity_state s ON s.user_id=u.id WHERE u.id=?`, userID).Scan(&a.id, &a.admin, &a.level, &a.banned, &a.until, &a.banKind, &a.revision, &a.state.ObservationStartedAt, &a.state.LastActiveAt, &a.state.ActivitySeq, &a.state.ActivityEpoch, &a.state.ScheduleRevision, &a.state.NextDueAt, &a.state.LastDecayAt)
-	return a, err
-}
 func status(c Configuration, a accountState, at int64) Status {
 	out := Status{Configuration: c, State: a.state}
 	switch {

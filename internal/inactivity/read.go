@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/waiting-here/NonbiriAPI/internal/auth"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
-	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"net/url"
 	"strconv"
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 func (s *Service) UserStatus(ctx context.Context) (Status, error) {
@@ -104,8 +107,13 @@ func (s *Service) Preview(ctx context.Context, input PreviewInput) (PreviewPage,
 			return out, ErrInvalid
 		}
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	tx, actor, err := s.beginAdmin(ctx, true)
 	if err != nil {
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
 		return out, err
 	}
 	defer tx.Rollback()
@@ -163,12 +171,13 @@ func (s *Service) Preview(ctx context.Context, input PreviewInput) (PreviewPage,
 		cursor := position(ids[len(ids)-1])
 		out.NextCursor = &cursor
 	}
+	states, err := readAccountStates(ctx, tx, ids)
+	if err != nil {
+		return out, err
+	}
+	decayIDs := make([]int64, 0, len(ids))
 	for _, id := range ids {
-		a, err := readAccount(ctx, tx, id)
-		if err != nil {
-			return out, err
-		}
-		view := status(c, a, out.AsOf)
+		view := status(c, states[id], out.AsOf)
 		item := PreviewEntry{UserID: strconv.FormatInt(id, 10), ExemptReason: view.ExemptReason, Action: "none", GeneralMilli: "0", GameMilli: "0"}
 		item.ScheduledAt = earliest(view.DecayAt, view.ProtectionAt)
 		if view.ProtectionAt != nil && *view.ProtectionAt <= out.AsOf {
@@ -179,15 +188,33 @@ func (s *Service) Preview(ctx context.Context, input PreviewInput) (PreviewPage,
 				item.Action = "protection"
 			} else {
 				item.Action = "decay"
-				_, payment, err := decayAmount(ctx, tx, id, c.Decay.Assets)
-				if err != nil {
-					return out, err
-				}
-				item.GeneralMilli = payment.General.Decimal()
-				item.GameMilli = payment.Game.Decimal()
+				decayIDs = append(decayIDs, id)
 			}
 		}
 		out.Data = append(out.Data, item)
+	}
+	general, err := ledger.UserAssetAccounts(ctx, tx, decayIDs, ledger.General)
+	if err != nil {
+		return out, err
+	}
+	game, err := ledger.UserAssetAccounts(ctx, tx, decayIDs, ledger.Game)
+	if err != nil {
+		return out, err
+	}
+	for i := range out.Data {
+		item := &out.Data[i]
+		if item.Action != "decay" {
+			continue
+		}
+		g, err := charge(general[ids[i]].Balance, c.Decay.Assets.General)
+		if err != nil {
+			return out, err
+		}
+		m, err := charge(game[ids[i]].Balance, c.Decay.Assets.Game)
+		if err != nil {
+			return out, err
+		}
+		item.GeneralMilli, item.GameMilli = g.Decimal(), m.Decimal()
 	}
 	details, _ := json.Marshal(struct {
 		Count  int    `json:"count"`

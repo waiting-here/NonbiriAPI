@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 const legalHoldPageSelection = `SELECT id,object_kind,object_ref,
@@ -66,7 +68,7 @@ func (c *Coordinator) listLegalHoldsPage(ctx context.Context, filter LegalHoldLi
 	if err != nil {
 		return LegalHoldPage{}, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, legalHoldPageFiltered+legalHoldPageOrder, append(args, filter.Page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(legalHoldPageFiltered+legalHoldPageOrder, `ORDER BY created_at DESC,id DESC`), append(args, filter.Page.Size, offset)...)
 	if err != nil {
 		return LegalHoldPage{}, fmt.Errorf("lifecycle: query legal hold page: %w", err)
 	}
