@@ -17,6 +17,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 )
 
+// Bound projection work in both JSON and ZIP pages within the same deadline.
+const historyExportPageRecords = 25
+
 // AdminAudit deliberately contains no cursor, match reference, or game content.
 type AdminAudit struct {
 	Actor               int64
@@ -387,7 +390,7 @@ func (s *Service) adminMode(ctx context.Context, reader *adminRead, dataset, id 
 }
 
 func (s *Service) AdminExport(ctx context.Context, in AdminExportInput) (page AdminExportPage, err error) {
-	return s.adminExport(ctx, in, 100)
+	return s.adminExport(ctx, in, historyExportPageRecords)
 }
 
 func (s *Service) adminExport(ctx context.Context, in AdminExportInput, recordLimit int) (page AdminExportPage, err error) {

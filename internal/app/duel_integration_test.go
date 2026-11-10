@@ -569,7 +569,48 @@ func TestDuelProductionFullMatchesAndSettlementProjection(t *testing.T) {
 				}
 			}
 			f.admin("GET", "/admin/api/games/"+g+"/history?dataset=recent", nil, 200)
-			f.admin("POST", "/admin/api/games/"+g+"/history/export", map[string]any{"dataset": "recent", "selection": map[string]any{}, "cursor": nil}, 200)
+			var cursor *string
+			seen := map[string]bool{}
+			records, exportedRounds := 0, 0
+			for {
+				exported := f.admin("POST", "/admin/api/games/"+g+"/history/export", map[string]any{"dataset": "recent", "selection": map[string]any{}, "cursor": cursor}, 200)
+				var page duel.AdminExportPage
+				if err := json.Unmarshal(exported.Body.Bytes(), &page); err != nil || page.Format != "duel-history-v1" || page.Dataset != "recent" || len(page.Items) > 25 || page.ExpiredSkipped != 0 {
+					t.Fatalf("history export page: %+v, %v", page, err)
+				}
+				for _, raw := range page.Items {
+					var item struct {
+						Kind     string `json:"kind"`
+						MatchRef string `json:"match_ref"`
+						RoundNo  int    `json:"round_no"`
+					}
+					if err := json.Unmarshal(raw, &item); err != nil || item.MatchRef != id {
+						t.Fatalf("history export identity: %+v, %v", item, err)
+					}
+					if records == 0 {
+						if item.Kind != "match" {
+							t.Fatal("history export missing match header")
+						}
+					} else {
+						if item.Kind != "round" || item.RoundNo != exportedRounds+1 {
+							t.Fatalf("history export round order: %+v after %d", item, exportedRounds)
+						}
+						exportedRounds++
+					}
+					records++
+				}
+				if page.NextCursor == nil {
+					break
+				}
+				if seen[*page.NextCursor] {
+					t.Fatal("history export cursor did not advance")
+				}
+				seen[*page.NextCursor] = true
+				cursor = page.NextCursor
+			}
+			if records != rounds+1 || exportedRounds != rounds {
+				t.Fatalf("incomplete history export: records=%d rounds=%d want=%d", records, exportedRounds, rounds)
+			}
 			f.checkLedger()
 		})
 	}
