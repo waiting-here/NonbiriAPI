@@ -25,7 +25,7 @@ func (f *claimFixture) discoveryInput(input DiscoveryClaimInput) DiscoveryClaimI
 		f.t.Fatal(err)
 	}
 	var owner, version int64
-	if err := tx.QueryRow(`SELECT owner_user_id,credential_version_id FROM discovery_source_revisions WHERE id=?`, source.SourceRevisionID).Scan(&owner, &version); err != nil {
+	if err := tx.QueryRow(`SELECT owner_user_id,credential_version_id,canonical_base_url FROM discovery_source_revisions WHERE id=?`, source.SourceRevisionID).Scan(&owner, &version, &input.Candidate.CanonicalBaseURL); err != nil {
 		f.t.Fatal(err)
 	}
 	var operationID string

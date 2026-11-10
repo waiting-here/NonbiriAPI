@@ -227,7 +227,7 @@ func (f *bridgeFixture) discoveryInput(t testing.TB, key seededKey, discoverer c
 	if err != nil {
 		t.Fatal(err)
 	}
-	return resources.DiscoveryClaimInput{Source: ref, SourceRevisionID: source.SourceRevisionID, CredentialVersionID: authorized.CredentialVersionID, OperationID: operationID, OwnerUserID: key.ownerID, EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: wire, CanonicalBaseURL: key.baseURL, Discoverer: discoverer}
+	return resources.DiscoveryClaimInput{Source: ref, SourceRevisionID: source.SourceRevisionID, CredentialVersionID: authorized.CredentialVersionID, OperationID: operationID, OwnerUserID: key.ownerID, EndpointID: key.endpointID, EndpointKeyID: key.keyID, ConnectorType: wire, CanonicalBaseURL: authorized.CanonicalBaseURL, Discoverer: discoverer}
 }
 func (f *bridgeFixture) discoveryClaimInput(t testing.TB, key seededKey) claim.DiscoveryClaimInput {
 	input := f.discoveryInput(t, key, nil)
