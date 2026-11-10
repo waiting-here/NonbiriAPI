@@ -338,12 +338,12 @@ func (r *Repository) CreateScan(ctx context.Context, actor Actor, input ScanInpu
 		if input.ScanKind == "user_ips" {
 			prefix = max(int64(0), prefix-int64(config.UserIPWindowHours)*3600)
 		}
-		var excluded int64
-		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND (l.origin_discord_id IS NULL OR l.origin_user_id IS NULL OR s.ip_quality NOT IN ('direct_peer','trusted_forwarded'))`, prefix, w.To, upperSource, w.Kind, w.Kind).Scan(&excluded)
+		var excluded bool
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.occurred_at>=? AND s.occurred_at<? AND s.source_id<=? AND s.kind IN ('self','charity','unclassified') AND (?='total' OR s.kind=?) AND (l.origin_discord_id IS NULL OR l.origin_user_id IS NULL OR s.ip_quality NOT IN ('direct_peer','trusted_forwarded')))`, prefix, w.To, upperSource, w.Kind, w.Kind).Scan(&excluded)
 		if err != nil {
 			return ClientScan{}, err
 		}
-		if excluded > 0 || prefix < now-int64(Retention/time.Second) {
+		if excluded || prefix < now-int64(Retention/time.Second) {
 			coverage = `{"partial":true,"reason":"identity_or_ip_unavailable"}`
 			if prefix < now-int64(Retention/time.Second) {
 				coverage = `{"partial":true,"reason":"prefix_retention"}`
