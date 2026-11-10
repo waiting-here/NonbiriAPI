@@ -4,6 +4,25 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.10 — Unreleased
+
+- Preserve specific business errors such as insufficient balance instead of
+  classifying every HTTP 403 as missing permission. Show the selected wallet's
+  available balance separately from its daily exchange allowance.
+- Show immediate and sustained query progress, retain useful previous results
+  during searches, and keep background refreshes quiet.
+- Materialize bounded query pages before returning rows so sparse page selection
+  can honor the read deadline. Batch selected-user wallets and
+  other repeated list projections; keep exact counts, sorting and authorization.
+- Index retained ledger operations by asset, time and kind, and read audit time
+  series in batches. Reuse hourly AI usage totals with exact partial-hour edges.
+- Cover owner log counts without loading diagnostic rows; order image-task
+  history by accepted sequence and count admission against active reservations.
+- Scope connection exports to the selected owner's indexed records, stop risk
+  coverage checks at the first exclusion, and bound legal-hold list requests.
+- Advance storage to schema 53 through an explicit offline upgrade accepting
+  exact registered schema 16–26 and 33–52 sources. Account export remains format 36.
+
 ## 1.3.9 — 2026-11-10
 
 - Use complete request URLs for model discovery, including channel presets and

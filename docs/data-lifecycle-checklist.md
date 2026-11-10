@@ -488,6 +488,13 @@ Public image-generation prompts remain in bounded request memory and may appear 
 
 Account deletion validates settled request/claim history in shared scans and detaches the account links in a batch. Naturally expired request logs do not block this step. In-progress requests retain their existing settlement handoff; accounting, safe retained log snapshots and the all-or-nothing deletion transaction are preserved.
 
+The ledger asset lookup is a derived operation index. It stores operation ID,
+asset, sequence, timestamp and kind without additional identities or amounts.
+Removing an account leaves its existing anonymized ledger facts and this lookup;
+removing the last retained entry of an asset removes that operation/asset row.
+Operation deletion cascades to the lookup. It is excluded from account exports,
+which already contain the owner's authoritative ledger entries.
+
 ## Operator snapshot and destructive-fresh boundary
 
 Complete operator snapshots are outside the account-export contract. They may contain
@@ -503,10 +510,10 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 52.
+Normal startup initializes absent storage or opens only exact current schema 53.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–51 sources require a deliberate standalone-converter invocation after the
+33–52 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending

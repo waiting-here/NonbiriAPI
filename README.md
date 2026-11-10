@@ -4,10 +4,9 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.9** uses complete model-list request URLs, displays the configured address,
-and fixes the interface selector layout when adding donated model bindings.
-The offline upgrade converts existing discovery addresses while preserving
-donation snapshots. Database schema is 52 and account export is format 36; existing databases
+**v1.3.10 (unreleased)** improves query cancellation, audit filtering and series,
+list hydration, and search progress feedback. Business rejections keep their
+specific error messages. Database schema is 53 and account export is format 36; existing databases
 on an earlier schema require the explicit offline upgrade before starting this
 version. See [service connections](docs/service-connections.md),
 [database upgrades](docs/database-upgrades.md) and [CHANGELOG](CHANGELOG.md).
@@ -303,10 +302,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 52.
+Fresh databases start in maintenance with public features closed and use schema 53.
 The service opens only the exact current schema; older, newer, unknown or
 incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–51 sources, preserve a complete recovery
+For exact registered schema 16–26 and 33–52 sources, preserve a complete recovery
 set before deliberately running the matching standalone
 [upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
 The service, startup scripts and deployment helpers must not apply upgrades
