@@ -563,7 +563,7 @@ func TestOperationsFilterAssetsBeforePagingAndBatchEntriesKeepExactAmounts(t *te
 	}
 }
 
-func TestOperationsSparseFiltersAndSequenceOrderedPlan(t *testing.T) {
+func TestOperationsSparseFiltersAndRangePlans(t *testing.T) {
 	f := newAuditFixture(t)
 	f.fund(t, 300, auditNow-1000)
 	filter := auditFilter(ledger.General)
@@ -587,12 +587,12 @@ func TestOperationsSparseFiltersAndSequenceOrderedPlan(t *testing.T) {
 	}
 	for _, scenario := range []struct {
 		filter Filter
-		before int64
+		index  string
 	}{
-		{auditFilter(ledger.Game), 0},
-		{filter, 100},
+		{auditFilter(ledger.Game), "idx_credit_operation_assets_time"},
+		{filter, "idx_credit_operation_assets_kind_time"},
 	} {
-		query, args := operationPageQuery(scenario.filter, 300, scenario.before)
+		query, args := operationRangePageQuery(scenario.filter, 100, 101)
 		rows, err := f.database.Query("EXPLAIN QUERY PLAN "+query, args...)
 		if err != nil {
 			t.Fatal(err)
@@ -615,8 +615,8 @@ func TestOperationsSparseFiltersAndSequenceOrderedPlan(t *testing.T) {
 			t.Fatal(err)
 		}
 		plan := strings.Join(details, "\n")
-		if !strings.Contains(plan, "ledger_seq<") || strings.Contains(plan, "USE TEMP B-TREE") || strings.Contains(plan, "idx_credit_operations_created") {
-			t.Fatalf("operation page lost ordered sequence plan: %s", plan)
+		if !strings.Contains(plan, "MATERIALIZE candidates") || !strings.Contains(plan, "MATERIALIZE page") || !strings.Contains(plan, scenario.index) || !strings.Contains(plan, "created_at>?") || strings.Contains(plan, "CORRELATED") {
+			t.Fatalf("sparse operation page lost asset/time range: %s", plan)
 		}
 	}
 }

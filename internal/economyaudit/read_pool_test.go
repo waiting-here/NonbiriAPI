@@ -59,13 +59,13 @@ func TestAuditReadersDoNotWaitForBusinessWriter(t *testing.T) {
 	if _, err := tx.ExecContext(f.ctx, `UPDATE economy_audit_checkpoint SET updated_at=updated_at+1 WHERE id=1`); err != nil {
 		t.Fatal(err)
 	}
-	// The service deadline bounds both reads; writer-pool waits are the invariant.
+	// The service deadline bounds all reads; writer-pool waits are the invariant.
 	ctx := f.ctx
 	filter := Filter{Asset: ledger.General, From: auditNow - 86400, To: auditNow + 1, Bucket: "hour"}
 	var wg sync.WaitGroup
-	errs := make(chan error, 2)
+	errs := make(chan error, 4)
 	before, start := f.database.Stats(), time.Now()
-	wg.Add(2)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		got, err := f.service.Summary(ctx, f.admin, filter)
@@ -82,6 +82,24 @@ func TestAuditReadersDoNotWaitForBusinessWriter(t *testing.T) {
 			errs <- fmt.Errorf("series: %w", err)
 		} else if len(got.Data) != 25 || got.Metadata.LedgerSeq != got.Metadata.ProjectedSeq {
 			errs <- fmt.Errorf("inconsistent series: %+v", got)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		got, err := f.service.Operations(ctx, f.admin, filter)
+		if err != nil {
+			errs <- fmt.Errorf("operations: %w", err)
+		} else if len(got.Data) != 1 || got.Metadata.LedgerSeq != "1" {
+			errs <- fmt.Errorf("inconsistent operations: %+v", got)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		got, err := f.service.Channels(ctx, f.admin, filter)
+		if err != nil {
+			errs <- fmt.Errorf("channels: %w", err)
+		} else if len(got.Data) != 1 || got.Data[0].Metrics.Issued != "1000" {
+			errs <- fmt.Errorf("inconsistent channels: %+v", got)
 		}
 	}()
 	wg.Wait()
