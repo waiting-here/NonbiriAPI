@@ -465,7 +465,7 @@ func (s *Service) listModelsQuery(ctx context.Context, queryer modelQueryer, que
 	}
 	statement += ` ORDER BY id LIMIT ?`
 	args = append(args, limit+1)
-	rows, err := queryer.QueryContext(ctx, statement, args...)
+	rows, err := queryer.QueryContext(ctx, db.MaterializePage(statement, `ORDER BY id`), args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("charity routing: list model identities: %w", err)
 	}

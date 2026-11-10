@@ -144,23 +144,21 @@ func (s *Service) Leaderboard(ctx context.Context, userID int64, periodID, nodeI
 		order = `p.best_score_units DESC,p.best_at_ms,p.best_challenge_id`
 		args = append(args, nodeID)
 	}
-	query := `WITH ranked AS (SELECT p.user_id,`
-	if nodeID == "" {
-		query += `p.total_score_units AS score,p.achieved_at_ms AS achieved,`
-	} else {
-		query += `p.best_score_units AS score,p.best_at_ms AS achieved,`
+	score, achieved, tie := "p.total_score_units", "p.achieved_at_ms", "p.public_tie_key"
+	if nodeID != "" {
+		score, achieved, tie = "p.best_score_units", "p.best_at_ms", "p.best_challenge_id"
 	}
-	query += `ROW_NUMBER() OVER(ORDER BY ` + order + `) AS rank FROM ` + from + ` WHERE ` + where + `)
+	selection := db.MaterializePage(`SELECT p.user_id,`+score+` AS score,`+achieved+` AS achieved,`+tie+` AS tie FROM `+from+` WHERE `+where+` ORDER BY `+order+` LIMIT ? OFFSET ?`, `ORDER BY score DESC,achieved,tie`)
+	query := `WITH selected AS (` + selection + `), ranked AS (SELECT user_id,score,achieved,?+ROW_NUMBER() OVER(ORDER BY score DESC,achieved,tie) AS rank FROM selected)
  SELECT r.user_id,r.score,r.achieved,r.rank,
  CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(pref.game_profile_public,u.game_profile_public) END,
  u.username,u.guild_nick,COALESCE(u.discord_id,''),u.avatar,u.guild_avatar_url
- FROM ranked r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences pref ON pref.user_id=r.user_id
- WHERE r.rank>? AND r.rank<=? ORDER BY r.rank`
+ FROM ranked r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences pref ON pref.user_id=r.user_id ORDER BY r.rank`
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM `+from+` WHERE `+where, args...).Scan(&board.Total); err != nil {
 		return Leaderboard{}, err
 	}
 	start := int64(page-1) * int64(pageSize)
-	queryArgs := append(append([]any{}, args...), nowMS/1000, start, start+int64(pageSize))
+	queryArgs := append(append([]any{}, args...), pageSize, start, start, nowMS/1000)
 	rows, err := tx.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
 		return Leaderboard{}, err
@@ -199,14 +197,15 @@ func (s *Service) History(ctx context.Context, userID int64, limit, page int) (H
 		return HistoryPage{}, err
 	}
 	cutoff := nowMS - int64(summaryLifetime/time.Millisecond)
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM fatfish_challenges WHERE user_id=? AND playtest=0 AND terminal_at_ms IS NOT NULL AND terminal_at_ms>=? ORDER BY terminal_at_ms DESC,id LIMIT ? OFFSET ?`, userID, cutoff, limit+1, (page-1)*limit)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT id,terminal_at_ms FROM fatfish_challenges WHERE user_id=? AND playtest=0 AND terminal_at_ms IS NOT NULL AND terminal_at_ms>=? ORDER BY terminal_at_ms DESC,id LIMIT ? OFFSET ?`, `ORDER BY terminal_at_ms DESC,id`), userID, cutoff, limit+1, (page-1)*limit)
 	if err != nil {
 		return HistoryPage{}, err
 	}
 	ids := []string{}
 	for rows.Next() {
 		var id string
-		if err = rows.Scan(&id); err != nil {
+		var terminalAt int64
+		if err = rows.Scan(&id, &terminalAt); err != nil {
 			rows.Close()
 			return HistoryPage{}, err
 		}

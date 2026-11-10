@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -62,7 +63,7 @@ func readManualCandidatesTx(ctx context.Context, tx *sql.Tx, keyID int64, q stri
 	if err != nil {
 		return nil, nil, "", err
 	}
-	rows, err := tx.QueryContext(ctx, selection+` ORDER BY pc.normalized_model_id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+` ORDER BY pc.normalized_model_id LIMIT ? OFFSET ?`, `ORDER BY normalized_model_id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return nil, nil, "", err
 	}

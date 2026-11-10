@@ -32,7 +32,7 @@ type donationPageItem struct {
 
 // ids come from the authorized current page in the same snapshot. Every query
 // is restricted to those IDs, including source grouping and window functions.
-func readDonationPageSummariesTx(ctx context.Context, tx *sql.Tx, ids []int64, now int64) (map[string]*donationPageItem, error) {
+func readDonationPageHeadersTx(ctx context.Context, tx *sql.Tx, ids []int64, now int64) (map[string]*donationPageItem, error) {
 	items := make(map[string]*donationPageItem, len(ids))
 	if len(ids) == 0 {
 		return items, nil
@@ -112,7 +112,28 @@ FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id IN (`
 		return nil, ErrInvariant
 	}
 
-	rows, err = tx.QueryContext(ctx, `SELECT dk.donation_id,`+donationstate.SQL()+` AS state,COUNT(*)
+	return items, nil
+}
+
+func readDonationPageSummariesTx(ctx context.Context, tx *sql.Tx, ids []int64, now int64) (map[string]*donationPageItem, error) {
+	items, err := readDonationPageHeadersTx(ctx, tx, ids, now)
+	if err != nil || len(ids) == 0 {
+		return items, err
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	timed := func(times int) []any {
+		values := make([]any, times, times+len(args))
+		for i := range values {
+			values[i] = now
+		}
+		return append(values, args...)
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT dk.donation_id,`+donationstate.SQL()+` AS state,COUNT(*)
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id `+donationstate.PhysicalJoins+`
 WHERE dk.donation_id IN (`+marks+`) GROUP BY dk.donation_id,state`, timed(4)...)
 	if err != nil {

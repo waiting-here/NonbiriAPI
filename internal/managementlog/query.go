@@ -229,7 +229,8 @@ func (s *Service) Query(ctx context.Context, adminID int64, q Query) (result Pag
 	if err != nil {
 		return page, err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT "+operationColumns+" FROM management_operations o WHERE "+where+" ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?", append(args, q.PageSize, (q.Page-1)*q.PageSize)...)
+	selection := "WITH operation_page AS MATERIALIZED (SELECT o.id FROM management_operations o WHERE " + where + " ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?) SELECT id FROM operation_page"
+	rows, err := tx.QueryContext(ctx, "SELECT "+operationColumns+" FROM management_operations o WHERE o.id IN ("+selection+") ORDER BY created_at DESC,id DESC", append(args, q.PageSize, (q.Page-1)*q.PageSize)...)
 	if err != nil {
 		return page, err
 	}
@@ -250,7 +251,7 @@ func queryGroups(ctx context.Context, tx *sql.Tx, q Query, page Page) (Page, err
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM management_operation_rollups r WHERE "+where, args...).Scan(&page.Total); err != nil {
 		return page, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT group_key,bucket,source,domain,action,actor_id,actor_name,actor_role,authorizer_id,authorizer_name,authorizer_role,outcome,operations,targets,succeeded,skipped,failed,max_id FROM management_operation_rollups r WHERE `+where+" ORDER BY bucket DESC,group_key LIMIT ? OFFSET ?", append(args, q.PageSize, (q.Page-1)*q.PageSize)...)
+	rows, err := tx.QueryContext(ctx, `WITH group_page AS MATERIALIZED (SELECT group_key,bucket,source,domain,action,actor_id,actor_name,actor_role,authorizer_id,authorizer_name,authorizer_role,outcome,operations,targets,succeeded,skipped,failed,max_id FROM management_operation_rollups r WHERE `+where+" ORDER BY bucket DESC,group_key LIMIT ? OFFSET ?) SELECT * FROM group_page ORDER BY bucket DESC,group_key", append(args, q.PageSize, (q.Page-1)*q.PageSize)...)
 	if err != nil {
 		return page, err
 	}

@@ -132,16 +132,18 @@ func (s *Service) keyModelPages(ctx context.Context, role roleKind, actorID, don
 	}
 	selection := `SELECT cm.id,cm.full_name,cm.enabled,COUNT(*),SUM(CASE WHEN (` + keyModelStateSQL() + `)='available' THEN 1 ELSE 0 END)` + from + ` GROUP BY cm.id,cm.full_name,cm.enabled`
 	order := "cm.full_name,cm.id"
+	pageOrder := "full_name,id"
 	if modelID != 0 {
 		selection = `SELECT rb.id,rt.upstream_model_id,rb.ord,` + keyModelStateSQL() + from + ` AND cm.id=?`
 		args = append(args, modelID)
 		order = "rb.ord,rb.id"
+		pageOrder = "ord,id"
 	}
 	meta, offset, err := pageWindow(ctx, tx, selection, args, page)
 	if err != nil {
 		return models, bindings, err
 	}
-	rows, err := tx.QueryContext(ctx, selection+` ORDER BY `+order+` LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+` ORDER BY `+order+` LIMIT ? OFFSET ?`, `ORDER BY `+pageOrder), append(args, page.Size, offset)...)
 	if err != nil {
 		return models, bindings, err
 	}

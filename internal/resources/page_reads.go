@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -12,7 +13,7 @@ type pageScanner interface{ Scan(...any) error }
 
 // The query is an internal SELECT with its complete owner and filter scope.
 // Counting that same query prevents count and row predicates from diverging.
-func readNumberedPage[T any](ctx context.Context, tx *sql.Tx, request pagination.Request, query, order string, args []any, scan func(pageScanner) (T, error)) (Page[T], error) {
+func readNumberedPage[T any](ctx context.Context, tx *sql.Tx, request pagination.Request, query, order, pageOrder string, args []any, scan func(pageScanner) (T, error)) (Page[T], error) {
 	var total int64
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+query+`)`, args...).Scan(&total); err != nil {
 		return Page[T]{}, err
@@ -22,7 +23,7 @@ func readNumberedPage[T any](ctx context.Context, tx *sql.Tx, request pagination
 		return Page[T]{}, ErrInvalidRequest
 	}
 	params := append(append([]any(nil), args...), request.Size, offset)
-	rows, err := tx.QueryContext(ctx, query+` ORDER BY `+order+` LIMIT ? OFFSET ?`, params...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY `+order+` LIMIT ? OFFSET ?`, `ORDER BY `+pageOrder), params...)
 	if err != nil {
 		return Page[T]{}, err
 	}
@@ -102,7 +103,7 @@ func (r *Repository) FilterEndpointsPage(ctx context.Context, userID int64, filt
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[Endpoint], error) {
 		query, args := endpointPageQuery(userID, filters)
-		result, err := readNumberedPage(ctx, tx, page, query, "e.updated_at DESC,e.id DESC", args, func(s pageScanner) (Endpoint, error) { return scanEndpoint(s) })
+		result, err := readNumberedPage(ctx, tx, page, query, "e.updated_at DESC,e.id DESC", "updated_at DESC,id DESC", args, func(s pageScanner) (Endpoint, error) { return scanEndpoint(s) })
 		if err != nil {
 			return result, err
 		}
@@ -140,7 +141,7 @@ func (r *Repository) FilterEndpointKeysPage(ctx context.Context, userID, endpoin
 			return Page[EndpointKey]{}, ErrNotFound
 		}
 		query, args := endpointKeyPageQuery(userID, endpointID, filters)
-		result, err := readNumberedPage(ctx, tx, page, query, "k.updated_at DESC,k.id DESC", args, func(s pageScanner) (EndpointKey, error) { return scanEndpointKey(s) })
+		result, err := readNumberedPage(ctx, tx, page, query, "k.updated_at DESC,k.id DESC", "updated_at DESC,id DESC", args, func(s pageScanner) (EndpointKey, error) { return scanEndpointKey(s) })
 		if err != nil {
 			return result, err
 		}
@@ -166,7 +167,7 @@ func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[Model], error) {
 		query, args := modelPageQuery(userID, filters)
-		result, err := readNumberedPage(ctx, tx, page, query, "m.updated_at DESC,m.id DESC", args, func(s pageScanner) (Model, error) { return scanModel(s) })
+		result, err := readNumberedPage(ctx, tx, page, query, "m.updated_at DESC,m.id DESC", "updated_at DESC,id DESC", args, func(s pageScanner) (Model, error) { return scanModel(s) })
 		if err != nil {
 			return result, err
 		}
@@ -178,7 +179,7 @@ func (r *Repository) FilterModelsPage(ctx context.Context, userID int64, filters
 	})
 }
 
-const candidatePageSelect = `SELECT e.id,k.id,p.rowid,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,p.normalized_model_id,
+const candidatePageSelect = `SELECT e.id AS endpoint_id,k.id AS endpoint_key_id,p.rowid AS pair_id,e.base_url,e.connector_type,e.note,k.display_head,k.display_tail,k.note,p.normalized_model_id,
 CASE WHEN p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision THEN 1 ELSE 0 END,
 CASE WHEN p.manual_supports>0 THEN 1 ELSE 0 END,a.effective_native_service_mask,a.rerank_format
 FROM model_pair_catalog p JOIN endpoint_key_current_credentials k ON k.id=p.endpoint_key_id
@@ -216,7 +217,7 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 			}
 		}
 		args := []any{userID, query.EndpointID, query.EndpointID, query.KeyID, query.KeyID, query.Query, query.Query, query.Source, query.Source, query.Source}
-		return readNumberedPage(ctx, tx, page, candidatePageSelect, "e.id,k.id,p.rowid", args, func(s pageScanner) (BindingCandidate, error) {
+		return readNumberedPage(ctx, tx, page, candidatePageSelect, "e.id,k.id,p.rowid", "endpoint_id,endpoint_key_id,pair_id", args, func(s pageScanner) (BindingCandidate, error) {
 			var c BindingCandidate
 			var endpointID, keyID, pairID int64
 			var automatic, manual int
@@ -258,7 +259,7 @@ func (r *Repository) GetCatalogPage(ctx context.Context, userID, endpointID, key
 		query := `SELECT c.id,c.source_type,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision,c.created_at,c.updated_at
 FROM endpoint_key_catalog_entries c JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
 WHERE c.endpoint_key_id=? AND (?='' OR c.source_type=?)`
-		entries, err := readNumberedPage(ctx, tx, page, query, "c.id", []any{keyID, source, source}, func(s pageScanner) (CatalogEntry, error) { return scanCatalogEntry(s) })
+		entries, err := readNumberedPage(ctx, tx, page, query, "c.id", "id", []any{keyID, source, source}, func(s pageScanner) (CatalogEntry, error) { return scanCatalogEntry(s) })
 		if err != nil {
 			return CatalogView{}, err
 		}
@@ -297,7 +298,7 @@ func (r *Repository) ListMainstreamChannelsPage(ctx context.Context, adminID int
 		query += ` WHERE state=?`
 		args = []any{state}
 	}
-	result, err := readNumberedPage(ctx, tx, page, query, "updated_at DESC,id DESC", args, func(s pageScanner) (MainstreamChannel, error) {
+	result, err := readNumberedPage(ctx, tx, page, query, "updated_at DESC,id DESC", "updated_at DESC,id DESC", args, func(s pageScanner) (MainstreamChannel, error) {
 		channel, err := scanMainstreamChannel(s)
 		if err != nil {
 			return channel, err

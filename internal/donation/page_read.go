@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
@@ -78,7 +79,7 @@ func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page p
 	if err != nil {
 		return nil, metadata, ErrInvalidRequest
 	}
-	rows, err := tx.QueryContext(ctx, query+` ORDER BY 1 LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY 1 LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return nil, metadata, fmt.Errorf("donation: read browse rows: %w", err)
 	}

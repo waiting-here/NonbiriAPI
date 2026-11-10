@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -181,7 +182,7 @@ func (s *Service) endpointBackoffPolicies(ctx context.Context, role roleKind, ac
 		return out, err
 	}
 	out.Pagination = &meta
-	rows, err := tx.QueryContext(ctx, endpointBackoffPoliciesSelect+` ORDER BY e.base_url,e.connector_type LIMIT ? OFFSET ?`, q, page.Size, offset)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(endpointBackoffPoliciesSelect+` ORDER BY e.base_url,e.connector_type LIMIT ? OFFSET ?`, `ORDER BY base_url,connector_type`), q, page.Size, offset)
 	if err != nil {
 		return out, err
 	}

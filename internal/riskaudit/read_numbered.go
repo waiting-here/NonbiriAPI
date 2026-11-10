@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 // sourcesNumberedTx is called only after the final actor authorization and
@@ -48,7 +50,8 @@ func sourcesNumberedTx(ctx context.Context, tx *sql.Tx, w Window, userID int64) 
 		return page, ErrUnavailable
 	}
 	rowArgs := append(append([]any{}, args...), at, at, anchorID, w.Limit)
-	rows, err := tx.QueryContext(ctx, `SELECT s.request_log_id,s.user_id,l.logical_request_id,s.kind,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,l.model,COALESCE(l.caller_result_class,'running'),EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),l.error_code,COALESCE(l.rejection_reason,''),l.duration_ms,l.completed_at`+from+` AND (s.occurred_at<? OR (s.occurred_at=? AND s.request_log_id<=?)) ORDER BY s.occurred_at DESC,s.request_log_id DESC LIMIT ?`, rowArgs...)
+	selection := db.MaterializePage(`SELECT s.request_log_id`+from+` AND (s.occurred_at<? OR (s.occurred_at=? AND s.request_log_id<=?)) ORDER BY s.occurred_at DESC,s.request_log_id DESC LIMIT ?`, `ORDER BY request_log_id`)
+	rows, err := tx.QueryContext(ctx, `SELECT s.request_log_id,s.user_id,l.logical_request_id,s.kind,s.occurred_at,s.source_json,s.effective_ip,s.ip_quality,l.model,COALESCE(l.caller_result_class,'running'),EXISTS(SELECT 1 FROM dispatch_claims dc WHERE dc.logical_request_id=l.logical_request_id AND dc.dispatched_at IS NOT NULL),l.error_code,COALESCE(l.rejection_reason,''),l.duration_ms,l.completed_at FROM request_source_facts s JOIN request_logs l ON l.id=s.request_log_id WHERE s.request_log_id IN (`+selection+`) ORDER BY s.occurred_at DESC,s.request_log_id DESC`, rowArgs...)
 	if err != nil {
 		return page, ErrUnavailable
 	}

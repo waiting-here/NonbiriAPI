@@ -128,10 +128,10 @@ CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx
 	if err != nil {
 		return Catalog{}, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.provider,cm.model,cm.full_name,cm.pricing_mode,
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT cm.id,cm.provider,cm.model,cm.full_name,cm.pricing_mode,
 cm.request_user_price,cm.uncached_user_price,cm.cache_write_user_price,cm.cache_read_user_price,cm.output_user_price,
 cm.discount_enabled,cm.discount_percent,cm.discount_start_at,cm.discount_end_at,
-cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_pricing,cm.recurring_discount,`+catalogAvailableSQL()+from+` ORDER BY cm.full_name,cm.id LIMIT ? OFFSET ?`,
+cm.enabled,a.allowed_level_mask,a.public_description,cm.model_types,cm.context_pricing,cm.recurring_discount,`+catalogAvailableSQL()+from+` ORDER BY cm.full_name,cm.id LIMIT ? OFFSET ?`, `ORDER BY full_name,id`),
 		append(args, page.Size, offset)...)
 	if err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: read catalog page: %w", err)

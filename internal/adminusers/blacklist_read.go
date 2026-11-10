@@ -66,7 +66,7 @@ AND (?='' OR b.created_at<? OR (b.created_at=? AND b.discord_id<?))`
 	if role == roleSteward {
 		selection += ` AND (u.id IS NULL OR u.is_admin=0)`
 	}
-	statement, args, meta, err := listPageQuery(ctx, tx, selection, ` ORDER BY b.created_at DESC,b.discord_id DESC`, args, query.Page, limit)
+	statement, args, meta, err := listPageQuery(ctx, tx, selection, ` ORDER BY b.created_at DESC,b.discord_id DESC`, ` ORDER BY created_at DESC,discord_id DESC`, args, query.Page, limit)
 	if err != nil {
 		return empty, err
 	}
@@ -175,7 +175,7 @@ func (s *Service) listBlacklistEvents(ctx context.Context, actorID int64, role m
 	if role == roleSteward && targetAdmin != 0 {
 		return empty, ErrForbidden
 	}
-	statement, args, meta, err := listPageQuery(ctx, tx, `SELECT id,actor_kind,actor_user_id,reason_codes_json,safe_note,created_at FROM discord_blacklist_events WHERE discord_id=?`, ` ORDER BY created_at ASC,id ASC`, []any{discordID}, &requested, requested.Size)
+	statement, args, meta, err := listPageQuery(ctx, tx, `SELECT id,actor_kind,actor_user_id,reason_codes_json,safe_note,created_at FROM discord_blacklist_events WHERE discord_id=?`, ` ORDER BY created_at ASC,id ASC`, ` ORDER BY created_at ASC,id ASC`, []any{discordID}, &requested, requested.Size)
 	if err != nil {
 		return empty, err
 	}

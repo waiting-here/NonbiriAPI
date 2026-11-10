@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"math"
 	"math/big"
 	"net/http"
@@ -20,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/managementlog"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
 
@@ -99,13 +99,38 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 			dst      *int64
 		}{fmt.Sprintf("level_threshold_%d_milli", level), 0, db.MaxMoneyMilli, &config.thresholds[level]})
 	}
+	keys := make([]any, 0, len(uints)+6)
 	for _, item := range uints {
-		var raw string
-		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, item.key).Scan(&raw); err != nil {
-			if errors.Is(err, sql.ErrNoRows) && (item.key == "default_concurrency_per_user" || item.key == "default_light_concurrency_per_user") {
+		keys = append(keys, item.key)
+	}
+	for level := 1; level <= 6; level++ {
+		keys = append(keys, fmt.Sprintf("level_display_name_%d", level))
+	}
+	values := make(map[string]string, len(keys))
+	rows, err := tx.QueryContext(ctx, `SELECT key,value FROM site_config WHERE key IN (`+strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")+`)`, keys...)
+	if err != nil {
+		return projectionConfig{}, classifyDatabaseError("read projection configuration", err)
+	}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			rows.Close()
+			return projectionConfig{}, classifyDatabaseError("read projection configuration", err)
+		}
+		values[key] = value
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return projectionConfig{}, classifyDatabaseError("read projection configuration", err)
+	}
+	for _, item := range uints {
+		raw, exists := values[item.key]
+		if !exists {
+			if item.key == "default_concurrency_per_user" || item.key == "default_light_concurrency_per_user" {
 				continue
 			}
-			return projectionConfig{}, classifyDatabaseError("read projection configuration", err)
+			return projectionConfig{}, classifyDatabaseError("read projection configuration", sql.ErrNoRows)
 		}
 		value, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || strconv.FormatInt(value, 10) != raw || value < item.min || value > item.max {
@@ -114,9 +139,11 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 		*item.dst = value
 	}
 	for level := 1; level <= 6; level++ {
-		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, fmt.Sprintf("level_display_name_%d", level)).Scan(&config.display[level]); err != nil {
-			return projectionConfig{}, classifyDatabaseError("read level display configuration", err)
+		value, exists := values[fmt.Sprintf("level_display_name_%d", level)]
+		if !exists {
+			return projectionConfig{}, classifyDatabaseError("read level display configuration", sql.ErrNoRows)
 		}
+		config.display[level] = value
 		if config.display[level] == "" {
 			config.display[level] = fmt.Sprintf("Lv. %d", level)
 			if level == 5 {
@@ -127,15 +154,19 @@ func readProjectionConfig(ctx context.Context, tx *sql.Tx) (projectionConfig, er
 	return config, nil
 }
 
-func readUserRow(ctx context.Context, tx *sql.Tx, userID int64) (userRow, error) {
-	var row userRow
-	err := tx.QueryRowContext(ctx, `
-SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banned_reason,banned_until,
+const userRowSelection = `SELECT id,discord_id,username,avatar,guild_nick,guild_avatar_url,is_banned,banned_reason,banned_until,
  charity_suspended_until,endpoint_limit,rpm_limit,concurrency_limit,game_profile_public,
  donation_credit_mag,level,auto_level,total_requests,total_uncached_input_tokens,
  total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,
- total_unknown_usage_requests,revision,lang,created_at,updated_at,discord_gate_policy,light_rpm_limit,light_concurrency_limit,global_rpm_limit
-FROM users WHERE id=? AND is_admin=0`, userID).Scan(
+ total_unknown_usage_requests,revision,lang,created_at,updated_at,discord_gate_policy,light_rpm_limit,light_concurrency_limit,global_rpm_limit FROM users`
+
+func readUserRow(ctx context.Context, tx *sql.Tx, userID int64) (userRow, error) {
+	return scanUserRow(tx.QueryRowContext(ctx, userRowSelection+` WHERE id=? AND is_admin=0`, userID))
+}
+
+func scanUserRow(scanner interface{ Scan(...any) error }) (userRow, error) {
+	var row userRow
+	err := scanner.Scan(
 		&row.id, &row.discordID, &row.username, &row.avatar, &row.guildNick, &row.guildAvatarURL,
 		&row.isBanned, &row.bannedReason, &row.bannedUntil, &row.charityUntil, &row.endpointLimit,
 		&row.rpmLimit, &row.concurrencyLimit, &row.gamePublic, &row.donation, &row.manualLevel,
@@ -174,6 +205,18 @@ func decodeUsage(raw ...[]byte) (UsageSummary, error) {
 }
 
 func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projectionConfig, now int64) (AdminUser, error) {
+	wallet, err := ledger.UserAccount(ctx, tx, row.id)
+	if err != nil {
+		return AdminUser{}, classifyLedgerError("read user wallet", err)
+	}
+	gameWallet, err := ledger.UserAssetAccount(ctx, tx, row.id, ledger.Game)
+	if err != nil {
+		return AdminUser{}, classifyLedgerError("read game wallet", err)
+	}
+	return projectUserWithAccounts(ctx, tx, row, config, now, wallet, gameWallet)
+}
+
+func projectUserWithAccounts(ctx context.Context, tx *sql.Tx, row userRow, config projectionConfig, now int64, wallet, gameWallet ledger.Account) (AdminUser, error) {
 	donation, err := db.DecodeU128(row.donation)
 	if err != nil {
 		return AdminUser{}, fmt.Errorf("%w: decode donation credit", ErrInvariant)
@@ -185,14 +228,6 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	usage, err := decodeUsage(row.requests, row.uncached, row.cacheWrite, row.cacheRead, row.output, row.unknown)
 	if err != nil {
 		return AdminUser{}, err
-	}
-	wallet, err := ledger.UserAccount(ctx, tx, row.id)
-	if err != nil {
-		return AdminUser{}, classifyLedgerError("read user wallet", err)
-	}
-	gameWallet, err := ledger.UserAssetAccount(ctx, tx, row.id, ledger.Game)
-	if err != nil {
-		return AdminUser{}, classifyLedgerError("read game wallet", err)
 	}
 	level, err := projectUserLevel(row, config)
 	if err != nil {
@@ -229,6 +264,54 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		GameProfilePublic: row.gamePublic == 1, Revision: revision.Decimal(), Usage: usage,
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
+}
+
+func projectUsers(ctx context.Context, tx *sql.Tx, ids []int64, config projectionConfig, now int64) (map[int64]AdminUser, error) {
+	out := make(map[int64]AdminUser, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := tx.QueryContext(ctx, userRowSelection+` WHERE is_admin=0 AND id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
+	if err != nil {
+		return nil, classifyDatabaseError("read user page", err)
+	}
+	selected := make([]userRow, 0, len(ids))
+	for rows.Next() {
+		row, err := scanUserRow(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		selected = append(selected, row)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, classifyDatabaseError("read user page", err)
+	}
+	if len(selected) != len(ids) {
+		return nil, ErrNotFound
+	}
+	wallets, err := ledger.UserAssetAccounts(ctx, tx, ids, ledger.General)
+	if err != nil {
+		return nil, classifyLedgerError("read user wallet", err)
+	}
+	gameWallets, err := ledger.UserAssetAccounts(ctx, tx, ids, ledger.Game)
+	if err != nil {
+		return nil, classifyLedgerError("read game wallet", err)
+	}
+	for _, row := range selected {
+		user, err := projectUserWithAccounts(ctx, tx, row, config, now, wallets[row.id], gameWallets[row.id])
+		if err != nil {
+			return nil, err
+		}
+		out[row.id] = user
+	}
+	return out, nil
 }
 
 func projectUserLevel(row userRow, config projectionConfig) (AdminUserLevel, error) {
@@ -327,7 +410,7 @@ SELECT id FROM users
 WHERE is_admin=0
  AND (?='' OR instr(username,?)>0 OR instr(COALESCE(discord_id,''),?)>0)
  AND (?=0 OR id=?)
- AND id>?`+filter, ` ORDER BY id ASC`, args, query.Page, limit)
+ AND id>?`+filter, ` ORDER BY id ASC`, ` ORDER BY id ASC`, args, query.Page, limit)
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
@@ -356,17 +439,14 @@ WHERE is_admin=0
 		ids = ids[:limit]
 	}
 	page := Page[AdminUser]{Data: make([]AdminUser, 0, len(ids)), Pagination: metadata}
-	for _, id := range ids {
-		row, err := readUserRow(ctx, tx, id)
-		if err != nil {
-			return Page[AdminUser]{}, err
-		}
-		user, err := projectUser(ctx, tx, row, config, now)
-		if err != nil {
-			return Page[AdminUser]{}, err
-		}
-		page.Data = append(page.Data, user)
+	users, err := projectUsers(ctx, tx, ids, config, now)
+	if err != nil {
+		return Page[AdminUser]{}, err
 	}
+	for _, id := range ids {
+		page.Data = append(page.Data, users[id])
+	}
+
 	if hasMore && len(ids) > 0 {
 		page.NextCursor, err = service.encodeCursor(cursorScopeUsers, owner, now, db.CursorAtom{Kind: db.CursorUint, Uint: uint64(ids[len(ids)-1])})
 		if err != nil {
@@ -473,7 +553,7 @@ func (service *Service) UserUsage(ctx context.Context, adminID int64, query Page
 	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT id,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,
  total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests
-FROM users WHERE is_admin=0 AND id>?`, ` ORDER BY id ASC`, []any{after}, query.Page, limit)
+FROM users WHERE is_admin=0 AND id>?`, ` ORDER BY id ASC`, ` ORDER BY id ASC`, []any{after}, query.Page, limit)
 	if err != nil {
 		return Page[AdminUserUsage]{}, err
 	}
@@ -583,7 +663,7 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT day,product_active,api_requests,uncached_input_tokens,cache_write_input_tokens,
  cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,game_rounds,distinct_product_users,game_checkins
-FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query.Page, limit)
+FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, ` ORDER BY day DESC`, []any{upper}, query.Page, limit)
 	if err != nil {
 		return ActivityPage{}, err
 	}
