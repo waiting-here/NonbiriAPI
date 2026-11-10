@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -50,7 +49,7 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 		}
 		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "model discovery is unavailable")
 	}
-	client, err := input.Backend.Open(input.Target.BaseURL())
+	client, err := backend.OpenDiscovery(input.Backend, input.Target.BaseURL())
 	if err != nil || nilEndpointClient(client) {
 		input.Credential.Clear()
 		if kind, failed := discoveryContextFailure(ctx, err); failed {
@@ -263,10 +262,8 @@ func containsSensitiveDiscoveryText(guard *sensitiveGuard, value string) bool {
 	return matched
 }
 
-func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/models" }
-
-func modelsPageURL(baseURL, cursor string) (string, error) {
-	parsed, err := url.Parse(ModelsURL(baseURL))
+func modelsPageURL(catalogURL, cursor string) (string, error) {
+	parsed, err := url.Parse(catalogURL)
 	if err != nil {
 		return "", err
 	}

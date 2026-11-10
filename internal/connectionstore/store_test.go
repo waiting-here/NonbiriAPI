@@ -322,7 +322,7 @@ func TestUnpinnedApprovedCatalogRetainsStandardSourceAcrossRotation(t *testing.T
 	}
 	assertCatalog()
 	rotateSelf(t, tx)
-	execConnection(t, tx, "INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at) VALUES(?,?,1,2,1,2,'https://upstream.example/v1','openai',3)", oldSourceRevision+1, sourceID)
+	execConnection(t, tx, "INSERT INTO discovery_source_revisions(id,source_id,owner_user_id,source_revision,credential_id,credential_version_id,canonical_base_url,list_format,created_at) VALUES(?,?,1,2,1,2,'https://upstream.example/v1/models','openai',3)", oldSourceRevision+1, sourceID)
 	execConnection(t, tx, "INSERT INTO discovery_source_states(source_revision_id,result_generation,updated_at) VALUES(?,1,3)", oldSourceRevision+1)
 	execConnection(t, tx, "UPDATE discovery_sources SET current_revision_id=?,revision=revision+1,updated_at=3 WHERE id=?", oldSourceRevision+1, sourceID)
 	staged, err := connectionstore.StagePendingUseRevisionTx(ctx, tx, connectionstore.StagePendingUseRevisionInput{UseID: 1, ExpectedRevision: 2, GrantRevisionID: 2, Origin: connectionstore.UseOriginRotation, At: 3})

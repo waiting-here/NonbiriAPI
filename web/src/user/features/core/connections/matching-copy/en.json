@@ -3,7 +3,7 @@
   "help": "Review a matching preset, or continue with your custom entry.",
   "usePreset": "Use this preset",
   "services": "Native services",
-  "discovery": "Model discovery",
+  "discovery": "Model list request URL",
   "models": "Suggested model mappings",
   "chooseServices": "Choose which services to use from this preset."
 }

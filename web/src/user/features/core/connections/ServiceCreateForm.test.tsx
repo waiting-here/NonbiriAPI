@@ -84,7 +84,7 @@ const options = {
           rerank_format: '',
         },
       ],
-      discovery_source: { base_url: 'https://preset.example/v1', list_format: 'openai' },
+      discovery_source: { base_url: 'https://preset.example/v1/models', list_format: 'openai' },
     },
   ],
 };
@@ -351,7 +351,7 @@ describe('service setup as one task', () => {
       mocks.execute.mock.calls.find(([intent]) => intent.kind === 'discovery_source')![0].input,
     ).toMatchObject({
       list_format: 'anthropic',
-      base_url: 'https://service.example/v1',
+      base_url: 'https://service.example/v1/models',
     });
     expect(
       mocks.execute.mock.calls.find(([intent]) => intent.kind === 'key')![0].input

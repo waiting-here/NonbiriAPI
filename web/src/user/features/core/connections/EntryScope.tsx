@@ -267,10 +267,9 @@ function PairListSettings({
       connectionId={endpoint.connection_id ?? ''}
       source={source.data}
       preset={
-        defaultDiscovery(endpoint.connector_type, endpoint.base_url) ?? {
-          base_url: endpoint.base_url,
-          list_format: 'openai',
-        }
+        defaultDiscovery(endpoint.connector_type, endpoint.base_url) ??
+        defaultDiscovery('openai-compatible', endpoint.base_url) ??
+        undefined
       }
       pairSettings
       fixedCredentialId={entryKey.credential_id ?? undefined}

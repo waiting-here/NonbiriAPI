@@ -288,6 +288,14 @@ export function EntryForm({
                   </div>
                 ) : null,
               )}
+              {channel?.discovery_source ? (
+                <dl className="nb-facts">
+                  <div>
+                    <dt>{t('common.connections.modelsURL')}</dt>
+                    <dd className="mono">{channel.discovery_source.base_url}</dd>
+                  </div>
+                </dl>
+              ) : null}
               <Note>{t('common.connections.presetAuthorization')}</Note>
             </>
           )}

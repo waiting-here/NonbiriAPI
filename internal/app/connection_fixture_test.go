@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -164,7 +165,7 @@ func appFixtureMainstreamChannel(t *testing.T, store *db.Store, id, name, base s
 		case connectorcontract.TypeAISDKGatewayV3, connectorcontract.TypeAISDKGatewayV4:
 			format = string(kind)
 		}
-		if _, err := tx.Exec(`INSERT INTO mainstream_channel_discovery_presets(channel_id,canonical_base_url,list_format) VALUES(?,?,?)`, id, base, format); err != nil {
+		if _, err := tx.Exec(`INSERT INTO mainstream_channel_discovery_presets(channel_id,canonical_base_url,list_format) VALUES(?,?,?)`, id, connectionstore.DefaultDiscoveryURL(kind, base), format); err != nil {
 			return 0, err
 		}
 		return result.LastInsertId()

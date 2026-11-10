@@ -1322,7 +1322,7 @@ for (const role of ['admin', 'steward'] as const)
     await picker.getByRole('button', { name: /^Reviewed key 61 —/ }).click();
     await expect(currentPage.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
     await picker.getByRole('checkbox', { name: /shared-model-2-/ }).check();
-    await expect(picker.locator('.ops-picker-selection li')).toHaveCount(3);
+    await expect(picker.locator('.charity-binding-selection li')).toHaveCount(3);
     for (const width of [320, 390, 768, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
       await fitsPage(page);
@@ -1341,7 +1341,7 @@ for (const role of ['admin', 'steward'] as const)
         ],
       });
     expect(Object.keys(submitted!)).toEqual(['expected_binding_revision', 'selections']);
-    await expect(page.locator('.ops-picker-selection li')).toHaveCount(0);
+    await expect(page.locator('.charity-binding-selection li')).toHaveCount(0);
     guard.assertNone();
     expect(reviewOverflows, 'review cells must fit at every tested width').toEqual([]);
   });

@@ -10,6 +10,7 @@ import (
 // current schema, keeping historical identities independent of current DDL.
 func restoreSchema50LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema51LayoutForTest(t, database)
 	definition := func(source, prefix, next string) string {
 		t.Helper()
 		start := strings.Index(source, prefix)

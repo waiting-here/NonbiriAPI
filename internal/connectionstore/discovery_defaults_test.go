@@ -2,6 +2,7 @@ package connectionstore_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
@@ -52,7 +53,8 @@ func TestDefaultDiscoveryCatalogCreationAndLookupAgree(t *testing.T) {
 				t.Fatalf("initial catalog: %d %v", revision, err)
 			}
 			var format string
-			if err := tx.QueryRow("SELECT list_format FROM discovery_source_revisions WHERE id=?", revision).Scan(&format); err != nil || format != tc.format {
+			var address string
+			if err := tx.QueryRow("SELECT list_format,canonical_base_url FROM discovery_source_revisions WHERE id=?", revision).Scan(&format, &address); err != nil || format != tc.format || address != connectionstore.DefaultDiscoveryURL(tc.kind, use.Grant.CanonicalBaseURL) {
 				t.Fatalf("created format: %q %v", format, err)
 			}
 			// No self association or donation pin exists: exercise the fallback
@@ -73,5 +75,34 @@ func TestDefaultDiscoveryCatalogCreationAndLookupAgree(t *testing.T) {
 				t.Fatalf("catalog duplicated: %d %v", count, err)
 			}
 		})
+	}
+}
+
+func TestDefaultDiscoveryURLPreservesFullPathsAndRejectsOverflow(t *testing.T) {
+	_, tx := connectionFixture(t)
+	for _, kind := range []contract.Type{contract.TypeOpenAICompatible, contract.TypeAnthropicCompatible, contract.TypeGoogleGemini, contract.TypeAISDKGatewayV3, contract.TypeAISDKGatewayV4} {
+		suffix := "/models"
+		if kind.AISDKGateway() {
+			suffix = "/config"
+		}
+		for _, base := range []string{"https://example.com/a%2Fb/v1", "https://example.com/v1/", "https://example.com/v1" + suffix, "https://example.com/v1" + suffix + "/"} {
+			want := strings.TrimRight(base, "/") + suffix
+			if strings.HasSuffix(strings.TrimRight(base, "/"), suffix) {
+				want = base
+			}
+			var got string
+			if err := tx.QueryRow("SELECT "+connectionstore.DefaultDiscoveryURLSQL+" FROM (SELECT ? canonical_base_url,? configured_type) a", base, kind).Scan(&got); err != nil || got != want || connectionstore.DefaultDiscoveryURL(kind, base) != want {
+				t.Fatal("default creation and fallback differ", kind, base, got, err)
+			}
+		}
+	}
+	seedApprovedUse(t, tx, false)
+	use, err := connectionstore.LoadDiscoveryUseTx(t.Context(), tx, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	use.Grant.CanonicalBaseURL = "https://example.com/" + strings.Repeat("x", 4096-len("https://example.com/"))
+	if _, err := connectionstore.EnsureDiscoverySourceTx(t.Context(), tx, use, 2); !errors.Is(err, connectionstore.ErrUnavailable) {
+		t.Fatal("overflow was not rejected before insertion", err)
 	}
 }

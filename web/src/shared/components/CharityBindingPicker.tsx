@@ -1151,7 +1151,7 @@ function CharityBindingPickerBody({
 
       {showSelectionSummary ? (
         <section
-          className="ops-picker-selection"
+          className="charity-binding-selection"
           aria-label={t('common.operations.charity.selectedModels')}
         >
           <h4>
@@ -1189,10 +1189,10 @@ function CharityBindingPickerBody({
           >
             {t('common.workflow.clearSelected')}
           </Button>
-          <ul>
+          <ul className="charity-binding-selection__list">
             {selectedPageEntries.map(([key, entry]) => (
               <li key={key}>
-                <div>
+                <div className="charity-binding-selection__metadata">
                   <strong>
                     {allSelectedEntries.findIndex(([id]) => id === key) + 1}.{' '}
                     {entry.upstream_model_id}
@@ -1202,19 +1202,6 @@ function CharityBindingPickerBody({
                     {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
                   </span>
                 </div>
-                {entry.native_services ? (
-                  <NativeServicesField
-                    options={entry.native_services}
-                    value={entry.selected_native_services ?? []}
-                    onChange={(value) =>
-                      onChange({
-                        ...selected,
-                        [key]: { ...entry, selected_native_services: value },
-                      })
-                    }
-                    disabled={interactionBlocked}
-                  />
-                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
@@ -1229,6 +1216,19 @@ function CharityBindingPickerBody({
                 >
                   {t('common.operations.charity.remove')}
                 </Button>
+                {entry.native_services ? (
+                  <NativeServicesField
+                    options={entry.native_services}
+                    value={entry.selected_native_services ?? []}
+                    onChange={(value) =>
+                      onChange({
+                        ...selected,
+                        [key]: { ...entry, selected_native_services: value },
+                      })
+                    }
+                    disabled={interactionBlocked}
+                  />
+                ) : null}
               </li>
             ))}
           </ul>

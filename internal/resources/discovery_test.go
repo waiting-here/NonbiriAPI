@@ -116,7 +116,7 @@ func TestDiscoveryEvidenceDuplicateAutomaticLateOperationAndReplayAuthorization(
 	environment.discovery.mu.Unlock()
 	if claimInput.OperationID != accepted.Value.OperationID || claimInput.OwnerUserID != userID ||
 		claimInput.EndpointID != endpointID || claimInput.EndpointKeyID != keyID ||
-		claimInput.ConnectorType != "openai-compatible" || claimInput.CanonicalBaseURL != "https://example.com/v1" ||
+		claimInput.ConnectorType != "openai-compatible" || claimInput.CanonicalBaseURL != "https://example.com/v1/models" ||
 		claimInput.Discoverer == nil {
 		t.Fatalf("discovery claim identity = %#v", claimInput)
 	}

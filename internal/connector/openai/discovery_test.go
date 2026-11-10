@@ -57,7 +57,7 @@ func openAIDiscoveryInput(client backend.EndpointClient, plaintext, ciphertext [
 		Backend: discoveryBackend{client: client},
 		Target: connectorcontract.NewTarget(
 			connectorcontract.TypeOpenAICompatible,
-			"https://api.example/v1",
+			"https://api.example/v1/models",
 			"",
 		),
 		Credential: connectorcontract.NewShortLivedSecret(plaintext, ciphertext),
@@ -110,7 +110,7 @@ func TestModelDiscoveryTypedSuccessNonemptyAndEmpty(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var requestSeen *http.Request
-			client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(request *http.Request) (*http.Response, error) {
+			client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(request *http.Request) (*http.Response, error) {
 				requestSeen = request
 				if request.Method != http.MethodGet || request.URL.String() != "https://api.example/v1/models" {
 					t.Fatalf("request = %s %s", request.Method, request.URL)
@@ -160,7 +160,7 @@ func TestModelDiscoveryMapsHTTPFailuresWithoutReadingBody(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			body := &discoveryReadCloser{err: errors.New("raw body must not be read")}
-			client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+			client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: test.status, Body: body, Header: make(http.Header)}, nil
 			}}
 			plaintext := []byte("sk-status-secret")
@@ -180,7 +180,7 @@ func TestModelDiscoveryMapsHTTPFailuresWithoutReadingBody(t *testing.T) {
 }
 
 func TestModelDiscoveryMapsFailureStatusWithoutBody(t *testing.T) {
-	client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+	client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusForbidden, Header: make(http.Header)}, nil
 	}}
 	plaintext := []byte("sk-status-without-body")
@@ -207,7 +207,7 @@ func TestModelDiscoveryRejectsInvalidResponseMediaTypesBeforeBodyRead(t *testing
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			body := &discoveryReadCloser{err: errors.New("untrusted media body must not be read")}
-			client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+			client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 				response := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body}
 				response.Header.Set("Content-Type", "application/json")
 				test.mutate(response.Header)
@@ -306,7 +306,7 @@ func TestModelDiscoveryMapsContextAndTransportFailures(t *testing.T) {
 			}
 			defer cancel()
 			calls := 0
-			client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(request *http.Request) (*http.Response, error) {
+			client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(request *http.Request) (*http.Response, error) {
 				calls++
 				return test.do(request)
 			}}
@@ -388,7 +388,7 @@ func TestModelDiscoveryMapsNilMalformedAndOversizeResponses(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: test.do}
+			client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: test.do}
 			plaintext := []byte("sk-malformed-secret")
 			ciphertext := []byte("cipher-malformed-secret")
 			result := (ModelDiscoverer{}).Discover(context.Background(), openAIDiscoveryInput(client, plaintext, ciphertext))
@@ -446,7 +446,7 @@ func TestModelDiscoveryRejectsCredentialReflection(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := &discoveryEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+			client := &discoveryEndpointClient{baseURL: "https://api.example/v1/models", do: func(*http.Request) (*http.Response, error) {
 				return openAIDiscoveryResponse(http.StatusOK, test.body), nil
 			}}
 			plaintext := []byte(test.plaintext)

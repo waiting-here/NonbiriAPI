@@ -110,7 +110,8 @@ func testCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T, retain bool) {
 	}
 	secret := func() *contract.ShortLivedSecret { return contract.NewShortLivedSecret([]byte(key), nil) }
 	target := contract.NewTarget(contract.TypeGoogleGemini, source, "test-model")
-	discovery := (gemini.ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: local, Target: target, Credential: secret()})
+	catalogTarget := contract.NewTarget(contract.TypeGoogleGemini, source+"/models", "")
+	discovery := (gemini.ModelDiscoverer{}).Discover(context.Background(), contract.DiscoveryInput{Backend: local, Target: catalogTarget, Credential: secret()})
 	if !discovery.Succeeded() || len(discovery.Models) != 1 || discovery.Models[0].ID != "test-model" {
 		t.Fatalf("discovery: %+v", discovery)
 	}
@@ -143,7 +144,7 @@ func testCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T, retain bool) {
 				t.Fatal("gateway token persisted")
 			}
 		})
-		discovery = (gemini.ModelDiscoverer{}).Discover(ctx, contract.DiscoveryInput{Backend: local, Target: target, Credential: secret()})
+		discovery = (gemini.ModelDiscoverer{}).Discover(ctx, contract.DiscoveryInput{Backend: local, Target: catalogTarget, Credential: secret()})
 		if discovery.Succeeded() || discovery.UpstreamStatus != 400 || calls.Load() != before+1 || !captured {
 			t.Fatal("failure changed status/retried", discovery, calls.Load(), captured)
 		}

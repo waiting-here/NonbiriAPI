@@ -202,6 +202,16 @@ func (s *Stack) NewClient(baseURL string) (*Client, error) {
 }
 
 func (s *Stack) newClient(baseURL string, allowCloudflare bool) (*Client, error) {
+	return s.newURLClient(baseURL, allowCloudflare, false)
+}
+
+// NewDiscoveryClient keeps the complete catalog path and the shared egress
+// policy while retaining routes configured for standard catalog bases.
+func (s *Stack) NewDiscoveryClient(catalogURL string) (*Client, error) {
+	return s.newURLClient(catalogURL, true, true)
+}
+
+func (s *Stack) newURLClient(baseURL string, allowCloudflare, discovery bool) (*Client, error) {
 	if !s.policy.originsReady() {
 		return nil, ErrSelfOriginsNotConfigured
 	}
@@ -213,6 +223,14 @@ func (s *Stack) newClient(baseURL string, allowCloudflare bool) (*Client, error)
 	if err != nil {
 		return nil, err
 	}
+	gateURL := canonical
+	gateAliasURL := ""
+	if discovery {
+		if base := standardCatalogBase(parsed); base != nil {
+			gateURL = base.String()
+			gateAliasURL = gateURL + "/"
+		}
+	}
 
 	var route *cloudflareRoute
 	var worker *cloudflareWorker
@@ -220,6 +238,12 @@ func (s *Stack) newClient(baseURL string, allowCloudflare bool) (*Client, error)
 		worker = s.worker
 		if worker == nil {
 			route = s.routes[key]
+			if route == nil && discovery {
+				route, err = s.discoveryRoute(parsed)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 	transportTarget := parsed
@@ -258,7 +282,10 @@ func (s *Stack) newClient(baseURL string, allowCloudflare bool) (*Client, error)
 
 	return &Client{
 		stack:            s,
+		discovery:        discovery,
 		baseURL:          canonical,
+		gateURL:          gateURL,
+		gateAliasURL:     gateAliasURL,
 		route:            route,
 		worker:           worker,
 		policy:           s.policy,
@@ -286,10 +313,13 @@ func (s *Stack) CloseIdleConnections() {
 // http.Client and Transport are intentionally not exposed.
 type Client struct {
 	stack            *Stack
+	discovery        bool
 	route            *cloudflareRoute
 	worker           *cloudflareWorker
 	policy           *EgressPolicy
 	baseURL          string
+	gateURL          string
+	gateAliasURL     string
 	origin           string
 	originScheme     string
 	originHost       string
@@ -319,7 +349,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		if c.imageProfile != 0 {
 			direct, err = c.stack.newImageClient(c.baseURL, c.imageProfile, false)
 		} else {
-			direct, err = c.stack.newClient(c.baseURL, false)
+			direct, err = c.stack.newURLClient(c.baseURL, false, c.discovery)
 		}
 		if err != nil {
 			if req.Body != nil {
@@ -368,7 +398,16 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 
 	ctx, cancel := context.WithTimeout(req.Context(), c.timeout)
 	diagnostic.Phase(ctx, "queue")
-	permit, err := c.gate.Acquire(ctx, c.baseURL)
+	gateURL := c.gateURL
+	if gateURL == "" {
+		gateURL = c.baseURL
+	}
+	var permit *Permit
+	if c.gateAliasURL != "" {
+		permit, err = c.gate.acquireAliases(ctx, gateURL, c.gateAliasURL)
+	} else {
+		permit, err = c.gate.Acquire(ctx, gateURL)
+	}
 	if err != nil {
 		cancel()
 		return closeBodyOnError(err)

@@ -755,7 +755,7 @@ describe('donation composer recovery', () => {
       id: '51',
       connection_id: '2',
       name: 'Catalog',
-      base_url: 'https://catalog.example',
+      base_url: 'https://catalog.example/models',
       models_url: 'https://catalog.example/models',
       list_format: 'openai',
       credential_id: '81',

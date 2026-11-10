@@ -174,6 +174,9 @@ func (m *serviceScopeMigration) prepareMaps() error {
 	// Capture old fallback selections before enforcing the new pair ownership.
 	oldSelection := strings.ReplaceAll(connectionstore.DiscoverySourceRevisionSQL,
 		" AND EXISTS(SELECT 1 FROM discovery_source_keys scope WHERE scope.source_id=ds.id AND scope.endpoint_key_id=dk.endpoint_key_id)\n", "")
+	// This source predates complete catalog addresses. Keep its fallback based
+	// on the original inference address until the later URL conversion runs.
+	oldSelection = strings.ReplaceAll(oldSelection, connectionstore.DefaultDiscoveryURLSQL, "a.canonical_base_url")
 	if err := m.exec(`CREATE TEMP TABLE service_use_sources AS SELECT ur.id,dk.endpoint_key_id AS key_id,` + oldSelection + ` AS revision_id
  FROM donation_use_revisions ur JOIN donation_uses u ON u.id=ur.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id
  JOIN endpoint_grant_authorizations a ON a.grant_revision_id=ur.grant_revision_id WHERE dk.endpoint_key_id IS NOT NULL;

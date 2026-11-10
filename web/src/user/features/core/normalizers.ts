@@ -1607,7 +1607,10 @@ export function normalizeBindingCandidatePage(value: unknown): Page<BindingCandi
   return page;
 }
 
-export function canonicalBaseURLPreview(value: string): string {
+export function canonicalBaseURLPreview(
+  value: string,
+  { preserveTrailingSlash = false } = {},
+): string {
   const trimmed = value.trim();
   if (
     trimmed.length === 0 ||
@@ -1637,7 +1640,7 @@ export function canonicalBaseURLPreview(value: string): string {
     );
   }
   const rendered = parsed.toString();
-  return rendered.endsWith('/') ? rendered.slice(0, -1) : rendered;
+  return !preserveTrailingSlash && rendered.endsWith('/') ? rendered.slice(0, -1) : rendered;
 }
 
 function asciiFragment(value: unknown, label: string): string {

@@ -96,7 +96,11 @@ func initializeKeySourceTx(ctx context.Context, tx *sql.Tx, userID, keyID, crede
 	if endpoint.ConnectionID != nil {
 		connectionID, _ = parseDecimalID(*endpoint.ConnectionID)
 	}
-	sourceID, _, err := createDiscoverySourceTx(ctx, tx, userID, connectionID, credentialID, versionID, "", endpoint.BaseURL, format, true, now)
+	catalogURL := connectionstore.DefaultDiscoveryURL(contract.Type(endpoint.ConnectorType), endpoint.BaseURL)
+	if len(catalogURL) > 4096 {
+		return ErrDiscoveryURLTooLong
+	}
+	sourceID, _, err := createDiscoverySourceTx(ctx, tx, userID, connectionID, credentialID, versionID, "", catalogURL, format, true, now)
 	if err != nil {
 		return err
 	}

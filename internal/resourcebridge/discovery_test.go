@@ -35,7 +35,7 @@ func testDiscoverySuccessCrossesDispatch(t *testing.T, kind connectorcontract.Ty
 		if input.Backend != fixture.backend {
 			t.Fatal("discoverer received a different backend")
 		}
-		if input.Target.Type() != expectedWire || input.Target.BaseURL() != key.baseURL || input.Target.UpstreamModel() != "" {
+		if input.Target.Type() != expectedWire || input.Target.BaseURL() != key.baseURL+"/models" || input.Target.UpstreamModel() != "" {
 			t.Fatalf("unexpected target: type=%q base=%q model=%q", input.Target.Type(), input.Target.BaseURL(), input.Target.UpstreamModel())
 		}
 		var state string

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { numberedResponse } from './numbered-fixtures';
 import { mockConnectionResources } from './connection-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
@@ -861,7 +862,18 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
             {
               donation_id: '9',
               donation_key_id: '6',
-              upstream_model_id: 'upstream-model',
+              upstream_model_id: 'upstream-model-' + 'm'.repeat(400),
+              native_services: ['chat_completions', 'responses'],
+              model_types: ['chat_completions', 'responses'],
+              service_routes: [
+                {
+                  operation: 'chat_completions',
+                  native_service: 'chat_completions',
+                  mode: 'native',
+                },
+                { operation: 'responses', native_service: 'responses', mode: 'native' },
+              ],
+              capabilities: { can_bind: true, unavailable_reason: null },
               source: sharedSource,
               source_types: ['automatic'],
               current_binding_id: null,
@@ -927,8 +939,52 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await picker.getByRole('button', { name: /Reviewed key note/ }).click();
   await picker.getByRole('checkbox', { name: /upstream-model/ }).check();
   await picker.getByRole('button', { name: '1 · Choose source', exact: true }).click();
-  await expect(picker.locator('.ops-picker-selection')).toContainText('upstream-model');
-  await expect(picker.locator('.ops-picker-selection')).toContainText('Reviewed key note');
+  await expect(picker.locator('.charity-binding-selection')).toContainText('upstream-model');
+  await expect(picker.locator('.charity-binding-selection')).toContainText('Reviewed key note');
+  const selected = picker.locator('.charity-binding-selection__list > li');
+  const responses = selected.getByRole('checkbox', { name: 'Responses', exact: true });
+  await expect(responses).toBeChecked();
+  await responses.uncheck();
+  await expect(responses).not.toBeChecked();
+  await expect(
+    selected.getByRole('checkbox', { name: 'Chat completions', exact: true }),
+  ).toBeChecked();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      const bounds = await selected.evaluate((row) => {
+        const metadata = row
+          .querySelector('.charity-binding-selection__metadata')!
+          .getBoundingClientRect();
+        const remove = row.querySelector(':scope > button')!.getBoundingClientRect();
+        const services = row.querySelector('fieldset')!.getBoundingClientRect();
+        const rect = row.getBoundingClientRect();
+        return {
+          rowWidth: rect.width,
+          fieldWidth: services.width,
+          fieldTop: services.top,
+          firstRowBottom: Math.max(metadata.bottom, remove.bottom),
+          contentWidth: row.scrollWidth,
+          availableWidth: row.clientWidth,
+        };
+      });
+      expect(bounds.fieldWidth).toBeGreaterThanOrEqual(bounds.rowWidth - 1);
+      expect(bounds.fieldTop).toBeGreaterThan(bounds.firstRowBottom);
+      expect(bounds.contentWidth).toBeLessThanOrEqual(bounds.availableWidth);
+      if (process.env.NONBIRI_VISUAL_DIR) {
+        await selected.locator('fieldset').scrollIntoViewIfNeeded();
+        await picker.locator('.charity-binding-selection').screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            `charity-selected-native-services-${width}-${theme}.png`,
+          ),
+        });
+      }
+    }
+  }
   await assertResponsiveAndClean(page, guard);
 });
 

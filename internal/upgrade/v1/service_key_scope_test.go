@@ -75,7 +75,9 @@ func TestServiceKeyScopeSchema39UpgradePreservesApprovedPendingAndCatalog(t *tes
 	if _, err := tx.ExecContext(t.Context(), `UPDATE credentials SET connection_id=? WHERE id=?`, firstService, credential); err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := testseed.SeedDiscoveryCatalogTx(t.Context(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: keys[0].KeyID, ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: "shared-model"}}})
+	// This published source stored a base address. Current fixture defaults
+	// generate a complete catalog URL, which would not match its old fallback.
+	catalog, err := testseed.SeedDiscoveryCatalogTx(t.Context(), tx, testseed.DiscoveryCatalogInput{EndpointKeyID: keys[0].KeyID, BaseURL: "https://same.example/v1", ListFormat: "openai", Models: []testseed.DiscoveryModel{{ID: "shared-model"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,6 +166,10 @@ func TestServiceKeyScopeSchema39UpgradePreservesApprovedPendingAndCatalog(t *tes
 	}
 	// A source retained only by approved uses still needs pair isolation.
 	hostileMustExec(t, store.DB(), `DELETE FROM endpoint_key_discovery_sources`)
+	var sourceCatalogs int
+	if err := store.DB().QueryRow(`SELECT count(*) FROM charity_model_catalog WHERE normalized_model_id='shared-model'`).Scan(&sourceCatalogs); err != nil || sourceCatalogs != 3 {
+		t.Fatalf("schema39 must authorize both pinned keys and the unpinned fallback: got %d want 3: %v", sourceCatalogs, err)
+	}
 	columns := legacyConnectionColumns(t, store.DB())
 	preserved := gatewayRows(t, store.DB())
 	assertRetainedManifest(t, store.DB(), db.Schema39ManifestHash)

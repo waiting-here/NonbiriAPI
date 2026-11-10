@@ -416,38 +416,6 @@ fieldset.ops-field-grid {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-.ops-picker-selection {
-  padding: var(--nb-space-4);
-  border-radius: var(--nb-radius-md);
-  background: var(--nb-color-surface-alt);
-}
-.ops-picker-selection ul {
-  padding: 0;
-  max-height: 24rem;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  list-style: none;
-}
-.ops-picker-selection li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--nb-space-3);
-  padding-block: var(--nb-space-2);
-  border-bottom: 1px solid var(--nb-color-border);
-}
-.ops-picker-selection li > div {
-  display: grid;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.ops-picker-selection li span {
-  color: var(--nb-color-text-muted);
-  font-size: var(--nb-font-size-sm);
-}
-.ops-picker-selection li > button {
-  flex-shrink: 0;
-}
 .ops-picker-source-types {
   display: block;
   color: var(--nb-color-text-muted);

@@ -6,6 +6,7 @@ import "errors"
 
 var (
 	ErrInvalidRequest             = errors.New("resources: invalid request")
+	ErrDiscoveryURLTooLong        = errors.New("resources: model-list address is too long")
 	ErrUnauthorized               = errors.New("resources: unauthorized")
 	ErrForbidden                  = errors.New("resources: forbidden")
 	ErrMaintenance                = errors.New("resources: maintenance")

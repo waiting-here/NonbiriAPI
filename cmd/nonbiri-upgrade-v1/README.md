@@ -1,6 +1,6 @@
 # Prepare existing storage
 
-The server initializes an absent database as schema 51 and opens only the exact
+The server initializes an absent database as schema 52 and opens only the exact
 current schema. Older, newer, unknown and incomplete storage is rejected before
 migration, repair or recovery writes. The service, startup scripts and deployment
 helpers must not run this upgrader implicitly. A developer or deployer must
@@ -41,10 +41,11 @@ exact source structures:
 | 48 | `9be4a03b9054f70d8a44ac7389378e4fe93dce0a` |
 | 49 | `4fd81dd0fd48b82e0ee55c562a9ea4f92b18eeca` |
 | 50 | `23afcd9fc058721f649ff352b216578c447f332b` |
+| 51 | `b0f488b08153d8cca7fb54f4d095f7e4feeb3fa1` |
 
 The machine-readable descriptor is authoritative for these exact source commits
 and their pinned manifest hashes. All supported sources convert atomically to
-schema 51. Schemas 27–32 and unregistered layouts are not supported sources.
+schema 52. Schemas 27–32 and unregistered layouts are not supported sources.
 
 The executable that last used a database may differ from the listed commit if
 its stored application identity, generation, schema version and complete
@@ -61,13 +62,20 @@ CGO_ENABLED=0 go build -trimpath -o nonbiri-upgrade-v1 ./cmd/nonbiri-upgrade-v1
 ```
 
 Both metadata commands need no database or environment. The converter reports
-its exact sources in `offline_conversions` and target schema 51. The server
-reports current and minimum schema 51, `startup_policy="exact"` and
+its exact sources in `offline_conversions` and target schema 52. The server
+reports current and minimum schema 52, `startup_policy="exact"` and
 `upgrade_tool="nonbiri-upgrade-v1"`, with empty `source_schema_versions`,
 `source_manifest_hashes` and `offline_conversions` arrays. The converter
-retains that target policy and adds its 29 offline-source entries. These describe
+retains that target policy and adds its 30 offline-source entries. These describe
 different executables; the empty server list does not remove the converter or
 authorize a deployment helper to call it automatically.
+
+The 51-to-52 step converts discovery-source revisions and channel discovery
+presets to complete request URLs. Already complete standard addresses are kept;
+legacy base addresses gain `/models` or Gateway's `/config`. Existing revision
+IDs, donation references, credential grants and fetched lists are preserved.
+Account export stays at format 36, with discovery `base_url` holding the complete
+request address.
 
 The 50-to-51 step adds optional endpoint and submitted donation-use rerank paths,
 nullable charity overrides and dispatch-path snapshots. Empty paths and null
@@ -230,7 +238,7 @@ conversion, remove the retired Gateway variable and `NONBIRI_SMTP_HOST`,
 `NONBIRI_SMTP_FROM` and `NONBIRI_SMTP_TLS` from the deployment environment.
 
 The [rc.7 command](../nonbiri-upgrade-rc7/README.md) remains a narrow wrapper
-accepting schema 16 and current schema 51. Both commands use one engine.
+accepting schema 16 and current schema 52. Both commands use one engine.
 `scripts/check-upgrade.sh` creates a populated synthetic source with the pinned
 rc.7 program, converts it, compares retained facts and resumes economy checks.
 The offline suite also covers the registered schema 17–26 fixtures. No

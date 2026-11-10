@@ -4,6 +4,19 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.9 — 2026-11-10
+
+- Use complete request URLs for model discovery, including channel presets and
+  donated directories. Requests no longer append `/models` or Gateway's `/config`;
+  forms show the actual address, and standard defaults include the required path.
+- Convert existing discovery addresses and their historical revisions during
+  the explicit offline upgrade. Already complete standard URLs remain unchanged;
+  credential grants and donation references are preserved.
+- Give selected donated model bindings a full-width interface selector, with
+  model details and removal controls above it, across desktop and mobile layouts.
+- Advance storage to schema 52. The standalone upgrader accepts exact registered
+  schema 16–26 and 33–51 sources; account export remains format 36.
+
 ## 1.3.8 — 2026-11-10
 
 - Add independent reject or FIFO queue behavior for each upstream key's
