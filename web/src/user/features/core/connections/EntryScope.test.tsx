@@ -136,8 +136,8 @@ describe('persistent entry metadata drafts', () => {
       { station: 'user', role: 'user' },
     );
     expect(screen.getByRole('combobox', { name: 'Catalog format' })).toHaveValue(format);
-    expect(screen.getByRole('textbox', { name: 'Model list base URL' })).toHaveValue(
-      endpointWire().base_url,
+    expect(screen.getByRole('textbox', { name: 'Complete model list URL' })).toHaveValue(
+      endpointWire().base_url + '/models',
     );
     view.unmount();
   });
@@ -152,7 +152,7 @@ describe('persistent entry metadata drafts', () => {
           connection_id: null,
           name: 'Chosen catalog',
           base_url: 'https://catalog.example/custom',
-          models_url: 'https://catalog.example/custom/models',
+          models_url: 'https://catalog.example/custom',
           list_format: 'anthropic',
           credential_id: '8',
           credential_version: '2',
@@ -188,7 +188,7 @@ describe('persistent entry metadata drafts', () => {
     expect(await screen.findByRole('combobox', { name: 'Catalog format' })).toHaveValue(
       'anthropic',
     );
-    expect(screen.getByRole('textbox', { name: 'Model list base URL' })).toHaveValue(
+    expect(screen.getByRole('textbox', { name: 'Complete model list URL' })).toHaveValue(
       'https://catalog.example/custom',
     );
   });

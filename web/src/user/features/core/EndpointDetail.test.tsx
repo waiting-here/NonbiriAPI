@@ -490,7 +490,7 @@ const catalogSource = {
   id: '17',
   connection_id: '9',
   name: 'Exact catalog',
-  base_url: 'https://catalog.example',
+  base_url: 'https://catalog.example/models',
   models_url: 'https://catalog.example/models',
   list_format: 'openai',
   credential_id: '7',
@@ -519,7 +519,9 @@ describe('per-pair list settings', () => {
     await view.user.click(screen.getByRole('button', { name: 'More actions · key note' }));
     await view.user.click(screen.getByRole('menuitem', { name: 'Edit note and limits' }));
     await view.user.click(screen.getByText('Model list settings', { selector: 'strong' }));
-    expect(await screen.findByLabelText('Model list base URL')).toHaveValue(catalogSource.base_url);
+    expect(await screen.findByLabelText('Complete model list URL')).toHaveValue(
+      catalogSource.base_url,
+    );
     expect(screen.queryByRole('table', { name: 'Choose a service key' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Discovery sources' })).not.toBeInTheDocument();
   });

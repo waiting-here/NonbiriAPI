@@ -246,7 +246,10 @@ export function MainstreamEntries({
         </Field>
         {value.discovery_source ? (
           <>
-            <Field label={t('common.connections.discoveryBaseURL')}>
+            <Field
+              label={t('common.connections.discoveryBaseURL')}
+              help={t('common.connections.independentDiscovery')}
+            >
               {(props) => (
                 <input
                   {...props}

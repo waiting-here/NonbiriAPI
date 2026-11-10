@@ -17,5 +17,12 @@ export function defaultDiscovery(
   baseURL: string,
 ): DiscoveryPreset | null {
   const format = configuration ? formats[configuration] : undefined;
-  return format ? { base_url: baseURL.trim(), list_format: format } : null;
+  if (!format) return null;
+  const address = baseURL.trim();
+  const suffix = format.startsWith('ai-sdk-gateway-') ? '/config' : '/models';
+  const path = address.replace(/\/+$/, '');
+  return {
+    base_url: !address || path.endsWith(suffix) ? address : path + suffix,
+    list_format: format,
+  };
 }

@@ -22,7 +22,7 @@ const source = {
   id: '51',
   connection_id: '2',
   name: 'Catalog',
-  base_url: 'https://catalog.example/root',
+  base_url: 'https://catalog.example/root/model-list',
   models_url: 'https://catalog.example/root/model-list',
   list_format: 'openai',
   credential_id: '41',

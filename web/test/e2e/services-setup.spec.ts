@@ -232,7 +232,7 @@ for (const locale of ['en', 'zh'] as const) {
       id: '51',
       connection_id: '1',
       name: 'Shared catalog',
-      base_url: endpoint.base_url,
+      base_url: endpoint.base_url + '/models',
       models_url: endpoint.base_url + '/models',
       list_format: 'openai',
       credential_id: '31',

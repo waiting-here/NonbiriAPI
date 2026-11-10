@@ -162,7 +162,7 @@ for (const width of [1440, 390]) {
               name: '',
               connection_id: '1',
               credential_version: credential.credential_version,
-              models_url: baseURL + '/models',
+              models_url: input.base_url,
               revision: '1',
               discovery_source_revision: '1',
               state: 'unknown',

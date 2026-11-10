@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { executeConnection } from './resourceOperation';
+import { canonicalBaseURLPreview } from '../normalizers';
 
 const input = {
-  base_url: 'https://catalog.example/v1',
+  base_url: 'https://catalog.example/v1/models',
   list_format: 'openai' as const,
   credential_id: '8',
   enabled: true,
@@ -57,7 +58,7 @@ const run = () =>
   );
 
 describe('suggested discovery catalogs', () => {
-  it('reuses the same canonical source when its entered address has a default port or trailing slash', async () => {
+  it('reuses the same canonical source when its entered address has a default port', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn<typeof fetch>(async (url, init) => {
@@ -73,7 +74,7 @@ describe('suggested discovery catalogs', () => {
         {
           kind: 'discovery_source',
           connectionId: '9',
-          input: { ...input, base_url: ' https://CATALOG.example:443/v1/ ' },
+          input: { ...input, base_url: ' https://CATALOG.example:443/v1/models ' },
           suggestedCredentialVersion: '2',
         },
         undefined,
@@ -81,6 +82,62 @@ describe('suggested discovery catalogs', () => {
         new AbortController().signal,
       ),
     ).resolves.toEqual({ kind: 'discovery_source', source });
+  });
+  it('preserves a suggested custom catalog path and its trailing slash', async () => {
+    const complete = 'https://catalog.example/custom/catalog/';
+    const expected = { ...source, base_url: complete, models_url: complete };
+    const writes: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (url, init) => {
+        if (String(url).startsWith('/api/credentials/')) return json(credential);
+        if (init?.method === 'POST') {
+          writes.push(JSON.parse(String(init.body)));
+          return json(expected, 201);
+        }
+        return page([]);
+      }),
+    );
+    await expect(
+      executeConnection(
+        {
+          kind: 'discovery_source',
+          connectionId: '9',
+          input: { ...input, base_url: ' https://CATALOG.example:443/custom/catalog/ ' },
+          suggestedCredentialVersion: '2',
+        },
+        undefined,
+        'ABCDEFGHIJKLMNOPQRSTUV',
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ kind: 'discovery_source', source: expected });
+    expect(writes).toEqual([{ ...input, base_url: complete }]);
+  });
+  it('accepts a migrated maximum-length catalog without widening the inference address limit', async () => {
+    const origin = 'https://catalog.example/';
+    const complete = origin + 'a'.repeat(4_096 - origin.length) + '/models';
+    const expected = { ...source, base_url: complete, models_url: complete };
+    expect(complete).toHaveLength(4_103);
+    expect(() => canonicalBaseURLPreview(complete)).toThrow();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (url) =>
+        String(url).startsWith('/api/credentials/') ? json(credential) : page([expected]),
+      ),
+    );
+    await expect(
+      executeConnection(
+        {
+          kind: 'discovery_source',
+          connectionId: '9',
+          input: { ...input, base_url: complete },
+          suggestedCredentialVersion: '2',
+        },
+        undefined,
+        'ABCDEFGHIJKLMNOPQRSTUV',
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ kind: 'discovery_source', source: expected });
   });
   it('finds an exact available version across pages without changing existing catalogs', async () => {
     const calls: string[] = [];
