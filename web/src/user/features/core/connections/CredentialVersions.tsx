@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -44,6 +45,7 @@ export function CredentialVersions({
       <PanelHead title={t('common.connections.versionHistory')} />
       <PanelBody>
         <Note>{t('common.connections.versionSwitchEffect')}</Note>
+        <QueryFeedback query={query} />
         {query.isPending ? (
           <CoreLoading />
         ) : query.error ? (

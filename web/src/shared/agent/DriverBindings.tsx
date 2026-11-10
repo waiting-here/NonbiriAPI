@@ -237,6 +237,7 @@ export function DriverBindings({
       >
         <div className="nb-stack">
           <FilterBar
+            query={users}
             activeCount={query ? 1 : 0}
             onSubmit={() => setPage('1')}
             onReset={() => {

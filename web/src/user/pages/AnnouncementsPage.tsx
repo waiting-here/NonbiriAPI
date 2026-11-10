@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -79,6 +80,7 @@ export function AnnouncementsPage() {
         title={t('user.announcements.title')}
         description={t('user.announcements.description')}
       />
+      <QueryFeedback query={announcements} />
       {session.error ? (
         <ErrorState error={session.error} onRetry={() => void session.refetch()} />
       ) : session.isPending || !accountID || announcements.isPending ? (

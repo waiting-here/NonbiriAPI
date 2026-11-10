@@ -75,11 +75,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
       ),
     enabled: Boolean(accountKey),
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[3] === accountKey &&
-      previousQuery.queryKey[5] === poolQuery &&
-      previousQuery.queryKey[6] === poolSort
-        ? previous
-        : undefined,
+      previousQuery?.queryKey[3] === accountKey ? previous : undefined,
   });
   const selectedId = params.get('stats_pool') ?? pools.data?.items[0]?.id;
   const cardPager = useUrlPagePager({
@@ -114,10 +110,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
       ),
     enabled: Boolean(accountKey && selectedId),
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[3] === accountKey &&
-      previousQuery.queryKey[5] === selectedId &&
-      previousQuery.queryKey[6] === cardQuery &&
-      previousQuery.queryKey[7] === cardSort
+      previousQuery?.queryKey[3] === accountKey && previousQuery.queryKey[5] === selectedId
         ? previous
         : undefined,
   });
@@ -197,6 +190,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
         />
         <PanelBody>
           <FilterBar
+            query={pools}
             ariaLabel={t('admin.gachaStats.poolFilters')}
             activeCount={poolQuery || poolSort !== 'recent' ? 1 : 0}
             secondaryAlwaysVisible
@@ -417,6 +411,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
                   </div>
                   <h3>{t('admin.gachaStats.cardsTitle')}</h3>
                   <FilterBar
+                    query={cards}
                     ariaLabel={t('admin.gachaStats.cardFilters')}
                     activeCount={cardQuery || cardSort !== 'count' ? 1 : 0}
                     secondaryAlwaysVisible

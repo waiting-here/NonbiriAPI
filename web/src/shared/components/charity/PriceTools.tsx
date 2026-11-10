@@ -57,16 +57,19 @@ function SearchForm({
   onSubmit,
   onReset,
   placeholder,
+  activity,
 }: {
   draft: string;
   setDraft: (value: string) => void;
   onSubmit: () => void;
   onReset: () => void;
   placeholder: string;
+  activity: { isFetching: boolean; data: unknown; isPlaceholderData?: boolean };
 }) {
   const { t } = useTranslation();
   return (
     <FilterBar
+      query={activity}
       activeCount={0}
       onReset={onReset}
       onSubmit={onSubmit}
@@ -122,6 +125,7 @@ function ModelPriceReference({ role, onApply, onCapabilityLoss }: PriceToolsProp
     <div className="nb-form">
       <Note>{t('common.workflow.referenceHelp')}</Note>
       <SearchForm
+        activity={query}
         draft={draft}
         setDraft={setDraft}
         onReset={() => {
@@ -237,6 +241,7 @@ function PriceTemplates({
   return (
     <div className="nb-form">
       <SearchForm
+        activity={query}
         draft={draft}
         setDraft={setDraft}
         onReset={() => {

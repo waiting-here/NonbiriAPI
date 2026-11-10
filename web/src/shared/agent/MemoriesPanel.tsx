@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -287,6 +289,7 @@ function MemoryOwnerPicker({
   });
   const list = useQuery({
     queryKey: [...agentRoot('admin', account), 'memory-owners', query, pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...agentRoot('admin', account), 'memory-owners']),
     queryFn: ({ signal }) => getMemoryOwners(query, pager.page, pager.pageSize, signal),
     enabled: active,
     retry: false,
@@ -325,6 +328,7 @@ function MemoryOwnerPicker({
           </select>
         )}
       </Field>
+      <QueryFeedback query={list} />
       {list.error ? (
         <AgentError error={list.error} onRetry={() => void list.refetch()} />
       ) : list.data ? (

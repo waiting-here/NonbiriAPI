@@ -1524,6 +1524,7 @@ export function ModelsPanel({
       {canRead && !selectedId && !creating ? (
         <Card>
           <FilterBar
+            query={models}
             activeCount={[query, enabled].filter(Boolean).length}
             secondaryAlwaysVisible
             onReset={() => {

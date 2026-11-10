@@ -115,6 +115,7 @@ export function UserDonationHistory({
       ) : (
         <>
           <FilterBar
+            query={list}
             onReset={reset}
             activeCount={[query, status].filter(Boolean).length}
             search={

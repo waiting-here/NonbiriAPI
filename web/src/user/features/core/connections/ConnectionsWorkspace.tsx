@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { useId, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -344,6 +345,7 @@ function ConnectionEndpoints({
   const endpointId = selected?.connection_id === connectionId ? selected.id : undefined;
   return (
     <div className="nb-stack">
+      <QueryFeedback query={query} />
       {query.isPending ? (
         <CoreLoading />
       ) : query.error ? (

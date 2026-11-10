@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Tabs } from '@shared/components/ui/Tabs';
 import { RecordsHeader } from '../components/RecordsHeader';
 import { Link } from 'react-router';
@@ -100,6 +101,7 @@ export function IssuesPage() {
           { value: 'closed', label: t('user.issues.closedTab') },
         ]}
       >
+        <QueryFeedback query={issues} />
         {session.error ? (
           <ErrorState error={session.error} onRetry={() => void session.refetch()} />
         ) : session.isPending || (issues.isPending && !pageData) ? (

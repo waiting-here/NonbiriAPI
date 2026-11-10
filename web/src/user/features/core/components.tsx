@@ -1,3 +1,4 @@
+import { useLongPending } from '@shared/components/QueryFeedback';
 import { useTranslation } from 'react-i18next';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { useState, type ReactNode } from 'react';
@@ -5,7 +6,7 @@ import { AuthRequired } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
 import { Illustration, type IllustrationName } from '@shared/components/Illustration';
 import { copyText } from '@shared/utils/clipboard';
-import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { isApiError, isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from './copy';
 import { Note, OutcomeNote } from '@shared/components/ui';
 import { callerSafeError } from './request';
@@ -14,13 +15,15 @@ import type { ConnectorType, DiscoveryEvidence, DiscoverySafeClass, UserProfile 
 
 export function CoreLoading({ compact = false }: { compact?: boolean }) {
   const { t } = useCoreCopy();
+  const { t: sharedCopy } = useTranslation();
+  const long = useLongPending(true);
   return (
     <div
       className={`core-state core-state--loading${compact ? ' core-state--compact' : ''}`}
       role="status"
     >
       <Icon name="spark" />
-      <span>{t('common.loading')}</span>
+      <span>{long ? sharedCopy('common.query.stillLoading') : t('common.loading')}</span>
     </div>
   );
 }
@@ -40,8 +43,13 @@ export function CoreErrorPanel({
   if (isApiError(error)) {
     if (error.code === 'mfa_required') body = sharedCopy('mfa.requiredError');
     else if (error.status === 409 || error.code === 'conflict') body = t('common.conflict');
-    else if (error.code === 'maintenance' || error.status === 503) body = t('common.maintenance');
-    else if (error.status === 401 || error.status === 403) body = t('common.permissionLost');
+    else if (error.code === 'maintenance') body = t('common.maintenance');
+    else if (isUnauthorized(error) || isForbidden(error)) body = t('common.permissionLost');
+    else if (error.code === 'insufficient_credits' || error.code === 'insufficient_balance')
+      body = sharedCopy('common.insufficientBalance');
+    else if (error.code === 'feature_disabled') body = sharedCopy('common.featureDisabled');
+    else if (error.code === 'charity_suspended') body = sharedCopy('common.charitySuspended');
+    else if (error.code === 'checkin_cap_reached') body = sharedCopy('common.checkinCapReached');
     else body = callerSafeError(error) ?? t('common.errorBody');
   }
   return (

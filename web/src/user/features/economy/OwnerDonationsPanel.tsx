@@ -252,6 +252,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
         }
       >
         <FilterBar
+          query={query}
           onReset={() => {
             setDraft({ source: '', value: '', invalid: false });
             setParams((previous) => {

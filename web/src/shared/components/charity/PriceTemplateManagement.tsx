@@ -175,6 +175,7 @@ export function PriceTemplateManagement({
         }
       />
       <FilterBar
+        query={list}
         activeCount={state === 'all' ? 0 : 1}
         onReset={() => {
           setSearch({ q: '', text: '' });

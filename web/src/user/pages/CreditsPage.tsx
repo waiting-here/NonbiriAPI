@@ -1,3 +1,4 @@
+import { useRetainedQueryData } from '@shared/query/useRetainedQueryData';
 import { CreditChange } from '../features/credits/CreditChange';
 import { Field, FilterBar, Segmented } from '@shared/components/ui';
 import { RecordsHeader } from '../components/RecordsHeader';
@@ -75,7 +76,7 @@ function CreditHistory({
     enabled: Boolean(accountID),
     retry: false,
   });
-  const data = history.data;
+  const data = useRetainedQueryData(history, ['user', 'credit-history', accountID]);
   const busy = history.isFetching;
   const timeReady =
     timeDraftValue(fromTimeDraft) !== undefined && timeDraftValue(toTimeDraft) !== undefined;
@@ -170,6 +171,7 @@ function CreditHistory({
           onChange={(asset_type) => url.apply({ ...url.filter, asset_type })}
         />
         <FilterBar
+          query={{ ...history, data, retained: history.data === undefined && data !== undefined }}
           onSubmit={apply}
           onReset={reset}
           submitDisabled={busy || !timeReady}
@@ -237,10 +239,13 @@ function CreditHistory({
             {copy.invalidRange}
           </p>
         ) : null}
-        <div className="credit-history__results" aria-busy={busy}>
-          {history.isPending ? (
+        <div className="credit-history__results" aria-busy={busy && data !== undefined}>
+          {history.error && data ? (
+            <ErrorState error={history.error} onRetry={() => void history.refetch()} />
+          ) : null}
+          {history.isPending && !data ? (
             <LoadingState />
-          ) : history.error ? (
+          ) : history.error && !data ? (
             <ErrorState error={history.error} onRetry={() => void history.refetch()} />
           ) : data ? (
             <>
@@ -300,11 +305,21 @@ function CreditHistory({
                     total_items: data.total,
                     total_pages: data.total_pages,
                   }}
-                  requestedPage={url.filter.page}
+                  requestedPage={history.data === undefined ? undefined : url.filter.page}
                   maxPage={MAX_HISTORY_PAGE}
                   busy={busy}
-                  onPageChange={(page) => url.setPage(page, data.anchor)}
-                  onPageSizeChange={(pageSize) => url.setPageSize(pageSize, data.anchor)}
+                  onPageChange={(page) => {
+                    if (history.error && page === url.filter.page) void history.refetch();
+                    else url.setPage(page, history.data === undefined ? undefined : data.anchor);
+                  }}
+                  onPageSizeChange={(pageSize) => {
+                    if (history.error && pageSize === url.filter.page_size) void history.refetch();
+                    else
+                      url.setPageSize(
+                        pageSize,
+                        history.data === undefined ? undefined : data.anchor,
+                      );
+                  }}
                 />
               </div>
             </>

@@ -604,6 +604,7 @@ export function AlertsPage() {
       ) : null}
       <Card>
         <FilterBar
+          query={result}
           activeCount={Number(resolved !== 'false') + Number(kind !== 'all')}
           onSubmit={() => {}}
           search={

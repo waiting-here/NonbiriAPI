@@ -887,6 +887,7 @@ export function CharitySourceBrowser({
       </header>
       <div className="charity-source-browser__filters">
         <FilterBar
+          query={sources}
           activeCount={
             [sourceSearch.value, handling.value, keyState === 'all' ? '' : keyState].filter(Boolean)
               .length
@@ -1000,7 +1001,6 @@ export function CharitySourceBrowser({
           }
         />
       </div>
-      {sourceBusy && sourcePage ? <LoadingState label={t('common.loading')} /> : null}
       <div className={`charity-source-browser__columns${sourceKey ? ' has-selection' : ''}`}>
         <section
           className="charity-source-browser__sources"
@@ -1086,6 +1086,7 @@ export function CharitySourceBrowser({
                 </Button>
               </header>
               <FilterBar
+                query={sourceKeys}
                 activeCount={[keySearch.value, idle.value].filter(Boolean).length}
                 onReset={() => {
                   setKeySearchDraft('');
@@ -1184,7 +1185,6 @@ export function CharitySourceBrowser({
                   }))}
                 />
               ) : null}
-              {sourceKeysBusy && keyPage ? <LoadingState label={t('common.loading')} /> : null}
               {sourceKeys.isPending ? (
                 <LoadingState />
               ) : sourceKeys.error ? (

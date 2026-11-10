@@ -114,6 +114,7 @@ export function EndpointTagRules({
       <p className="nb-muted">{t('management.endpoints.rules.description')}</p>
       <p className="nb-muted">{t('management.endpoints.rules.precedence')}</p>
       <FilterBar
+        query={rules}
         ariaLabel={t('management.endpoints.rules.search')}
         activeCount={Number(Boolean(query))}
         onSubmit={() => changeQuery(draft.trim())}

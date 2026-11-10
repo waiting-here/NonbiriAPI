@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
@@ -22,6 +24,7 @@ export function SharedBrowsers({ role, scopeKey }: { role: RiskRole; scopeKey: s
   const size = isPageSize(rawSize) ? rawSize : 20;
   const query = useQuery({
     queryKey: ['risk', role, scopeKey, 'shared-browsers', page, size],
+    placeholderData: retainQueryScope(['risk', role, scopeKey, 'shared-browsers']),
     queryFn: ({ signal }) => getSharedBrowsers(role, page, size, signal),
     retry: false,
     gcTime: 0,
@@ -51,6 +54,7 @@ export function SharedBrowsers({ role, scopeKey }: { role: RiskRole; scopeKey: s
           </button>
         }
       />
+      <QueryFeedback query={query} />
       <Note>{t('common.audit.browsers.help')}</Note>
       {query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />

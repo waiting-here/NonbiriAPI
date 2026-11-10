@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { CloudflareProxySummary } from '@shared/components/CloudflareProxyField';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
@@ -604,6 +605,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           }}
         />
       </Sheet>
+      <QueryFeedback query={models} />
       {/* Filters are hidden until there is something to filter. */}
       {filters.active || (models.data && models.data.pagination.total_items !== '0') ? (
         <ResourceFilterBar control={filters} />

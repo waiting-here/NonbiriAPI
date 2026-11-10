@@ -172,12 +172,7 @@ export function isStewardPermissionDenied(error: unknown): boolean {
 }
 
 export function isForbidden(error: unknown): boolean {
-  return (
-    isApiError(error) &&
-    !isMfaRequired(error) &&
-    !isStewardPermissionDenied(error) &&
-    (error.status === 403 || error.code === 'forbidden')
-  );
+  return isApiError(error) && (error.code === 'forbidden' || error.code === 'elevated_required');
 }
 
 export function isNotFoundError(error: unknown): boolean {

@@ -1,3 +1,4 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import type { NativeService } from '@shared/nativeServices';
 import { BindingTargets } from '../connections/BindingTargets';
@@ -224,6 +225,7 @@ function BindingSelector({
       <div className="core-card__header">
         <h2>{copy.addSources}</h2>
       </div>
+      <QueryFeedback query={bindings} />
       {bindings.isPending && !bindings.data ? <CoreLoading compact /> : null}
       {!bindings.data && bindings.error ? (
         <CoreErrorPanel compact error={bindings.error} onRetry={() => void bindings.refetch()} />
@@ -551,6 +553,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
       <div className="core-card__header">
         <h2>{t('models.bindingsTitle')}</h2>
       </div>
+      <QueryFeedback query={bindings} />
       {bindings.isPending && !bindings.data ? (
         <CoreLoading />
       ) : !bindings.data ? (

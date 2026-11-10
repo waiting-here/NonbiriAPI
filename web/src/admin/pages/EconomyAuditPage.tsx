@@ -1,3 +1,5 @@
+import { useRetainedQueryData } from '@shared/query/useRetainedQueryData';
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
@@ -284,50 +286,70 @@ function Trend({ filter }: { readonly filter: AuditFilter }) {
   const { t: copy } = useTranslation();
   const t = useEconomyText(),
     session = useAdminSession();
-  const q = useQuery({
+  const q = useQuery<Awaited<ReturnType<typeof getSeries>>>({
     queryKey: ['admin', session.data?.admin.username, 'economy-series', filter],
+    placeholderData: (previous, query) =>
+      query &&
+      query.queryKey[1] === session.data?.admin.username &&
+      (query.queryKey[3] as AuditFilter).asset === filter.asset
+        ? previous
+        : undefined,
     queryFn: ({ signal }) => getSeries(filter, signal),
     retry: false,
     refetchInterval: (q) =>
       q.state.data?.metadata.coverage.status === 'catching_up' ? 1000 : false,
   });
-  if (q.isPending) return <LoadingState />;
-  if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  const data = useRetainedQueryData(q, [
+    'admin',
+    session.data?.admin.username,
+    'economy-series',
+    filter.asset,
+  ]);
+  if (data === undefined)
+    return q.error ? (
+      <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />
+    ) : (
+      <LoadingState />
+    );
   return (
     <>
-      <Coverage meta={q.data.metadata} compact />
-      {q.data.metadata.coverage.status !== 'catching_up' && (
-        <>
-          <EconomyTrendChart series={q.data} />
-          <Fold
-            title={copy('admin.economyAudit.presentation.periods', { count: q.data.data.length })}
-          >
-            <DataTable
-              caption={t('分时段收支', 'Flows by time bucket')}
-              rows={q.data.data}
-              rowKey={(point) => String(point.start)}
-              columns={[
-                {
-                  key: 'start',
-                  header: t('区间起点', 'Interval start'),
-                  cell: 'title',
-                  render: (point) => time(point.start, q.data.metadata.offset_minutes),
-                },
-                ...metricKeys.map((key) => ({
-                  key,
-                  header: metricLabel(key, t),
-                  mobileLabel: metricLabel(key, t),
-                  cell: 'meta' as const,
-                  align: 'num' as const,
-                  render: (point: (typeof q.data.data)[number]) => (
-                    <CreditNumber value={displayAmount(point.metrics[key])} />
-                  ),
-                })),
-              ]}
-            />
-          </Fold>
-        </>
-      )}
+      <QueryFeedback query={{ ...q, data, retained: q.data === undefined }} quietRefetch />
+      <div className="nb-stack" aria-busy={q.isFetching}>
+        {q.error ? <AuditErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
+        <Coverage meta={data.metadata} compact />
+        {data.metadata.coverage.status !== 'catching_up' && (
+          <>
+            <EconomyTrendChart series={data} />
+            <Fold
+              title={copy('admin.economyAudit.presentation.periods', { count: data.data.length })}
+            >
+              <DataTable
+                caption={t('分时段收支', 'Flows by time bucket')}
+                rows={data.data}
+                rowKey={(point) => String(point.start)}
+                columns={[
+                  {
+                    key: 'start',
+                    header: t('区间起点', 'Interval start'),
+                    cell: 'title',
+                    render: (point) => time(point.start, data.metadata.offset_minutes),
+                  },
+                  ...metricKeys.map((key) => ({
+                    key,
+                    header: metricLabel(key, t),
+                    mobileLabel: metricLabel(key, t),
+                    cell: 'meta' as const,
+                    align: 'num' as const,
+                    render: (point: (typeof data.data)[number]) => (
+                      <CreditNumber value={displayAmount(point.metrics[key])} />
+                    ),
+                  })),
+                ]}
+              />
+            </Fold>
+          </>
+        )}
+      </div>
     </>
   );
 }
@@ -341,65 +363,85 @@ function ChannelDetails({
 }) {
   const t = useEconomyText(),
     session = useAdminSession();
-  const q = useQuery({
+  const q = useQuery<Awaited<ReturnType<typeof getChannels>>>({
     queryKey: ['admin', session.data?.admin.username, 'economy-channels', filter],
+    placeholderData: (previous, query) =>
+      query &&
+      query.queryKey[1] === session.data?.admin.username &&
+      (query.queryKey[3] as AuditFilter).asset === filter.asset
+        ? previous
+        : undefined,
     queryFn: ({ signal }) => getChannels(filter, signal),
     retry: false,
     refetchInterval: (q) =>
       q.state.data?.metadata.coverage.status === 'catching_up' ? 1000 : false,
   });
-  if (q.isPending) return <LoadingState />;
-  if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  const data = useRetainedQueryData(q, [
+    'admin',
+    session.data?.admin.username,
+    'economy-channels',
+    filter.asset,
+  ]);
+  if (data === undefined)
+    return q.error ? (
+      <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />
+    ) : (
+      <LoadingState />
+    );
   return (
     <>
-      <Coverage meta={q.data.metadata} compact />
-      <DataTable
-        caption={t('点击渠道查看对应分录', 'Open a channel to inspect its ledger entries')}
-        rows={q.data.data}
-        rowKey={(channel) => `${channel.kind}/${channel.source_type}/${channel.channel}`}
-        columns={[
-          {
-            key: 'channel',
-            header: t('渠道 / 操作', 'Channel / operation'),
-            cell: 'title',
-            render: (channel) => (
-              <>
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  onClick={() => select(channel.kind, channel.channel)}
-                >
-                  {channelLabel(channel.channel, t)}
-                </button>
-                <span className="nb-sub">
-                  <code>{channel.kind}</code>
-                  {!channel.known ? t('未分类', 'Unclassified') : null}
-                </span>
-              </>
-            ),
-          },
-          ...metricKeys.map((key) => ({
-            key,
-            header: metricLabel(key, t),
-            mobileLabel: metricLabel(key, t),
-            cell: 'meta' as const,
-            align: 'num' as const,
-            render: (channel: (typeof q.data.data)[number]) => (
-              <CreditNumber value={displayAmount(channel.metrics[key])} />
-            ),
-          })),
-          {
-            key: 'operations',
-            header: t('操作数', 'Operations'),
-            mobileLabel: t('操作数', 'Operations'),
-            cell: 'meta',
-            align: 'num',
-            render: (channel) => channel.metrics.operations,
-          },
-        ]}
-      />
-      {q.data.data.length === 0 && q.data.metadata.coverage.status !== 'catching_up' && (
-        <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
-      )}
+      <QueryFeedback query={{ ...q, data, retained: q.data === undefined }} quietRefetch />
+      <div className="nb-stack" aria-busy={q.isFetching}>
+        {q.error ? <AuditErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
+        <Coverage meta={data.metadata} compact />
+        <DataTable
+          caption={t('点击渠道查看对应分录', 'Open a channel to inspect its ledger entries')}
+          rows={data.data}
+          rowKey={(channel) => `${channel.kind}/${channel.source_type}/${channel.channel}`}
+          columns={[
+            {
+              key: 'channel',
+              header: t('渠道 / 操作', 'Channel / operation'),
+              cell: 'title',
+              render: (channel) => (
+                <>
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    onClick={() => select(channel.kind, channel.channel)}
+                  >
+                    {channelLabel(channel.channel, t)}
+                  </button>
+                  <span className="nb-sub">
+                    <code>{channel.kind}</code>
+                    {!channel.known ? t('未分类', 'Unclassified') : null}
+                  </span>
+                </>
+              ),
+            },
+            ...metricKeys.map((key) => ({
+              key,
+              header: metricLabel(key, t),
+              mobileLabel: metricLabel(key, t),
+              cell: 'meta' as const,
+              align: 'num' as const,
+              render: (channel: (typeof data.data)[number]) => (
+                <CreditNumber value={displayAmount(channel.metrics[key])} />
+              ),
+            })),
+            {
+              key: 'operations',
+              header: t('操作数', 'Operations'),
+              mobileLabel: t('操作数', 'Operations'),
+              cell: 'meta',
+              align: 'num',
+              render: (channel) => channel.metrics.operations,
+            },
+          ]}
+        />
+        {data.data.length === 0 && data.metadata.coverage.status !== 'catching_up' && (
+          <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
+        )}
+      </div>
     </>
   );
 }
@@ -409,84 +451,105 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
     session = useAdminSession();
   const [cursors, setCursors] = useState<string[]>([]);
   const cursor = cursors.at(-1);
-  const q = useQuery({
+  const q = useQuery<Awaited<ReturnType<typeof getOperations>>>({
     queryKey: ['admin', session.data?.admin.username, 'economy-operations', filter, cursor],
+    placeholderData: (previous, query) =>
+      query &&
+      query.queryKey[1] === session.data?.admin.username &&
+      (query.queryKey[3] as AuditFilter).asset === filter.asset
+        ? previous
+        : undefined,
     queryFn: ({ signal }) => getOperations({ ...filter, cursor }, signal),
     retry: false,
   });
-  if (q.isPending) return <LoadingState />;
-  if (q.error) return <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  const data = useRetainedQueryData(q, [
+    'admin',
+    session.data?.admin.username,
+    'economy-operations',
+    filter.asset,
+  ]);
+  if (data === undefined)
+    return q.error ? (
+      <AuditErrorState error={q.error} onRetry={() => void q.refetch()} />
+    ) : (
+      <LoadingState />
+    );
   return (
     <>
-      <Coverage meta={q.data.metadata} compact />
-      <p>
-        {t(
-          '每页最多100笔；每个币种的分录独立展示。',
-          'Up to 100 operations per page; each asset is shown separately.',
-        )}{' '}
-        {t('本次翻页固定于账本水位', 'Pagination is anchored at ledger watermark')}{' '}
-        {q.data.anchor_seq}.
-      </p>
-      {q.data.data.map((o) => (
-        <details className="audit-operation" key={o.id}>
-          <summary>
-            {time(o.created_at, q.data.metadata.offset_minutes)} ·{' '}
-            {channelLabel(o.classification.channel, t)} · <code>{o.kind}</code> · #{o.ledger_seq}
-          </summary>
-          <p>
-            <code>{o.id}</code> · {o.source_type}: <code>{o.source_id}</code>
-          </p>
-          <DataTable
-            caption={t('分录', 'Ledger')}
-            rows={o.entries}
-            rowKey={(entry) => String(o.entries.indexOf(entry))}
-            columns={[
-              {
-                key: 'asset',
-                header: t('资产', 'Asset'),
-                cell: 'title',
-                render: (entry) => assetLabel(entry.asset, t),
-              },
-              {
-                key: 'account',
-                header: t('账户', 'Account'),
-                mobileLabel: t('账户', 'Account'),
-                cell: 'meta',
-                render: (entry) => entry.account_kind,
-              },
-              {
-                key: 'user',
-                header: t('用户', 'User'),
-                mobileLabel: t('用户', 'User'),
-                cell: 'meta',
-                render: (entry) =>
-                  entry.user_id ??
-                  (entry.account_kind === 'user' ? t('已去身份', 'Deidentified') : '—'),
-              },
-              {
-                key: 'delta',
-                header: t('变动', 'Delta'),
-                mobileLabel: t('变动', 'Delta'),
-                cell: 'meta',
-                align: 'num',
-                render: (entry) => <CreditNumber value={displayAmount(entry.delta)} />,
-              },
-            ]}
-          />
-        </details>
-      ))}
-      {q.data.data.length === 0 && (
-        <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
-      )}
-      <SimplePager
-        page={cursors.length + 1}
-        hasMore={Boolean(q.data.next_cursor)}
-        onPrev={() => setCursors((v) => v.slice(0, -1))}
-        onNext={() => {
-          if (q.data.next_cursor) setCursors((v) => [...v, q.data.next_cursor!]);
-        }}
-        labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
-      />
+      <QueryFeedback query={{ ...q, data, retained: q.data === undefined }} />
+      <div className="nb-stack" aria-busy={q.isFetching}>
+        {q.error ? <AuditErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
+        <Coverage meta={data.metadata} compact />
+        <p>
+          {t(
+            '每页最多100笔；每个币种的分录独立展示。',
+            'Up to 100 operations per page; each asset is shown separately.',
+          )}{' '}
+          {t('本次翻页固定于账本水位', 'Pagination is anchored at ledger watermark')}{' '}
+          {data.anchor_seq}.
+        </p>
+        {data.data.map((o) => (
+          <details className="audit-operation" key={o.id}>
+            <summary>
+              {time(o.created_at, data.metadata.offset_minutes)} ·{' '}
+              {channelLabel(o.classification.channel, t)} · <code>{o.kind}</code> · #{o.ledger_seq}
+            </summary>
+            <p>
+              <code>{o.id}</code> · {o.source_type}: <code>{o.source_id}</code>
+            </p>
+            <DataTable
+              caption={t('分录', 'Ledger')}
+              rows={o.entries}
+              rowKey={(entry) => String(o.entries.indexOf(entry))}
+              columns={[
+                {
+                  key: 'asset',
+                  header: t('资产', 'Asset'),
+                  cell: 'title',
+                  render: (entry) => assetLabel(entry.asset, t),
+                },
+                {
+                  key: 'account',
+                  header: t('账户', 'Account'),
+                  mobileLabel: t('账户', 'Account'),
+                  cell: 'meta',
+                  render: (entry) => entry.account_kind,
+                },
+                {
+                  key: 'user',
+                  header: t('用户', 'User'),
+                  mobileLabel: t('用户', 'User'),
+                  cell: 'meta',
+                  render: (entry) =>
+                    entry.user_id ??
+                    (entry.account_kind === 'user' ? t('已去身份', 'Deidentified') : '—'),
+                },
+                {
+                  key: 'delta',
+                  header: t('变动', 'Delta'),
+                  mobileLabel: t('变动', 'Delta'),
+                  cell: 'meta',
+                  align: 'num',
+                  render: (entry) => <CreditNumber value={displayAmount(entry.delta)} />,
+                },
+              ]}
+            />
+          </details>
+        ))}
+        {data.data.length === 0 && (
+          <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
+        )}
+        <SimplePager
+          disabled={q.isFetching}
+          page={cursors.length + 1}
+          hasMore={q.data !== undefined && Boolean(data.next_cursor)}
+          onPrev={() => setCursors((v) => v.slice(0, -1))}
+          onNext={() => {
+            if (data.next_cursor) setCursors((v) => [...v, data.next_cursor!]);
+          }}
+          labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+        />
+      </div>
     </>
   );
 }
@@ -500,16 +563,29 @@ export function EconomyAuditPage() {
   });
   const [draft, setDraft] = useState(filter),
     [view, setView] = useState<View>('series'),
-    [invalid, setInvalid] = useState(false);
+    [invalid, setInvalid] = useState(false),
+    [refreshing, setRefreshing] = useState(false);
   const [fromInput, setFromInput] = useState(() => createTimeDraft(filter.from, 'second'));
   const [toInput, setToInput] = useState(() => createTimeDraft(filter.to, 'second'));
-  const summary = useQuery({
+  const summary = useQuery<Awaited<ReturnType<typeof getSummary>>>({
     queryKey: ['admin', session.data?.admin.username, 'economy-summary', filter],
+    placeholderData: (previous, query) =>
+      query &&
+      query.queryKey[1] === session.data?.admin.username &&
+      (query.queryKey[3] as AuditFilter).asset === filter.asset
+        ? previous
+        : undefined,
     queryFn: ({ signal }) => getSummary(filter, signal),
     retry: false,
     refetchInterval: (q) =>
       q.state.data?.metadata.coverage.status === 'catching_up' ? 1000 : false,
   });
+  const summaryData = useRetainedQueryData(summary, [
+    'admin',
+    session.data?.admin.username,
+    'economy-summary',
+    filter.asset,
+  ]);
   const from = timeDraftValue(fromInput),
     to = timeDraftValue(toInput);
   const offset = fromInput.siteOffsetMinutes;
@@ -542,6 +618,12 @@ export function EconomyAuditPage() {
       <Card>
         <TimeContextNotice station="admin" />
         <FilterBar
+          query={{
+            data: summaryData,
+            error: summary.error,
+            retained: summary.data === undefined && summaryData !== undefined,
+            isFetching: summary.isFetching && (summary.isPlaceholderData || refreshing),
+          }}
           activeCount={Number(filter.asset !== 'general') + Number(filter.bucket !== 'hour')}
           onSubmit={() => apply()}
           onReset={() => {
@@ -621,7 +703,11 @@ export function EconomyAuditPage() {
           <button
             className="nb-btn nb-btn--secondary"
             type="button"
-            onClick={() => void summary.refetch()}
+            disabled={summary.isFetching}
+            onClick={() => {
+              setRefreshing(true);
+              void summary.refetch().finally(() => setRefreshing(false));
+            }}
           >
             {t('刷新库存', 'Refresh stock')}
           </button>
@@ -636,23 +722,28 @@ export function EconomyAuditPage() {
         )}
       </Card>
       <Card>
-        {summary.isPending ? (
-          <LoadingState />
-        ) : summary.error ? (
-          <AuditErrorState error={summary.error} onRetry={() => void summary.refetch()} />
-        ) : (
-          <>
-            <h2>{assetLabel(filter.asset, t)}</h2>
-            <Coverage meta={summary.data.metadata} />
-            {summary.data.metadata.coverage.status !== 'catching_up' && (
-              <>
-                <h3>{t('所选区间收支', 'Selected interval flows')}</h3>
-                <MetricCards metrics={summary.data.flows} />
-                <Stock summary={summary.data} />
-              </>
-            )}
-          </>
-        )}
+        <div aria-busy={summary.isFetching && summaryData !== undefined}>
+          {summary.error && summaryData ? (
+            <AuditErrorState error={summary.error} onRetry={() => void summary.refetch()} />
+          ) : null}
+          {summary.isPending && !summaryData ? (
+            <LoadingState />
+          ) : summary.error && !summaryData ? (
+            <AuditErrorState error={summary.error} onRetry={() => void summary.refetch()} />
+          ) : summaryData ? (
+            <>
+              <h2>{assetLabel(filter.asset, t)}</h2>
+              <Coverage meta={summaryData.metadata} />
+              {summaryData.metadata.coverage.status !== 'catching_up' && (
+                <>
+                  <h3>{t('所选区间收支', 'Selected interval flows')}</h3>
+                  <MetricCards metrics={summaryData.flows} />
+                  <Stock summary={summaryData} />
+                </>
+              )}
+            </>
+          ) : null}
+        </div>
       </Card>
       <Card>
         <Tabs

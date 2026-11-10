@@ -3152,6 +3152,16 @@
       "save": "Save model quotas",
       "retry": "Retry the same save",
       "saved": "Model quotas saved."
+    },
+    "insufficientBalance": "There is not enough available balance. Choose a smaller amount or add funds.",
+    "featureDisabled": "This feature is currently closed.",
+    "charitySuspended": "Charity access is currently suspended for this account.",
+    "checkinCapReached": "Your balance has reached the check-in limit.",
+    "query": {
+      "updating": "Updating results… Showing the previous results until the query finishes.",
+      "stillUpdating": "The query is still running. Previous results remain visible until it finishes.",
+      "stillLoading": "The query is still running. Please wait for the result.",
+      "failedRetained": "The query failed. The previous results are still shown."
     }
   },
   "logs": {

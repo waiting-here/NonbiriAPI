@@ -105,6 +105,7 @@ export function ConnectionResourceList<T>({
       <PanelHead title={title} level={embedded ? 3 : 2} actions={actions} />
       <PanelBody>
         <FilterBar
+          query={query}
           as="div"
           activeCount={q ? 1 : 0}
           search={

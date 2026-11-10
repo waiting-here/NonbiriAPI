@@ -715,6 +715,7 @@ export function DonationResourcePicker({
 
   const endpointSearchForm = (
     <FilterBar
+      query={endpointQuery}
       activeCount={endpointSearch ? 1 : 0}
       onSubmit={() => {
         if (enabled && !disabled)
@@ -745,6 +746,7 @@ export function DonationResourcePicker({
 
   const keySearchForm = (
     <FilterBar
+      query={keyQuery}
       activeCount={keySearch ? 1 : 0}
       onSubmit={() => {
         if (enabled && !disabled) commitSearch(KEY_SEARCH_PARAM, KEY_PAGE_PARAM, keySearchDraft);

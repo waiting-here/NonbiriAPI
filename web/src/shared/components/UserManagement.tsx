@@ -1207,12 +1207,7 @@ export function UserManagement({
       !invalidCommittedUserID &&
       !invalidCommittedDiscordID &&
       previousQuery?.queryKey[3] === account &&
-      previousQuery.queryKey[4] === banned &&
-      previousQuery.queryKey[5] === query &&
-      previousQuery.queryKey[6] === level &&
-      previousQuery.queryKey[7] === userID &&
-      previousQuery.queryKey[10] === accountState &&
-      previousQuery.queryKey[11] === discordID
+      previousQuery.queryKey[10] === accountState
         ? previous
         : undefined,
   });
@@ -1405,6 +1400,7 @@ export function UserManagement({
         <div className="nb-md__list ops-stack" ref={listRef} tabIndex={-1}>
           <Card>
             <FilterBar
+              query={users}
               activeCount={
                 [userID, discordID, banned, level, accountState !== 'all'].filter(Boolean).length
               }
@@ -1559,7 +1555,6 @@ export function UserManagement({
               />
             ) : (
               <div aria-busy={users.isFetching}>
-                {users.isFetching ? <LoadingState /> : null}
                 <DataTable
                   dense
                   caption={t('management.users.listTitle')}

@@ -605,6 +605,7 @@ function CharityBindingPickerBody({
       {!selectedSource ? (
         <>
           <FilterBar
+            query={sources}
             activeCount={sourceQuery ? 1 : 0}
             onSubmit={submitSourceQuery}
             onReset={() => {
@@ -744,6 +745,7 @@ function CharityBindingPickerBody({
           {!selectedKey ? (
             <>
               <FilterBar
+                query={sourceKeys}
                 activeCount={keyQuery ? 1 : 0}
                 onSubmit={submitKeyQuery}
                 onReset={() => {
@@ -914,6 +916,7 @@ function CharityBindingPickerBody({
                 <ErrorState error={sourceKeys.error} onRetry={() => void sourceKeys.refetch()} />
               ) : null}
               <FilterBar
+                query={candidates}
                 activeCount={[candidateQuery, candidateSource].filter(Boolean).length}
                 onSubmit={submitCandidateQuery}
                 onReset={() => {

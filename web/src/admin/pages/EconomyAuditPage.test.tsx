@@ -219,3 +219,97 @@ describe('administrator economy audit', () => {
     expect(screen.queryByText(/private database detail/)).toBeNull();
   });
 });
+
+it('keeps the previous stock visible after a replacement summary times out', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      );
+      if (url.pathname === '/admin/api/session')
+        return response({ admin: { username: 'audit-admin' } });
+      if (url.pathname === '/admin/api/time-context')
+        return response({ mode: 'site', offset_minutes: 330 });
+      if (url.pathname.endsWith('/summary')) {
+        return url.searchParams.get('bucket') === 'day'
+          ? response({ error: { code: 'service_unavailable', message: 'Timed out' } }, 503)
+          : response(summary);
+      }
+      if (url.pathname.endsWith('/series'))
+        return response({ metadata, bucket: url.searchParams.get('bucket') ?? 'hour', data: [] });
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    }),
+  );
+  await renderWithProviders(<EconomyAuditPage />, { station: 'admin', locale: 'en' });
+  await screen.findByRole('heading', { name: 'Current stock' });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Bucket' }), { target: { value: 'day' } });
+  await screen.findByRole('heading', { name: 'Accounting audit unavailable' });
+  expect(screen.getByRole('heading', { name: 'Current stock' })).toBeVisible();
+  expect(screen.getByText('The query failed. The previous results are still shown.')).toBeVisible();
+});
+
+it('keeps failed retained cursor navigation recoverable through Previous and Retry', async () => {
+  let failNext = true;
+  const reads: (string | null)[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      );
+      if (url.pathname === '/admin/api/session')
+        return response({ admin: { username: 'audit-admin' } });
+      if (url.pathname === '/admin/api/time-context')
+        return response({ mode: 'site', offset_minutes: 330 });
+      if (url.pathname.endsWith('/summary')) return response(summary);
+      if (url.pathname.endsWith('/series')) return response({ metadata, bucket: 'hour', data: [] });
+      if (url.pathname.endsWith('/operations')) {
+        const cursor = url.searchParams.get('cursor');
+        reads.push(cursor);
+        if (cursor === 'next-page' && failNext)
+          return response({ error: { code: 'service_unavailable', message: 'Timed out' } }, 503);
+        return response({
+          metadata,
+          anchor_seq: '1',
+          next_cursor: cursor ? null : 'next-page',
+          data: [
+            {
+              id: 'op_' + 'A'.repeat(22),
+              ledger_seq: '1',
+              kind: 'checkin_award',
+              source_type: 'operation',
+              source_id: cursor ? 'new-source' : 'previous-source',
+              created_at: 1_800_000_000,
+              classification: { channel: 'checkin', behavior: 'award', known: true },
+              entries: [{ asset: 'general', account_kind: 'user', user_id: null, delta: '1000' }],
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    }),
+  );
+  const view = await renderWithProviders(<EconomyAuditPage />, { station: 'admin' });
+  await screen.findByRole('heading', { name: 'Current stock' });
+  await view.user.click(screen.getByRole('tab', { name: 'Ledger' }));
+  await screen.findByText('previous-source');
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await screen.findByRole('heading', { name: 'Accounting audit unavailable' });
+  expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  expect(reads.filter((cursor) => cursor === 'next-page')).toHaveLength(1);
+  await view.user.click(screen.getByRole('button', { name: 'Previous' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('heading', { name: 'Accounting audit unavailable' })).toBeNull(),
+  );
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await screen.findByRole('heading', { name: 'Accounting audit unavailable' });
+  failNext = false;
+  await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+  await screen.findByText('new-source');
+  expect(reads.filter((cursor) => cursor === 'next-page')).toHaveLength(3);
+});

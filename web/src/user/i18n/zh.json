@@ -2828,8 +2828,8 @@
       "connector.chatCompletions": "OpenAI Chat Completions"
     },
     "lakeNotes": {
-      "dailyRemaining": "今日还可支出 {{amount}} {{unit}}",
-      "dailyLimit": "每日支出上限：{{amount}} {{unit}}",
+      "dailyRemaining": "今日剩余兑换额度：{{amount}} {{unit}}",
+      "dailyLimit": "每日兑换额度上限：{{amount}} {{unit}}",
       "dailyUnlimited": "每日兑换不限额",
       "dailyLimitReached": "今日剩余额度不足，请减少兑换数量或明天再试。",
       "dailyReset": "额度重置：{{time}}",
@@ -3538,7 +3538,8 @@
       "buyBatch": "购买 {{count}} 个 · {{cost}} 金币",
       "bitePreparation": "鱼上钩了，准备控竿",
       "saveHelp": "存档随账号同步，换设备后可继续。",
-      "previewFirst": "请先预览兑换。"
+      "previewFirst": "请先预览兑换。",
+      "sourceBalance": "实际可用余额：<amount>{{amount}}</amount> {{unit}}"
     },
     "quickstart": {
       "title": "接入自用服务",
