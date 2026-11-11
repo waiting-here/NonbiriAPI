@@ -112,6 +112,19 @@ func accessWhere(filter AccessFilter) (string, []any) {
 	return where, args
 }
 
+func accessPageQuery(where string, numbered bool) string {
+	limit := ` LIMIT ?`
+	if numbered {
+		limit += ` OFFSET ?`
+	}
+	return `WITH access_page AS MATERIALIZED (
+ SELECT rowid AS access_rowid FROM audit_access_events WHERE ` + where + `
+ ORDER BY occurred_at DESC,id DESC` + limit + `
+) SELECT e.id,e.user_id,e.caller_key_generation,e.path_kind,e.method,e.http_status,e.response_kind,e.source_json,e.occurred_at
+ FROM access_page p JOIN audit_access_events e ON e.rowid=p.access_rowid
+ ORDER BY e.occurred_at DESC,e.id DESC`
+}
+
 // Access reads require authorization in the caller-owned transaction. Their
 // cursor is only a position within the already authorized, bounded selection.
 func ListAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (AccessPage, error) {
@@ -130,7 +143,7 @@ func ListAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (AccessP
 		args = append(args, cursor.At, cursor.At, cursor.ID)
 	}
 	args = append(args, filter.Limit+1)
-	rows, err := tx.QueryContext(ctx, `SELECT id,user_id,caller_key_generation,path_kind,method,http_status,response_kind,source_json,occurred_at FROM audit_access_events WHERE `+where+` ORDER BY occurred_at DESC,id DESC LIMIT ?`, args...)
+	rows, err := tx.QueryContext(ctx, accessPageQuery(where, false), args...)
 	if err != nil {
 		return page, err
 	}
@@ -166,7 +179,7 @@ func ListAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (AccessP
 
 // ListAccessNumberedTx counts and reads from one authorized snapshot. A
 // rowid watermark excludes inserts after the first page even when opaque IDs
-// sort before older IDs; a database anchor keeps high-page rows out of Go.
+// sort before older IDs; only the selected page receives its display fields.
 func ListAccessNumberedTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (NumberedAccessPage, error) {
 	page := NumberedAccessPage{Data: []AccessRow{}, From: filter.From, To: filter.To}
 	if tx == nil || validateAccessFilter(filter) != nil || filter.Cursor != "" || filter.Page < 1 || filter.Page > 2147483647 ||
@@ -194,14 +207,8 @@ func ListAccessNumberedTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) 
 	if total == 0 {
 		return page, nil
 	}
-	anchorArgs := append(append([]any{}, args...), (pageNumber-1)*int64(filter.Limit))
-	var at int64
-	var id string
-	if err := tx.QueryRowContext(ctx, `SELECT occurred_at,id FROM audit_access_events WHERE `+where+` ORDER BY occurred_at DESC,id DESC LIMIT 1 OFFSET ?`, anchorArgs...).Scan(&at, &id); err != nil {
-		return page, err
-	}
-	rowsArgs := append(append([]any{}, args...), at, at, id, filter.Limit)
-	rows, err := tx.QueryContext(ctx, `SELECT id,user_id,caller_key_generation,path_kind,method,http_status,response_kind,source_json,occurred_at FROM audit_access_events WHERE `+where+` AND (occurred_at<? OR (occurred_at=? AND id<=?)) ORDER BY occurred_at DESC,id DESC LIMIT ?`, rowsArgs...)
+	rowsArgs := append(append([]any{}, args...), filter.Limit, (pageNumber-1)*int64(filter.Limit))
+	rows, err := tx.QueryContext(ctx, accessPageQuery(where, true), rowsArgs...)
 	if err != nil {
 		return page, err
 	}
@@ -228,6 +235,12 @@ func ListAccessNumberedTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) 
 	return page, rows.Err()
 }
 
+// Match the retained-source partial index explicitly: SQLite cannot infer
+// the IN-list subset. The second predicate preserves generation-only counts.
+const accessGenerationCountQuery = `SELECT count(*) FROM request_source_facts
+ WHERE kind IN ('self','charity','unclassified') AND kind IN ('self','charity')
+ AND occurred_at>=? AND occurred_at<?`
+
 func SummarizeAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (AccessSummary, error) {
 	result := AccessSummary{Paths: make([]AccessPathSummary, 0)}
 	if tx == nil || validateAccessFilter(filter) != nil {
@@ -241,7 +254,10 @@ func SummarizeAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (Ac
 		result.Coverage.LastGapAt = &gap.Int64
 	}
 	where, args := accessWhere(filter)
-	rows, err := tx.QueryContext(ctx, `SELECT path_kind,response_kind,count(*) FROM audit_access_events WHERE `+where+` GROUP BY path_kind,response_kind ORDER BY path_kind,response_kind`, args...)
+	rows, err := tx.QueryContext(ctx, `WITH access_summary AS MATERIALIZED (
+ SELECT path_kind,response_kind,count(*) AS count FROM audit_access_events WHERE `+where+`
+ GROUP BY path_kind,response_kind
+) SELECT path_kind,response_kind,count FROM access_summary ORDER BY path_kind,response_kind`, args...)
 	if err != nil {
 		return result, err
 	}
@@ -274,7 +290,9 @@ func SummarizeAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (Ac
 			anonWhere += ` AND status_class=?`
 			anonArgs = append(anonArgs, filter.StatusClass)
 		}
-		rows, err = tx.QueryContext(ctx, `SELECT path_kind,SUM(count) FROM anonymous_access_minutes WHERE `+anonWhere+` GROUP BY path_kind ORDER BY path_kind`, anonArgs...)
+		rows, err = tx.QueryContext(ctx, `WITH anonymous_summary AS MATERIALIZED (
+ SELECT path_kind,SUM(count) AS count FROM anonymous_access_minutes WHERE `+anonWhere+` GROUP BY path_kind
+) SELECT path_kind,count FROM anonymous_summary ORDER BY path_kind`, anonArgs...)
 		if err != nil {
 			return result, err
 		}
@@ -296,13 +314,13 @@ func SummarizeAccessTx(ctx context.Context, tx *sql.Tx, filter AccessFilter) (Ac
 	}
 	// Ordinary generation attempts are counted once by their logical source
 	// row, including refusals. Discovery and auxiliary events are excluded.
-	where = `occurred_at>=? AND occurred_at<?`
+	query := accessGenerationCountQuery
 	args = []any{filter.From, filter.To}
 	if filter.UserID > 0 {
-		where += ` AND user_id=?`
+		query += ` AND user_id=?`
 		args = append(args, filter.UserID)
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_source_facts WHERE kind IN ('self','charity') AND `+where, args...).Scan(&result.GenerationRequests); err != nil {
+	if err = tx.QueryRowContext(ctx, query, args...).Scan(&result.GenerationRequests); err != nil {
 		return result, err
 	}
 	if result.GenerationRequests > 0 {

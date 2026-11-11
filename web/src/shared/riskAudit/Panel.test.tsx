@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   saveRule: vi.fn(),
   deleteRule: vi.fn(),
   user: vi.fn(),
+  numberedAccess: vi.fn(),
+  accessSummary: vi.fn(),
 }));
 vi.mock('./api', async (load) => ({
   ...(await load<typeof import('./api')>()),
@@ -263,6 +265,95 @@ beforeEach(() => {
   }));
 });
 describe('Risk audit access and evidence presentation', () => {
+  it.each(['admin', 'steward'] as const)(
+    'shows independent access-summary and event refresh feedback for %s, including retry',
+    async (role) => {
+      const accessSummary = {
+        authenticated_events: 1,
+        anonymous_events: 0,
+        model_list_events: 1,
+        generation_requests: 1,
+        model_generation_ratio: 1,
+        coverage: { capture_started_at: 1799913600, dropped: 0, last_gap_at: null },
+        paths: [],
+      };
+      const events = {
+        items: [
+          {
+            id: 'aev_AAAAAAAAAAAAAAAAAAAAAA',
+            user_id: '6',
+            caller_key_generation: '3',
+            path_kind: 'models',
+            method: 'GET',
+            http_status: 200,
+            response_kind: 'api_json',
+            source: { effective_ip: '192.0.2.72', ip_quality: 'direct_peer', quality: {} },
+            occurred_at: 1799999999,
+          },
+        ],
+        page: '1',
+        page_size: 20,
+        total_items: '1',
+        total_pages: '1',
+        watermark: '1',
+        changed: false,
+        from: 1799913600,
+        to: 1800000000,
+      };
+      api.accessSummary.mockResolvedValue(accessSummary);
+      api.numberedAccess.mockResolvedValue(events);
+      const view = await renderWithProviders(<RiskAuditPanel role={role} scopeKey="6" />, {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level6',
+        route:
+          '/audit?audit_tab=access&audit_access_from=1799913600&audit_access_to=1800000000&audit_access_watermark=1&audit_access_total=1',
+      });
+      const rowText = 'GET · models · 200 · api_json';
+      expect(await screen.findByText(rowText)).toBeVisible();
+      await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
+      let finishSummary!: (value: typeof accessSummary) => void;
+      let failEvents!: (error: Error) => void;
+      api.accessSummary.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishSummary = resolve;
+          }),
+      );
+      api.numberedAccess.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failEvents = reject;
+          }),
+      );
+      act(() => {
+        void view.queryClient.invalidateQueries({ queryKey: ['risk', role, '6'] });
+      });
+      await waitFor(() => expect(screen.getAllByText(/Updating results/)).toHaveLength(2));
+      expect(screen.getByText(rowText)).toBeVisible();
+      await act(async () => finishSummary(accessSummary));
+      await waitFor(() => expect(screen.getAllByText(/Updating results/)).toHaveLength(1));
+      await act(async () =>
+        failEvents(new ApiError('service_unavailable', 'Query timed out', 503)),
+      );
+      expect(await screen.findByRole('alert')).toBeVisible();
+      expect(screen.queryByText(/Updating results/)).toBeNull();
+      let finishEvents!: (value: typeof events) => void;
+      api.numberedAccess.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishEvents = resolve;
+          }),
+      );
+      await view.user.click(screen.getByRole('button', { name: 'Retry' }));
+      expect(await screen.findByText(/Updating results/)).toBeVisible();
+      expect(screen.getByText(rowText)).toBeVisible();
+      expect(screen.queryByRole('alert')).toBeNull();
+      await act(async () => finishEvents(events));
+      await waitFor(() => expect(screen.queryByText(/Updating results/)).toBeNull());
+      expect(screen.getByText(rowText)).toBeVisible();
+    },
+  );
+
   it('submits pasted IP addresses as one alternative condition alongside other conditions', async () => {
     const view = await renderWithProviders(<RiskAuditPanel role="steward" scopeKey="6" />, {
       station: 'user',
