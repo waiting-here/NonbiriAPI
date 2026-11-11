@@ -26,9 +26,19 @@ func TestConnectionsUpgradePreservesPublishedHistoryAndCredentials(t *testing.T)
 	defer database.Close()
 	mustExec(t, database, "PRAGMA foreign_keys=ON")
 	plan, err := storageSchema.plan(ctx, database)
-	if err != nil || len(plan.steps) != 21 || plan.steps[0].version != 33 || plan.steps[1].version != 34 || plan.steps[2].version != 35 || plan.steps[3].version != 36 || plan.steps[4].version != 37 || plan.steps[5].version != 38 || plan.steps[6].version != 39 || plan.steps[7].version != 40 || plan.steps[8].version != 41 || plan.steps[9].version != 42 || plan.steps[10].version != 43 || plan.steps[11].version != 44 || plan.steps[12].version != 45 || plan.steps[13].version != 46 || plan.steps[14].version != 47 || plan.steps[15].version != 48 || plan.steps[16].version != 49 || plan.steps[17].version != 50 || plan.steps[18].version != 51 || plan.steps[19].version != 52 || plan.steps[20].version != db.CurrentSchemaVersion || !plan.auditsCredentials() {
-		t.Fatalf("connection migration plan: %+v, %v", plan, err)
+	if err != nil || len(plan.steps) != db.CurrentSchemaVersion-32 || !plan.auditsCredentials() {
+		t.Fatalf("connection migration plan: steps=%d target=%d, %v", len(plan.steps), plan.target.version, err)
 	}
+	for i, step := range plan.steps {
+		from := 32 + i
+		if i == 0 {
+			from = 26
+		}
+		if step.from != from || step.version != 33+i {
+			t.Fatalf("migration step %d: %d -> %d", i, step.from, step.version)
+		}
+	}
+
 	owner := hostileInsertUser(t, database, "connection-owner", 0, 1)
 	for i, kind := range []string{"openai-compatible", "openai-responses", "openai-decisions", "anthropic-compatible", "google-gemini", "ai-sdk-gateway-v3"} {
 		seedGatewayRows(t, database, vault, owner, int64(i+1), kind)
