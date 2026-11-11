@@ -127,11 +127,8 @@ func (r *Repository) listConnectionEntries(ctx context.Context, userID, connecti
 		if err != nil {
 			return Page[Endpoint]{}, err
 		}
-		for i := range page.Data {
-			page.Data[i].Browse, err = endpointBrowseTx(ctx, tx, userID, page.Data[i])
-			if err != nil {
-				return Page[Endpoint]{}, err
-			}
+		if err := attachEndpointBrowseTx(ctx, tx, userID, page.Data); err != nil {
+			return Page[Endpoint]{}, err
 		}
 		return page, nil
 	})

@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/queryread"
 )
 
 // Page counts and rows share the authorized snapshot. Browse projections use
@@ -22,15 +24,11 @@ func (s *Service) beginPageRead(ctx context.Context, role roleKind, actorID int6
 }
 
 func pageWindow(ctx context.Context, tx *sql.Tx, selection string, args []any, page pagination.Request) (pagination.Metadata, int64, error) {
-	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
-		return pagination.Metadata{}, 0, err
-	}
-	metadata, offset, err := page.Window(total)
-	if err != nil {
+	metadata, offset, err := queryread.Window(ctx, tx, selection, args, page)
+	if errors.Is(err, pagination.ErrInvalid) {
 		return metadata, 0, ErrInvalidRequest
 	}
-	return metadata, offset, nil
+	return metadata, offset, err
 }
 
 func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, query string, enabled *bool, page pagination.Request) (Page[AdminCharityModel], error) {
@@ -79,14 +77,11 @@ func (s *Service) modelsPage(ctx context.Context, role roleKind, actorID int64, 
 	if err != nil {
 		return empty, err
 	}
-	result := Page[AdminCharityModel]{Data: make([]AdminCharityModel, 0, len(ids)), Pagination: &metadata}
-	for _, id := range ids {
-		item, err := getAdminModelTx(ctx, tx, id, now)
-		if err != nil {
-			return empty, err
-		}
-		result.Data = append(result.Data, item)
+	models, err := getAdminModelsTx(ctx, tx, ids, now)
+	if err != nil {
+		return empty, err
 	}
+	result := Page[AdminCharityModel]{Data: models, Pagination: &metadata}
 	s.attachModelCloudflareMode(result.Data)
 	if err := tx.Commit(); err != nil {
 		return empty, err

@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/queryread"
 )
 
 func (s *Service) beginBrowseTx(ctx context.Context, role reviewerRole, userID int64) (*sql.Tx, error) {
@@ -71,13 +72,12 @@ func (s *Service) beginBrowseActorTxOn(ctx context.Context, database *sql.DB, ro
 }
 
 func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page pagination.Request) ([]int64, pagination.Metadata, error) {
-	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+query+`)`, args...).Scan(&total); err != nil {
-		return nil, pagination.Metadata{}, fmt.Errorf("donation: count browse rows: %w", err)
-	}
-	metadata, offset, err := page.Window(total)
-	if err != nil {
+	metadata, offset, err := queryread.Window(ctx, tx, query, args, page)
+	if errors.Is(err, pagination.ErrInvalid) {
 		return nil, metadata, ErrInvalidRequest
+	}
+	if err != nil {
+		return nil, metadata, fmt.Errorf("donation: count browse rows: %w", err)
 	}
 	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY 1 LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
 	if err != nil {

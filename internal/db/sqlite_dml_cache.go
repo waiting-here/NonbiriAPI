@@ -8,7 +8,7 @@ import (
 	"errors"
 	"strings"
 
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 const (

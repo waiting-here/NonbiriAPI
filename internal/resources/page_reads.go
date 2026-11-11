@@ -3,43 +3,30 @@ package resources
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/queryread"
 )
 
-type pageScanner interface{ Scan(...any) error }
+type pageScanner = queryread.Scanner
 
 // The query is an internal SELECT with its complete owner and filter scope.
 // Counting that same query prevents count and row predicates from diverging.
 func readNumberedPage[T any](ctx context.Context, tx *sql.Tx, request pagination.Request, query, order, pageOrder string, args []any, scan func(pageScanner) (T, error)) (Page[T], error) {
-	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+query+`)`, args...).Scan(&total); err != nil {
-		return Page[T]{}, err
-	}
-	meta, offset, err := request.Window(total)
-	if err != nil {
+	statement, params, meta, err := queryread.Page(ctx, tx, query, " ORDER BY "+order, "ORDER BY "+pageOrder, args, &request, request.Size)
+	if errors.Is(err, pagination.ErrInvalid) {
 		return Page[T]{}, ErrInvalidRequest
 	}
-	params := append(append([]any(nil), args...), request.Size, offset)
-	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY `+order+` LIMIT ? OFFSET ?`, `ORDER BY `+pageOrder), params...)
 	if err != nil {
 		return Page[T]{}, err
 	}
-	defer rows.Close()
-	page := Page[T]{Data: make([]T, 0, request.Size), Pagination: &meta}
-	for rows.Next() {
-		item, err := scan(rows)
-		if err != nil {
-			return Page[T]{}, err
-		}
-		page.Data = append(page.Data, item)
-	}
-	if err := rows.Err(); err != nil {
+	items, err := queryread.Collect(ctx, tx, statement, params, scan)
+	if err != nil {
 		return Page[T]{}, err
 	}
-	return page, nil
+	return Page[T]{Data: items, Pagination: meta}, nil
 }
 
 func userPageRead[T any](ctx context.Context, r *Repository, userID int64, page pagination.Request, read func(context.Context, *sql.Tx) (T, error)) (T, error) {
@@ -47,26 +34,9 @@ func userPageRead[T any](ctx context.Context, r *Repository, userID int64, page 
 	if ctx == nil || r == nil || r.db == nil || userID <= 0 || !page.Valid() {
 		return zero, ErrInvalidRequest
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	tx, err := r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return zero, err
-	}
-	defer tx.Rollback()
-	// This existing boundary checks the current session, role and ban without
-	// consuming elevation or changing state for the ordinary-user requirement.
-	if err = r.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
-		return zero, err
-	}
-	result, err := read(ctx, tx)
-	if err != nil {
-		return zero, err
-	}
-	if err = tx.Commit(); err != nil {
-		return zero, err
-	}
-	return result, nil
+	return queryread.Snapshot(ctx, r.readDB, queryread.DefaultTimeout, func(ctx context.Context, tx *sql.Tx) error {
+		return r.finalAuth.AuthorizeUserMutation(ctx, tx, userID)
+	}, read)
 }
 
 const endpointPageSelect = `SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
@@ -107,11 +77,8 @@ func (r *Repository) FilterEndpointsPage(ctx context.Context, userID int64, filt
 		if err != nil {
 			return result, err
 		}
-		for i := range result.Data {
-			result.Data[i].Browse, err = endpointBrowseTx(ctx, tx, userID, result.Data[i])
-			if err != nil {
-				return Page[Endpoint]{}, err
-			}
+		if err := attachEndpointBrowseTx(ctx, tx, userID, result.Data); err != nil {
+			return Page[Endpoint]{}, err
 		}
 		return result, nil
 	})
@@ -145,11 +112,8 @@ func (r *Repository) FilterEndpointKeysPage(ctx context.Context, userID, endpoin
 		if err != nil {
 			return result, err
 		}
-		for i := range result.Data {
-			result.Data[i].Browse, err = endpointKeyBrowseTx(ctx, tx, userID, endpointID, result.Data[i])
-			if err != nil {
-				return Page[EndpointKey]{}, err
-			}
+		if err := attachEndpointKeyBrowseTx(ctx, tx, userID, endpointID, result.Data); err != nil {
+			return Page[EndpointKey]{}, err
 		}
 		return result, nil
 	})

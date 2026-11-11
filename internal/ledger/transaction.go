@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	sqlite "modernc.org/sqlite"
+	sqlite "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 const maxUnix = int64(253402300799)

@@ -6,7 +6,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
-	moderncsqlite "modernc.org/sqlite"
+	moderncsqlite "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 var (

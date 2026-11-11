@@ -3,10 +3,11 @@ package adminusers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/queryread"
 )
 
 const pageReadTimeout = 5 * time.Second
@@ -26,24 +27,12 @@ func (s *Service) beginListRead(ctx context.Context, adminID int64) (*sql.Tx, er
 }
 
 func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order, pageOrder string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
-	if requested == nil {
-		statement := selection + order + ` LIMIT ?`
-		if pageOrder != "" {
-			statement = db.MaterializePage(statement, pageOrder)
-		}
-		return statement, append(args, limit+1), nil, nil
-	}
-	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
-		return "", nil, nil, classifyDatabaseError("count page", err)
-	}
-	metadata, offset, err := requested.Window(total)
-	if err != nil {
+	statement, params, meta, err := queryread.Page(ctx, tx, selection, order, pageOrder, args, requested, limit)
+	if errors.Is(err, pagination.ErrInvalid) {
 		return "", nil, nil, ErrInvariant
 	}
-	statement := selection + order + ` LIMIT ? OFFSET ?`
-	if pageOrder != "" {
-		statement = db.MaterializePage(statement, pageOrder)
+	if err != nil {
+		return "", nil, nil, classifyDatabaseError("count page", err)
 	}
-	return statement, append(args, requested.Size, offset), &metadata, nil
+	return statement, params, meta, nil
 }

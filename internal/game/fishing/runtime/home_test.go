@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	fishing "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func TestHomeSummaryTxClosedSourcesOwnershipAndOrder(t *testing.T) {

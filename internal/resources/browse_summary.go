@@ -117,92 +117,19 @@ func bindingPreviewTx(ctx context.Context, tx *sql.Tx, scope, order string, args
 }
 
 func endpointBrowseTx(ctx context.Context, tx *sql.Tx, userID int64, endpoint Endpoint) (*EndpointBrowse, error) {
-	var modelCount, availableKeys int64
-	var subscription, apiPlatform bool
-	err := tx.QueryRowContext(ctx, `SELECT
-(SELECT COUNT(DISTINCT b.model_id)`+ownedBindingJoin+ownedBindingScope+` AND e.id=?),
-(SELECT COUNT(*) FROM endpoint_keys k JOIN self_grant_availability a ON a.endpoint_key_id=k.id AND a.native_service_mask>0 WHERE k.endpoint_id=? AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)),
-EXISTS(SELECT 1 FROM mainstream_channels c JOIN mainstream_channel_entries ce ON ce.channel_id=c.id WHERE c.state='active' AND c.enabled=1 AND ce.enabled=1
- AND ce.connector_type=? AND ce.canonical_base_url=? AND c.category='subscription'),
-EXISTS(SELECT 1 FROM mainstream_channels c JOIN mainstream_channel_entries ce ON ce.channel_id=c.id WHERE c.state='active' AND c.enabled=1 AND ce.enabled=1
- AND ce.connector_type=? AND ce.canonical_base_url=? AND c.category='api_platform')`,
-		userID, userID, endpoint.ID, endpoint.ID,
-		endpoint.ConnectorType, endpoint.BaseURL, endpoint.ConnectorType, endpoint.BaseURL).Scan(&modelCount, &availableKeys, &subscription, &apiPlatform)
-	if err != nil {
+	page := []Endpoint{endpoint}
+	if err := attachEndpointBrowseTx(ctx, tx, userID, page); err != nil {
 		return nil, err
 	}
-	state := "available"
-	if !endpoint.Enabled {
-		state = "endpoint_disabled"
-		availableKeys = 0
-	} else if endpoint.KeyCount == "0" {
-		state = "no_keys"
-	} else if availableKeys == 0 {
-		state = "no_usable_key"
-	}
-	// Current channel matches are independent of the endpoint's creation snapshot.
-	categories := make([]string, 0, 2)
-	if subscription {
-		categories = append(categories, mainstreamChannelCategorySubscription)
-	}
-	if apiPlatform {
-		categories = append(categories, mainstreamChannelCategoryAPIPlatform)
-	}
-	return &EndpointBrowse{ModelCount: strconv.FormatInt(modelCount, 10), AvailableKeyCount: strconv.FormatInt(availableKeys, 10), State: state, MainstreamCategories: categories}, nil
+	return page[0].Browse, nil
 }
 
 func endpointKeyBrowseTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64, key EndpointKey) (*EndpointKeyBrowse, error) {
-	keyID, err := parseDecimalID(key.ID)
-	if err != nil {
+	page := []EndpointKey{key}
+	if err := attachEndpointKeyBrowseTx(ctx, tx, userID, endpointID, page); err != nil {
 		return nil, err
 	}
-	evidenceRow, err := discoveryOwnerTx(ctx, tx, userID, endpointID, keyID)
-	if err != nil {
-		return nil, err
-	}
-	evidence, err := evidenceRow.evidence()
-	if err != nil {
-		return nil, err
-	}
-	scope := ownedBindingScope + ` AND e.id=? AND k.id=?`
-	args := []any{userID, userID, endpointID, keyID}
-	// Every target here shares one key. Resolve its live authority once within
-	// this snapshot; only the selected service mask varies between targets.
-	var availableMask int64
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT a.native_service_mask FROM self_grant_availability a
-WHERE a.endpoint_key_id=? AND a.owner_user_id=?
-AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=a.endpoint_key_id)),0)`, keyID, userID).Scan(&availableMask)
-	if err != nil {
-		return nil, err
-	}
-	var modelCount, bindingCount, availableCount int64
-	countArgs := append([]any{availableMask}, args...)
-	err = tx.QueryRowContext(ctx, `SELECT COUNT(DISTINCT m.id),COUNT(DISTINCT b.id),COUNT(DISTINCT CASE WHEN (?&t.native_service_mask)>0 THEN b.id ELSE NULL END)`+ownedBindingJoin+scope, countArgs...).Scan(&modelCount, &bindingCount, &availableCount)
-	if err != nil {
-		return nil, err
-	}
-	preview, err := bindingPreviewTx(ctx, tx, scope, "t.upstream_model_id,b.id,t.id", args)
-	if err != nil {
-		return nil, err
-	}
-	// Submission uses the same persisted suspension and membership checks.
-	// A due membership remains occupied until the ordinary expiry path ends it.
-	var eligibility string
-	err = tx.QueryRowContext(ctx, `SELECT CASE
-WHEN EXISTS(SELECT 1 FROM endpoint_key_suspensions WHERE endpoint_key_id=?) THEN 'security_processing'
-WHEN EXISTS(SELECT 1 FROM donation_key_memberships WHERE endpoint_key_id=?) THEN 'already_donated'
-ELSE 'eligible' END`, keyID, keyID).Scan(&eligibility)
-	if err != nil {
-		return nil, err
-	}
-	if !key.CredentialAvailable {
-		eligibility = "unavailable"
-	}
-	return &EndpointKeyBrowse{
-		DonationEligibility: eligibility,
-		ModelCount:          strconv.FormatInt(modelCount, 10), BindingCount: strconv.FormatInt(bindingCount, 10),
-		AvailableBindingCount: strconv.FormatInt(availableCount, 10), Discovery: evidence, Preview: preview,
-	}, nil
+	return page[0].Browse, nil
 }
 
 // Only models on this page participate. Counts and the first three bindings

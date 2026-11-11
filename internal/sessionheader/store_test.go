@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func sessionDB(t *testing.T) *sql.DB {

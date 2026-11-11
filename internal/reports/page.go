@@ -3,14 +3,15 @@ package reports
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/queryread"
 )
 
 const pageReadTimeout = 5 * time.Second
@@ -46,18 +47,14 @@ func (r *Repository) beginCasePageRead(ctx context.Context, actor authz.Actor) (
 
 func reportPageSQL(ctx context.Context, tx *sql.Tx, selection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
 	outerOrder := strings.NewReplacer("t.", "", "dk.", "").Replace(order)
-	if requested == nil {
-		return db.MaterializePage(selection+order+` LIMIT ?`, outerOrder), append(args, limit+1), nil, nil
-	}
-	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
-		return "", nil, nil, fmt.Errorf("reports: count page: %w", err)
-	}
-	metadata, offset, err := requested.Window(total)
-	if err != nil {
+	statement, params, meta, err := queryread.Page(ctx, tx, selection, order, outerOrder, args, requested, limit)
+	if errors.Is(err, pagination.ErrInvalid) {
 		return "", nil, nil, ErrInvariant
 	}
-	return db.MaterializePage(selection+order+` LIMIT ? OFFSET ?`, outerOrder), append(args, requested.Size, offset), &metadata, nil
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("reports: count page: %w", err)
+	}
+	return statement, params, meta, nil
 }
 
 func reportReadWindow(values url.Values, prefix string) (int, *pagination.Request, error) {

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 type queryCounterDriver struct{ count *atomic.Int64 }
