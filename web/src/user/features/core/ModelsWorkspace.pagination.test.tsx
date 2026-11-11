@@ -656,7 +656,7 @@ describe('ModelsWorkspace numbered pagination', () => {
           return jsonResponse(numbered([key], url.searchParams.get('page') ?? '1', 20, 1));
         }
         if (method === 'GET' && url.pathname === '/api/models/61/binding-candidates') {
-          return jsonResponse({ error: { code: 'permission_denied', message: 'forbidden' } }, 403);
+          return jsonResponse({ error: { code: 'forbidden', message: 'forbidden' } }, 403);
         }
         if (method === 'POST') throw new Error('candidate writes must be unavailable');
         if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
@@ -712,7 +712,7 @@ describe('ModelsWorkspace numbered pagination', () => {
         }
         if (method === 'POST' && url.pathname === '/api/models/81/bindings/batch') {
           writes.push(String(init?.body));
-          return jsonResponse({ error: { code: 'permission_denied', message: 'forbidden' } }, 403);
+          return jsonResponse({ error: { code: 'forbidden', message: 'forbidden' } }, 403);
         }
         if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
           return jsonResponse(

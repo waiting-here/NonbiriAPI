@@ -206,6 +206,7 @@ describe('endpoint policy management', () => {
     await waitFor(() =>
       expect(data.requests.some((path) => path.includes('page=1&page_size=20'))).toBe(true),
     );
+    await waitFor(() => expect(screen.getByLabelText('Go to page')).toBeEnabled());
     fireEvent.change(await screen.findByLabelText('Go to page'), { target: { value: '4' } });
     fireEvent.keyDown(screen.getByLabelText('Go to page'), { key: 'Enter' });
     await waitFor(() =>
