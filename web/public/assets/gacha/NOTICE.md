@@ -10,6 +10,10 @@ Seven ordinary foregrounds retain generative corrections of their established po
 
 The permanent-pool cover retains a localized generative correction of ChatGPT's outstretched hand to five fingers. Only the hand region of the generated 1672 × 941 foreground edit is adopted; the remaining character artwork, background and composition registration are preserved. Both transparent foregrounds and composited covers share the correction at standard size and 3840 × 2160 resampled size.
 
+The Fairytale Theatre cover replaces an unattached lantern-holding hand with a suspended gold chain. The localized foreground edit preserves the cast, their existing poses and the registered background. Its standard foreground and cover remain 1672 × 941; the matching 3840 × 2160 derivatives are resampled from the same corrected source.
+
+The Fairytale Theatre group illustration and Celestial Myth ChatGPT card and group illustration retain localized corrections of unnatural finger bends. Their registered foregrounds, static compositions, thumbnail, open/closed motion sources and heartfelt-moment portrait share the corrected hands. Faces, eye registration, backgrounds and unrelated poses are preserved. Standard derivatives retain their existing dimensions; larger derivatives are resampled from the same corrected inputs.
+
 ChatGPT, Claude, GLM, DeepSeek and Gemini names identify the fictional character inspirations. Related names and marks belong to their respective holders. The activity is not affiliated with or endorsed by those holders.
 
 The soundtrack `audio/lobby.mp3` is the project's lobby arrangement of **Elevate** by **Fupi**, based on the [Elevate instrument tracks](https://opengameart.org/content/elevate-instrument-tracks), released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). The source composition and instrument tracks retain that dedication.
