@@ -4,6 +4,16 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.11 — 2026-11-11
+
+- Keep upcoming gacha pool draw buttons aligned with open pools, with the
+  availability notice above both buttons on desktop and mobile.
+- Remove an unattached lantern-holding hand from the Fairytale Theatre cover
+  and correct unnatural finger bends in its group illustration and the
+  Celestial Myth ChatGPT artwork. Update matching layers, card thumbnails,
+  motion sources and high-resolution variants.
+- Keep storage schema 54 and account export format 36 unchanged.
+
 ## 1.3.10 — 2026-11-11
 
 - Preserve specific business errors such as insufficient balance instead of

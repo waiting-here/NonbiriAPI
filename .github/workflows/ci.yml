@@ -469,9 +469,10 @@ jobs:
         run: node scripts/ci-station-build.mjs restore .cache/ci/station-build
       - name: Install Chromium
         run: |
-          # Prefer the official archives when the Azure mirror is slow.
+          # Keep an independently hosted Ubuntu mirror ahead of the Canonical mirrors.
           if [[ -f /etc/apt/apt-mirrors.txt ]]; then
             sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|s/priority:1/priority:4/' /etc/apt/apt-mirrors.txt
+            printf '%s\tpriority:1\n' 'https://mirrors.edge.kernel.org/ubuntu/' | sudo tee -a /etc/apt/apt-mirrors.txt >/dev/null
           fi
           npm exec -- playwright install --with-deps chromium
       - name: Selected browser contracts
@@ -530,9 +531,10 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: |
-          # Prefer the official archives when the Azure mirror is slow.
+          # Keep an independently hosted Ubuntu mirror ahead of the Canonical mirrors.
           if [[ -f /etc/apt/apt-mirrors.txt ]]; then
             sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|s/priority:1/priority:4/' /etc/apt/apt-mirrors.txt
+            printf '%s\tpriority:1\n' 'https://mirrors.edge.kernel.org/ubuntu/' | sudo tee -a /etc/apt/apt-mirrors.txt >/dev/null
           fi
           npm exec -- playwright install --with-deps chromium
       - name: Require this run's fixture artifact
