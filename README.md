@@ -4,9 +4,9 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.10 (unreleased)** improves query cancellation, audit filtering and series,
-list hydration, and search progress feedback. Business rejections keep their
-specific error messages. Database schema is 53 and account export is format 36; existing databases
+**v1.3.11** fixes upcoming gacha pool button alignment and corrects hand anatomy
+in several gacha illustrations, including their layered and high-resolution variants.
+Database schema remains 54 and account export remains format 36; existing databases
 on an earlier schema require the explicit offline upgrade before starting this
 version. See [service connections](docs/service-connections.md),
 [database upgrades](docs/database-upgrades.md) and [CHANGELOG](CHANGELOG.md).
