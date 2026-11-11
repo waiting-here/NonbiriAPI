@@ -492,6 +492,25 @@ for (const language of ['zh', 'en'] as const)
         await expect(page.locator('.gacha-draw-actions__notice')).toBeInViewport();
         await expect(once).toBeInViewport();
         await expect(ten).toBeInViewport();
+        const drawLayout = await page.locator('.gacha-draw-actions').evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const buttons = [...element.querySelectorAll('button')].map((button) =>
+            button.getBoundingClientRect(),
+          );
+          const notice = element
+            .querySelector('.gacha-draw-actions__notice')!
+            .getBoundingClientRect();
+          return {
+            rightGap: bounds.right - Number.parseFloat(style.paddingRight) - buttons[1].right,
+            rowOffset: buttons[0].top - buttons[1].top,
+            noticeBottom: notice.bottom,
+            buttonTop: buttons[0].top,
+          };
+        });
+        expect(Math.abs(drawLayout.rightGap)).toBeLessThanOrEqual(1);
+        expect(Math.abs(drawLayout.rowOffset)).toBeLessThanOrEqual(1);
+        expect(drawLayout.noticeBottom).toBeLessThanOrEqual(drawLayout.buttonTop);
         if (process.env.NONBIRI_VISUAL_DIR) {
           await page
             .locator('.gacha-banner__back, .gacha-hero-card img')
