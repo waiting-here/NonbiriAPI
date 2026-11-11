@@ -2,16 +2,18 @@ package charity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
-func TestSelfDonationRequiresCurrentLevelSixAndKeepsReward(t *testing.T) {
-	for _, level := range []int{1, 5, 6} {
+func TestSelfDonationRequiresCurrentStewardAndKeepsReward(t *testing.T) {
+	for _, level := range []int{1, 4, 5, 6} {
 		t.Run(fmt.Sprint(level), func(t *testing.T) {
 			e := newCharityTestEnv(t)
 			rail := e.billingRail(t)
@@ -22,9 +24,18 @@ func TestSelfDonationRequiresCurrentLevelSixAndKeepsReward(t *testing.T) {
 			if _, err := e.store.DB().Exec(`UPDATE charity_model_access SET allowed_level_mask=63`); err != nil {
 				t.Fatal(err)
 			}
+
+			if level == 5 {
+				p := authz.DefaultStewardPermissions(0)
+				grants, _ := json.Marshal(p.Permissions)
+				limits, _ := json.Marshal(p.Limits)
+				if _, err := e.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,'none',1,1)`, e.callerID, string(grants), string(limits)); err != nil {
+					t.Fatal(err)
+				}
+			}
 			request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(t, request.ID, 1))
-			if level != 6 {
+			if level < 5 {
 				if !errors.Is(err, claim.ErrNotFound) {
 					t.Fatalf("self donor admitted at level %d: %v", level, err)
 				}
@@ -67,7 +78,7 @@ func TestSelfDonationRoleLossBeforeDispatch(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	e.callerID = e.donorID
-	if _, err := e.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, e.callerID); err != nil {
+	if _, err := e.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, e.callerID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.store.DB().Exec(`UPDATE charity_model_access SET allowed_level_mask=63`); err != nil {
@@ -78,7 +89,7 @@ func TestSelfDonationRoleLossBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, e.callerID); err != nil {
+	if _, err := e.store.DB().Exec(`UPDATE users SET level=4 WHERE id=?`, e.callerID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := rail.TakeForDispatch(context.Background(), handle); !errors.Is(err, claim.ErrNotFound) {

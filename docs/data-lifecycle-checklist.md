@@ -510,10 +510,10 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 53.
+Normal startup initializes absent storage or opens only exact current schema 54.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–52 sources require a deliberate standalone-converter invocation after the
+33–53 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
@@ -673,3 +673,15 @@ the origin-only rule for normalized source facts does not apply to this separate
 restricted capture. Go parsing and repeated values are preserved within the capture
 bounds; it is not a wire packet recording. Name-based credential redaction does
 not guarantee that arbitrary header text is secret-free.
+
+### v1.3.10 additional resource management
+
+Additional inventory remains in its existing credit-account, gacha and Lake Notes
+records and follows their existing personal-export and deletion paths. Direct
+adjustments add no new inventory table or retention period. Management history
+records the actual actor, target, reason, before/after quantities and dependent
+selection changes under the existing management-log access and retention rules.
+Drawing changes also use ordinary balanced ledger operations. Core credit grants,
+loan history, claims, statistics and game progress keep their existing meaning.
+The new saved permission follows the existing steward-policy export/deletion and
+90-day policy-history rules; historical policy JSON is not rewritten by upgrade.

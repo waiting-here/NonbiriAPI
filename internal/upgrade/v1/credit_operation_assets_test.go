@@ -11,6 +11,7 @@ import (
 
 func restoreSchema52LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema53LayoutForTest(t, database)
 	hostileMustExec(t, database, `DROP TRIGGER credit_operation_assets_insert;
 DROP TRIGGER credit_operation_assets_delete;
 DROP TABLE credit_operation_assets;

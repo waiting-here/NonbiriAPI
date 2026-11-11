@@ -20,7 +20,7 @@ func requireDonationCallerTx(ctx context.Context, tx *sql.Tx, callerID, donorID,
 		return nil
 	}
 	var exempt bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND COALESCE(level,auto_level)=6)`, callerID).Scan(&exempt); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=? AND is_admin=0 AND COALESCE(level,auto_level) IN (5,6))`, callerID).Scan(&exempt); err != nil {
 		return err
 	}
 	if !exempt {

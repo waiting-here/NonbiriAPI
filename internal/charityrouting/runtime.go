@@ -420,7 +420,7 @@ AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
 AND k.enabled=1 AND e.enabled=1
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
-AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level)=6))
+AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level) IN (5,6)))
 AND `+donorAvailableSQL("?")+`
 ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow, maxBindingBatch+1)
 	if err != nil {

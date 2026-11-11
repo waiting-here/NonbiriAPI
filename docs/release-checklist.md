@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 53 startup and explicit offline conversion
-  of registered schema 16–26 and 33–52 sources: target equality,
+- Validate fresh/exact-current schema 54 startup and explicit offline conversion
+  of registered schema 16–26 and 33–53 sources: target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -42,7 +42,7 @@ has passed.
 - Check service-health and reset-receipt times with an EST browser and UTC+08:00
   site. Exercise separate rate-limit release as donor, administrator and permitted
   steward, including late-request fencing and preserved failures/limits.
-- Check account export 35 includes own stored/effective steward permissions,
+- Check account export 36 includes own stored/effective steward permissions,
   retained policy history and personal-model header configuration, but excludes
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Include own pond queue/statistics and safe browser
@@ -85,7 +85,7 @@ has passed.
   Exercise an existing streak, repeated completion and transaction rollback.
 - Check account deletion with expired terminal logs and mixed settled/in-flight
   requests, preserving accounting, retained log snapshots and rollback.
-- Verify all 51 steward grants, whole-donation scopes and current target hierarchy
+- Verify all 56 steward grants, whole-donation scopes and current target hierarchy
   across sessions, CallerKeys, queued work and approved assistant plans. Check
   whole-plan rollback, human decisions, mode changes, tool-result budgets and
   restart recovery without duplicate operations.

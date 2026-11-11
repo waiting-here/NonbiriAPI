@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Button } from './ui/Button';
 import {
-  DataTable,
+  Segmented,
   Field,
   Note,
   OutcomeNote,
@@ -25,7 +25,17 @@ import {
   stewardLimitKeys,
   type StewardPermissions,
   type StewardLimit,
+  type StewardPermission,
 } from '@shared/operations/stewardPermissions';
+
+import {
+  permissionGroups,
+  permissionPairMode,
+  applyPermissionPair,
+  type PermissionMode,
+} from '@shared/operations/stewardPermissionGroups';
+import { permissionPresentationCopy } from './permissionPresentationCopy';
+import './stewardPermissionEditor.css';
 
 const copyKey = (key: string) => key.replaceAll('.', '_');
 const isMoney = (key: StewardLimit) => key.endsWith('_milli');
@@ -103,6 +113,7 @@ function PermissionForm({
   onEdit: () => void;
 }) {
   const { t } = useTranslation();
+  const copy = permissionPresentationCopy(t);
   const [permissions, setPermissions] = useState(policy.permissions);
   const [donationScope, setDonationScope] = useState(policy.donation_scope);
   const inputsFor = (value: StewardPermissions) =>
@@ -111,6 +122,7 @@ function PermissionForm({
     ) as Record<StewardLimit, string>;
   const [inputs, setInputs] = useState(() => inputsFor(policy));
   const [filter, setFilter] = useState('');
+  const [category, setCategory] = useState('all');
   const limits = Object.fromEntries(
     stewardLimitKeys.map((key) => [key, parseStewardLimitInput(key, inputs[key])]),
   ) as Record<StewardLimit, string | null>;
@@ -155,13 +167,42 @@ function PermissionForm({
     setDonationScope(next.donation_scope);
     setInputs(inputsFor(next));
   };
-  const rows = stewardPermissionKeys.filter(
-    (key) =>
-      key !== 'ai.memory.edit' &&
-      t(`management.permissions.labels.${copyKey(key)}`)
-        .toLocaleLowerCase()
-        .includes(filter.toLocaleLowerCase()),
+  const matches = (value: string) =>
+    value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase());
+  const groups = permissionGroups
+    .filter((group) => category === 'all' || category === group.id)
+    .map((group) => ({
+      ...group,
+      visible: group.keys.filter(
+        (key) =>
+          matches(t(`management.permissions.labels.${copyKey(key)}`)) ||
+          matches(copy.groups[group.id].title) ||
+          matches(copy.groups[group.id].help),
+      ),
+    }))
+    .filter((group) => group.visible.length > 0);
+  const toggle = (key: StewardPermission) => (
+    <Toggle
+      key={key}
+      label={t(`management.permissions.labels.${copyKey(key)}`)}
+      description={t(
+        STEWARD_PERMISSION_DEFAULTS[key]
+          ? 'management.permissions.defaultAllowed'
+          : 'management.permissions.defaultDenied',
+      )}
+      checked={permissions[key]}
+      disabled={locked}
+      onChange={(checked) => {
+        onEdit();
+        setPermissions((current) => ({ ...current, [key]: checked }));
+      }}
+    />
   );
+  const showLimits =
+    (category === 'all' || category === 'limits') &&
+    (!filter.trim() ||
+      matches(t('management.permissions.limitsTitle')) ||
+      stewardLimitKeys.some((key) => matches(t(`management.permissions.limits.${copyKey(key)}`))));
   return (
     <div className="nb-stack">
       <SectionHead
@@ -181,141 +222,202 @@ function PermissionForm({
           {t('management.permissions.none')}
         </Button>
       </div>
-      <Field
-        label={t('management.permissions.scope.title')}
-        help={t('management.permissions.scope.help')}
-      >
-        {(field) => (
-          <>
-            <strong>{t(`management.permissions.scope.${donationScope}.label`)}</strong>
-            <input
-              {...field}
-              type="range"
-              min="0"
-              max="3"
-              step="1"
-              value={DONATION_SCOPES.indexOf(donationScope)}
-              aria-valuetext={t(`management.permissions.scope.${donationScope}.label`)}
-              disabled={locked}
-              onChange={(event) => {
-                onEdit();
-                setDonationScope(DONATION_SCOPES[Number(event.target.value)]);
-              }}
-            />
-          </>
-        )}
-      </Field>
-      <dl className="nb-stack">
-        {DONATION_SCOPES.map((scope) => (
-          <div key={scope}>
-            <dt>
-              <strong>{t(`management.permissions.scope.${scope}.label`)}</strong>
-            </dt>
-            <dd>{t(`management.permissions.scope.${scope}.description`)}</dd>
-          </div>
-        ))}
-      </dl>
       <Field label={t('management.permissions.search')}>
         {(field) => (
           <input
             {...field}
             value={filter}
             placeholder={t('management.permissions.searchPlaceholder')}
-            onChange={(event) => setFilter(event.target.value)}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setCategory('all');
+            }}
           />
         )}
       </Field>
-      {rows.length === 0 ? (
+      <nav className="permission-categories" aria-label={t('management.permissions.categories')}>
+        {[{ id: 'all' }, ...permissionGroups, { id: 'limits' }].map((group) => (
+          <Button
+            key={group.id}
+            type="button"
+            aria-pressed={category === group.id}
+            onClick={() => {
+              setCategory(group.id);
+              setFilter('');
+            }}
+          >
+            {group.id === 'all'
+              ? t('management.permissions.allCategories')
+              : group.id === 'limits'
+                ? t('management.permissions.limitsTitle')
+                : copy.groups[group.id].title}
+            {'keys' in group
+              ? ` · ${group.keys.filter((key) => permissions[key]).length}/${group.keys.length}`
+              : ''}
+          </Button>
+        ))}
+      </nav>
+      <Note>{t('management.permissions.fixedExemptions')}</Note>
+      {groups.length === 0 && !showLimits ? (
         <EmptyState
           title={t('management.permissions.noMatches')}
           body={t('common.noResultsBody')}
         />
-      ) : (
-        <DataTable
-          caption={t('management.permissions.title')}
-          rows={rows}
-          rowKey={(key) => key}
-          columns={[
-            {
-              key: 'permission',
-              header: t('management.permissions.action'),
-              cell: 'title',
-              render: (key) => (
-                <Toggle
-                  label={t(`management.permissions.labels.${copyKey(key)}`)}
-                  checked={permissions[key]}
-                  disabled={locked}
-                  onChange={(checked) => {
-                    onEdit();
-                    setPermissions((current) => ({ ...current, [key]: checked }));
-                  }}
-                />
-              ),
-            },
-            {
-              key: 'default',
-              header: t('management.permissions.defaultState'),
-              cell: 'meta',
-              mobileLabel: t('management.permissions.defaultState'),
-              render: (key) =>
-                t(
-                  STEWARD_PERMISSION_DEFAULTS[key]
-                    ? 'management.permissions.allowed'
-                    : 'management.permissions.notAllowed',
-                ),
-            },
-          ]}
-        />
-      )}
-      <SectionHead
-        title={t('management.permissions.limitsTitle')}
-        description={t('management.permissions.limitsHelp')}
-      />
-      <div className="nb-stack">
-        {stewardLimitKeys.map((key) => (
-          <Field
-            key={key}
-            label={t(`management.permissions.limits.${copyKey(key)}`)}
-            error={limits[key] === null ? t('management.permissions.invalidLimit') : undefined}
-            help={t('management.permissions.maximum', {
-              value: displayLimit(key, STEWARD_LIMIT_MAXIMUMS[key]),
-            })}
-          >
-            {(field) => (
-              <>
-                <input
-                  {...field}
-                  type="number"
-                  min="0"
-                  max={displayLimit(key, STEWARD_LIMIT_MAXIMUMS[key])}
-                  step={isMoney(key) ? '0.001' : '1'}
-                  value={inputs[key]}
-                  disabled={locked}
-                  onChange={(event) => {
-                    onEdit();
-                    setInputs((current) => ({ ...current, [key]: event.target.value }));
-                  }}
-                />
-                {!isMoney(key) ? (
-                  <input
-                    type="range"
-                    min="0"
-                    max={STEWARD_LIMIT_MAXIMUMS[key]}
-                    step="1"
-                    aria-label={t(`management.permissions.limits.${copyKey(key)}`)}
-                    value={limits[key] ?? '0'}
-                    disabled={locked}
-                    onChange={(event) => {
-                      onEdit();
-                      setInputs((current) => ({ ...current, [key]: event.target.value }));
-                    }}
-                  />
-                ) : null}
-              </>
-            )}
-          </Field>
-        ))}
-      </div>
+      ) : null}
+      {groups.map((group) => (
+        <section
+          key={group.id}
+          className="permission-group"
+          aria-label={copy.groups[group.id].title}
+        >
+          <SectionHead
+            title={copy.groups[group.id].title}
+            description={copy.groups[group.id].help}
+          />
+          {group.id === 'donations' ? (
+            <div className="permission-scope">
+              <Field
+                label={t('management.permissions.scope.title')}
+                help={t('management.permissions.scope.help')}
+              >
+                {(field) => (
+                  <>
+                    <strong>{t(`management.permissions.scope.${donationScope}.label`)}</strong>
+                    <input
+                      {...field}
+                      type="range"
+                      min="0"
+                      max="3"
+                      step="1"
+                      value={DONATION_SCOPES.indexOf(donationScope)}
+                      aria-valuetext={t(`management.permissions.scope.${donationScope}.label`)}
+                      disabled={locked}
+                      onChange={(event) => {
+                        onEdit();
+                        setDonationScope(DONATION_SCOPES[Number(event.target.value)]);
+                      }}
+                    />
+                  </>
+                )}
+              </Field>
+              <dl className="nb-stack">
+                {DONATION_SCOPES.map((scope) => (
+                  <div key={scope}>
+                    <dt>
+                      <strong>{t(`management.permissions.scope.${scope}.label`)}</strong>
+                    </dt>
+                    <dd>{t(`management.permissions.scope.${scope}.description`)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
+          <div className="permission-grid">
+            {(group.pairs ?? [])
+              .filter(
+                (pair) => group.visible.includes(pair.read) || group.visible.includes(pair.manage),
+              )
+              .map((pair) => {
+                const mode = permissionPairMode(permissions, pair);
+                return (
+                  <div key={pair.id} className="permission-pair">
+                    <strong>{copy.pairs[pair.id]}</strong>
+                    <Segmented<PermissionMode>
+                      label={copy.pairs[pair.id]}
+                      value={mode}
+                      disabled={locked}
+                      options={(
+                        [
+                          'off',
+                          'read',
+                          'manage',
+                          ...(mode === 'custom' ? ['custom'] : []),
+                        ] as PermissionMode[]
+                      ).map((value) => ({
+                        value,
+                        label: copy.modes[value],
+                      }))}
+                      onChange={(next) => {
+                        onEdit();
+                        setPermissions((current) => applyPermissionPair(current, pair, next));
+                      }}
+                    />
+                    <p className="nb-muted">
+                      {t('management.permissions.manageIncludes', {
+                        action: t(`management.permissions.labels.${copyKey(pair.manage)}`),
+                      })}
+                    </p>
+                    <details open={filter.trim() ? true : undefined}>
+                      <summary>{t('management.permissions.individual')}</summary>
+                      <div className="nb-stack">
+                        {toggle(pair.read)}
+                        {toggle(pair.manage)}
+                      </div>
+                    </details>
+                  </div>
+                );
+              })}
+            {group.visible
+              .filter(
+                (key) => !group.pairs?.some((pair) => pair.read === key || pair.manage === key),
+              )
+              .map(toggle)}
+          </div>
+        </section>
+      ))}
+      {showLimits ? (
+        <section className="permission-group">
+          <SectionHead
+            title={t('management.permissions.limitsTitle')}
+            description={t('management.permissions.limitsHelp')}
+          />
+          <div className="nb-stack">
+            {stewardLimitKeys.map((key) => (
+              <Field
+                key={key}
+                label={t(`management.permissions.limits.${copyKey(key)}`)}
+                error={limits[key] === null ? t('management.permissions.invalidLimit') : undefined}
+                help={t('management.permissions.maximum', {
+                  value: displayLimit(key, STEWARD_LIMIT_MAXIMUMS[key]),
+                })}
+              >
+                {(field) => (
+                  <>
+                    <input
+                      {...field}
+                      type="number"
+                      min="0"
+                      max={displayLimit(key, STEWARD_LIMIT_MAXIMUMS[key])}
+                      step={isMoney(key) ? '0.001' : '1'}
+                      value={inputs[key]}
+                      disabled={locked}
+                      onChange={(event) => {
+                        onEdit();
+                        setInputs((current) => ({ ...current, [key]: event.target.value }));
+                      }}
+                    />
+                    {!isMoney(key) ? (
+                      <input
+                        type="range"
+                        min="0"
+                        max={STEWARD_LIMIT_MAXIMUMS[key]}
+                        step="1"
+                        aria-label={t(`management.permissions.limits.${copyKey(key)}`)}
+                        value={limits[key] ?? '0'}
+                        disabled={locked}
+                        onChange={(event) => {
+                          onEdit();
+                          setInputs((current) => ({ ...current, [key]: event.target.value }));
+                        }}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </Field>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {mutation.error && outcome.kind === 'idle' ? <ErrorState error={mutation.error} /> : null}
       <OutcomeNote outcome={outcome} busy={mutation.isPending} />
       <SaveBar

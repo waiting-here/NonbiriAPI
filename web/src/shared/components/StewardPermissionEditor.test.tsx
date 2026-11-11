@@ -1,4 +1,4 @@
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { useAdminSession } from '../../admin/data';
@@ -18,8 +18,8 @@ function Session({ children }: { children: ReactNode }) {
   return session.data ? children : null;
 }
 
-function installServer(loseFirstResponse = false) {
-  let policy = defaultStewardPermissions(5);
+function installServer(loseFirstResponse = false, initial = defaultStewardPermissions(5)) {
+  let policy = initial;
   const writes: { key: string | null; body: Record<string, unknown> }[] = [];
   const response = (value: unknown) =>
     new Response(JSON.stringify(value), {
@@ -50,6 +50,39 @@ function installServer(loseFirstResponse = false) {
 }
 
 describe('steward permission editor', () => {
+  it('browses by responsibility and preserves custom grants until an explicit preset change', async () => {
+    const initial = defaultStewardPermissions(5);
+    initial.permissions['users.caller_keys.read'] = false;
+    initial.permissions['users.caller_keys.revoke'] = true;
+    initial.permissions['ai.memory.edit'] = true;
+    const writes = installServer(false, initial);
+    const { user } = await renderWithProviders(
+      <Session>
+        <StewardPermissionEditor role="admin" account="fixture-admin" userId="51" />
+      </Session>,
+      { station: 'admin', locale: 'en' },
+    );
+    await user.click(
+      await screen.findByRole('button', { name: new RegExp(copy.groups.safety.title) }),
+    );
+    expect(
+      screen.queryByRole('region', { name: copy.groups.models.title }),
+    ).not.toBeInTheDocument();
+    const pair = screen.getByRole('radiogroup', { name: copy.pairs.callerKeys });
+    expect(within(pair).getByRole('radio', { name: copy.modes.custom })).toBeChecked();
+    expect(writes).toHaveLength(0);
+    await user.click(within(pair).getByRole('radio', { name: copy.modes.read }));
+    await user.click(screen.getByRole('button', { name: copy.save }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body.permissions).toEqual({
+      ...initial.permissions,
+      'users.caller_keys.read': true,
+      'users.caller_keys.revoke': false,
+    });
+    expect(writes[0].body.limits).toEqual(initial.limits);
+    expect(writes[0].body.donation_scope).toBe(initial.donation_scope);
+  });
+
   it('keeps presets as an editable draft and saves the exact fractional allowance', async () => {
     const writes = installServer();
     const { user } = await renderWithProviders(

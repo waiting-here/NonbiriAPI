@@ -3632,8 +3632,6 @@
       "noMatches": "没有匹配的授权项，请调整搜索词。",
       "invalidLimit": "请输入范围内的非负数；积分最多保留三位小数。",
       "combinedActions": "查看页面和执行操作分别授权。加入黑名单还需封禁及永久封禁权限；替换已有封禁还需解除封禁权限。自动化操作同时检查对应的页面、操作和来源范围授权。",
-      "action": "页面与操作",
-      "defaultState": "5 级默认",
       "allowed": "允许",
       "notAllowed": "未授权",
       "limitsTitle": "操作额度",
@@ -3698,7 +3696,8 @@
         "endpoints_tags": "修改端点标签",
         "ai_chat": "使用 AI 对话",
         "ai_review_read": "查看 AI 审核报告",
-        "ai_memory_edit": "编辑共用记忆"
+        "ai_memory_edit": "编辑共用记忆",
+        "users_resources": "调整附加资源（画材、卡牌、垂钓手记等）"
       },
       "limits": {
         "users_endpoint_limit_max": "可设置的端点数量上限",
@@ -3726,6 +3725,62 @@
         "full": {
           "label": "完全",
           "description": "全部捐赠及其密钥，仍受具体操作权限限制。"
+        }
+      },
+      "categories": "按职责浏览权限",
+      "allCategories": "全部分类",
+      "defaultAllowed": "5 级默认允许",
+      "defaultDenied": "5 级默认关闭",
+      "fixedExemptions": "固定权益：5 级和 6 级协管始终豁免低活跃度账号清理，并可通过公益调用使用自己捐赠的密钥；不受下列开关控制，密钥有效性和封禁等其他校验仍照常生效。",
+      "individual": "逐项调整／查看默认值",
+      "manageIncludes": "管理档位同时允许查看及「{{action}}」。",
+      "modes": {
+        "off": "关闭",
+        "read": "只读",
+        "manage": "管理",
+        "custom": "自定义"
+      },
+      "pairs": {
+        "callerKeys": "CallerKey",
+        "blacklist": "注册黑名单",
+        "endpoints": "端点总览与标签",
+        "priceTemplates": "价格模板",
+        "risk": "滥用审计",
+        "announcements": "公告",
+        "maintenance": "维护模式"
+      },
+      "groups": {
+        "users": {
+          "title": "账号与调用额度",
+          "help": "查看用户、编辑资料、调整等级和调用限制。"
+        },
+        "economy": {
+          "title": "资源与积分",
+          "help": "通用积分、游戏积分、附加资源和借贷记录；捐赠回馈的调整权限维持现状。"
+        },
+        "safety": {
+          "title": "账号安全",
+          "help": "封禁、解封、处罚记录、CallerKey 和注册黑名单。"
+        },
+        "donations": {
+          "title": "捐赠与端点",
+          "help": "先确定可操作的捐赠范围，再设置审核、密钥和发现等操作权限。"
+        },
+        "models": {
+          "title": "公益模型",
+          "help": "模型、绑定、定价、请求适配、亲和与退避。"
+        },
+        "audit": {
+          "title": "日志与审计",
+          "help": "请求日志、诊断、压力、探测访问和滥用审计。"
+        },
+        "site": {
+          "title": "站点运维",
+          "help": "公告、维护模式、出口流量与自动化访问。"
+        },
+        "assistant": {
+          "title": "助手",
+          "help": "对话与助手审核记录。"
         }
       }
     },
@@ -3792,6 +3847,36 @@
         "mainstream": "主流渠道及其衍生",
         "mysterious": "神秘渠道",
         "other_third_party": "其他第三方"
+      }
+    },
+    "resources": {
+      "title": "附加资源",
+      "description": "查看和调整兑换码、全站奖励支持的画材、抽卡资源和《垂钓手记》资源。",
+      "readOnly": "当前权限或目标账号仅允许查看资源。",
+      "adjustHelp": "输入增减数量，核对调整前后结果，再填写原因。",
+      "direction": "调整方向",
+      "increase": "增加",
+      "decrease": "减少",
+      "quantity": "调整数量",
+      "maximum": "单次最多 {{maximum}}；最终数量还须符合该资源的持有上限。",
+      "invalidAmount": "请输入正整数，并确保调整后数量在允许范围内。",
+      "beforeAfter": "{{before}} → {{after}}",
+      "reason": "调整原因（必填）",
+      "relatedChanges": "扣减经验或装备可能清除不再满足条件的技能、装备栏或保存的配装。正在垂钓时需先结束当前一竿。首次发放垂钓资源会建立存档并附带初始竹竿。卡牌直接调整持有状态，不兑换重复卡碎片。",
+      "review": "核对调整",
+      "search": "搜索资源名称",
+      "group": "资源分类",
+      "allGroups": "全部资源",
+      "resource": "资源",
+      "owned": "当前持有",
+      "adjust": "调整",
+      "confirmTitle": "确认资源调整",
+      "confirm": "确认调整",
+      "groups": {
+        "drawing": "画材",
+        "gacha": "抽奖券与碎片",
+        "cards": "卡牌",
+        "lake": "垂钓手记"
       }
     }
   },

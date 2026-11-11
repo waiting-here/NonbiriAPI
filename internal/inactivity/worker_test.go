@@ -3,7 +3,9 @@ package inactivity
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"sync"
 	"testing"
@@ -15,6 +17,13 @@ func TestDecayUsesLiveActivityRoleAndAvailableWallets(t *testing.T) {
 	user := e.user(t, "donor", 1, 10000, 2000)
 	five := e.user(t, "trainee", 5, 10000, 2000)
 	six := e.user(t, "steward", 6, 10000, 2000)
+	policy := authz.DefaultStewardPermissions(0)
+	grants, _ := json.Marshal(policy.Permissions)
+	limits, _ := json.Marshal(policy.Limits)
+	if _, err := e.store.DB().Exec(`INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,'none',?,?)`, five, string(grants), string(limits), testNow, testNow); err != nil {
+		t.Fatal(err)
+	}
+
 	fresh := e.user(t, "active", 1, 10000, 2000)
 	negative := e.user(t, "negative", 1, -100, -200)
 	e.policy(t, testPolicy())

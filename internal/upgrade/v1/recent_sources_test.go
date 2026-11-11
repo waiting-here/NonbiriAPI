@@ -71,7 +71,7 @@ func migrationIndex(t *testing.T, from int) int {
 func oldStewardPolicyForTest(t *testing.T) string {
 	t.Helper()
 	grants := authz.DefaultStewardPermissions(5).Permissions
-	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"} {
+	for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure", "users.resources"} {
 		delete(grants, key)
 	}
 	i := 0
@@ -723,7 +723,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 		var before, after map[string]bool
 		json.Unmarshal([]byte(original), &before)
 		json.Unmarshal([]byte(body), &after)
-		if len(after) != 55 {
+		if len(after) != 56 {
 			t.Fatal("not current", after)
 		}
 		for key, value := range before {
@@ -731,7 +731,7 @@ func TestAgentPolicyOfflineMigrationPreservesAuthorityAndAudit(t *testing.T) {
 				t.Fatal("authority changed", key)
 			}
 		}
-		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"} {
+		for _, key := range []string{"ai.chat", "ai.review.read", "ai.memory.edit", "charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure", "users.resources"} {
 			if after[key] {
 				t.Fatal("new grant enabled", key)
 			}

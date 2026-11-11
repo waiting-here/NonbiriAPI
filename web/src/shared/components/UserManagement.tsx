@@ -3,6 +3,7 @@ import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
 import { UserLimitBatch } from './UserLimitBatch';
+import { UserResources } from './UserResources';
 import { StewardPermissionEditor } from './StewardPermissionEditor';
 import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { UserDonationHistory } from './UserDonationHistory';
@@ -304,7 +305,7 @@ function UserAuthority({
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const tabID = useId();
   const [tab, setTab] = useState<
-    'overview' | 'limits' | 'economy' | 'penalties' | 'donations' | 'permissions'
+    'overview' | 'limits' | 'economy' | 'resources' | 'penalties' | 'donations' | 'permissions'
   >('overview');
   const [penaltiesVisited, setPenaltiesVisited] = useState(false);
   const [coordinating, setCoordinating] = useState(false);
@@ -560,6 +561,7 @@ function UserAuthority({
           { value: 'overview', label: t('management.users.tabOverview') },
           { value: 'limits', label: t('management.users.tabLimits') },
           { value: 'economy', label: t('management.users.tabEconomy') },
+          { value: 'resources', label: t('management.resources.title') },
           { value: 'penalties', label: t('management.users.tabPenalties') },
           { value: 'donations', label: t('management.permissions.history') },
           ...(canManagePermissions
@@ -1024,6 +1026,27 @@ function UserAuthority({
           ) : (
             <StewardPermissionNotice />
           )}
+        </section>
+      ) : null}
+      {tab === 'resources' ? (
+        <section
+          role="tabpanel"
+          id={`${tabID}-resources-panel`}
+          aria-labelledby={`${tabID}-resources`}
+        >
+          <UserResources
+            role={role}
+            account={account}
+            userId={user.id}
+            editable={
+              editable &&
+              (role === 'admin' ||
+                actorLevel === 6 ||
+                (permissions ?? defaultStewardPermissions(actorLevel)).permissions[
+                  'users.resources'
+                ])
+            }
+          />
         </section>
       ) : null}
       {tab === 'permissions' && canManagePermissions ? (

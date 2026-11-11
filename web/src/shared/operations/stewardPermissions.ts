@@ -10,6 +10,7 @@ export const STEWARD_PERMISSION_DEFAULTS = {
   'users.profile': false,
   'users.limits': true,
   'users.level': false,
+  'users.resources': false,
   'users.balance': false,
   'users.game_balance': false,
   'users.ban': true,
@@ -108,6 +109,7 @@ export function normalizeStewardPermissions(value: unknown): StewardPermissions 
     'steward permissions',
   );
   const added = [
+    'users.resources',
     'charity.request_adaptation',
     'charity.affinity',
     'charity.price_templates.manage',
