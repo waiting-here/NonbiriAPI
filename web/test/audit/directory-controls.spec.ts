@@ -583,9 +583,15 @@ test('administrator saves changed binding order, removes a connection and delete
       .click();
     const confirmation = page.getByRole('alertdialog');
     await expect(confirmation).toHaveCount(1);
+    const deleted = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' &&
+        new URL(response.url()).pathname === '/admin/api/charity-models/' + model.id,
+    );
     await confirmation
       .getByRole('button', { name: copy.operations.charity.deleteModelConfirm, exact: true })
       .click();
+    expect((await deleted).status()).toBe(204);
     await expect(confirmation).toHaveCount(0);
     const removed = await admin.request.get(
       state.admin_url + '/admin/api/charity-models/' + model.id,

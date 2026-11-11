@@ -319,6 +319,7 @@ func TestRegisterRoutesOwnsOnlyFrozenCorrectiveSurface(t *testing.T) {
 		"GET " + routeBlacklistEvents: true, "GET " + routeDeletedUser: true, "GET " + routeDeletionDuelAborts: true,
 		"GET " + routeCallerKey: true, "POST " + routeCallerKeyRevoke: true,
 		"GET " + routeUsers: true, "GET " + routeUser: true, "PATCH " + routeUser: true,
+		"GET " + routeUserResources: true, "PATCH " + routeUserResources: true,
 		"POST " + routeBan: true, "POST " + routeUnban: true, "GET " + routeUsage: true,
 		"GET " + routeActivity: true, "GET " + routeEndpointOverview: true,
 		"PATCH " + routeEndpointTags:                                          true,
