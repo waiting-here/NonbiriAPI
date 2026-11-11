@@ -44,7 +44,7 @@ func assertExactStartupRejection(t *testing.T, path string, vault *secret.Vault,
 	assertBootstrapSourcesUnchanged(t, path, before)
 }
 func TestExactStartupRejectsHistoricalAndNewerSchemasBeforeWriting(t *testing.T) {
-	for _, version := range []int{33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 49, CurrentSchemaVersion + 1} {
+	for _, version := range []int{33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 49, 50, 51, 52, 53, CurrentSchemaVersion + 1} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			var path string
 			var vault *secret.Vault
@@ -92,6 +92,18 @@ func TestExactStartupRejectsHistoricalAndNewerSchemasBeforeWriting(t *testing.T)
 				}
 				if version == 49 {
 					restoreSchema49LayoutForTest(t, source.DB())
+				}
+				if version == 50 {
+					restoreSchema50LayoutForTest(t, source.DB())
+				}
+				if version == 51 {
+					restoreSchema51LayoutForTest(t, source.DB())
+				}
+				if version == 52 {
+					restoreSchema52LayoutForTest(t, source.DB())
+				}
+				if version == 53 {
+					restoreSchema53LayoutForTest(t, source.DB())
 				}
 				if version == 36 {
 					restoreSchema36LayoutForTest(t, source.DB())

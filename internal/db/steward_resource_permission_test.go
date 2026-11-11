@@ -1,10 +1,17 @@
 package db
 
 import (
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func restoreSchema53LayoutForTest(t *testing.T, database *sql.DB) {
+	t.Helper()
+	hostileMustExec(t, database, StewardCharityPermissionsSQL)
+	assertRetainedManifest(t, database, Schema53ManifestHash)
+}
 
 func TestResourcePermissionMigrationPreservesSourceAndRejectsMalformedPolicies(t *testing.T) {
 	source := map[string]bool{}
