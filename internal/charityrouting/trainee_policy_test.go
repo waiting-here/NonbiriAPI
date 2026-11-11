@@ -88,11 +88,11 @@ func TestRequestPolicyAndCallerSnapshotUseCurrentAuthority(t *testing.T) {
 	if _, err := e.service.SnapshotForCaller(context.Background(), owner, mid, routingTestNow, connectors, connectorcontract.OperationChatCompletions); !errors.Is(err, ErrUnavailable) {
 		t.Fatal("self donation candidate admitted", err)
 	}
-	if _, err := e.store.DB().Exec(`UPDATE users SET level=6 WHERE id=?`, owner); err != nil {
+	if _, err := e.store.DB().Exec(`UPDATE users SET level=5 WHERE id=?`, owner); err != nil {
 		t.Fatal(err)
 	}
 	if value, err := e.service.SnapshotForCaller(context.Background(), owner, mid, routingTestNow, connectors, connectorcontract.OperationChatCompletions); err != nil || len(value.Candidates()) != 1 {
-		t.Fatalf("six exemption: %+v %v", value, err)
+		t.Fatalf("five exemption: %+v %v", value, err)
 	}
 	if _, err := e.store.DB().Exec(`UPDATE charity_model_access SET allowed_level_mask=1 WHERE model_id=?`, mid); err != nil {
 		t.Fatal(err)

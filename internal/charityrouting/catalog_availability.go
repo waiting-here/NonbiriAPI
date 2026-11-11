@@ -26,7 +26,7 @@ func catalogAvailableBindingSQL(bindingID string, memberID ...string) string {
 
 // Caller-scoped lists and the global catalog share every resource and quota
 // predicate. Only caller lists exclude the reader's own donations (except
-// level six, whose non-administrator identity is checked by CurrentLevel).
+// levels five and six, whose non-administrator identity is checked by CurrentLevel).
 func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ...string) string {
 	scope := ""
 	if bindingID != "" {
@@ -39,7 +39,7 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
 		scope += " AND target.id=" + memberID[1]
 	}
 	if callerScoped {
-		scope += " AND (d.user_id<>cx.caller_id OR cx.caller_level=6)"
+		scope += " AND (d.user_id<>cx.caller_id OR cx.caller_level IN (5,6))"
 	}
 	price := `(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price ELSE COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),CAST(cx.token_reserve AS INTEGER)) END)`
 	// The joined key has no extra quota predicate when neither independent

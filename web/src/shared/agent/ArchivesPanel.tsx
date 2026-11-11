@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { roleLabels } from './presentation';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -179,6 +181,7 @@ export function ArchivesPanel({ account, active }: { account: string; active: bo
   });
   const query = useQuery({
     queryKey: [...agentRoot('admin', account), 'archives', pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...agentRoot('admin', account), 'archives']),
     queryFn: ({ signal }) => getArchives(pager.page, pager.pageSize, signal),
     enabled: active,
     retry: false,
@@ -232,6 +235,7 @@ export function ArchivesPanel({ account, active }: { account: string; active: bo
           <AgentError error={query.error} onRetry={() => void query.refetch()} />
         ) : (
           <>
+            <QueryFeedback query={query} />
             {query.data.items.length ? (
               <DataTable
                 caption={t('common.agent.archives')}

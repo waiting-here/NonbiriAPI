@@ -173,12 +173,7 @@ export function EndpointManagement({
     retry: false,
     enabled: scopeReady && canRead,
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[3] === account &&
-      previousQuery.queryKey[4] === query &&
-      previousQuery.queryKey[7] === tag &&
-      previousQuery.queryKey[8] === userId
-        ? previous
-        : undefined,
+      previousQuery?.queryKey[3] === account ? previous : undefined,
   });
   const selectionScope = `${query}:${tag}:${userId}:${pager.page}:${pager.pageSize}`;
   const [selection, setSelection] = useState<{ scope: string; urls: string[] }>({
@@ -258,6 +253,7 @@ export function EndpointManagement({
         <EndpointTagRules role={role} account={account} canTag={canTag} />
       </Fold>
       <FilterBar
+        query={result}
         activeCount={Number(Boolean(query)) + Number(Boolean(userId)) + Number(Boolean(tag))}
         onSubmit={() => {
           const bytes = new TextEncoder().encode(draft).byteLength;

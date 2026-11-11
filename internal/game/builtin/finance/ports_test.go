@@ -11,7 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	ports "github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func TestFinancialPortsRejectForeignSourcesBeforeLedgerMutation(t *testing.T) {

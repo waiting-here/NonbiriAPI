@@ -120,9 +120,83 @@ func aggregateMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, 
 	return rows.Err()
 }
 
+// Read complete series buckets together. Only partial edge buckets need the
+// immutable-entry path; a long series must not repeat the same range query for
+// each of its hundreds of points.
+func seriesMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, start, step int64) ([]Point, error) {
+	points := make([]Point, 0, (f.To-start-1)/step+1)
+	values := make([]measures, 0, cap(points))
+	first, last := start, bucketStart(f.To, c.offset, step)
+	if first < f.From {
+		first += step
+	}
+	for at := start; at < f.To; at += step {
+		points = append(points, Point{Start: max(f.From, at), End: min(f.To, at+step)})
+		values = append(values, measures{})
+	}
+	if first < last {
+		query := `SELECT bucket_start,issued,reclaimed,user_income,user_expense,internal_transfer,operation_count
+FROM economy_audit_buckets WHERE asset_type=? AND bucket=? AND bucket_start>=? AND bucket_start<? AND offset_minutes=?`
+		args := []any{string(f.Asset), f.Bucket, first, last, c.offset}
+		if f.Kind != "" {
+			query += ` AND kind=?`
+			args = append(args, f.Kind)
+		}
+		if f.Channel != "" {
+			query += ` AND channel=?`
+			args = append(args, f.Channel)
+		}
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var at, count int64
+			var raw [5]string
+			if err := rows.Scan(&at, &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			m, err := decodeMeasures(raw, count)
+			if err == nil {
+				err = values[(at-start)/step].add(m)
+			}
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+	for i := range points {
+		at := start + int64(i)*step
+		if at < first || at >= last {
+			part := f
+			part.From, part.To = points[i].Start, points[i].End
+			partial, err := rangeMeasures(ctx, tx, c, part)
+			if err != nil {
+				return nil, err
+			}
+			m, err := sumDimensions(partial)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = *m
+		}
+		points[i].Metrics = values[i].wire()
+	}
+	return points, nil
+}
+
 const edgeCountQuery = `SELECT count(*),count(CASE WHEN created_at>=? AND created_at<? THEN 1 END)
-FROM credit_operations INDEXED BY idx_credit_operations_created
-WHERE created_at>=? AND created_at<? AND ledger_seq<=?`
+FROM credit_operation_assets
+WHERE asset_type=? AND created_at>=? AND created_at<? AND ledger_seq<=?`
 
 func edgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from, to int64, out map[dimension]*measures) error {
 	if from >= to {
@@ -144,7 +218,7 @@ func edgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, from,
 	// records. A mostly selected hour is cheaper as its aggregate minus the
 	// smaller excluded portion, particularly for the current unfinished hour.
 	var total, selected int64
-	err := tx.QueryRowContext(ctx, edgeCountQuery, from, to, hourFrom, hourTo, c.last).Scan(&total, &selected)
+	err := tx.QueryRowContext(ctx, edgeCountQuery, from, to, string(f.Asset), hourFrom, hourTo, c.last).Scan(&total, &selected)
 	if err != nil {
 		return err
 	}
@@ -193,14 +267,19 @@ func rawEdgeMeasures(ctx context.Context, tx *sql.Tx, c checkpoint, f Filter, fr
 	}
 	afterAt, after := from, int64(0)
 	for {
-		query := `SELECT id,ledger_seq,kind,source_type,source_id,created_at FROM credit_operations WHERE (created_at,ledger_seq)>(?,?) AND created_at<? AND ledger_seq<=?`
-		args := []any{afterAt, after, to, c.last}
+		query := `WITH page AS MATERIALIZED (
+SELECT o.id,o.ledger_seq,o.kind,o.source_type,o.source_id,o.created_at
+FROM credit_operation_assets p JOIN credit_operations o ON o.id=p.operation_id
+WHERE p.asset_type=? AND (p.created_at,p.ledger_seq)>(?,?) AND p.created_at<? AND p.ledger_seq<=?`
+		args := []any{string(f.Asset), afterAt, after, to, c.last}
 		if f.Kind != "" {
-			query += ` AND kind=?`
+			query += ` AND p.kind=?`
 			args = append(args, f.Kind)
 		}
-		query += operationChannelCondition(f, "source_id")
-		query += ` ORDER BY created_at,ledger_seq LIMIT 100`
+		query += operationChannelCondition(f, "o.source_id")
+		query += ` ORDER BY p.created_at,p.ledger_seq LIMIT 100
+)
+SELECT id,ledger_seq,kind,source_type,source_id,created_at FROM page ORDER BY created_at,ledger_seq`
 		rows, err := tx.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err

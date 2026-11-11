@@ -244,7 +244,7 @@ func TestCallerListsKeepSixLevelsAndDonorIdentitySeparate(t *testing.T) {
 		}
 		for _, user := range []int64{owner, env.caller} {
 			want := 1
-			if user == owner && level != 6 {
+			if user == owner && level < 5 {
 				want = 0
 			}
 			models, err := env.service.ListAvailableModels(t.Context(), user, routingTestNow, MaxAvailableModels)

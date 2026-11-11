@@ -35,6 +35,10 @@ func allIndexSourceFacts(t *testing.T, database *sql.DB, sourceColumns map[strin
 		if assertEmptyAttendanceTableForTest(t, database, table) || assertEmptyModelQuotaTableForTest(t, database, table) {
 			continue
 		}
+		if table == "credit_operation_assets" {
+			assertCreditOperationAssetsProjectionForTest(t, database)
+			continue
+		}
 		if isFishingPondTableForTest(table) {
 			assertInitialFishingPondTableForTest(t, database, table)
 			continue

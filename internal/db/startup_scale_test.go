@@ -27,7 +27,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 const (

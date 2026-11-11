@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	sqlite "modernc.org/sqlite"
+	sqlite "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 const (

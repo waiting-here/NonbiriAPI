@@ -73,7 +73,9 @@ func ReadTx(ctx context.Context, tx *sql.Tx, user int64, board, window string, p
 			return result, nil
 		}
 	}
-	query := `SELECT t.user_id,t.amount_mag,t.achieved_at,t.achieved_phase,t.achieved_seq FROM game_rank_totals t JOIN users u ON u.id=t.user_id WHERE t.board=? AND t.window=? AND t.amount_sign=1 AND u.is_admin=0`
+	// Totals have a cascading owner foreign key. Excluding the indexed admin
+	// identity avoids loading every preceding user row just to test its role.
+	query := `SELECT t.user_id,t.amount_mag,t.achieved_at,t.achieved_phase,t.achieved_seq FROM game_rank_totals t WHERE t.board=? AND t.window=? AND t.amount_sign=1 AND t.user_id NOT IN (SELECT id FROM users WHERE is_admin=1)`
 	args := []any{board, window}
 	preference := `COALESCE(p.game_profile_public,u.game_profile_public)`
 	var offset int64
@@ -81,8 +83,10 @@ func ReadTx(ctx context.Context, tx *sql.Tx, user int64, board, window string, p
 		query = `SELECT id AS user_id,donation_credit_mag AS amount_mag,donation_credit_achieved_at AS achieved_at,0 AS achieved_phase,donation_credit_achieved_seq AS achieved_seq FROM users WHERE is_admin=0 AND donation_credit_mag>zeroblob(16)`
 		args = nil
 		preference = `u.charity_profile_public`
+		// Both counts use existing narrow indexes; the subtraction is exact in
+		// this transaction and avoids fetching every donor solely for is_admin.
 		var count int64
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM (`+query+`)`).Scan(&count); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM users WHERE donation_credit_mag>zeroblob(16))-(SELECT COUNT(*) FROM users WHERE is_admin=1 AND donation_credit_mag>zeroblob(16))`).Scan(&count); err != nil {
 			return Board{}, err
 		}
 		meta, start, err := page.Window(count)
@@ -92,19 +96,31 @@ func ReadTx(ctx context.Context, tx *sql.Tx, user int64, board, window string, p
 		result.Pagination = &meta
 		offset = start
 	}
-	query = `WITH eligible AS (` + query + `), ranked AS (SELECT *,ROW_NUMBER() OVER(ORDER BY amount_mag DESC,achieved_at,achieved_phase,achieved_seq) AS rank FROM eligible)
+	const order = `amount_mag DESC,achieved_at,achieved_phase,achieved_seq`
+	// Number only the selected page. The current user's position is an exact
+	// count over preceding totals in this same identity and balance snapshot.
+	// Achievement sequences identify globally unique, user-owned events. Expiry
+	// retains a sequence from that user's events, so strict tuple precedence
+	// also gives the exact row-number position when amounts and times tie.
+	selected := db.MaterializePage(`SELECT * FROM eligible ORDER BY `+order+` LIMIT 20 OFFSET ?`, `ORDER BY `+order)
+	query = `WITH eligible AS NOT MATERIALIZED (` + query + `), selected AS (` + selected + `),
+ ranked AS (SELECT user_id,amount_mag,?+ROW_NUMBER() OVER(ORDER BY ` + order + `) AS rank FROM selected)`
+	args = append(args, offset, offset)
+	if board != "charity" {
+		query += `, own AS (SELECT me.user_id,me.amount_mag,1+(SELECT COUNT(*) FROM eligible preceding
+ WHERE preceding.amount_mag>=me.amount_mag AND (preceding.amount_mag>me.amount_mag OR
+ (preceding.achieved_at,preceding.achieved_phase,preceding.achieved_seq)<(me.achieved_at,me.achieved_phase,me.achieved_seq))) AS rank
+ FROM eligible me WHERE me.user_id=? AND NOT EXISTS(SELECT 1 FROM selected WHERE user_id=me.user_id)),
+ visible AS (SELECT * FROM ranked UNION ALL SELECT * FROM own)`
+		args = append(args, user)
+	} else {
+		query += `, visible AS (SELECT * FROM ranked)`
+	}
+	query += `
 SELECT r.user_id,r.amount_mag,r.rank,CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE ` + preference + ` END,
 u.username,u.guild_nick,COALESCE(u.discord_id,''),u.avatar,u.guild_avatar_url
-FROM ranked r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences p ON p.user_id=r.user_id WHERE `
+FROM visible r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences p ON p.user_id=r.user_id ORDER BY r.rank`
 	args = append(args, now)
-	if board == "charity" {
-		query += `r.rank>? AND r.rank<=?`
-		args = append(args, offset, offset+20)
-	} else {
-		query += `r.rank<=20 OR r.user_id=?`
-		args = append(args, user)
-	}
-	query += ` ORDER BY r.rank`
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Board{}, err

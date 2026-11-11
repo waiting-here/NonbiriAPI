@@ -83,6 +83,22 @@ func NewAdminGameAdjustment(meta Meta, userAccountID, externalAccountID int64, d
 	return plan, nil
 }
 
+// NewAdminDrawingAdjustment keeps material changes in the ordinary balanced
+// adjustment ledger without granting access to either credit balance.
+func NewAdminDrawingAdjustment(meta Meta, userAccountID, externalAccountID int64, asset Asset, delta Amount, reason string) (Plan, error) {
+	if asset != SketchPaper && asset != SketchBrush {
+		return Plan{}, ErrInvalidPlan
+	}
+	plan, err := NewAdminUserAdjustment(meta, userAccountID, externalAccountID, delta, 0, Amount{}, reason)
+	if err != nil {
+		return Plan{}, err
+	}
+	for i := range plan.spec.entries {
+		plan.spec.entries[i].role.asset = asset
+	}
+	return plan, nil
+}
+
 // NewWalletsDeleteZero clears both user assets in one operation.
 func NewWalletsDeleteZero(meta Meta, wallets, external AccountPair) (Plan, error) {
 	if !wallets.valid() || !external.valid() {

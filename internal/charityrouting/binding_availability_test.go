@@ -80,8 +80,10 @@ FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donat
 	readWhileWriterHeld := func(name string, read func(context.Context) error) {
 		t.Helper()
 		before := e.store.DB().Stats()
-		// Each request gets its own deadline; the previous read must not spend it.
-		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		// Writer occupancy and WaitCount below prove pool isolation. Keep each
+		// read bounded, allowing race-instrumented SQL preparation on shared CI
+		// runners; this is not a one-second production latency requirement.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 		started := time.Now()
 		err := read(ctx)

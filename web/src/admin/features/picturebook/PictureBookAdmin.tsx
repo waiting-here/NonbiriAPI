@@ -281,6 +281,7 @@ const Catalog = forwardRef<
           <ErrorState error={models.error} onRetry={() => void models.refetch()} />
         ) : null}
         <FilterBar
+          query={models}
           activeCount={
             Number(Boolean(filter.q)) +
             Number(filter.type !== 'image') +

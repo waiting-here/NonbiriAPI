@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router';
@@ -28,6 +30,7 @@ export function BrowserAccounts({
   const size = isPageSize(rawSize) ? rawSize : 20;
   const query = useQuery({
     queryKey: ['risk', role, scopeKey, 'browser-accounts', browserID, page, size],
+    placeholderData: retainQueryScope(['risk', role, scopeKey, 'browser-accounts', browserID]),
     queryFn: ({ signal }) => getBrowserAccounts(role, browserID, page, size, signal),
     retry: false,
     gcTime: 0,
@@ -38,6 +41,7 @@ export function BrowserAccounts({
   if (!query.data) return <LoadingState />;
   return (
     <div className="nb-stack">
+      <QueryFeedback query={query} />
       <DataTable
         caption={t('common.audit.browsers.viewAccounts')}
         rows={query.data.associations}

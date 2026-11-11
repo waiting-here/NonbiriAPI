@@ -16,7 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
-	moderncsqlite "modernc.org/sqlite"
+	moderncsqlite "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 const maxSiteConfigUnixSecond = int64(253402300799)

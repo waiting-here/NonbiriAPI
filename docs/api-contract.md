@@ -152,9 +152,9 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 52. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 30 exact registered schema 16–26 and 33–51 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 51-to-52. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 54. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 32 exact registered schema 16–26 and 33–53 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 52-to-54. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=52`, `minimum_schema_version=52`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 30 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=54`, `minimum_schema_version=54`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 31 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
 
 Current account export `schema_version=36` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v36.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -3042,3 +3042,11 @@ without purchasing again or consuming the new day's limit. Monthly ticket
 exchange caps and single-ticket prices do not affect these bundles.
 
 Reward receipts are included in the current account export under `rewards`. They contain the account’s successful site-wide and code rewards, quantities, duplicate conversions and skipped items, without code text, eligibility configuration, other recipients or retry hashes. Receipts remain for the account lifetime and are removed on deletion; campaign totals and used quota remain. See [rewards](rewards.md).
+
+### Additional managed user resources (v1.3.10)
+
+The administrator and steward `GET|PATCH /users/{id}/resources` routes are defined
+in [steward permissions](steward-permissions.md#additional-user-resources), including
+exact payloads, current authority, whole-number limits, inventory compare-and-swap,
+idempotent replay and dependent Lake Notes changes. They do not grant authority to
+adjust general credits, game credits or donation credit through this route.

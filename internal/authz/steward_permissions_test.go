@@ -81,7 +81,7 @@ func TestStewardPermissionsRejectUnknownMissingAndNumericOverflow(t *testing.T) 
 
 func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 	p := DefaultStewardPermissions(5)
-	if !p.Permissions["ai.chat"] || p.Permissions["ai.review.read"] || p.Permissions["ai.memory.edit"] || len(p.Permissions) != 55 {
+	if !p.Permissions["ai.chat"] || p.Permissions["ai.review.read"] || p.Permissions["ai.memory.edit"] || len(p.Permissions) != 56 {
 		t.Fatal("AI defaults", p)
 	}
 	for key := range p.Permissions {
@@ -226,5 +226,14 @@ func TestRiskConfigurationPermissionIsIndependent(t *testing.T) {
 				t.Fatalf("grant=%q route=%+v operation=%q", grant, tc, operation)
 			}
 		}
+	}
+}
+
+func TestResourceManagementPermissionRoutes(t *testing.T) {
+	if StewardRoutePermission("GET", "/api/steward/users/1/resources") != "users.read" || StewardRoutePermission("PATCH", "/api/steward/users/1/resources") != "users.resources" {
+		t.Fatal("resource route authority drift")
+	}
+	if DefaultStewardPermissions(5).Permissions["users.resources"] || !DefaultStewardPermissions(6).Permissions["users.resources"] {
+		t.Fatal("resource defaults drift")
 	}
 }

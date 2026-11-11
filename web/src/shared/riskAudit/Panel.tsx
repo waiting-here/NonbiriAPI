@@ -17,6 +17,7 @@ import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { sourceFlagLabel, sourceQualityLabel } from '@shared/observability/sourceLabels';
 import { Card, ErrorState, LoadingState, PageHeader, SectionHead } from '@shared/components/States';
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Tabs, Fold, Note, DataTable } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -1660,7 +1661,8 @@ function Access({ role, scopeKey, c, filters }: Scope) {
           </>
         }
       />
-      {summary.error ? (
+      <QueryFeedback query={summary} />
+      {summary.error && !summary.isFetching ? (
         <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
       ) : summary.data ? (
         <Card>
@@ -1698,7 +1700,8 @@ function Access({ role, scopeKey, c, filters }: Scope) {
       ) : (
         <LoadingState />
       )}
-      {events.error ? (
+      <QueryFeedback query={events} />
+      {events.error && !events.isFetching ? (
         <ErrorState error={events.error} onRetry={() => void events.refetch()} />
       ) : events.data ? (
         <>

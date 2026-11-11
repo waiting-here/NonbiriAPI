@@ -30,7 +30,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		return nil, err
 	}
 	defer tx.Rollback()
-	query := `SELECT ` + commonListColumns + `,l.model FROM request_logs l WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)` + phaseFilter(filter.Phase)
+	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)` + phaseFilter(filter.Phase)
 	args := []any{user, now - requestLogRetentionSeconds}
 	if useOperationRange(filter) {
 		query += " AND " + logOperationSQL + "=?"
@@ -56,7 +56,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		query += ` AND l.started_at<?`
 		args = append(args, *filter.To)
 	}
-	query += ` ORDER BY l.started_at,l.id LIMIT ?`
+	query = logExportQuery(commonListColumns+`,l.model`, "", query)
 	args = append(args, maxExportRows+1)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {

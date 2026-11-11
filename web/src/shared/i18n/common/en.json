@@ -3152,6 +3152,16 @@
       "save": "Save model quotas",
       "retry": "Retry the same save",
       "saved": "Model quotas saved."
+    },
+    "insufficientBalance": "There is not enough available balance. Choose a smaller amount or add funds.",
+    "featureDisabled": "This feature is currently closed.",
+    "charitySuspended": "Charity access is currently suspended for this account.",
+    "checkinCapReached": "Your balance has reached the check-in limit.",
+    "query": {
+      "updating": "Updating results… Showing the previous results until the query finishes.",
+      "stillUpdating": "The query is still running. Previous results remain visible until it finishes.",
+      "stillLoading": "The query is still running. Please wait for the result.",
+      "failedRetained": "The query failed. The previous results are still shown."
     }
   },
   "logs": {
@@ -3622,8 +3632,6 @@
       "noMatches": "No matching permissions. Try a different search.",
       "invalidLimit": "Enter a non-negative value within the range; points allow up to three decimal places.",
       "combinedActions": "Page access and actions are granted separately. Blacklisting also requires ban and permanent-ban permissions; replacing an existing ban also requires unban permission. Automation checks the matching page, action and source-scope grants.",
-      "action": "Page or action",
-      "defaultState": "Level-5 default",
       "allowed": "Allowed",
       "notAllowed": "Not granted",
       "limitsTitle": "Action limits",
@@ -3688,7 +3696,8 @@
         "endpoints_tags": "Edit endpoint tags",
         "ai_chat": "Use AI chat",
         "ai_review_read": "Read AI review reports",
-        "ai_memory_edit": "Edit shared memory"
+        "ai_memory_edit": "Edit shared memory",
+        "users_resources": "Adjust additional resources (drawing, cards, Lake Notes)"
       },
       "limits": {
         "users_endpoint_limit_max": "Maximum endpoint limit",
@@ -3716,6 +3725,62 @@
         "full": {
           "label": "Full",
           "description": "All donations and their keys, subject to each action permission."
+        }
+      },
+      "categories": "Browse permissions by responsibility",
+      "allCategories": "All categories",
+      "defaultAllowed": "Allowed by default at level 5",
+      "defaultDenied": "Disabled by default at level 5",
+      "fixedExemptions": "Fixed benefits: level 5 and 6 stewards are always exempt from inactivity cleanup and may use their own donated keys for charity calls. These switches do not control either benefit. Key validity, bans and other checks still apply.",
+      "individual": "Individual grants / defaults",
+      "manageIncludes": "Manage permits viewing and “{{action}}”.",
+      "modes": {
+        "off": "Off",
+        "read": "Read only",
+        "manage": "Manage",
+        "custom": "Custom"
+      },
+      "pairs": {
+        "callerKeys": "CallerKey",
+        "blacklist": "Registration blacklist",
+        "endpoints": "Endpoint overview and tags",
+        "priceTemplates": "Price templates",
+        "risk": "Abuse audit",
+        "announcements": "Announcements",
+        "maintenance": "Maintenance mode"
+      },
+      "groups": {
+        "users": {
+          "title": "Accounts and request limits",
+          "help": "User access, profile editing, account levels and request limits."
+        },
+        "economy": {
+          "title": "Resources and credits",
+          "help": "General credits, game credits, additional resources and loans. Donation credit authority stays unchanged."
+        },
+        "safety": {
+          "title": "Account safety",
+          "help": "Bans, unbans, penalties, CallerKeys and registration blacklist."
+        },
+        "donations": {
+          "title": "Donations and endpoints",
+          "help": "Choose the donation scope, then allow review, key management and discovery actions."
+        },
+        "models": {
+          "title": "Charity models",
+          "help": "Models, bindings, pricing, request adaptation, affinity and backoff."
+        },
+        "audit": {
+          "title": "Logs and audits",
+          "help": "Request logs, diagnostics, pressure, access probes and abuse audit."
+        },
+        "site": {
+          "title": "Site operations",
+          "help": "Announcements, maintenance mode, egress and automation access."
+        },
+        "assistant": {
+          "title": "Assistant",
+          "help": "Conversations and assistant review records."
         }
       }
     },
@@ -3782,6 +3847,36 @@
         "mainstream": "Mainstream channels and derivatives",
         "mysterious": "Mysterious channel",
         "other_third_party": "Other third party"
+      }
+    },
+    "resources": {
+      "title": "Additional resources",
+      "description": "View and adjust drawing supplies, gacha assets and Lake Notes resources supported by redemption codes and site rewards.",
+      "readOnly": "Your permissions or the target account allow viewing only.",
+      "adjustHelp": "Enter an amount, check the resulting quantity and give a reason.",
+      "direction": "Adjustment direction",
+      "increase": "Increase",
+      "decrease": "Decrease",
+      "quantity": "Adjustment quantity",
+      "maximum": "At most {{maximum}} per adjustment; the final quantity must also fit the resource capacity.",
+      "invalidAmount": "Enter a positive whole number that leaves the quantity within its permitted range.",
+      "beforeAfter": "{{before}} → {{after}}",
+      "reason": "Reason (required)",
+      "relatedChanges": "Removing experience or gear may clear ineligible skills, equipped items or saved loadouts. Finish any active cast first. A first Lake Notes grant creates a profile with its starter rod. Cards change ownership directly without converting duplicates into shards.",
+      "review": "Review adjustment",
+      "search": "Search resource names",
+      "group": "Resource category",
+      "allGroups": "All resources",
+      "resource": "Resource",
+      "owned": "Currently owned",
+      "adjust": "Adjust",
+      "confirmTitle": "Confirm resource adjustment",
+      "confirm": "Confirm adjustment",
+      "groups": {
+        "drawing": "Drawing supplies",
+        "gacha": "Tickets and shards",
+        "cards": "Cards",
+        "lake": "Lake Notes"
       }
     }
   },

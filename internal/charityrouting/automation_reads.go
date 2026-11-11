@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -178,7 +179,7 @@ func (s *Service) AutomationModels(ctx context.Context, actorID int64, query str
 	if err != nil {
 		return empty, err
 	}
-	rows, err := tx.QueryContext(ctx, selection+` ORDER BY id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(selection+` ORDER BY id LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return empty, err
 	}
@@ -191,13 +192,9 @@ func (s *Service) AutomationModels(ctx context.Context, actorID int64, query str
 		return empty, err
 	}
 	result := AutomationPage[StewardCharityModel]{Data: make([]StewardCharityModel, 0, len(ids)), Pagination: &metadata}
-	models := make([]AdminCharityModel, 0, len(ids))
-	for _, id := range ids {
-		item, err := getAdminModelTx(ctx, tx, id, now)
-		if err != nil {
-			return empty, err
-		}
-		models = append(models, item)
+	models, err := getAdminModelsTx(ctx, tx, ids, now)
+	if err != nil {
+		return empty, err
 	}
 	s.attachModelCloudflareMode(models)
 	for _, item := range models {

@@ -378,6 +378,7 @@ export function MultiTargetBindingWorkflow({
       ) : (
         <>
           <FilterBar
+            query={models}
             activeCount={q ? 1 : 0}
             onReset={() => {
               setDraft('');

@@ -105,6 +105,15 @@ func logListPageQuery(ctx context.Context, reader logReadQueryer, columns, join,
 		` FROM log_page p JOIN request_logs l ON l.id=p.id` + join + order, args, metadata, nil
 }
 
+// Export selection has the same narrow-page boundary as interactive lists.
+// In particular, an attempt filter must not project every matching row's
+// charges and caller history before applying the export capacity window.
+func logExportQuery(columns, join, where string) string {
+	const order = ` ORDER BY l.started_at ASC,l.id ASC`
+	return `WITH log_page AS MATERIALIZED (SELECT l.id FROM request_logs l ` + where + order +
+		` LIMIT ?) SELECT ` + columns + ` FROM log_page p JOIN request_logs l ON l.id=p.id` + join + order
+}
+
 func parseLogPage(values url.Values, prefix string) (*pagination.Request, error) {
 	pageValues := url.Values{}
 	for _, name := range []string{"page", "page_size", "cursor", "limit"} {

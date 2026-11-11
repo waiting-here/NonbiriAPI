@@ -1,3 +1,4 @@
+import { useRetainedQueryData } from '@shared/query/useRetainedQueryData';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { FailureDetails, RequestDelivery } from '@shared/observability/FailureDiagnostics';
 import {
@@ -12,6 +13,7 @@ import { Button } from '@shared/components/ui/Button';
 import { Link, useLocation } from 'react-router';
 import { charityManagementPath } from './managementNavigation';
 import { clearStationSession } from '@shared/charityManagement';
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { formatCredits } from '../../../user/games/common/strict';
 import { Fold, Note } from '@shared/components/ui';
@@ -547,6 +549,11 @@ function ScopedRoleLogPanel({
       : isFinalAuthorityError(detail.error)
         ? detail.error
         : null;
+  const retainedLogData = useRetainedQueryData(
+    { data: logs.data, error: authorityError ?? logs.error },
+    [role, accountID],
+    observerEnabled,
+  );
   const authorityClosed = revoked || authorityError !== null;
 
   useEffect(() => {
@@ -1154,7 +1161,7 @@ function ScopedRoleLogPanel({
       </Card>
     );
 
-  const pageData = invalidFilter ? undefined : logs.data;
+  const pageData = invalidFilter ? undefined : retainedLogData;
   const listBusy = logs.isFetching;
   return (
     <Card className={`ops-stack log-panel log-panel--${role}`}>
@@ -1195,6 +1202,15 @@ function ScopedRoleLogPanel({
           {t('common.operations.logs.keyFilterNotice', { id: filter.endpoint_key_id })}
         </p>
       ) : null}
+      {!invalidFilter ? (
+        <QueryFeedback
+          query={{
+            ...logs,
+            data: pageData,
+            retained: logs.data === undefined && pageData !== undefined,
+          }}
+        />
+      ) : null}
       {invalidFilter ? null : logs.error && !pageData ? (
         <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
       ) : pageData ? (
@@ -1222,10 +1238,16 @@ function ScopedRoleLogPanel({
           )}
           <PagePagination
             metadata={pageData.pagination}
-            requestedPage={pager.page}
+            requestedPage={logs.data === undefined ? undefined : pager.page}
             busy={listBusy}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
+            onPageChange={(page) => {
+              if (logs.error && page === pager.page) void logs.refetch();
+              else pager.setPage(page);
+            }}
+            onPageSizeChange={(size) => {
+              if (logs.error && size === pager.pageSize) void logs.refetch();
+              else pager.setPageSize(size);
+            }}
           />
         </div>
       ) : logs.isPending ? (

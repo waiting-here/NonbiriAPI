@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 type connectionFixtureCache struct {

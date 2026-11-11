@@ -13,7 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/sessionheader"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 type adapterTestState struct {

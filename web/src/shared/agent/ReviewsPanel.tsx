@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -37,6 +39,7 @@ export function ReviewsPanel({
   });
   const query = useQuery({
     queryKey: [...agentRoot(role, account), 'reviews', pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...agentRoot(role, account), 'reviews']),
     queryFn: ({ signal }) => getReviews(role, pager.page, pager.pageSize, signal),
     enabled: active,
     retry: false,
@@ -129,6 +132,7 @@ export function ReviewsPanel({
           <AgentError error={query.error} onRetry={() => void query.refetch()} />
         ) : (
           <>
+            <QueryFeedback query={query} quietRefetch />
             {!query.data.items.length ? (
               <AgentEmpty body={t('common.agent.reviewsEmpty')} />
             ) : (

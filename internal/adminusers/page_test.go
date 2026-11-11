@@ -308,3 +308,33 @@ func TestAdminNumberedLiveAuthorityAndBanTimeFiltering(t *testing.T) {
 		}
 	}
 }
+
+func TestCursorPageCancelsBeforeSparseTailEscapesQuery(t *testing.T) {
+	f := newAdminUsersFixture(t)
+	tx, err := f.store.ReadDB().BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	selection := `SELECT 1 AS id UNION ALL SELECT (WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000000) SELECT SUM(x) FROM n)`
+	statement, args, _, err := listPageQuery(t.Context(), tx, selection, "", "ORDER BY id", nil, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	rows, err := tx.QueryContext(ctx, statement, args...)
+	if rows != nil {
+		rows.Close()
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("cursor exposed its first row before finishing sparse selection: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	var value int
+	if err := f.store.ReadDB().QueryRowContext(t.Context(), `SELECT 7`).Scan(&value); err != nil || value != 7 {
+		t.Fatalf("reader reuse after cancellation: value=%d err=%v", value, err)
+	}
+}

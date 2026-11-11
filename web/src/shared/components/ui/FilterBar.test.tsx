@@ -22,3 +22,24 @@ it('allows invalid input to be reset while preserving explicit in-flight protect
   view.rerender(tree(true));
   expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
 });
+
+it.each(['form', 'div'] as const)(
+  'prevents duplicate Enter submissions in a disabled %s search',
+  async (as) => {
+    const submit = vi.fn();
+    const view = await renderWithProviders(
+      <FilterBar
+        as={as}
+        activeCount={0}
+        search={<input aria-label="Query" />}
+        onSubmit={submit}
+        onReset={vi.fn()}
+        submitDisabled
+      />,
+      { station: 'user' },
+    );
+    await view.user.type(screen.getByRole('textbox', { name: 'Query' }), 'pending{Enter}');
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox', { name: 'Query' })).toHaveValue('pending');
+  },
+);

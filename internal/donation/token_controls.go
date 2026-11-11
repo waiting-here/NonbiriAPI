@@ -123,29 +123,28 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&inputLimit, &outputLimit, &inputRes
 	return err
 }
 
-func readSplitTokenProjection(ctx context.Context, tx *sql.Tx, keyID int64, item *AdminDonationKey) error {
-	var inLimit, outLimit, inUsed, outUsed, inReserved, outReserved, unattributed []byte
-	var inReserve, outReserve sql.NullInt64
-	err := tx.QueryRowContext(ctx, `SELECT input_token_limit_mag,output_token_limit_mag,input_token_reserve,output_token_reserve,input_tokens_used,output_tokens_used,input_tokens_reserved,output_tokens_reserved,breakdown_started_at,unattributed_total_tokens FROM donation_keys WHERE id=?`, keyID).
-		Scan(&inLimit, &outLimit, &inReserve, &outReserve, &inUsed, &outUsed, &inReserved, &outReserved, &item.BreakdownStartedAt, &unattributed)
-	if err != nil {
-		return err
-	}
-	if inReserve.Valid != outReserve.Valid {
+type splitTokenProjection struct {
+	inLimit, outLimit, inUsed, outUsed, inReserved, outReserved, unattributed []byte
+	inReserve, outReserve                                                     sql.NullInt64
+}
+
+func (p splitTokenProjection) apply(item *AdminDonationKey) error {
+	var err error
+	if p.inReserve.Valid != p.outReserve.Valid {
 		return ErrInvariant
 	}
-	if inReserve.Valid {
-		a, b := strconv.FormatInt(inReserve.Int64, 10), strconv.FormatInt(outReserve.Int64, 10)
+	if p.inReserve.Valid {
+		a, b := strconv.FormatInt(p.inReserve.Int64, 10), strconv.FormatInt(p.outReserve.Int64, 10)
 		item.InputTokenReserve, item.OutputTokenReserve = &a, &b
 	}
-	item.Limits.InputTokens, err = nullableDecimalFromBlob(inLimit)
+	item.Limits.InputTokens, err = nullableDecimalFromBlob(p.inLimit)
 	if err == nil {
-		item.Limits.OutputTokens, err = nullableDecimalFromBlob(outLimit)
+		item.Limits.OutputTokens, err = nullableDecimalFromBlob(p.outLimit)
 	}
 	for _, field := range []struct {
 		value  []byte
 		target *string
-	}{{inUsed, &item.Usage.InputTokensUsed}, {outUsed, &item.Usage.OutputTokensUsed}, {inReserved, &item.Usage.InputTokensInflight}, {outReserved, &item.Usage.OutputTokensInflight}, {unattributed, &item.Usage.UnattributedTotalTokens}} {
+	}{{p.inUsed, &item.Usage.InputTokensUsed}, {p.outUsed, &item.Usage.OutputTokensUsed}, {p.inReserved, &item.Usage.InputTokensInflight}, {p.outReserved, &item.Usage.OutputTokensInflight}, {p.unattributed, &item.Usage.UnattributedTotalTokens}} {
 		if err != nil {
 			return err
 		}

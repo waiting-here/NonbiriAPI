@@ -1,3 +1,4 @@
+import { QueryFeedback } from '../QueryFeedback';
 import { Button } from '@shared/components/ui/Button';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -5,6 +6,7 @@ import { FilterFieldLayoutContext } from './FieldLayoutContext';
 
 export function FilterBar({
   search,
+  query,
   as: Tag = 'form',
   persistKey,
   ariaLabel,
@@ -23,6 +25,13 @@ export function FilterBar({
   role,
 }: {
   search: ReactNode;
+  query?: {
+    isFetching: boolean;
+    data: unknown;
+    isPlaceholderData?: boolean;
+    error?: unknown;
+    retained?: boolean;
+  };
   as?: 'form' | 'div';
   persistKey?: string;
   ariaLabel?: string;
@@ -69,14 +78,14 @@ export function FilterBar({
           ) {
             event.preventDefault();
             event.stopPropagation();
-            onSubmit();
+            if (!submitDisabled) onSubmit();
           }
         }}
         className="nb-filter"
         aria-label={ariaLabel}
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit();
+          if (!submitDisabled) onSubmit();
         }}
       >
         <div className="nb-filter__row">
@@ -126,6 +135,7 @@ export function FilterBar({
             </details>
           ) : null}
         </div>
+        {query ? <QueryFeedback query={query} /> : null}
         {secondary && secondaryAlwaysVisible ? (
           <div className="nb-filter__fields">{secondary}</div>
         ) : null}

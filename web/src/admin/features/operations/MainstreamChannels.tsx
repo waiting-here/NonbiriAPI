@@ -611,6 +611,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
       ) : null}
       <Card>
         <FilterBar
+          query={channels}
           activeCount={Number(state !== 'active')}
           onSubmit={() => {}}
           search={

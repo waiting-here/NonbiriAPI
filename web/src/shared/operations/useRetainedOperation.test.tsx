@@ -408,3 +408,22 @@ describe('retained operation station authority', () => {
     client.clear();
   });
 });
+
+it('treats insufficient funds as a definite rejection while keeping station authority', async () => {
+  const { client, wrapper } = setup();
+  const failure = new ApiError('insufficient_credits', 'Not enough funds', 403);
+  const execute = vi.fn(async () => {
+    throw failure;
+  });
+  const reconcile = vi.fn();
+  const hook = renderHook(() => useRetainedOperation(execute, reconcile), { wrapper });
+  await act(async () => {
+    await expect(hook.result.current.mutateAsync({ quantity: '3' })).rejects.toBe(failure);
+  });
+  expect(hook.result.current.outcome).toBe('failed');
+  expect(hook.result.current.variables).toEqual({ quantity: '3' });
+  expect(client.getQueryData(['admin', 'session'])).toEqual({ admin: { username: 'first' } });
+  expect(reconcile).not.toHaveBeenCalled();
+  hook.unmount();
+  client.clear();
+});

@@ -7,6 +7,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/charityscope"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -80,7 +81,7 @@ func (s *Service) donationBindingPresets(ctx context.Context, role roleKind, act
 		return out, err
 	}
 	out.Pagination = &meta
-	rows, err := tx.QueryContext(ctx, query+` ORDER BY recommended DESC,c.name,c.id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY recommended DESC,c.name,c.id LIMIT ? OFFSET ?`, `ORDER BY recommended DESC,name,id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return out, err
 	}

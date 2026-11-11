@@ -12,7 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 const generationTwoTestAnnouncementEpoch = "b1e_AAAAAAAAAAAAAAAAAAAAAA"

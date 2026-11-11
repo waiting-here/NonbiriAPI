@@ -41,6 +41,22 @@ func assertEmptyModelQuotaTableForTest(t *testing.T, database *sql.DB, table str
 	return true
 }
 
+// This destination projection must exactly describe retained source entries;
+// it adds lookup rows without replacing any authoritative ledger facts.
+func assertCreditOperationAssetsProjectionForTest(t *testing.T, database *sql.DB) {
+	t.Helper()
+	var different bool
+	err := database.QueryRow(`WITH expected AS (
+ SELECT DISTINCT o.id AS operation_id,e.asset_type,o.ledger_seq,o.created_at,o.kind
+ FROM credit_operations o JOIN credit_entries e ON e.operation_id=o.id
+)
+SELECT EXISTS(SELECT * FROM expected EXCEPT SELECT * FROM credit_operation_assets)
+ OR EXISTS(SELECT * FROM credit_operation_assets EXCEPT SELECT * FROM expected)`).Scan(&different)
+	if err != nil || different {
+		t.Fatal("asset lookup differs from retained ledger facts", different, err)
+	}
+}
+
 // The original columns are captured before conversion. Relocated fields still
 // participate in the comparison through their exact compatibility projection.
 func connectionFactQuery(table string, sourceColumns map[string][]string) (string, bool) {
@@ -123,7 +139,9 @@ func assertExactPublishedSource(t *testing.T, database *sql.DB, version int, man
 		t.Fatalf("restored source has no published conversion path: %+v, %v", plan, err)
 	}
 	for _, step := range plan.steps {
-		if step.from > 26 && step.from != 33 && step.from != 34 && step.from != 35 && step.from != 36 && step.from != 37 && step.from != 38 && step.from != 39 && step.from != 40 && step.from != 41 && step.from != 42 && step.from != 43 && step.from != 44 && step.from != 45 && step.from != 46 && step.from != 47 && step.from != 48 && step.from != 49 && step.from != 50 && step.from != 51 || step.version > 26 && step.version != 33 && step.version != 34 && step.version != 35 && step.version != 36 && step.version != 37 && step.version != 38 && step.version != 39 && step.version != 40 && step.version != 41 && step.version != 42 && step.version != 43 && step.version != 44 && step.version != 45 && step.version != 46 && step.version != 47 && step.version != 48 && step.version != 49 && step.version != 50 && step.version != 51 && step.version != 52 {
+		publishedSource := step.from >= 16 && step.from <= 26 || step.from >= 33 && step.from <= 53
+		registeredTarget := step.version >= 17 && step.version <= 26 || step.version >= 33 && step.version <= 54
+		if !publishedSource || !registeredTarget {
 			t.Fatalf("unreleased intermediate schema became a supported source: %+v", step)
 		}
 	}

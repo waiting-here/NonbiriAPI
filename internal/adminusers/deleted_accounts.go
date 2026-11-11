@@ -232,7 +232,7 @@ func (service *Service) listManagedAccounts(ctx context.Context, actorID int64, 
 	}
 	selection := `SELECT sort_key,kind,record_id FROM (` + strings.Join(parts, ` UNION ALL `) + `) WHERE (?='' OR sort_key>?)`
 	args = append(args, after, after)
-	statement, args, meta, err := listPageQuery(ctx, tx, selection, ` ORDER BY sort_key ASC`, args, query.Page, limit)
+	statement, args, meta, err := listPageQuery(ctx, tx, selection, ` ORDER BY sort_key ASC`, ` ORDER BY sort_key ASC`, args, query.Page, limit)
 	if err != nil {
 		return empty, err
 	}
@@ -264,18 +264,21 @@ func (service *Service) listManagedAccounts(ctx context.Context, actorID int64, 
 	if more {
 		choices = choices[:limit]
 	}
+	activeIDs := make([]int64, 0, len(choices))
+	for _, choice := range choices {
+		if choice.kind == "active" {
+			activeIDs = append(activeIDs, choice.id)
+		}
+	}
+	users, err := projectUsers(ctx, tx, activeIDs, config, now)
+	if err != nil {
+		return empty, err
+	}
 	page := Page[ManagedAccountRow]{Data: make([]ManagedAccountRow, 0, len(choices)), Pagination: meta}
 	for _, choice := range choices {
 		switch choice.kind {
 		case "active":
-			row, err := readUserRow(ctx, tx, choice.id)
-			if err != nil {
-				return empty, err
-			}
-			user, err := projectUser(ctx, tx, row, config, now)
-			if err != nil {
-				return empty, err
-			}
+			user := users[choice.id]
 			page.Data = append(page.Data, ManagedAccountRow{AdminUser: &user, AccountState: "active"})
 		case "deleted":
 			item, err := readDeletedAccount(ctx, tx, choice.id, role)
@@ -321,7 +324,7 @@ func (service *Service) listDeletionDuelAborts(ctx context.Context, adminID int6
 		return empty, err
 	}
 	defer tx.Rollback()
-	statement, args, meta, err := listPageQuery(ctx, tx, `SELECT id,discord_id,game_key,match_id,former_user_id,reason,occurred_at FROM self_deletion_duel_aborts WHERE discord_id=? AND expires_at>?`, ` ORDER BY occurred_at DESC,id DESC`, []any{discordID, service.now().Unix()}, requested, requested.Size)
+	statement, args, meta, err := listPageQuery(ctx, tx, `SELECT id,discord_id,game_key,match_id,former_user_id,reason,occurred_at FROM self_deletion_duel_aborts WHERE discord_id=? AND expires_at>?`, ` ORDER BY occurred_at DESC,id DESC`, ` ORDER BY occurred_at DESC,id DESC`, []any{discordID, service.now().Unix()}, requested, requested.Size)
 	if err != nil {
 		return empty, err
 	}

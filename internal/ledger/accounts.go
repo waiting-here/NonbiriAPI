@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -169,6 +170,55 @@ func UserAssetAccount(ctx context.Context, tx *sql.Tx, userID int64, asset Asset
 	return accountForUser(ctx, tx, userID, asset)
 }
 
+// UserAssetAccounts reads wallets for a selected user page in the same snapshot.
+// Authorization of the selected users remains the caller's responsibility.
+func UserAssetAccounts(ctx context.Context, tx *sql.Tx, userIDs []int64, asset Asset) (map[int64]Account, error) {
+	if ctx == nil || tx == nil || !asset.valid() {
+		return nil, ErrNotFound
+	}
+	accounts := make(map[int64]Account, len(userIDs))
+	ids := make([]int64, 0, len(userIDs))
+	seen := make(map[int64]bool, len(userIDs))
+	for _, id := range userIDs {
+		if id <= 0 {
+			return nil, ErrNotFound
+		}
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	// Keep parameters bounded for callers with more than one page of users.
+	for start := 0; start < len(ids); start += 100 {
+		batch := ids[start:min(start+100, len(ids))]
+		args := []any{string(asset)}
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT `+accountColumns+` FROM credit_accounts WHERE kind='user' AND asset_type=? AND user_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")+`)`, args...)
+		if err != nil {
+			return nil, classifySQLError("read user accounts", err)
+		}
+		for rows.Next() {
+			account, err := scanAccount(rows)
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+			accounts[account.UserID] = account
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, classifySQLError("read user accounts", err)
+		}
+	}
+	if len(accounts) != len(ids) {
+		return nil, ErrNotFound
+	}
+	return accounts, nil
+}
+
 // CodedAccount reads one closed non-user account code. Dynamic pool/RPS codes
 // remain constructible only by their typed account constructors.
 func CodedAccount(ctx context.Context, tx *sql.Tx, code string) (Account, error) {
@@ -194,15 +244,7 @@ func CodedAssetAccount(ctx context.Context, tx *sql.Tx, code string, asset Asset
 }
 
 func accountForUser(ctx context.Context, tx *sql.Tx, userID int64, asset Asset) (Account, error) {
-	var id int64
-	err := tx.QueryRowContext(ctx, `SELECT id FROM credit_accounts WHERE kind='user' AND user_id=? AND asset_type=?`, userID, string(asset)).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Account{}, ErrNotFound
-	}
-	if err != nil {
-		return Account{}, classifySQLError("read user account", err)
-	}
-	return readAccount(ctx, tx, id)
+	return scanAccount(tx.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM credit_accounts WHERE kind='user' AND user_id=? AND asset_type=?`, userID, string(asset)))
 }
 
 func accountByCode(ctx context.Context, tx *sql.Tx, code string, asset Asset) (Account, error) {
@@ -218,7 +260,14 @@ func accountByCode(ctx context.Context, tx *sql.Tx, code string, asset Asset) (A
 }
 
 func readAccount(ctx context.Context, tx *sql.Tx, accountID int64) (Account, error) {
+	return scanAccount(tx.QueryRowContext(ctx, `SELECT `+accountColumns+` FROM credit_accounts WHERE id=?`, accountID))
+}
+
+const accountColumns = `id,kind,user_id,code,asset_type,balance_sign,balance_mag,created_at,updated_at`
+
+func scanAccount(row interface{ Scan(...any) error }) (Account, error) {
 	var (
+		accountID int64
 		kind      string
 		asset     Asset
 		user      sql.NullInt64
@@ -228,9 +277,7 @@ func readAccount(ctx context.Context, tx *sql.Tx, accountID int64) (Account, err
 		createdAt int64
 		updatedAt int64
 	)
-	err := tx.QueryRowContext(ctx, `
-SELECT kind,user_id,code,asset_type,balance_sign,balance_mag,created_at,updated_at
-FROM credit_accounts WHERE id=?`, accountID).Scan(&kind, &user, &code, &asset, &sign, &mag, &createdAt, &updatedAt)
+	err := row.Scan(&accountID, &kind, &user, &code, &asset, &sign, &mag, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, ErrNotFound
 	}

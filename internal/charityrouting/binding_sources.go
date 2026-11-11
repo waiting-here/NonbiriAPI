@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 )
 
@@ -90,7 +91,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 		args = scopeArgs
 		args = append(args, donationID, afterID, limit+1)
 	}
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query, `ORDER BY id`), args...)
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("charity routing: read binding sources: %w", err)
 	}

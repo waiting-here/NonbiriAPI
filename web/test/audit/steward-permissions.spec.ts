@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 import copy from '../../src/shared/i18n/common/en.json' with { type: 'json' };
+import type { ManagedResource } from '../../src/shared/operations/managedResources';
 
 interface Fixture {
   admin_url: string;
@@ -19,6 +20,116 @@ interface Policy {
 const fixture = () =>
   JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
 test.skip(process.env.NONBIRI_MANAGEMENT_BROWSER !== '1', 'Requires management fixtures.');
+
+test('resource inventory is read only for default level 5 and adjustable through the admin form', async ({
+  browser,
+}) => {
+  const state = fixture();
+  const owner = state.users.find((user) => user.level === 1)!;
+  const admin = await session(browser, state, 'admin');
+  const steward = await session(browser, state, 5);
+  const senior = await session(browser, state, 6);
+  const adminPath = `/admin/api/users/${owner.id}/resources`;
+  const stewardPath = `/api/steward/users/${owner.id}/resources`;
+  let adjusted = false;
+  const original = (
+    (await get(admin, state.admin_url, adminPath)).resources as ManagedResource[]
+  ).find((r) => r.id === 'lake:coins')!;
+  try {
+    const visitor = await steward.newPage();
+    await visitor.goto(`${state.user_url}/steward?tab=users&user=${owner.id}`);
+    await visitor.getByRole('tab', { name: copy.management.resources.title, exact: true }).click();
+    await expect(
+      visitor.getByText(copy.management.resources.readOnly, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      visitor.getByRole('button', { name: copy.management.resources.adjust, exact: true }),
+    ).toHaveCount(0);
+    const intent = {
+      asset: 'lake:coins',
+      direction: 'increase',
+      quantity: '7',
+      expected_quantity: original.quantity,
+      reason: 'Resource browser verification',
+    };
+    const denied = await steward.request.patch(state.user_url + stewardPath, {
+      headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
+      data: intent,
+    });
+    expect(denied.status()).toBe(403);
+    expect((await denied.json()).error.code).toBe('steward_permission_denied');
+    const page = await admin.newPage();
+    await page.goto(`${state.admin_url}/users?user=${owner.id}`);
+    await page.getByRole('tab', { name: copy.management.resources.title, exact: true }).click();
+    const resources = page.getByRole('region', {
+      name: copy.management.resources.title,
+      exact: true,
+    });
+    await resources
+      .getByLabel(copy.management.resources.search, { exact: true })
+      .fill('Lake coins');
+    await resources
+      .getByRole('button', { name: copy.management.resources.adjust, exact: true })
+      .click();
+    await resources.getByLabel(copy.management.resources.quantity, { exact: true }).fill('7');
+    await resources
+      .getByLabel(copy.management.resources.reason, { exact: true })
+      .fill(intent.reason);
+    await resources
+      .getByRole('button', { name: copy.management.resources.review, exact: true })
+      .click();
+    const dialog = page.getByRole('alertdialog', { name: copy.management.resources.confirmTitle });
+    await expect(dialog).toContainText(`${original.quantity} → ${BigInt(original.quantity) + 7n}`);
+    await dialog
+      .getByRole('button', { name: copy.management.resources.confirm, exact: true })
+      .click();
+    await expect(resources.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
+    adjusted = true;
+    const current = (
+      (await get(admin, state.admin_url, adminPath)).resources as ManagedResource[]
+    ).find((r) => r.id === original.id)!;
+    expect(current.quantity).toBe((BigInt(original.quantity) + 7n).toString());
+    const visual = process.env.NONBIRI_VISUAL_DIR;
+    if (visual) {
+      mkdirSync(visual, { recursive: true });
+      for (const theme of ['light', 'dark'])
+        for (const width of [1440, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.evaluate((value) => {
+            document.documentElement.dataset.theme = value;
+          }, theme);
+          await page
+            .getByRole('heading', { name: copy.management.resources.title, exact: true })
+            .scrollIntoViewIfNeeded();
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          await resources.screenshot({
+            path: resolve(visual, `resources-${theme}-${width}.png`),
+            animations: 'disabled',
+          });
+        }
+    }
+  } finally {
+    try {
+      if (adjusted) {
+        const restored = await senior.request.patch(state.user_url + stewardPath, {
+          headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
+          data: {
+            asset: original.id,
+            direction: 'decrease',
+            quantity: '7',
+            expected_quantity: (BigInt(original.quantity) + 7n).toString(),
+            reason: 'Restore browser fixture inventory',
+          },
+        });
+        expect.soft(restored.ok(), `Restore resources: HTTP ${restored.status()}`).toBe(true);
+      }
+    } finally {
+      await Promise.all([admin.close(), steward.close(), senior.close()]);
+    }
+  }
+});
 
 async function session(browser: Browser, state: Fixture, role: 'admin' | 5 | 6) {
   const origin = role === 'admin' ? state.admin_url : state.user_url;
@@ -66,8 +177,11 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await page.goto(`${state.admin_url}/users?user=${five.id}`);
     await page.getByRole('tab', { name: copy.management.permissions.title, exact: true }).click();
     await expect(
-      page.getByRole('table', { name: copy.management.permissions.title }),
+      page.getByRole('navigation', { name: copy.management.permissions.categories }),
     ).toBeVisible();
+    await page
+      .getByRole('button', { name: new RegExp(copy.management.permissions.groups.safety.title) })
+      .click();
     const visual = process.env.NONBIRI_VISUAL_DIR;
     if (visual) {
       mkdirSync(visual, { recursive: true });
@@ -78,7 +192,7 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
         for (const width of [1440, 390]) {
           await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
           await page
-            .getByRole('slider', { name: copy.management.permissions.scope.title, exact: true })
+            .getByRole('navigation', { name: copy.management.permissions.categories })
             .scrollIntoViewIfNeeded();
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -87,8 +201,20 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
             path: resolve(visual, `permissions-${theme}-${width}.png`),
             animations: 'disabled',
           });
+          await page
+            .getByRole('region', {
+              name: copy.management.permissions.groups.safety.title,
+              exact: true,
+            })
+            .screenshot({
+              path: resolve(visual, `permission-controls-${theme}-${width}.png`),
+              animations: 'disabled',
+            });
         }
       }
+      await page
+        .getByRole('button', { name: copy.management.permissions.limitsTitle, exact: true })
+        .click();
       await page
         .getByRole('heading', { name: copy.management.permissions.limitsTitle })
         .scrollIntoViewIfNeeded();

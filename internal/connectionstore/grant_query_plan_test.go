@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func TestGrantQueriesBoundAuthorizationMaterialization(t *testing.T) {

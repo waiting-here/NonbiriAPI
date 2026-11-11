@@ -1,3 +1,5 @@
+import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { retainQueryScope } from '@shared/query/retain';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -356,6 +358,7 @@ export function ManagementHistory({ account }: { account: string }) {
   });
   const query = useQuery({
     queryKey: [...root, 'list', scope, pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...root, 'list']),
     queryFn: ({ signal }) =>
       getHistory(
         filter,
@@ -368,8 +371,9 @@ export function ManagementHistory({ account }: { account: string }) {
     retry: false,
   });
   useEffect(() => {
-    if (query.data) snapshot.current = { scope, id: query.data.snapshot_max_id };
-  }, [query.data, scope]);
+    if (query.data && !query.isPlaceholderData)
+      snapshot.current = { scope, id: query.data.snapshot_max_id };
+  }, [query.data, query.isPlaceholderData, scope]);
   const update = (key: string, value: string) =>
     setParams((old) => {
       const next = new URLSearchParams(old);
@@ -529,6 +533,7 @@ export function ManagementHistory({ account }: { account: string }) {
                 </Button>
               </Note>
             ) : null}
+            <QueryFeedback query={query} />
             {query.isPending ? (
               <LoadingState />
             ) : query.error ? (
@@ -659,6 +664,7 @@ function OperationDetail({
   });
   const items = useQuery({
     queryKey: [...historyRoot(account), 'items', id, pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...historyRoot(account), 'items', id]),
     queryFn: ({ signal }) => getOperationItems(id, pager.page, pager.pageSize, signal),
     retry: false,
   });
@@ -729,6 +735,7 @@ function OperationDetail({
             <CountDetails value={detail.data} />
           </div>
         )}
+        <QueryFeedback query={items} />
         {items.isPending ? (
           <LoadingState />
         ) : items.error ? (

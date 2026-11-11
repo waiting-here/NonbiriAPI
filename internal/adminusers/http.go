@@ -57,6 +57,8 @@ func (api *httpAPI) userRoutes() []managementRoute {
 		{http.MethodPut, api.role.route(routeStewardPermissions), api.putStewardPermissions},
 		{http.MethodGet, api.role.route(routeDeletedUser), api.getDeletedUser},
 		{http.MethodGet, api.role.route(routeUser), api.getUser},
+		{http.MethodGet, api.role.route(routeUserResources), api.getResources},
+		{http.MethodPatch, api.role.route(routeUserResources), api.patchResources},
 		{http.MethodGet, api.role.route(routeCallerKey), api.getCallerKey},
 		{http.MethodPost, api.role.route(routeCallerKeyRevoke), api.revokeCallerKey},
 		{http.MethodGet, api.role.route(routeUserLoans), api.getLoans},

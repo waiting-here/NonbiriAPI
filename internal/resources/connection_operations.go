@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -112,8 +113,9 @@ func parseConnectionList(writer http.ResponseWriter, request *http.Request, fiel
 func readConnectionList[T any](ctx context.Context, tx *sql.Tx, r *Repository, window connectionListWindow, namespace, query, identity string,
 	args []any, scan func(pageScanner) (T, error), id func(T) string,
 ) (Page[T], error) {
+	pageOrder := identity[strings.LastIndex(identity, ".")+1:] + " DESC"
 	if window.Page != nil {
-		return readNumberedPage(ctx, tx, *window.Page, query, identity+" DESC", args, scan)
+		return readNumberedPage(ctx, tx, *window.Page, query, identity+" DESC", pageOrder, args, scan)
 	}
 	if !validPageLimit(window.Limit) {
 		return Page[T]{}, ErrInvalidRequest
@@ -145,7 +147,7 @@ func readConnectionList[T any](ctx context.Context, tx *sql.Tx, r *Repository, w
 		params = append(params, after)
 	}
 	params = append(params, window.Limit+1)
-	rows, err := tx.QueryContext(ctx, query+" ORDER BY "+identity+" DESC LIMIT ?", params...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+" ORDER BY "+identity+" DESC LIMIT ?", "ORDER BY "+pageOrder), params...)
 	if err != nil {
 		return Page[T]{}, err
 	}

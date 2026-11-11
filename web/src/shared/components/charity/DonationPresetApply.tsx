@@ -145,6 +145,7 @@ function CustomPresetApply(props: {
       <h3>{t('common.bindingPresets.choosePreset')}</h3>
       <p className="nb-small nb-muted">{t('common.bindingPresets.customHelp')}</p>
       <FilterBar
+        query={list}
         activeCount={query ? 1 : 0}
         onReset={() => {
           setSearch('');

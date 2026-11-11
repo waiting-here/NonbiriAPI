@@ -131,6 +131,7 @@ export function DonationManualCandidates({
       <h4>{t('common.manualCandidates.title')}</h4>
       <p>{t('common.manualCandidates.help')}</p>
       <FilterBar
+        query={query}
         activeCount={q ? 1 : 0}
         onReset={() => {
           setSearchDraft({ query: '', value: '' });

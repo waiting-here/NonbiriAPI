@@ -88,6 +88,7 @@ function ModelLimitList(props: RecurringLimitsProps) {
     <div className="nb-stack">
       <p className="field-help">{t('common.modelLimits.scope')}</p>
       <FilterBar
+        query={list}
         search={
           <Field label={t('common.modelLimits.model')}>
             {(field) => (

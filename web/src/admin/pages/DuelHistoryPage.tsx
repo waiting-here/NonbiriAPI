@@ -1,3 +1,5 @@
+import { retainQueryScope } from '@shared/query/retain';
+import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Field, FilterBar } from '@shared/components/ui';
@@ -89,6 +91,7 @@ function HistoryResults({
     after = cursors[cursors.length - 1];
   const query = useQuery({
     queryKey: ['admin', 'duel-history', game, dataset, selection, after],
+    placeholderData: retainQueryScope(['admin', 'duel-history', game, dataset, selection]),
     queryFn: ({ signal }) => getHistory(game, dataset, selection, after, signal),
     retry: false,
   });
@@ -101,6 +104,7 @@ function HistoryResults({
             ? t('近30天完整历史', 'Recent complete history')
             : t('长期匿名资料', 'Anonymous archive')}
         </h2>
+        <QueryFeedback query={query} />
         {query.isPending ? (
           <LoadingState />
         ) : query.error ? (
@@ -189,6 +193,7 @@ function HistoryResults({
                 </div>
               )}
               <SimplePager
+                disabled={query.isFetching}
                 page={cursors.length}
                 hasMore={Boolean(query.data.next_cursor)}
                 onPrev={() => setCursors(cursors.slice(0, -1))}

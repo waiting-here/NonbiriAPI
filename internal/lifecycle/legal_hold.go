@@ -400,6 +400,8 @@ func (coordinator *Coordinator) ListLegalHolds(ctx context.Context, filter Legal
 	if filter.Limit < 1 || filter.Limit > legalHoldMaximumLimit {
 		return LegalHoldPage{}, ErrInvalid
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	if err := coordinator.expireAllDueHolds(ctx, filter.DecisionNow); err != nil {
 		return LegalHoldPage{}, err
 	}
@@ -443,7 +445,7 @@ WHERE (?='' OR state=?) AND (?='' OR object_kind=?)
 	}
 	query += ` ORDER BY created_at DESC,id DESC LIMIT ?`
 	args = append(args, filter.Limit+1)
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query, `ORDER BY created_at DESC,id DESC`), args...)
 	if err != nil {
 		return LegalHoldPage{}, fmt.Errorf("lifecycle: list legal holds: %w", err)
 	}

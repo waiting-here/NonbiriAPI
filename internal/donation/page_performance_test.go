@@ -17,7 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func pagePerformanceFixture(t *testing.T) (*donationTestEnv, int64) {

@@ -1,3 +1,4 @@
+import { retainQueryScope } from '@shared/query/retain';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import {
   hasStewardPermission,
@@ -150,6 +151,7 @@ function EndpointPoliciesContent({
   });
   const list = useQuery({
     queryKey: [...endpointPolicyKeys(role), 'list', accountId, q, pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...endpointPolicyKeys(role), 'list', accountId]),
     queryFn: ({ signal }) => getEndpointPolicies(role, q, pager.page, pager.pageSize, signal),
     enabled: rulesAllowed,
     retry: false,
@@ -222,6 +224,7 @@ function EndpointPoliciesContent({
               <>
                 <div hidden={Boolean(selection)} ref={listRef} tabIndex={-1} className="nb-form">
                   <FilterBar
+                    query={list}
                     activeCount={q ? 1 : 0}
                     onReset={() => {
                       setSearch('');

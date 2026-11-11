@@ -19,7 +19,7 @@ personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 36 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v36.json`; SQLite `user_version` remains 2 and the current storage schema is 51. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 36 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v36.json`; SQLite `user_version` remains 2 and the current storage schema is 53. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 Optional rerank paths belong to endpoints and submitted donation-use revisions;
 nullable management overrides belong to the donated use. Account export 36
@@ -488,6 +488,13 @@ Public image-generation prompts remain in bounded request memory and may appear 
 
 Account deletion validates settled request/claim history in shared scans and detaches the account links in a batch. Naturally expired request logs do not block this step. In-progress requests retain their existing settlement handoff; accounting, safe retained log snapshots and the all-or-nothing deletion transaction are preserved.
 
+The ledger asset lookup is a derived operation index. It stores operation ID,
+asset, sequence, timestamp and kind without additional identities or amounts.
+Removing an account leaves its existing anonymized ledger facts and this lookup;
+removing the last retained entry of an asset removes that operation/asset row.
+Operation deletion cascades to the lookup. It is excluded from account exports,
+which already contain the owner's authoritative ledger entries.
+
 ## Operator snapshot and destructive-fresh boundary
 
 Complete operator snapshots are outside the account-export contract. They may contain
@@ -503,10 +510,10 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 52.
+Normal startup initializes absent storage or opens only exact current schema 54.
 Older, newer, unknown and incomplete databases are rejected before migration,
 repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–51 sources require a deliberate standalone-converter invocation after the
+33–53 sources require a deliberate standalone-converter invocation after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
@@ -666,3 +673,15 @@ the origin-only rule for normalized source facts does not apply to this separate
 restricted capture. Go parsing and repeated values are preserved within the capture
 bounds; it is not a wire packet recording. Name-based credential redaction does
 not guarantee that arbitrary header text is secret-free.
+
+### v1.3.10 additional resource management
+
+Additional inventory remains in its existing credit-account, gacha and Lake Notes
+records and follows their existing personal-export and deletion paths. Direct
+adjustments add no new inventory table or retention period. Management history
+records the actual actor, target, reason, before/after quantities and dependent
+selection changes under the existing management-log access and retention rules.
+Drawing changes also use ordinary balanced ledger operations. Core credit grants,
+loan history, claims, statistics and game progress keep their existing meaning.
+The new saved permission follows the existing steward-policy export/deletion and
+90-day policy-history rules; historical policy JSON is not rewritten by upgrade.

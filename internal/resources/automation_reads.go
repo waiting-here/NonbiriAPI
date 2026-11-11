@@ -20,7 +20,7 @@ func automationPage[T any](page Page[T]) AutomationPage[T] {
 func (r *Repository) AutomationEndpoints(ctx context.Context, userID int64, q string, page pagination.Request) (AutomationPage[Endpoint], error) {
 	result, err := userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (Page[Endpoint], error) {
 		query, args := endpointPageQuery(userID, EndpointPageFilters{Query: q})
-		return readNumberedPage(ctx, tx, page, query, "e.updated_at DESC,e.id DESC", args, func(s pageScanner) (Endpoint, error) { return scanEndpoint(s) })
+		return readNumberedPage(ctx, tx, page, query, "e.updated_at DESC,e.id DESC", "updated_at DESC,id DESC", args, func(s pageScanner) (Endpoint, error) { return scanEndpoint(s) })
 	})
 	return automationPage(result), err
 }
@@ -33,7 +33,7 @@ func (r *Repository) AutomationKeys(ctx context.Context, userID, endpointID int6
 			return Page[EndpointKey]{}, err
 		}
 		query, args := endpointKeyPageQuery(userID, endpointID, EndpointKeyPageFilters{Query: q})
-		return readNumberedPage(ctx, tx, page, query, "k.updated_at DESC,k.id DESC", args, func(s pageScanner) (EndpointKey, error) { return scanEndpointKey(s) })
+		return readNumberedPage(ctx, tx, page, query, "k.updated_at DESC,k.id DESC", "updated_at DESC,id DESC", args, func(s pageScanner) (EndpointKey, error) { return scanEndpointKey(s) })
 	})
 	return automationPage(result), err
 }
@@ -74,16 +74,17 @@ func (r *Repository) AutomationBindings(ctx context.Context, userID, modelID int
 		if _, err := r.getModelTx(ctx, tx, userID, modelID); err != nil {
 			return Page[AutomationBinding]{}, err
 		}
-		query := `SELECT b.id,k.id,e.id,e.base_url,e.connector_type,e.note,k.note,k.display_head,k.display_tail,t.upstream_model_id,b.ord,e.enabled,k.enabled,
+		query := `SELECT b.id AS binding_id,k.id,e.id,e.base_url,e.connector_type,e.note,k.note,k.display_head,k.display_tail,t.upstream_model_id,b.ord AS binding_order,e.enabled,k.enabled,
   CASE WHEN EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) THEN 'security_processing' ELSE 'none' END,
-  COALESCE((p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision)),0),t.id
+  COALESCE((p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision)),0),t.id AS target_id,t.ord AS target_order
   FROM model_bindings b JOIN model_binding_targets t ON t.binding_id=b.id JOIN models m ON m.id=b.model_id JOIN endpoint_key_current_credentials k ON k.id=t.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id
   LEFT JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=t.upstream_model_id LEFT JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
   WHERE m.id=? AND m.user_id=? AND e.user_id=? AND (?='' OR instr(t.upstream_model_id,?)>0 OR instr(e.base_url,?)>0 OR instr(e.note,?)>0 OR instr(k.note,?)>0)`
-		return readNumberedPage(ctx, tx, page, query, "b.ord,b.id,t.ord,t.id", []any{modelID, userID, userID, q, q, q, q, q}, func(s pageScanner) (AutomationBinding, error) {
+		return readNumberedPage(ctx, tx, page, query, "b.ord,b.id,t.ord,t.id", "binding_order,binding_id,target_order,target_id", []any{modelID, userID, userID, q, q, q, q, q}, func(s pageScanner) (AutomationBinding, error) {
 			var item AutomationBinding
 			var id, keyID, endpointID int64
-			err := s.Scan(&id, &keyID, &endpointID, &item.BaseURL, &item.ConnectorType, &item.EndpointNote, &item.KeyNote, &item.DisplayHead, &item.DisplayTail, &item.UpstreamModelID, &item.Ord, &item.EndpointEnabled, &item.KeyEnabled, &item.SuspensionState, &item.CatalogEligible, &item.TargetID)
+			var targetOrder int
+			err := s.Scan(&id, &keyID, &endpointID, &item.BaseURL, &item.ConnectorType, &item.EndpointNote, &item.KeyNote, &item.DisplayHead, &item.DisplayTail, &item.UpstreamModelID, &item.Ord, &item.EndpointEnabled, &item.KeyEnabled, &item.SuspensionState, &item.CatalogEligible, &item.TargetID, &targetOrder)
 			item.ID, _ = decimalID(id)
 			item.EndpointKeyID, _ = decimalID(keyID)
 			item.EndpointID, _ = decimalID(endpointID)

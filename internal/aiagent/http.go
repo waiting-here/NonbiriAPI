@@ -110,6 +110,8 @@ func writeError(w http.ResponseWriter, err error) {
 		code, message = httperr.CodeServiceUnavailable, "AI模型尚未配置，请联系管理员。"
 	case errors.Is(err, ErrChatDisabled):
 		code, message = httperr.CodeServiceUnavailable, "AI对话尚未开放，请联系管理员开启对话并配置驱动模型。"
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		code, message = httperr.CodeServiceUnavailable, "查询未完成，请稍后重试或缩小查询范围。"
 	case errors.Is(err, ErrUnavailable), errors.Is(err, agentrequest.ErrClosed):
 		code, message = httperr.CodeServiceUnavailable, "AI暂时不可用，请稍后重试。"
 	}

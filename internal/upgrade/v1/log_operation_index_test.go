@@ -98,6 +98,8 @@ VALUES(?,?,'provider/retained','charity_responses',1,2,'success',200,200)`, requ
 	}
 	defer store.Close()
 	after := gatewayRows(t, store.DB(), true)
+	assertCreditOperationAssetsProjectionForTest(t, store.DB())
+	delete(after, "credit_operation_assets")
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("index upgrade changed retained rows")
 	}

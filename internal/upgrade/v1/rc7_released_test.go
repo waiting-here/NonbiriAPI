@@ -128,6 +128,10 @@ func retainedFacts(t *testing.T, database *sql.DB, sourceColumns map[string][]st
 		if assertEmptyAttendanceTableForTest(t, database, table) || assertEmptyModelQuotaTableForTest(t, database, table) {
 			continue
 		}
+		if table == "credit_operation_assets" {
+			assertCreditOperationAssetsProjectionForTest(t, database)
+			continue
+		}
 		if table == "game_fishing_recent_order" {
 			assertFishingRecentOrderProjectionForTest(t, database)
 			continue

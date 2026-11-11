@@ -19,3 +19,10 @@ type Result struct {
 	Skipped   string `json:"skipped,omitempty"`
 	Converted *Item  `json:"converted,omitempty"`
 }
+
+// Change records an exact management adjustment and any dependent selections.
+type Change struct {
+	Field  string `json:"field"`
+	Before string `json:"before"`
+	After  string `json:"after"`
+}

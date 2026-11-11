@@ -2828,8 +2828,8 @@
       "connector.chatCompletions": "OpenAI Chat Completions"
     },
     "lakeNotes": {
-      "dailyRemaining": "Available to spend today: {{amount}} {{unit}}",
-      "dailyLimit": "Daily spending limit: {{amount}} {{unit}}",
+      "dailyRemaining": "Remaining daily exchange allowance: {{amount}} {{unit}}",
+      "dailyLimit": "Daily exchange limit: {{amount}} {{unit}}",
       "dailyUnlimited": "No daily exchange limit",
       "dailyLimitReached": "Today's remaining allowance is too low. Choose a smaller amount or try again tomorrow.",
       "dailyReset": "Allowance resets: {{time}}",
@@ -3538,7 +3538,8 @@
       "buyBatch": "Buy {{count}} · {{cost}} coins",
       "bitePreparation": "Fish hooked. Get ready!",
       "saveHelp": "Your save follows your account across devices.",
-      "previewFirst": "Preview the exchange first."
+      "previewFirst": "Preview the exchange first.",
+      "sourceBalance": "Available balance: <amount>{{amount}}</amount> {{unit}}"
     },
     "quickstart": {
       "title": "Connect your service",

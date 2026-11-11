@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/endpointtags"
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 //go:embed endpoint_tag_rules.sql

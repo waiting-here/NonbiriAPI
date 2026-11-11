@@ -33,7 +33,7 @@ type StewardPermissions struct {
 
 var stewardDefaults = map[string]bool{
 	"users.read": true, "users.profile": false, "users.limits": true, "users.level": false,
-	"users.balance": false, "users.game_balance": false, "users.ban": true, "users.unban": false,
+	"users.resources": false, "users.balance": false, "users.game_balance": false, "users.ban": true, "users.unban": false,
 	"users.ban_permanent": true, "users.caller_keys.read": true, "users.caller_keys.revoke": true,
 	"users.loans.read": true, "users.penalties.read": true, "users.donations.read": true,
 	"blacklist.read": false, "blacklist.add": false,
@@ -285,6 +285,11 @@ func StewardRoutePermission(method, path string) string {
 			return "users.loans.read"
 		case strings.Contains(p, "/penalties"):
 			return "users.penalties.read"
+		case strings.HasSuffix(p, "/resources"):
+			if read {
+				return "users.read"
+			}
+			return "users.resources"
 		case strings.HasSuffix(p, "/unban"):
 			return "users.unban"
 		case strings.HasSuffix(p, "/ban"):

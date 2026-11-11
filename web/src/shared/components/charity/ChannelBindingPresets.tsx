@@ -116,6 +116,7 @@ export function ChannelBindingPresets({
         {!channel ? (
           <>
             <FilterBar
+              query={list}
               activeCount={q ? 1 : 0}
               onReset={() => {
                 setSearch('');
@@ -624,6 +625,7 @@ function PresetTargetPicker({
     <section className="nb-form" aria-label={t('common.bindingPresets.chooseTarget')}>
       <h3>{t('common.bindingPresets.chooseTarget')}</h3>
       <FilterBar
+        query={models}
         activeCount={q ? 1 : 0}
         onReset={() => {
           setDraft('');

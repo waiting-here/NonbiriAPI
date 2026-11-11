@@ -58,16 +58,17 @@ their existing distinct errors.
 
 ## Actions and defaults
 
-There are 55 independent boolean permissions.
+There are 56 independent boolean permissions.
 
 | Permission | Allows | Level-5 default |
 |---|---|---|
-| `users.read` | User list/detail, deleted account records | true |
+| `users.read` | User list/detail, deleted account records and additional resource inventory | true |
 | `users.profile` | Language and endpoint quota | false |
 | `users.limits` | RPM and concurrency admission limits | true |
 | `users.level` | Assign lower user levels | false |
 | `users.balance` | General balance adjustment | false |
 | `users.game_balance` | Game balance adjustment | false |
+| `users.resources` | Adjust drawing supplies, gacha inventory and Lake Notes resources | false |
 | `users.ban` | Ban lower-level users | true |
 | `users.unban` | Unban or replace an active ban | false |
 | `users.ban_permanent` | Permanent ban | true |
@@ -281,3 +282,53 @@ Each history entry
 contains `previous,next,created_at`; editor identities are excluded. Existing
 export size/collection limits apply. See [database upgrades](database-upgrades.md)
 and [data lifecycle](data-lifecycle-checklist.md).
+
+## Additional user resources
+
+`GET|PATCH /admin/api/users/{id}/resources` and the equivalent `/api/steward`
+route share the reward asset catalog, excluding general/game credits and donation
+credit. Their existing grants are unchanged. GET uses `users.read`; PATCH uses
+`users.resources` (off by default for level 5, always available to level 6),
+current target hierarchy and the existing active-ban correction prerequisite.
+Current authority, target level and deletion state are checked before replay.
+
+GET returns `{resources}` with each asset's name, group, whole-number `quantity`,
+`minimum`, holding `capacity` and per-adjustment `maximum`. PATCH requires an
+`Idempotency-Key` and exactly `{asset,direction,quantity,expected_quantity,reason}`.
+`direction` is `increase` or `decrease`; quantities are canonical decimal strings.
+The positive adjustment must fit its maximum and the resulting inventory bounds.
+The current quantity must match `expected_quantity` inside the write transaction;
+stale inventory returns 409. A nonempty reason is limited to 512 Unicode characters
+and cannot contain control characters. The response contains updated `resources`
+and exact `changes` (`field`, `before`, `after`). Inventory, ledger postings,
+management history and the idempotency receipt commit together.
+
+Drawing material changes use the balanced ledger. Gacha adjustments preserve pity,
+welcome/check-in status, purchase statistics and historical collection claims;
+cards are owned or absent, without duplicate conversion. Lake Notes adjustments
+refuse an unfinished cast, including a paused cast, and preserve catches, contracts
+and claims. Removing experience clears ineligible skills; removing gear repairs
+active/saved loadouts, and exhausting selected bait deselects it. An initialized
+profile always retains its starter rod. A first adjustment initializes the profile
+and its starter rod; the receipt records that additional change. All other game
+rules and capacity constraints still apply.
+
+## Permission editor and fixed benefits
+
+The editor groups actions by accounts, resources, safety, donations, models,
+audits, site operations and assistant access. Category navigation and search only
+change presentation. Suitable read/manage pairs offer off/read-only/manage presets;
+asymmetric stored grants appear as custom and remain editable individually.
+Selecting a pair changes only its two grants. Existing policies, donation scope
+and limits are not normalized by opening the editor or switching categories.
+
+Actual levels 5 and 6 are always exempt from inactivity cleanup and from the
+charity restriction on routing to their own donated key. These are account-level
+benefits, independent of all configurable grants and donation scope. Key validity,
+bans, model access, quotas, payment and donor rewards still use their existing
+rules. Demotion removes the exemption at the next current-authority check,
+including the check immediately before dispatch.
+
+Schema 54 adds `users.resources=false` to every saved schema-53 policy and extends
+management capture of that field. It preserves old grants, policy revisions,
+limits, scopes, timestamps and historical policy audit JSON.

@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -126,6 +128,8 @@ func (s *Service) GetTask(ctx context.Context, user int64, id string) (Task, err
 	return out, tx.Commit()
 }
 func (s *Service) ListTasks(ctx context.Context, user int64, limit int, cursor string) (Page[Task], error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	out := Page[Task]{Data: []Task{}}
 	if !pageLimit(limit) {
 		return out, ErrInvalid
@@ -154,7 +158,9 @@ func (s *Service) ListTasks(ctx context.Context, user int64, limit int, cursor s
 	if err = s.authorizeUserTx(ctx, tx, user, now); err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT "+taskColumns+" FROM image_activity_tasks WHERE user_id=? AND accepted_seq<? AND (completed_at IS NULL OR completed_at>?) ORDER BY accepted_seq DESC LIMIT ?", user, before, now-taskLifetime, limit+1)
+	rows, err := tx.QueryContext(ctx, `WITH task_page AS MATERIALIZED (
+SELECT accepted_seq FROM image_activity_tasks WHERE user_id=? AND accepted_seq<? AND (completed_at IS NULL OR completed_at>?) ORDER BY accepted_seq DESC LIMIT ?)
+SELECT `+taskColumns+` FROM image_activity_tasks WHERE accepted_seq IN (SELECT accepted_seq FROM task_page) ORDER BY accepted_seq DESC`, user, before, now-taskLifetime, limit+1)
 	if err != nil {
 		return out, err
 	}
@@ -191,6 +197,8 @@ func (s *Service) ListTasks(ctx context.Context, user int64, limit int, cursor s
 	return out, tx.Commit()
 }
 func (s *Service) GetQueue(ctx context.Context, user int64) (Queue, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	out := Queue{Own: []OwnPosition{}}
 	now, err := s.now()
 	if err != nil {
@@ -221,7 +229,7 @@ func (s *Service) GetQueue(ctx context.Context, user int64) (Queue, error) {
 		return out, err
 	}
 	out.DispatchPaused = out.DispatchPaused || maintenance || paused
-	rows, err := tx.QueryContext(ctx, `SELECT t.id,t.created_at,CASE WHEN t.state='queued' THEN (SELECT count(*) FROM image_activity_tasks q WHERE q.state='queued' AND q.accepted_seq<=t.accepted_seq) ELSE NULL END FROM image_activity_tasks t WHERE t.user_id=? AND t.finance_state='reserved' ORDER BY t.accepted_seq LIMIT 100`, user)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT t.id,t.created_at,CASE WHEN t.state='queued' THEN (SELECT count(*) FROM image_activity_tasks q WHERE q.state='queued' AND q.accepted_seq<=t.accepted_seq) ELSE NULL END,t.accepted_seq FROM image_activity_tasks t WHERE t.user_id=? AND t.finance_state='reserved' ORDER BY t.accepted_seq LIMIT 100`, `ORDER BY accepted_seq`), user)
 	if err != nil {
 		return out, err
 	}
@@ -229,7 +237,8 @@ func (s *Service) GetQueue(ctx context.Context, user int64) (Queue, error) {
 	for rows.Next() {
 		var item OwnPosition
 		var pos sql.NullInt64
-		if err = rows.Scan(&item.TaskID, &item.AcceptedAt, &pos); err != nil {
+		var acceptedSeq int64
+		if err = rows.Scan(&item.TaskID, &item.AcceptedAt, &pos, &acceptedSeq); err != nil {
 			return out, err
 		}
 		if pos.Valid {

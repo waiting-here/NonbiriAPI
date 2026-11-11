@@ -41,7 +41,7 @@ func endpointOverviewPageQuery(ctx context.Context, tx *sql.Tx, q, after string,
 		}
 		selection = strings.Replace(selection, "GROUP BY e.base_url", clause+" GROUP BY e.base_url", 1)
 	}
-	window, args, metadata, err := listPageQuery(ctx, tx, selection, ` ORDER BY e.base_url ASC`, args, requested, limit)
+	window, args, metadata, err := listPageQuery(ctx, tx, selection, ` ORDER BY e.base_url ASC`, ``, args, requested, limit)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -57,7 +57,7 @@ GROUP BY p.base_url ORDER BY p.base_url ASC`, args, metadata, nil
 }
 
 func endpointOverviewUsersPageQuery(ctx context.Context, tx *sql.Tx, baseURL string, requested pagination.Request) (string, []any, *pagination.Metadata, error) {
-	window, args, metadata, err := listPageQuery(ctx, tx, endpointOverviewUserGroups, ` ORDER BY e.user_id ASC`, []any{baseURL}, &requested, requested.Size)
+	window, args, metadata, err := listPageQuery(ctx, tx, endpointOverviewUserGroups, ` ORDER BY e.user_id ASC`, ``, []any{baseURL}, &requested, requested.Size)
 	if err != nil {
 		return "", nil, nil, err
 	}

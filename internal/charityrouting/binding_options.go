@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -50,7 +51,7 @@ func (s *Service) keyBindingOptions(ctx context.Context, role roleKind, actorID,
 		return out, err
 	}
 	out.Pagination = &meta
-	rows, err := tx.QueryContext(ctx, query+` ORDER BY cm.full_name,cm.id LIMIT ? OFFSET ?`, append(args, page.Size, offset)...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY cm.full_name,cm.id LIMIT ? OFFSET ?`, `ORDER BY full_name,id`), append(args, page.Size, offset)...)
 	if err != nil {
 		return out, err
 	}

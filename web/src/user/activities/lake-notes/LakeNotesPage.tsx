@@ -42,7 +42,7 @@ import {
 
 import './platform.css';
 
-function LakeExchange({
+export function LakeExchange({
   view,
   account,
   text,
@@ -127,6 +127,12 @@ function LakeExchange({
   const allowanceUnit = allowance ? directionUnits[allowance.direction][0] : null;
   const rate = actual ? settings.exchanges[actual] : null;
   const rateUnits = actual ? directionUnits[actual] : null;
+  const funds = quote;
+  const sourceBalance = rateUnits
+    ? rateUnits[0] === 'coins'
+      ? (funds?.coins ?? view.profile.coins)
+      : (funds?.wallet ?? view.wallet)[rateUnits[0] === 'general' ? 'general_milli' : 'game_milli']
+    : null;
   return (
     <Card>
       <h2>{text('exchangeHeading')}</h2>
@@ -139,6 +145,15 @@ function LakeExchange({
               targetAmount: formatCredits(unitsToNatural(rate.target_amount, rateUnits[1])),
             }}
             values={{ sourceUnit: text(rateUnits[0]), targetUnit: text(rateUnits[1]) }}
+          />
+        </p>
+      ) : null}
+      {rateUnits && sourceBalance !== null ? (
+        <p className="lake-source-balance">
+          <CreditText
+            i18nKey="user.lakeNotes.sourceBalance"
+            amounts={{ amount: formatCredits(unitsToNatural(sourceBalance, rateUnits[0])) }}
+            values={{ unit: text(rateUnits[0]) }}
           />
         </p>
       ) : null}

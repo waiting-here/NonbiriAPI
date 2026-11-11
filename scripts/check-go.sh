@@ -45,7 +45,15 @@ printf 'Go build completed in %s seconds\n' "$((SECONDS - check_go_started))"
 
 printf 'Go vet started at %s\n' "$(date -u +%FT%TZ)"
 check_go_started=$SECONDS
-"$GO" vet $pkgs
+# The maintained modernc adapter retains upstream's uintptr-based C ABI. Those
+# intentional conversions are not accepted by vet's unsafeptr analyzer (the
+# upstream dependency was not analyzed when it lived in the module cache).
+# Keep every analyzer for application code, and all other analyzers for the
+# pinned adapter. Its provenance test rejects changes to the reviewed sources.
+adapter_pkg='github.com/waiting-here/NonbiriAPI/internal/sqliteadapter'
+application_pkgs="$(printf '%s\n' "$pkgs" | grep -vx "$adapter_pkg")"
+"$GO" vet $application_pkgs
+"$GO" vet -unsafeptr=false "$adapter_pkg"
 printf 'Go vet completed in %s seconds\n' "$((SECONDS - check_go_started))"
 
 # Timing hints only reorder the complete live package list.

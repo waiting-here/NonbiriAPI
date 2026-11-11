@@ -10,12 +10,13 @@ cat > "$fake" <<'FAKE_GO'
 set -euo pipefail
 printf '%s\n' "$*" >> "$FAKE_GO_LOG"
 if [ "${FAKE_GO_FAIL:-}" = "$1" ]; then exit 73; fi
+if [ "${FAKE_GO_FAIL:-}" = vet-adapter ] && [ "$1" = vet ] && [ "${2:-}" = -unsafeptr=false ]; then exit 73; fi
 case "$1" in
-  list) printf '%s\n' example/fast example/node_modules/dependency example/slow ;;
+  list) printf '%s\n' example/fast github.com/waiting-here/NonbiriAPI/internal/sqliteadapter example/node_modules/dependency example/slow ;;
   build|vet|test) ;;
   run)
     cat > "$FAKE_GO_INPUT"
-    printf '%s\n' example/slow example/fast
+    printf '%s\n' example/slow example/fast github.com/waiting-here/NonbiriAPI/internal/sqliteadapter
     ;;
   *) exit 79 ;;
 esac
@@ -25,16 +26,17 @@ export FAKE_GO_LOG="$temporary/calls" FAKE_GO_INPUT="$temporary/input"
 GO="$fake" bash "$root/scripts/check-go.sh" > "$temporary/output" 2>&1
 cat > "$temporary/expected-calls" <<'EXPECTED'
 list ./...
-build example/fast example/slow
+build example/fast github.com/waiting-here/NonbiriAPI/internal/sqliteadapter example/slow
 vet example/fast example/slow
+vet -unsafeptr=false github.com/waiting-here/NonbiriAPI/internal/sqliteadapter
 run ./internal/citools/testorder
-test -vet=off -timeout=30m example/slow example/fast
+test -vet=off -timeout=30m example/slow example/fast github.com/waiting-here/NonbiriAPI/internal/sqliteadapter
 EXPECTED
 diff -u "$temporary/expected-calls" "$FAKE_GO_LOG"
-printf '%s\n' example/fast example/slow > "$temporary/expected-input"
+printf '%s\n' example/fast github.com/waiting-here/NonbiriAPI/internal/sqliteadapter example/slow > "$temporary/expected-input"
 diff -u "$temporary/expected-input" "$FAKE_GO_INPUT"
 
-for stage in list build vet run test; do
+for stage in list build vet vet-adapter run test; do
   : > "$FAKE_GO_LOG"
   if FAKE_GO_FAIL="$stage" GO="$fake" bash "$root/scripts/check-go.sh" > "$temporary/output" 2>&1; then
     printf 'Go gate hid a %s failure\n' "$stage" >&2
@@ -48,7 +50,7 @@ for stage in list build vet run test; do
     fi
   fi
   last=$(tail -n 1 "$FAKE_GO_LOG")
-  if [ "${last%% *}" != "$stage" ]; then
+  if [ "${last%% *}" != "${stage%%-*}" ]; then
     printf 'Go gate continued after %s failed: %s\n' "$stage" "$last" >&2
     exit 1
   fi

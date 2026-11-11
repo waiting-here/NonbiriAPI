@@ -20,7 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func createStatusDonation(t *testing.T, e *donationTestEnv, owner int64, suffix byte, services ...contract.NativeService) Donation {

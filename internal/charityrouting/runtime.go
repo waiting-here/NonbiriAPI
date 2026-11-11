@@ -222,8 +222,8 @@ func (s *Service) ListAvailableModels(ctx context.Context, userID, decisionNow i
 		}
 		return []AvailableModel{}, nil
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.provider,cm.full_name,cm.created_at FROM charity_models cm
-JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowed_level_mask & ?)<>0 ORDER BY cm.full_name,cm.id LIMIT ?`, 1<<(level-1), limit+1)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT cm.id,cm.provider,cm.full_name,cm.created_at FROM charity_models cm
+JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowed_level_mask & ?)<>0 ORDER BY cm.full_name,cm.id LIMIT ?`, `ORDER BY full_name,id`), 1<<(level-1), limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("charity routing: read available model list: %w", err)
 	}
@@ -420,7 +420,7 @@ AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
 AND k.enabled=1 AND e.enabled=1
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
-AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level)=6))
+AND (?=0 OR d.user_id<>? OR EXISTS(SELECT 1 FROM users caller WHERE caller.id=? AND caller.is_admin=0 AND COALESCE(caller.level,caller.auto_level) IN (5,6)))
 AND `+donorAvailableSQL("?")+`
 ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, decisionNow, maxBindingBatch+1)
 	if err != nil {

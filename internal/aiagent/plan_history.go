@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 const planColumns = `p.id,p.job_id,p.state,p.operations,p.preview,p.tool_call_ids,p.result,p.created_at,p.decided_at`
@@ -40,11 +41,12 @@ func scanPlan(row interface{ Scan(...any) error }) (Plan, error) {
 // Match the actual surviving assistant calls, not the conversation generation:
 // editing keeps the earlier prefix, including its plans from older generations.
 func readConversationPlans(ctx context.Context, tx *sql.Tx, conversation, before, firstMessage int64, archive bool, limit int) ([]Plan, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT `+planColumns+` FROM ai_agent_plans p JOIN ai_agent_jobs j ON j.id=p.job_id
+	rows, err := tx.QueryContext(ctx, `WITH selected AS MATERIALIZED (SELECT p.id FROM ai_agent_plans p JOIN ai_agent_jobs j ON j.id=p.job_id
 WHERE j.conversation_id=? AND (?=0 OR p.id<?) AND (? OR EXISTS(
  SELECT 1 FROM ai_agent_messages m,json_each(m.tool_calls) call,json_each(p.tool_call_ids) wanted
  WHERE m.conversation_id=j.conversation_id AND m.active=1 AND m.id>=? AND json_extract(call.value,'$.id')=wanted.value
-)) ORDER BY p.id DESC LIMIT ?`, conversation, before, before, archive, firstMessage, limit)
+)) ORDER BY p.id DESC LIMIT ?)
+SELECT `+planColumns+` FROM selected s JOIN ai_agent_plans p ON p.id=s.id ORDER BY p.id DESC`, conversation, before, before, archive, firstMessage, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +68,8 @@ type PlanHistory struct {
 }
 
 func (s *Service) Plans(ctx context.Context, actor Actor, owner, before int64, archive bool) (PlanHistory, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	out := PlanHistory{Items: []Plan{}}
 	if before < 0 {
 		return out, ErrInvalid

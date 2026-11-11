@@ -3,9 +3,11 @@ package adminusers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/queryread"
 )
 
 const pageReadTimeout = 5 * time.Second
@@ -24,17 +26,13 @@ func (s *Service) beginListRead(ctx context.Context, adminID int64) (*sql.Tx, er
 	return s.beginManagement(ctx, adminID, roleAdmin, true)
 }
 
-func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
-	if requested == nil {
-		return selection + order + ` LIMIT ?`, append(args, limit+1), nil, nil
-	}
-	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+selection+`)`, args...).Scan(&total); err != nil {
-		return "", nil, nil, classifyDatabaseError("count page", err)
-	}
-	metadata, offset, err := requested.Window(total)
-	if err != nil {
+func listPageQuery(ctx context.Context, tx *sql.Tx, selection, order, pageOrder string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+	statement, params, meta, err := queryread.Page(ctx, tx, selection, order, pageOrder, args, requested, limit)
+	if errors.Is(err, pagination.ErrInvalid) {
 		return "", nil, nil, ErrInvariant
 	}
-	return selection + order + ` LIMIT ? OFFSET ?`, append(args, requested.Size, offset), &metadata, nil
+	if err != nil {
+		return "", nil, nil, classifyDatabaseError("count page", err)
+	}
+	return statement, params, meta, nil
 }

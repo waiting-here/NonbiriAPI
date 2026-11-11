@@ -14,9 +14,9 @@ var schema51ConfigurationPermissions = []string{"charity.request_adaptation", "c
 
 // StewardCharityPermissionsSQL extends the retained capture projections without
 // changing the historical management schema used by older upgrade sources.
-var StewardCharityPermissionsSQL = charityPermissionCaptureSQL()
+var StewardCharityPermissionsSQL = permissionCaptureSQL(schema51ConfigurationPermissions)
 
-func charityPermissionCaptureSQL() string {
+func permissionCaptureSQL(keys []string) string {
 	var result strings.Builder
 	for _, body := range strings.Split(ManagementDetailsSQL, "\nCREATE TRIGGER ")[1:] {
 		if !strings.HasPrefix(body, "management_capture_steward_permissions_") {
@@ -26,7 +26,7 @@ func charityPermissionCaptureSQL() string {
 		for _, side := range []string{"OLD", "NEW"} {
 			marker := ",'limits.users.endpoint_limit_max',CASE WHEN json_type(" + side + ".limits,"
 			var fields strings.Builder
-			for _, key := range schema51ConfigurationPermissions {
+			for _, key := range keys {
 				fmt.Fprintf(&fields, ",'permissions.%s',CASE WHEN json_type(%s.permissions,'$.\"%s\"') IN ('text','integer','real','true','false') THEN substr(CAST(json_extract(%s.permissions,'$.\"%s\"') AS TEXT),1,512) ELSE NULL END", key, side, key, side, key)
 			}
 			body = strings.ReplaceAll(body, marker, fields.String()+marker)
@@ -39,6 +39,10 @@ func charityPermissionCaptureSQL() string {
 // UpgradeStewardCharityPermissions adds closed, disabled grants to schema50
 // policies. Revisions, limits, scopes, timestamps and old audit evidence survive.
 func UpgradeStewardCharityPermissions(ctx context.Context, q stewardPolicyMigrationDB) error {
+	return upgradeStewardPolicies(ctx, q, normalizeSchema50StewardPolicy)
+}
+
+func upgradeStewardPolicies(ctx context.Context, q stewardPolicyMigrationDB, normalize func(string) (string, error)) error {
 	var after int64
 	for {
 		rows, err := q.QueryContext(ctx, "SELECT user_id,permissions FROM steward_permissions WHERE user_id>? ORDER BY user_id LIMIT 100", after)
@@ -65,7 +69,7 @@ func UpgradeStewardCharityPermissions(ctx context.Context, q stewardPolicyMigrat
 			return nil
 		}
 		for _, p := range batch {
-			normalized, err := normalizeSchema50StewardPolicy(p.body)
+			normalized, err := normalize(p.body)
 			if err != nil {
 				return err
 			}

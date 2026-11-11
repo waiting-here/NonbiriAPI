@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/calendar"
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 var errBrowseSQLValue = errors.New("invalid browse scalar")

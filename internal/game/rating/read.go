@@ -45,12 +45,14 @@ func ReadTx(ctx context.Context, tx *sql.Tx, game string, user int64, window str
  FROM game_duel_results WHERE game_key=? AND settled_at>? AND settled_at<=? GROUP BY user_id HAVING wins>0
 ), ranked AS (
  SELECT *,ROW_NUMBER() OVER(ORDER BY wins DESC,played,achieved_at,user_id) rank FROM scores
+), selected AS MATERIALIZED (
+ SELECT * FROM ranked WHERE rank<=20 OR user_id=?
 )
 SELECT r.user_id,r.rank,r.wins,r.played,r.draws,
  CASE WHEN u.is_banned=1 AND (u.banned_until IS NULL OR u.banned_until>?) THEN 0 ELSE COALESCE(p.game_profile_public,u.game_profile_public) END,
  u.username,u.guild_nick,COALESCE(u.discord_id,''),u.avatar,u.guild_avatar_url
-FROM ranked r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences p ON p.user_id=r.user_id
-WHERE u.is_admin=0 AND (r.rank<=20 OR r.user_id=?) ORDER BY r.rank`, game, now-days*86400, now, now, user)
+FROM selected r JOIN users u ON u.id=r.user_id LEFT JOIN game_user_preferences p ON p.user_id=r.user_id
+WHERE u.is_admin=0 ORDER BY r.rank`, game, now-days*86400, now, user, now)
 	if err != nil {
 		return Board{}, err
 	}

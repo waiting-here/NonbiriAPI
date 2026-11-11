@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	sqlite "modernc.org/sqlite"
+	sqlite "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 // StartupStage is a closed vocabulary shared with the process composition root.

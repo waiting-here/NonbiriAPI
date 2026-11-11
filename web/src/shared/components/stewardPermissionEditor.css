@@ -1,0 +1,58 @@
+.permission-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.permission-categories [aria-pressed='true'] {
+  background: var(--nb-color-accent-soft);
+  border-color: var(--nb-color-accent);
+  color: var(--nb-color-accent);
+}
+.permission-group {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  background: var(--nb-color-surface);
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.permission-grid > .nb-toggle,
+.permission-pair {
+  padding: 1rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  min-width: 0;
+}
+.permission-pair {
+  display: grid;
+  gap: 0.75rem;
+}
+.permission-pair .nb-seg {
+  flex-wrap: wrap;
+}
+.permission-pair summary {
+  cursor: pointer;
+}
+.permission-pair details > div {
+  margin-top: 0.75rem;
+}
+.permission-scope {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.permission-scope dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+}
+.permission-scope dd {
+  margin-inline-start: 0;
+  color: var(--nb-color-text-muted);
+}

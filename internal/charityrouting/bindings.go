@@ -65,7 +65,7 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	statement, args := candidatePageSelection(modelID, now, query)
 	statement += ` ORDER BY dk.id,pc.normalized_model_id LIMIT ?`
 	args = append(args, query.Limit+1)
-	rows, err := tx.QueryContext(ctx, statement, args...)
+	rows, err := tx.QueryContext(ctx, db.MaterializePage(statement, `ORDER BY id,normalized_model_id`), args...)
 	if err != nil {
 		return nil, 0, "", fmt.Errorf("charity routing: list binding candidates: %w", err)
 	}

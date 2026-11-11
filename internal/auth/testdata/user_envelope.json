@@ -51,6 +51,7 @@
         "users.level": false,
         "users.balance": false,
         "users.game_balance": false,
+        "users.resources": false,
         "users.ban": true,
         "users.unban": false,
         "users.ban_permanent": true,

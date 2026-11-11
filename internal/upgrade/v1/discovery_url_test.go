@@ -16,6 +16,7 @@ import (
 
 func restoreSchema51LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema52LayoutForTest(t, database)
 	_, view, _ := strings.Cut(db.ServiceKeyScopeSQL, "DROP VIEW charity_model_catalog;")
 	hostileMustExec(t, database, "DROP VIEW charity_model_catalog;"+view)
 	assertRetainedManifest(t, database, db.Schema51ManifestHash)
@@ -122,6 +123,8 @@ func TestCompleteDiscoveryURLUpgradePreservesPinnedHistoryAndRollsBack(t *testin
 	}
 	defer store.Close()
 	after := gatewayRows(t, store.DB(), true)
+	assertCreditOperationAssetsProjectionForTest(t, store.DB())
+	delete(after, "credit_operation_assets")
 	for _, table := range []string{"schema_state", "discovery_source_revisions", "mainstream_channel_discovery_presets"} {
 		delete(before, table)
 		delete(after, table)

@@ -17,6 +17,7 @@ describe('per-user steward permissions', () => {
       'charity.affinity',
       'charity.price_templates.manage',
       'risk.configure',
+      'users.resources',
     ] as const) {
       expect(defaultStewardPermissions(5).permissions[key]).toBe(false);
       expect(defaultStewardPermissions(6).permissions[key]).toBe(true);
@@ -29,7 +30,7 @@ describe('per-user steward permissions', () => {
   });
   it('keeps default review and history access while full diagnostic and delegation scopes stay absent', () => {
     const policy = defaultStewardPermissions(5);
-    expect(stewardPermissionKeys).toHaveLength(55);
+    expect(stewardPermissionKeys).toHaveLength(56);
     expect(policy.permissions['ai.chat']).toBe(true);
     expect(policy.permissions['ai.review.read']).toBe(false);
     expect(policy.permissions['ai.memory.edit']).toBe(false);
@@ -75,6 +76,15 @@ describe('per-user steward permissions', () => {
     expect(omitted).toBe(false);
     expect(
       normalizeStewardPermissions({ ...policy, permissions }).permissions['risk.configure'],
+    ).toBe(false);
+  });
+
+  it('keeps resource adjustments disabled when an older response omits the grant', () => {
+    const policy = defaultStewardPermissions(5);
+    const { ['users.resources']: omitted, ...permissions } = policy.permissions;
+    expect(omitted).toBe(false);
+    expect(
+      normalizeStewardPermissions({ ...policy, permissions }).permissions['users.resources'],
     ).toBe(false);
   });
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
-	"modernc.org/sqlite"
+	"github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 // Count actual SQLite queries so admission cannot silently add another

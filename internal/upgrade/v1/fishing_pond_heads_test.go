@@ -125,6 +125,8 @@ func TestPondHeadSchema46UpgradePreservesQueueAndRollsBack(t *testing.T) {
 	// Compare all original tables, including queue IDs, signatures, total
 	// counts, and sqlite_sequence; only the derived projection is added.
 	after := gatewayRows(t, store.DB(), true)
+	assertCreditOperationAssetsProjectionForTest(t, store.DB())
+	delete(after, "credit_operation_assets")
 	delete(after, "game_fishing_pond_queue_heads")
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("head upgrade changed retained facts")

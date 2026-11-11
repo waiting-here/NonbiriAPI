@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/waiting-here/NonbiriAPI/internal/sqliteadapter"
 )
 
 func TestLoadManyUsesSuppliedReaderAndCurrentPolicy(t *testing.T) {

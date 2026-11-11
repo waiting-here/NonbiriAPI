@@ -1,3 +1,4 @@
+import { retainQueryScope } from '@shared/query/retain';
 import { FailureDetails } from '@shared/observability/FailureDiagnostics';
 import { sourceLabels } from './presentation';
 import { useState } from 'react';
@@ -195,6 +196,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
   });
   const query = useQuery({
     queryKey: [...root, 'requests', filters, pager.page, pager.pageSize],
+    placeholderData: retainQueryScope([...root, 'requests']),
     queryFn: ({ signal }) => getRequests(filters, pager.page, pager.pageSize, signal),
     enabled: active,
     retry: false,
@@ -338,6 +340,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
               </Note>
             ) : null}
             <FilterBar
+              query={query}
               ariaLabel={t('common.agent.requestFilters')}
               activeCount={Object.values(filters).filter(Boolean).length}
               onSubmit={() => commitFilters()}

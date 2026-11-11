@@ -363,6 +363,7 @@ export function BlacklistManagement({
       {!panelOpen ? feedback : null}
       <Card>
         <FilterBar
+          query={result}
           onSubmit={applySearch}
           activeCount={[actorKind, actorUserID, filterDiscordID].filter(Boolean).length}
           onReset={() => {

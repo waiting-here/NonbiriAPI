@@ -123,7 +123,12 @@ func ReadCasesTx(ctx context.Context, tx *sql.Tx, user, now int64, page paginati
 	result.Pagination = meta
 	selectArgs := append([]any{now, now, now}, args...)
 	selectArgs = append(selectArgs, page.Size, offset)
-	rows, err := tx.QueryContext(ctx, `SELECT `+caseColumns+` FROM abuse_cases c WHERE `+where+` ORDER BY c.started_at DESC,(SELECT max(seq) FROM abuse_actions a WHERE a.case_id=c.id) DESC LIMIT ? OFFSET ?`, selectArgs...)
+	selection := db.MaterializePage(`SELECT c.id,c.started_at,
+(SELECT max(seq) FROM abuse_actions a WHERE a.case_id=c.id) AS last_action
+FROM abuse_cases c WHERE `+where+` ORDER BY c.started_at DESC,last_action DESC LIMIT ? OFFSET ?`,
+		`ORDER BY started_at DESC,last_action DESC`)
+	rows, err := tx.QueryContext(ctx, `SELECT `+caseColumns+` FROM (`+selection+`) p
+CROSS JOIN abuse_cases c ON c.id=p.id ORDER BY p.started_at DESC,p.last_action DESC`, selectArgs...)
 	if err != nil {
 		return result, err
 	}
