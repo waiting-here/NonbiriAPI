@@ -4,6 +4,15 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.12 — Unreleased
+
+- Correct both hands in Fairytale Theatre Gemini, remove stray fingers from
+  Summer Fireworks ChatGPT, and refine finger shapes in Origin Echo DeepSeek,
+  Myriad Forms ChatGPT and the Fairytale Theatre group illustration.
+- Keep the matching card, thumbnail, transparent, eye-state, heartfelt-moment
+  and high-resolution artwork consistent with the corrected sources.
+- Keep storage schema 54 and account export format 36 unchanged.
+
 ## 1.3.11 — 2026-11-11
 
 - Keep upcoming gacha pool draw buttons aligned with open pools, with the
