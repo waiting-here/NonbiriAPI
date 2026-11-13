@@ -74,7 +74,7 @@ it('finds individual Christmas cards by either theme name or by character', asyn
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(count(), query).toBe(expected);
     expect(
-      screen.getByRole('button', { name: 'A Wish Between Pages, Not collected' }),
+      screen.getByRole('button', { name: 'A Date in the Snow · Claude, Not collected' }),
     ).toBeVisible();
   }
 });

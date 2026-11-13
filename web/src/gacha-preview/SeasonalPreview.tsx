@@ -10,6 +10,7 @@ import { CardTile } from '../user/activities/gacha/CardTile';
 import { highResolutionArt } from '../user/activities/gacha/art-resolution';
 import { renderSSR } from '../user/activities/gacha/ssr-renderer';
 import { ChristmasAssets } from './ChristmasAssets';
+import { ClaudeLayerStudy } from './ClaudeLayerStudy';
 import '../user/activities/gacha/gacha.css';
 import './seasonal-preview.css';
 
@@ -122,6 +123,11 @@ export function SeasonalPreview({
         <a className="nb-btn nb-btn--secondary" href="#landscapes">
           插画与封面
         </a>
+        {theme === 't' && (
+          <a className="nb-btn nb-btn--secondary" href="#claude-study">
+            Claude 新旧方案
+          </a>
+        )}
         {theme === 't' && (
           <a className="nb-btn nb-btn--secondary" href="#resources">
             分层资源与原图
@@ -241,6 +247,7 @@ export function SeasonalPreview({
           </figure>
         ))}
       </section>
+      {theme === 't' && <ClaudeLayerStudy />}
       {theme === 't' && <ChristmasAssets high={high} />}
     </main>
   );

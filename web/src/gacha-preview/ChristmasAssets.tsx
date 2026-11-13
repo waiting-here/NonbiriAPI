@@ -75,7 +75,7 @@ export function ChristmasAssets({ high }: { high: boolean }) {
             >
               {christmasCards.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.character} · {item.name}
+                  {item.name}
                 </option>
               ))}
             </select>
