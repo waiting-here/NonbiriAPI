@@ -51,6 +51,7 @@ type Service struct {
 	closed     bool
 
 	heartbeatInterval time.Duration
+	jsonKeepalive     func() time.Duration
 
 	personal       PersonalRouter
 	charity        CharityRouter
@@ -124,6 +125,7 @@ func NewService(config Config) (*Service, error) {
 		connectors: instances, safety: config.Safety, observer: config.Observer,
 		adaptations:   config.Adaptations,
 		gatewayModels: config.GatewayModels,
+		jsonKeepalive: config.JSONKeepalive,
 		now:           config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
 		backoff: config.Backoff.normalized(),
 	}, nil
@@ -372,6 +374,18 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	requestattempt.Handled(parent)
 
 	var stream *streamWriter
+	var jsonWriter *jsonKeepaliveWriter
+	if suppressor == nil && supportsJSONKeepalive(request) && service.jsonKeepalive != nil {
+		if interval := service.jsonKeepalive(); interval > 0 {
+			if _, ok := writer.(http.Flusher); ok {
+				jsonWriter, executionContext = newJSONKeepaliveWriter(executionContext, writer, interval)
+				writer = jsonWriter
+				jsonWriter.armHeartbeat()
+				defer jsonWriter.stopHeartbeat()
+				defer jsonWriter.cancel()
+			}
+		}
+	}
 	if request.Stream && suppressor == nil {
 		if _, ok := writer.(http.Flusher); ok {
 			interval := service.heartbeatInterval
@@ -406,7 +420,7 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	}
 
 	caller, failure := service.classifyCaller(parent, executionContext, plan, run)
-	if stream != nil && parent.Err() == nil && run.hasResult &&
+	if (stream != nil || jsonWriter != nil) && parent.Err() == nil && run.hasResult &&
 		run.result.Failure == connectorcontract.FailureCanceled && run.result.FailureOrigin == connectorcontract.OriginTimeout {
 		result := run.result
 		result.ClientStatus = http.StatusGatewayTimeout
@@ -440,6 +454,9 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 		}
 	}
 
+	if jsonWriter != nil {
+		jsonWriter.stopHeartbeat()
+	}
 	if decision.Active {
 		service.writeDebugTerminal(parent, suppressor, decision, run, caller, failure)
 		return
@@ -452,12 +469,20 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	}
 	if run.err != nil {
 		value := platformFailure(httperr.CodeInternal, "internal error")
+		if jsonWriter != nil {
+			jsonWriter.finishFailure(value)
+			return
+		}
 		if stream == nil || !stream.finishFailure(value) {
 			writeFailure(writer, value)
 		}
 		return
 	}
 	if failure != nil {
+		if jsonWriter != nil {
+			jsonWriter.finishFailure(*failure)
+			return
+		}
 		if stream != nil && stream.finishFailure(*failure) {
 			return
 		}

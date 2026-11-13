@@ -195,6 +195,10 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"donation_accept_enabled":           boolSpec("0"),
 		"games_enabled":                     boolSpec("0"),
 		fishingconfig.FishingEnabledKey:     boolSpec("0"),
+
+		"non_stream_keepalive_enabled":          {kind: generationTwoConfigBool},
+		"non_stream_keepalive_interval_seconds": {kind: generationTwoConfigUint, minimum: 5, maximum: 120},
+
 		fishingconfig.FishingWormPriceMilliKey: amountSpec(
 			generationTwoFishingDefaultAmount(fishingDefaults, fishing.BaitWorm), uint64(fishing.MinimumBaitPriceMilli)),
 		fishingconfig.FishingLurePriceMilliKey: amountSpec(

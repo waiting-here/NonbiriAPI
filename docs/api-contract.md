@@ -9,6 +9,32 @@ Service, endpoint, service-owned key, model-list and donation semantics are desc
 
 ## 1. Shared wire rules
 
+### Optional non-streaming JSON keepalives
+
+The administrator-only site setting `non_stream_keepalive_enabled` defaults to
+false. When enabled, accepted non-streaming requests may send leading JSON
+whitespace while waiting in a key queue or for an upstream response. The first
+and recurring interval is `non_stream_keepalive_interval_seconds`, default 60
+seconds and adjustable from 5 to 120 seconds. Both settings are snapshotted for
+each accepted request. Authentication, admission and audit failures still run
+before this timer starts. Existing SSE heartbeat behavior is unchanged.
+
+This applies to chat completions, embeddings, image generations/edits/variations,
+Decisions, Responses (including compact and input-token operations), completions,
+moderations, rerank and System One. Audio routes, model discovery, streaming
+requests and Debug captures are excluded. Whitespace does not represent model
+output, successful upstream acceptance, a retry boundary or a billing event.
+
+Before the first keepalive, failures retain their normal HTTP status. The first
+keepalive commits HTTP 200 with `application/json`; any later failure uses the
+normal sanitized JSON error envelope within that response. Clients must inspect
+the error body instead of relying solely on HTTP status or status-based retries.
+Successful responses remain a single JSON value with optional leading whitespace.
+Disconnect cancellation, the overall request budget, upstream failure counters
+and settlement rules remain unchanged. An interval below the proxy idle timeout
+and sufficient client total timeout are still required; proxy buffering can
+prevent keepalives from reaching the client promptly.
+
 ### 1.1 Stations and authentication
 
 | Station | Host | Authentication |

@@ -80,6 +80,25 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 
 The timeout variables accept integer seconds only; decimals and out-of-range values are rejected. Blank or unset values use the defaults. Budgets cover the whole process phase rather than restarting for each step. Opening the database alone does not mean the application is ready; readiness follows full initialization and listener binding. See the [API contract](api-contract.md) for `/readyz`.
 
+Administrators can enable `non_stream_keepalive_enabled` in Settings → Connectors.
+It defaults to off. `non_stream_keepalive_interval_seconds` controls both the
+first and subsequent keepalives: 60 seconds by default, from 5 to 120 seconds.
+The setting is read once when a request is accepted and covers accepted queue
+waits and upstream work. Choose an interval below every proxy's idle timeout,
+with enough margin for network delays; 120 seconds leaves little margin below
+Cloudflare's [current 125-second proxy read timeout](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-524/).
+Client total deadlines still apply.
+
+When enabled, eligible non-streaming JSON inference responses send whitespace
+while waiting. Errors before the first keepalive retain their HTTP status.
+After the first keepalive, HTTP status is already 200 and any later error is
+returned in the usual JSON error envelope. Clients must inspect that envelope;
+status-based error handling and retries cannot detect these later failures.
+Audio endpoints and Debug captures are excluded. See the [API contract](api-contract.md)
+for the exact scope. These settings do not alter upstream retries, failure
+counters or accounting, and cannot guarantee that every proxy forwards each
+keepalive immediately.
+
 An OAuth scope override must retain both identity and guild-member access for registration or sign-in without an exemption; `identify` alone cannot satisfy guild/role checks.
 
 The master key is not a normal setting. Back it up securely, keep its Unix file mode owner-only (`0400` or `0600`), and never replace it for an existing database. Losing it makes encrypted upstream credentials unrecoverable. The environment file also contains the administrator password and OAuth client secret, so keep it readable only by root and the dedicated service account.
