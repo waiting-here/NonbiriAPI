@@ -15,6 +15,7 @@ import (
 
 const (
 	maxOAuthStates       = 4096
+	maxOAuthIntentStates = maxOAuthStates - 256
 	maxStateClockSkew    = 30 * time.Second
 	maxStateBindingBytes = 256
 	maxRouteIDBytes      = 64
@@ -32,7 +33,10 @@ type oauthStatePayload struct {
 	Expires    int64  `json:"exp"`
 }
 
-type stateRecord struct{ expires int64 }
+type stateRecord struct {
+	expires int64
+	intent  string
+}
 
 type StateClaims struct {
 	Intent     string
@@ -43,13 +47,15 @@ type StateClaims struct {
 
 // StateManager creates process-local, signed, bounded and one-use OAuth state.
 type StateManager struct {
-	mu      sync.Mutex
-	key     []byte
-	ttl     time.Duration
-	max     int
-	now     func() time.Time
-	pending map[[32]byte]stateRecord
-	closed  bool
+	mu              sync.Mutex
+	key             []byte
+	ttl             time.Duration
+	max             int
+	maxPerIntent    int
+	now             func() time.Time
+	pending         map[[32]byte]stateRecord
+	pendingByIntent map[string]int
+	closed          bool
 }
 
 func NewStateManager(ttl time.Duration) (*StateManager, error) {
@@ -58,7 +64,7 @@ func NewStateManager(ttl time.Duration) (*StateManager, error) {
 		clear(key)
 		return nil, fmt.Errorf("oauth state signer unavailable")
 	}
-	m, err := newStateManager(key, ttl, maxOAuthStates, time.Now)
+	m, err := newStateManager(key, ttl, maxOAuthStates, maxOAuthIntentStates, time.Now)
 	if err != nil {
 		clear(key)
 	}
@@ -67,18 +73,18 @@ func NewStateManager(ttl time.Duration) (*StateManager, error) {
 
 func NewStateManagerWithKey(key []byte, ttl time.Duration) (*StateManager, error) {
 	copyKey := append([]byte(nil), key...)
-	m, err := newStateManager(copyKey, ttl, maxOAuthStates, time.Now)
+	m, err := newStateManager(copyKey, ttl, maxOAuthStates, maxOAuthIntentStates, time.Now)
 	if err != nil {
 		clear(copyKey)
 	}
 	return m, err
 }
 
-func newStateManager(key []byte, ttl time.Duration, max int, now func() time.Time) (*StateManager, error) {
-	if len(key) < 32 || ttl <= 0 || ttl > time.Hour || max <= 0 || now == nil {
+func newStateManager(key []byte, ttl time.Duration, max, maxPerIntent int, now func() time.Time) (*StateManager, error) {
+	if len(key) < 32 || ttl <= 0 || ttl > time.Hour || max <= 0 || maxPerIntent <= 0 || maxPerIntent > max || now == nil {
 		return nil, fmt.Errorf("oauth state signer configuration is invalid")
 	}
-	return &StateManager{key: key, ttl: ttl, max: max, now: now, pending: make(map[[32]byte]stateRecord)}, nil
+	return &StateManager{key: key, ttl: ttl, max: max, maxPerIntent: maxPerIntent, now: now, pending: make(map[[32]byte]stateRecord), pendingByIntent: make(map[string]int)}, nil
 }
 
 func (m *StateManager) TTL() time.Duration {
@@ -125,7 +131,7 @@ func (m *StateManager) issue(station, intent, binding, routeID, resourceID strin
 	}
 	now := m.now()
 	m.purgeLocked(now)
-	if len(m.pending) >= m.max {
+	if len(m.pending) >= m.max || m.pendingByIntent[intent] >= m.maxPerIntent {
 		return "", ErrStateCapacity
 	}
 	nonceRaw := make([]byte, 32)
@@ -142,7 +148,8 @@ func (m *StateManager) issue(station, intent, binding, routeID, resourceID strin
 		return "", ErrStateInvalid
 	}
 	signed := encoded + "." + m.sign(encoded)
-	m.pending[nonceHash] = stateRecord{expires: p.Expires}
+	m.pending[nonceHash] = stateRecord{expires: p.Expires, intent: intent}
+	m.pendingByIntent[intent]++
 	return signed, nil
 }
 
@@ -213,17 +220,26 @@ func (m *StateManager) ConsumeClaims(state, cookie, station string) (StateClaims
 	}
 	h := sha256.Sum256(raw)
 	clear(raw)
-	if _, ok := m.pending[h]; !ok {
+	record, ok := m.pending[h]
+	if !ok {
 		return StateClaims{}, ErrStateReplay
 	}
-	delete(m.pending, h)
+	m.removePendingLocked(h, record)
 	return StateClaims{Intent: p.Intent, Binding: p.Bind, RouteID: p.RouteID, ResourceID: p.ResourceID}, nil
+}
+
+func (m *StateManager) removePendingLocked(nonce [32]byte, record stateRecord) {
+	delete(m.pending, nonce)
+	m.pendingByIntent[record.intent]--
+	if m.pendingByIntent[record.intent] == 0 {
+		delete(m.pendingByIntent, record.intent)
+	}
 }
 
 func (m *StateManager) purgeLocked(now time.Time) {
 	for n, r := range m.pending {
 		if r.expires <= now.UnixNano() {
-			delete(m.pending, n)
+			m.removePendingLocked(n, r)
 		}
 	}
 }
@@ -241,6 +257,7 @@ func (m *StateManager) Close() error {
 	clear(m.key)
 	m.key = nil
 	clear(m.pending)
+	clear(m.pendingByIntent)
 	return nil
 }
 

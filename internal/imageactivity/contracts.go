@@ -22,6 +22,8 @@ const (
 	maxPrompt       = 64 << 10
 	maxImage        = 32 << 20
 	maxImages       = 64 << 20
+	maxImagePixels  = int64(64000000)
+	maxTaskPixels   = int64(64 * 1024 * 1024)
 	maxResponse     = 96 << 20
 	executionMemory = int64(256 << 20)
 	resultLifetime  = int64(600)

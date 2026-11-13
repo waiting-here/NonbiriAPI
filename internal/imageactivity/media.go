@@ -173,10 +173,10 @@ func checkedImage(body []byte, declared string) (imageBytes, error) {
 			return imageBytes{}, ErrInvalid
 		}
 	}
-	if width <= 0 || height <= 0 || int64(width) > 64000000/int64(height) {
+	if width <= 0 || height <= 0 || int64(width) > maxImagePixels/int64(height) {
 		return imageBytes{}, ErrInvalid
 	}
-	return imageBytes{data: body, mime: sniff}, nil
+	return imageBytes{data: body, mime: sniff, pixels: int64(width) * int64(height)}, nil
 }
 func webpDimensions(body []byte) (int, int, error) {
 	if len(body) < 20 || !bytes.Equal(body[:4], []byte("RIFF")) || !bytes.Equal(body[8:12], []byte("WEBP")) || uint64(binary.LittleEndian.Uint32(body[4:8]))+8 != uint64(len(body)) {

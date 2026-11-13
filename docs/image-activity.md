@@ -218,8 +218,11 @@ page. There is no automatic browser persistence.
 Each executing task reserves 256 MiB for bounded response and conversion buffers.
 Each image is limited to 32 MiB, each task to 64 MiB of image bytes,
 and each generation JSON response to 96 MiB. Returned image dimensions are
-limited to 64 million pixels. Queue payloads share the activity memory budget
-and may use at most one quarter of it. Slow image readers retain their memory
+limited to 64 million pixels per image and 67,108,864 pixels per task, including
+all retained results. Images exceeding either limit are omitted; later images
+that fit may still be retained. The existing partial-success charging rule applies.
+Queue payloads share the activity memory budget and may use at most one quarter
+of it. Slow image readers retain their memory
 charge until they finish; new tasks do not evict a result still inside its
 promised pickup window.
 

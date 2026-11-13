@@ -109,7 +109,12 @@ Configure the public user host and the separate admin host in DNS and TLS. The p
 - preserve long-lived SSE responses without imposing a shorter buffering or idle timeout than the application contract;
 - apply both per-client and global rate limits to the unauthenticated
   `/api/auth/discord/start` route and to the session-gated
-  `/api/auth/elevate` route; OAuth states expire after ten minutes and the shared in-process pending-state store holds at most 4096 live entries. Test chosen limits without weakening callback availability.
+  `/api/auth/elevate` route; OAuth states expire after ten minutes and the shared
+  in-process pending-state store holds at most 4096 live entries. Each flow can
+  occupy at most 3840 entries, leaving capacity for 256 entries of the other flow.
+  This reservation prevents one flow from filling the entire store; distributed
+  login-start floods still require proxy admission control. Test chosen limits
+  without weakening callback availability.
   The application additionally enforces an in-process per-client-IP admission
   throttle on both routes as a second layer (configurable at runtime via the
   `oauth_start_rate_limit` / `oauth_start_rate_window_seconds` /
