@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -166,6 +167,59 @@ func TestOAuthLoginAndElevationShareLiveClientIPThrottle(t *testing.T) {
 	elevate := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodPost, "https://user.example/api/auth/elevate", "", []*http.Cookie{cookie}, nil)
 	if elevate.Code != http.StatusTooManyRequests || elevate.Header().Get("Retry-After") == "" {
 		t.Fatalf("status=%d retry=%q body=%s", elevate.Code, elevate.Header().Get("Retry-After"), elevate.Body.String())
+	}
+}
+
+func TestOAuthLoginSaturationPreservesElevationAndCallbacks(t *testing.T) {
+	f := newRuntimeFixture(t, func(config *RuntimeConfig) {
+		config.OAuthStates.max = 8
+		config.OAuthStates.maxPerIntent = 6
+	})
+	handler := f.runtime.UserHandler()
+	session := loginUser(t, f, "capacity-base", "")
+	// Isolate pending-state admission from the separately tested per-IP throttle.
+	if _, err := f.store.DB().Exec(`UPDATE site_config SET value='0' WHERE key='oauth_start_rate_limit'`); err != nil {
+		t.Fatal(err)
+	}
+	var loginStart *httptest.ResponseRecorder
+	for range 6 {
+		loginStart = request(t, handler, host.StationUser, http.MethodGet, "https://user.example/api/auth/discord/start?route_id=account", "", nil, nil)
+		if loginStart.Code != http.StatusFound {
+			t.Fatalf("login start=%d %s", loginStart.Code, loginStart.Body.String())
+		}
+	}
+	blocked := request(t, handler, host.StationUser, http.MethodGet, "https://user.example/api/auth/discord/start", "", nil, nil)
+	if blocked.Code != http.StatusServiceUnavailable {
+		t.Fatalf("saturated login=%d %s", blocked.Code, blocked.Body.String())
+	}
+	start := request(t, handler, host.StationUser, http.MethodPost, "https://user.example/api/auth/elevate", "", []*http.Cookie{session}, nil)
+	var handoff AuthorizationURLResponse
+	if start.Code != http.StatusOK || json.Unmarshal(start.Body.Bytes(), &handoff) != nil {
+		t.Fatalf("elevation start=%d %s", start.Code, start.Body.String())
+	}
+	parsed, err := url.Parse(handoff.AuthorizationURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addLogin(f.provider, "capacity-elevate", "discord-1")
+	callbackURL := "https://user.example/api/auth/discord/callback?code=capacity-elevate&state=" + url.QueryEscape(parsed.Query().Get("state"))
+	cookies := []*http.Cookie{responseCookie(t, start, OAuthStateCookieName), session}
+	callback := request(t, handler, host.StationUser, http.MethodGet, callbackURL, "", cookies, nil)
+	if callback.Code != http.StatusFound || callback.Header().Get("Location") != "/account" {
+		t.Fatalf("elevation callback=%d %s", callback.Code, callback.Body.String())
+	}
+	responseCookie(t, callback, ElevatedCookieName)
+	if replay := request(t, handler, host.StationUser, http.MethodGet, callbackURL, "", cookies, nil); replay.Code != http.StatusUnauthorized {
+		t.Fatalf("callback replay=%d %s", replay.Code, replay.Body.String())
+	}
+	parsed, err = url.Parse(loginStart.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	callbackURL = "https://user.example/api/auth/discord/callback?code=capacity-base&state=" + url.QueryEscape(parsed.Query().Get("state"))
+	callback = request(t, handler, host.StationUser, http.MethodGet, callbackURL, "", []*http.Cookie{responseCookie(t, loginStart, OAuthStateCookieName)}, nil)
+	if callback.Code != http.StatusFound || callback.Header().Get("Location") != "/account" {
+		t.Fatalf("existing login callback=%d %s", callback.Code, callback.Body.String())
 	}
 }
 
