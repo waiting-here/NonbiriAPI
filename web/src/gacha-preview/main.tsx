@@ -60,6 +60,9 @@ function Preview() {
               {english ? 'LOCAL PREVIEW · independent sample data' : '本地预览 · 使用独立体验数据'}
             </span>
             <div>
+              <a className="nb-btn nb-btn--secondary" href="?view=christmas">
+                {english ? 'Christmas artwork' : '圣诞美术预览'}
+              </a>
               <button
                 onClick={() => {
                   const next = !appearanceView;

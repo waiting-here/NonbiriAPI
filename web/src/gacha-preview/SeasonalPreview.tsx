@@ -9,6 +9,7 @@ import { cardById, cards, themeById } from '../user/activities/gacha/catalog';
 import { CardTile } from '../user/activities/gacha/CardTile';
 import { highResolutionArt } from '../user/activities/gacha/art-resolution';
 import { renderSSR } from '../user/activities/gacha/ssr-renderer';
+import { ChristmasAssets } from './ChristmasAssets';
 import '../user/activities/gacha/gacha.css';
 import './seasonal-preview.css';
 
@@ -111,6 +112,22 @@ export function SeasonalPreview({
         </div>
         <ThemeToggle />
       </header>
+      <nav className="seasonal-review__navigation nb-actions" aria-label="美术资源导航">
+        <a className="nb-btn nb-btn--secondary" href="#motion">
+          动态卡面
+        </a>
+        <a className="nb-btn nb-btn--secondary" href="#tiles">
+          图鉴取景
+        </a>
+        <a className="nb-btn nb-btn--secondary" href="#landscapes">
+          插画与封面
+        </a>
+        {theme === 't' && (
+          <a className="nb-btn nb-btn--secondary" href="#resources">
+            分层资源与原图
+          </a>
+        )}
+      </nav>
       <section className="seasonal-review__controls" aria-label="预览控制">
         {theme === 's' && (
           <Toggle
@@ -173,6 +190,7 @@ export function SeasonalPreview({
           </a>
         </div>
       </section>
+      <h2 id="motion">动态卡面</h2>
       <section className="seasonal-review__cards" aria-label="动态卡面">
         {ids.map((id) => (
           <MotionCard
@@ -185,6 +203,7 @@ export function SeasonalPreview({
           />
         ))}
       </section>
+      <h2 id="tiles">图鉴取景</h2>
       <section className="seasonal-review__tiles" aria-label="图鉴取景">
         {ids.map((id) => (
           <CardTile
@@ -199,6 +218,7 @@ export function SeasonalPreview({
           />
         ))}
       </section>
+      <h2 id="landscapes">插画与封面</h2>
       <section className="seasonal-review__landscapes" aria-label="静态插画与封面">
         {(['groups', 'covers'] as const).map((kind) => (
           <figure key={kind}>
@@ -207,10 +227,21 @@ export function SeasonalPreview({
               src={`/assets/gacha/${high ? 'hires/' : ''}${kind}/${theme}.webp`}
               alt={name + (kind === 'groups' ? ' · 主题插画' : ' · 独立封面')}
             />
-            <figcaption>{kind === 'groups' ? '主题插画' : '独立封面'}</figcaption>
+            <figcaption>
+              {kind === 'groups' ? '主题插画' : '独立封面'}
+              {' · '}
+              <a
+                href={`/assets/gacha/${high ? 'hires/' : ''}${kind}/${theme}.webp`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                打开原尺寸图片 ↗
+              </a>
+            </figcaption>
           </figure>
         ))}
       </section>
+      {theme === 't' && <ChristmasAssets high={high} />}
     </main>
   );
 }
