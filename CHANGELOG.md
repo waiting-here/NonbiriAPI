@@ -6,6 +6,15 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.3.12 — Unreleased
 
+- Add optional administrator-controlled JSON response keepalives, disabled by
+  default, with a configurable interval of 60 seconds by default. Errors retain
+  their HTTP status until the first heartbeat; later errors remain in JSON.
+  Upstream failure accounting, retries and billing use the original upstream result.
+- Reserve OAuth state capacity for each flow and cap aggregate decoded image
+  pixels in each image-generation activity result.
+- Add A Date in the Snow, five non-explicit Christmas limited SSR cards, with
+  distinct poses, character motion, a snowy-window drawing room, a group
+  illustration and a separate pool cover. Its preset has no seasonal date limit.
 - Correct both hands in Fairytale Theatre Gemini, remove stray fingers from
   Summer Fireworks ChatGPT, and refine finger shapes in Origin Echo DeepSeek,
   Myriad Forms ChatGPT and the Fairytale Theatre group illustration.
