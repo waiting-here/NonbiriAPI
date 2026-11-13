@@ -134,17 +134,18 @@ it('anchors the drawn faces, hands, hard details and supports in each compositio
   contacts.push([
     't-deepseek',
     [
-      [455, 201],
-      [521, 178],
-      [503, 236],
-      [509, 309],
-      [500, 337],
-      [600, 341],
-      [437, 502],
-      [657, 495],
-      [573, 564],
-      [404, 1447],
-      [589, 1491],
+      [510, 201],
+      [580, 178],
+      [557, 236],
+      [550, 289],
+      [450, 344],
+      [407, 513],
+      [762, 493],
+      [781, 581],
+      [534, 565],
+      [605, 626],
+      [378, 1491],
+      [631, 1491],
     ],
   ]);
   for (const [id, points] of contacts)
@@ -212,7 +213,7 @@ it('binds the visible torso in each pose to respiration without animating waist 
     ['t-chatgpt', [570, 435], [604, 572]],
     ['t-claude', [482, 491], [540, 726]],
     ['t-glm', [551, 399], [500, 596]],
-    ['t-deepseek', [574, 447], [573, 564]],
+    ['t-deepseek', [595, 425], [595, 565]],
     ['t-gemini', [584, 425], [519, 547]],
   ];
   for (const [id, torso, anchor] of torsos) {
@@ -231,9 +232,9 @@ it('retains visible motion at actual free hair, drape and tail landmarks', () =>
     ['t-claude', [256, 1000]],
     ['t-glm', [870, 634]],
     ['t-glm', [786, 854]],
-    ['t-deepseek', [208, 644]],
-    ['t-deepseek', [404, 814]],
-    ['t-deepseek', [877, 668]],
+    ['t-deepseek', [186, 505]],
+    ['t-deepseek', [270, 950]],
+    ['t-deepseek', [102, 630]],
     ['t-gemini', [179, 732]],
     ['t-gemini', [331, 1046]],
   ];
