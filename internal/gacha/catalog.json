@@ -204,6 +204,16 @@
       "tagline": "找到我，今晚的糖分你一半。",
       "tagline_en": "Find me, and half of tonight's candy is yours.",
       "art": "/assets/gacha/groups/s.webp"
+    },
+    {
+      "id": "t",
+      "name": "雪夜赴约",
+      "name_en": "A Date in the Snow",
+      "rarity": "SSR",
+      "source": "limited",
+      "tagline": "雪还在下，我们在灯下等你赴约。",
+      "tagline_en": "The snow is still falling. We'll be under the lights, waiting for you.",
+      "art": "/assets/gacha/groups/t.webp"
     }
   ],
   "cards": [
@@ -917,6 +927,61 @@
       "source": "limited",
       "art": "/assets/gacha/cards/s-claude.webp",
       "thumb": "/assets/gacha/thumbs/s-claude.webp"
+    },
+    {
+      "id": "t-chatgpt",
+      "theme": "t",
+      "character": "ChatGPT",
+      "name": "为你留灯",
+      "name_en": "A Light Kept for You",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-chatgpt.webp",
+      "thumb": "/assets/gacha/thumbs/t-chatgpt.webp"
+    },
+    {
+      "id": "t-claude",
+      "theme": "t",
+      "character": "Claude",
+      "name": "书页里的心愿",
+      "name_en": "A Wish Between Pages",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-claude.webp",
+      "thumb": "/assets/gacha/thumbs/t-claude.webp"
+    },
+    {
+      "id": "t-glm",
+      "theme": "t",
+      "character": "GLM",
+      "name": "零点之前",
+      "name_en": "Before Midnight",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-glm.webp",
+      "thumb": "/assets/gacha/thumbs/t-glm.webp"
+    },
+    {
+      "id": "t-deepseek",
+      "theme": "t",
+      "character": "DeepSeek",
+      "name": "系紧这个冬天",
+      "name_en": "Winter, Tied Close",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-deepseek.webp",
+      "thumb": "/assets/gacha/thumbs/t-deepseek.webp"
+    },
+    {
+      "id": "t-gemini",
+      "theme": "t",
+      "character": "Gemini",
+      "name": "星光只赠与你",
+      "name_en": "Starlight, Just for You",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-gemini.webp",
+      "thumb": "/assets/gacha/thumbs/t-gemini.webp"
     }
   ]
 }

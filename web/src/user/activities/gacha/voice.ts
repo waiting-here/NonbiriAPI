@@ -4,6 +4,36 @@ import type { DrawReceipt } from './types';
 export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
+  't-chatgpt': [
+    '灯是为你留的，礼物也是。快过来，我等你等得手都凉了。',
+    'The lights are for you, and so is this gift. Come here. My hands got cold waiting for you.',
+    '礼物待会儿再拆。先让我抱紧你，好不好？',
+    'We can open the gift later. Can I hold you first? Nice and close?',
+  ],
+  't-claude': [
+    '给你的心愿夹在书里。坐近些，我只想念给你一个人听。',
+    'I tucked a wish for you between the pages. Sit closer. I only want you to hear it.',
+    '念到最后一页的时候，我想吻你。可以吗？',
+    "When I get to the last page, I'd like to kiss you. May I?",
+  ],
+  't-glm': [
+    '还有三分钟到零点。礼物给你，另一只手能借我吗？',
+    'Three minutes to midnight. The gift is yours. Can I borrow your other hand?',
+    '钟一响，你想先拆礼物，还是先吻我？',
+    'When the bells ring, do you want to open your gift first or kiss me first?',
+  ],
+  't-deepseek': [
+    '低一点，我给你系围巾。嗯……你靠这么近，我脸都红了。',
+    "Bend down so I can tie your scarf. Oh… you're so close. I can feel myself blushing.",
+    '围巾系好啦。现在，能让我靠在你怀里暖一会儿吗？',
+    'There, all tied! Can I warm up in your arms for a little while now?',
+  ],
+  't-gemini': [
+    '把手摊开。这颗星星是给你的，我挑了很久。',
+    'Open your hand. This star is yours. It took me ages to pick the right one.',
+    '星星归你，今晚留给我，好吗？我想靠着你看雪。',
+    'The star is yours. Stay with me tonight? I want to watch the snow in your arms.',
+  ],
   's-chatgpt': [
     '糖给你，拥抱和吻归我。快过来，我已经等不及啦。',
     "The candy is yours. I get the hugs and kisses. Come here—I can't wait!",
@@ -281,6 +311,26 @@ export const VOICE: Record<string, Voice> = {
 };
 
 export const VOICE_AGAIN: Record<string, Voice> = {
+  't-chatgpt': [
+    '又见面啦。我还给你留着灯呢，今晚陪我多待一会儿吧。',
+    'There you are. I left the lights on for you again. Stay a little longer with me tonight?',
+  ],
+  't-claude': [
+    '书签还在那一页。今晚想先听我念，还是先抱我？',
+    'The bookmark is still there. Shall I read to you first, or would you rather hold me?',
+  ],
+  't-glm': [
+    '上次借了你的手。今晚，能把你的时间也借给我吗？',
+    'I borrowed your hand last time. Could I borrow a little more of your time tonight?',
+  ],
+  't-deepseek': [
+    '围巾还系得好好的呀。过来，这次我直接抱你取暖！',
+    "Your scarf's still tied! Come here. This time I'll hug you to get warm!",
+  ],
+  't-gemini': [
+    '还记得一起看雪的地方吗？牵住我，我想和你再走一趟。',
+    "Remember where we watched the snow? Take my hand. I'd like to go back there with you.",
+  ],
   'r-chatgpt': [
     '你来了！今天，又想和你试点新鲜的。',
     "You're here! Let's try something new today.",

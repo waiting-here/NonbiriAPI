@@ -21,6 +21,18 @@ it('covers every card with bounded, nonempty bilingual paragraphs', () => {
   expect(voiceLines('l-chatgpt', false)).toHaveLength(2);
   expect(voiceLines('l-chatgpt', true, true)).toHaveLength(1);
 });
+it('gives each Christmas card two encounter lines and a distinct reunion in both languages', () => {
+  for (const card of cards.filter((card) => card.theme === 't')) {
+    for (const english of [false, true]) {
+      const first = voiceLines(card.id, english);
+      const reunion = voiceLines(card.id, english, true);
+      expect(first, card.id).toHaveLength(2);
+      expect(reunion, card.id).toHaveLength(1);
+      expect(first, card.id).not.toContain(reunion[0]);
+    }
+  }
+});
+
 it.each([
   [['l-chatgpt', 'g-chatgpt'], true, 'sp'],
   [['g-chatgpt', 'e-chatgpt'], true, 'ssr'],

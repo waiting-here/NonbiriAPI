@@ -257,6 +257,26 @@
       "rating": "r18",
       "scene": "illustration:s"
     },
+    "card:t-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-claude": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-glm": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-deepseek": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-gemini": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
     "illustration:a": {
       "rating": "general"
     },
@@ -313,6 +333,9 @@
     },
     "illustration:s": {
       "rating": "r18"
+    },
+    "illustration:t": {
+      "rating": "general"
     },
     "cover:permanent": {
       "rating": "general",
@@ -378,6 +401,11 @@
       "rating": "r18",
       "name": "糖夜迷藏",
       "name_en": "Sweet Hide-and-Seek"
+    },
+    "cover:t": {
+      "rating": "general",
+      "name": "雪夜赴约",
+      "name_en": "A Date in the Snow"
     },
     "appearance:default": {
       "rating": "general"
@@ -477,6 +505,88 @@
         "hires/backgrounds/covers/s.webp",
         "layers/covers/s.webp",
         "hires/layers/covers/s.webp"
+      ]
+    },
+    {
+      "owner": "card:t-chatgpt",
+      "files": [
+        "cards/t-chatgpt.webp",
+        "hires/cards/t-chatgpt.webp",
+        "thumbs/t-chatgpt.webp"
+      ],
+      "prefixes": [
+        "motion/t-chatgpt/",
+        "hires/motion/t-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:t-claude",
+      "files": [
+        "cards/t-claude.webp",
+        "hires/cards/t-claude.webp",
+        "thumbs/t-claude.webp"
+      ],
+      "prefixes": [
+        "motion/t-claude/",
+        "hires/motion/t-claude/"
+      ]
+    },
+    {
+      "owner": "card:t-glm",
+      "files": [
+        "cards/t-glm.webp",
+        "hires/cards/t-glm.webp",
+        "thumbs/t-glm.webp"
+      ],
+      "prefixes": [
+        "motion/t-glm/",
+        "hires/motion/t-glm/"
+      ]
+    },
+    {
+      "owner": "card:t-deepseek",
+      "files": [
+        "cards/t-deepseek.webp",
+        "hires/cards/t-deepseek.webp",
+        "thumbs/t-deepseek.webp"
+      ],
+      "prefixes": [
+        "motion/t-deepseek/",
+        "hires/motion/t-deepseek/"
+      ]
+    },
+    {
+      "owner": "card:t-gemini",
+      "files": [
+        "cards/t-gemini.webp",
+        "hires/cards/t-gemini.webp",
+        "thumbs/t-gemini.webp"
+      ],
+      "prefixes": [
+        "motion/t-gemini/",
+        "hires/motion/t-gemini/"
+      ]
+    },
+    {
+      "owner": "illustration:t",
+      "files": [
+        "groups/t.webp",
+        "hires/groups/t.webp",
+        "backgrounds/t.webp",
+        "hires/backgrounds/t.webp",
+        "layers/groups/t-foreground.webp",
+        "hires/layers/groups/t-foreground.webp"
+      ]
+    },
+    {
+      "owner": "cover:t",
+      "files": [
+        "covers/t.webp",
+        "hires/covers/t.webp",
+        "backgrounds/covers/t.webp",
+        "hires/backgrounds/covers/t.webp",
+        "layers/covers/t-foreground.webp",
+        "hires/layers/covers/t-foreground.webp"
       ]
     },
     {

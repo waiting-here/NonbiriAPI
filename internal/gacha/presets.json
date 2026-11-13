@@ -367,6 +367,44 @@
         "published": false,
         "revision": 0
       }
+    },
+    {
+      "id": "christmas-date",
+      "name": "雪夜赴约",
+      "pool": {
+        "id": "",
+        "name": "雪夜赴约",
+        "name_en": "A Date in the Snow",
+        "cover": "t",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 5000,
+          "sr_guarantee": true,
+          "ssr_guarantee": true
+        },
+        "featured": [
+          "t-chatgpt",
+          "t-claude",
+          "t-glm",
+          "t-deepseek",
+          "t-gemini"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
     }
   ]
 }
