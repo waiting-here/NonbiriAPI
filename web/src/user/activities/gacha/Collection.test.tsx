@@ -48,6 +48,37 @@ it('submits card search explicitly, applies selects immediately, and preserves f
   expect(count()).toBe(1);
 });
 
+it('finds individual Christmas cards by either theme name or by character', async () => {
+  const state = gachaSnapshot();
+  state.visible_themes = ['g', 't'];
+  const view = await renderWithProviders(
+    <Collection
+      state={state}
+      english
+      busy={false}
+      act={vi.fn()}
+      inspect={vi.fn()}
+      viewGroup={vi.fn()}
+    />,
+    { station: 'user', role: 'user' },
+  );
+  const search = screen.getByRole('textbox', { name: 'Search' });
+  const count = () => view.container.querySelectorAll('.gacha-catalog .gacha-card').length;
+  for (const [query, expected] of [
+    ['雪夜赴约', 5],
+    ['a date in the snow', 5],
+    ['claude', 2],
+  ] as const) {
+    await view.user.clear(search);
+    await view.user.type(search, query);
+    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(count(), query).toBe(expected);
+    expect(
+      screen.getByRole('button', { name: 'A Wish Between Pages, Not collected' }),
+    ).toBeVisible();
+  }
+});
+
 it('clears both the applied search and its draft from the empty-state action', async () => {
   const state = gachaSnapshot();
   state.visible_themes = ['g'];

@@ -10,7 +10,7 @@ import { Tabs } from '@shared/components/ui/Tabs';
 import { Icon } from '@shared/components/Icon';
 import { ExactCredits } from '../../features/core/components';
 import { CardTile } from './CardTile';
-import { cards, characters, displayRarities, themes } from './catalog';
+import { cards, characters, displayRarities, themeById, themes } from './catalog';
 import { collectionProgress } from './collection-progress';
 import type { Action, Card, Snapshot, Theme } from './types';
 
@@ -48,13 +48,19 @@ export function Collection({
   };
   const visibleThemes = themes.filter((theme) => state.visible_themes.includes(theme.id));
   const visibleCards = cards.filter((card) => state.visible_themes.includes(card.theme));
-  const filtered = visibleCards.filter(
-    (c) =>
-      (c.name + c.name_en).toLowerCase().includes(search.toLowerCase()) &&
-      (!character || c.character === character) &&
-      (!rarity || c.rarity === rarity) &&
-      (!owned || !!state.owned[c.id] === (owned === 'yes')),
-  );
+  const query = search.toLowerCase();
+  const filtered = visibleCards.filter((card) => {
+    const theme = themeById[card.theme];
+    return (
+      (!query ||
+        [card.name, card.name_en, card.character, theme.name, theme.name_en].some((name) =>
+          name.toLowerCase().includes(query),
+        )) &&
+      (!character || card.character === character) &&
+      (!rarity || card.rarity === rarity) &&
+      (!owned || !!state.owned[card.id] === (owned === 'yes'))
+    );
+  });
   return (
     <div className="gacha-collection">
       <div className="gacha-section-heading">
