@@ -97,6 +97,8 @@ type fakeUpstream struct {
 	mu                   sync.Mutex
 	submitted            []map[string]any
 	catalogBody          []byte
+	resultImages         []map[string]string
+	imageBodies          map[string][]byte
 	started              chan struct{}
 	release              chan struct{}
 	png                  []byte
@@ -115,6 +117,22 @@ func newUpstream(t *testing.T) *fakeUpstream {
 	f := &fakeUpstream{started: make(chan struct{}, 100), release: make(chan struct{}), png: buf.Bytes()}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		images := f.resultImages
+		imageBody, isImage := f.imageBodies[r.URL.Path]
+		f.mu.Unlock()
+		if isImage {
+			if r.Header.Get("Authorization") != "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(imageBody)
+			return
+		}
+		if images == nil {
+			images = []map[string]string{{"b64": base64.StdEncoding.EncodeToString(f.png)}}
+		}
 		switch r.URL.Path {
 		case "/models", "/v1/models":
 			f.models.Add(1)
@@ -178,7 +196,7 @@ func newUpstream(t *testing.T) *fakeUpstream {
 					return
 				}
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"status": "done", "data": []map[string]string{{"b64": base64.StdEncoding.EncodeToString(f.png)}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "done", "data": images})
 		default:
 			if r.Method == http.MethodGet {
 				f.polls.Add(1)

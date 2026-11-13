@@ -221,6 +221,7 @@ func (s *Service) extractImages(ctx context.Context, row taskRow, snapshot upstr
 	}
 	items, _ := rawArray(array, 16)
 	size := 0
+	pixels := int64(0)
 	limit := row.n
 	if limit <= 0 {
 		limit = 16
@@ -261,10 +262,11 @@ func (s *Service) extractImages(ctx context.Context, row taskRow, snapshot upstr
 			continue
 		}
 		img, e := checkedImage(data, declared)
-		if e != nil {
+		if e != nil || img.pixels > maxTaskPixels-pixels {
 			continue
 		}
 		size += len(data)
+		pixels += img.pixels
 		output = append(output, img)
 	}
 	return output

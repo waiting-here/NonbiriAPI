@@ -126,7 +126,7 @@ func TestMemoryReaderAndRetiredExecutionKeepReservation(t *testing.T) {
 	if m.used != executionMemory {
 		t.Fatal("active memory released before reader completed")
 	}
-	if m.publish("task", 1, []imageBytes{{[]byte("image"), "image/png"}}, 100) {
+	if m.publish("task", 1, []imageBytes{{data: []byte("image"), mime: "image/png"}}, 100) {
 		t.Fatal("retired result resurrected")
 	}
 	m.discard("task")
@@ -136,7 +136,7 @@ func TestMemoryReaderAndRetiredExecutionKeepReservation(t *testing.T) {
 	if !m.reserveQueued("cached", 1, []byte("prompt"), 512<<20) || !m.commitQueued("cached") || !m.prepareExecution("cached", 512<<20) {
 		t.Fatal("reservation")
 	}
-	if !m.publish("cached", 1, []imageBytes{{[]byte("image"), "image/png"}}, 100) {
+	if !m.publish("cached", 1, []imageBytes{{data: []byte("image"), mime: "image/png"}}, 100) {
 		t.Fatal("publish")
 	}
 	img, release, ok := m.image("cached", 1, 99, 0)
