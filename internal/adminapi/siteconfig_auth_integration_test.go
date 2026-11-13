@@ -251,6 +251,33 @@ func TestSiteConfigRoutesUseHostPasswordSessionGenerationAndFinalTxAuth(t *testi
 	wrongRoleCookie := siteConfigWrongRoleCookie(t, fixture.store)
 	wrongRole := siteConfigAuthRequest(t, fixture.handler, host.StationAdmin, http.MethodGet, RouteAdminBootstrapConfig, nil, []*http.Cookie{wrongRoleCookie}, nil)
 	assertSiteConfigHTTPError(t, wrongRole, http.StatusForbidden, httperr.CodeForbidden)
+	for _, level := range []int{1, 6} {
+		if _, err := fixture.store.DB().Exec(`UPDATE users SET level=? WHERE discord_id='discord-wrong-role'`, level); err != nil {
+			t.Fatal(err)
+		}
+		denied := siteConfigAuthRequest(t, fixture.handler, host.StationAdmin, http.MethodPatch, "/admin/api/site-config/"+KeyNonStreamKeepaliveEnabled,
+			[]byte(`{"value":true}`), []*http.Cookie{wrongRoleCookie}, map[string]string{"Content-Type": "application/json", "Origin": "https://admin.example", "Idempotency-Key": "keepalive-denied-role"})
+		assertSiteConfigHTTPError(t, denied, http.StatusForbidden, httperr.CodeForbidden)
+	}
+	for _, setting := range []struct{ key, body, stored string }{
+		{KeyNonStreamKeepaliveEnabled, `{"value":true}`, "1"},
+		{KeyNonStreamKeepaliveInterval, `{"value":45}`, "45"},
+	} {
+		saved := siteConfigAuthRequest(t, fixture.handler, host.StationAdmin, http.MethodPatch, "/admin/api/site-config/"+setting.key,
+			[]byte(setting.body), []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Origin": "https://admin.example", "Idempotency-Key": "save-" + setting.key})
+		if saved.Code != http.StatusOK {
+			t.Fatalf("save %s: %d %s", setting.key, saved.Code, saved.Body.String())
+		}
+		var value string
+		if err := fixture.store.ReadDB().QueryRow(`SELECT value FROM site_config WHERE key=?`, setting.key).Scan(&value); err != nil || value != setting.stored {
+			t.Fatalf("saved %s=%q err=%v", setting.key, value, err)
+		}
+	}
+	for _, raw := range []string{"4", "121"} {
+		invalid := siteConfigAuthRequest(t, fixture.handler, host.StationAdmin, http.MethodPatch, "/admin/api/site-config/"+KeyNonStreamKeepaliveInterval,
+			[]byte(`{"value":`+raw+`}`), []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Origin": "https://admin.example", "Idempotency-Key": "invalid-keepalive-interval-" + raw})
+		assertSiteConfigHTTPError(t, invalid, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	}
 
 	initialRevision := siteConfigRevision(t, fixture.store)
 	initialRecords := siteConfigIdempotencyCount(t, fixture.store)

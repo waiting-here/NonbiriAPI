@@ -91,6 +91,7 @@ func newPublicForwardRuntime(
 	rpm ratelimit.RPMConfig,
 	cancelUserDuelsTx func(context.Context, *sql.Tx, int64, string, int64) (func(bool), error),
 	audits *auditRuntime,
+	jsonKeepalive func() time.Duration,
 	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
 	if store == nil || vault == nil || adaptations == nil || identities == nil || claims == nil || charityService == nil || charityRoutes == nil ||
@@ -185,6 +186,7 @@ func newPublicForwardRuntime(
 		connectors = append(connectors, instance)
 	}
 	forwardConfig := forward.Config{
+		JSONKeepalive: jsonKeepalive,
 		Adaptations:   adaptations,
 		GatewayModels: gatewaypolicy.NewStore(store.ReadDB()),
 		Personal:      personal, Charity: charity, Claims: claimRail, CharityCharges: charityService,
