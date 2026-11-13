@@ -76,6 +76,17 @@ export async function renderSSR(
     if (options.signal?.aborted) return () => {};
     return renderSweetHideAndSeek(canvas, id, { ...options, frozenTime, paused, highResolution });
   }
+  if (
+    id === 't-chatgpt' ||
+    id === 't-claude' ||
+    id === 't-glm' ||
+    id === 't-deepseek' ||
+    id === 't-gemini'
+  ) {
+    const { renderChristmas } = await import('./christmas/renderer');
+    if (options.signal?.aborted) return () => {};
+    return renderChristmas(canvas, id, { ...options, frozenTime, paused, highResolution });
+  }
   const theme = specialCards[id];
   if (theme) {
     const { renderSpecial } = await import('./special-renderer');
