@@ -1449,6 +1449,7 @@
       "logPrivacyRedacted": "Your current permissions hide IPv4 addresses and non-mainstream channel domain identifiers in this error. Copies and downloads contain the same displayed content.",
       "ipv4Redacted": "Your current permissions hide IPv4 addresses in this error. Copies and downloads contain the same displayed content.",
       "bodyPreview": "Body preview",
+      "savedBodyEmpty": "This record contains an empty error body (0 bytes). No error details can be recovered from it.",
       "rawBodyReadFailed": "The upstream body could not be read.",
       "rawBodyStorageFailed": "The body was read but could not be stored.",
       "rawBodyUnspecifiedFailure": "This older record does not distinguish read and storage failures."

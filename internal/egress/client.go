@@ -538,7 +538,7 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 	limit := c.maxResponseBytes
 	limits := routeResponseLimits(req, limit)
 	if secrets != nil {
-		if routeResponseIsSSE(resp) {
+		if resp.StatusCode < http.StatusMultipleChoices && routeResponseIsSSE(resp) {
 			limit = limits.StreamBytes
 		} else {
 			limit = limits.JSONBytes

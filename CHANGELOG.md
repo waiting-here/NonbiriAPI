@@ -12,6 +12,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   Upstream failure accounting, retries and billing use the original upstream result.
 - Reserve OAuth state capacity for each flow and cap aggregate decoded image
   pixels in each image-generation activity result.
+- Preserve failed Cloudflare-routed response bodies even when a JSON error is
+  labelled as an event stream, so Gemini overload details reach diagnostics.
+  Retain bounded reads and credential checks, including genuine SSE errors.
 - Add A Date in the Snow, five non-explicit Christmas limited SSR cards, with
   distinct poses, character motion, a snowy-window drawing room, a group
   illustration and a separate pool cover. Its preset has no seasonal date limit.

@@ -222,6 +222,8 @@ export function RawErrorViewer({
   }, [body]);
   const raw = decoded?.text ?? '';
   const synthetic = body.content_type === 'application/vnd.nonbiriapi.image-diagnostic+json';
+  const emptyBody =
+    body.save_state === 'saved' && body.bytes_saved === 0 && decoded?.bytes.length === 0;
   const [formatted, setFormatted] = useState<string>();
   const [formatting, setFormatting] = useState(false);
   const [notice, setNotice] = useState('');
@@ -305,7 +307,7 @@ export function RawErrorViewer({
         <button
           className="nb-btn nb-btn--secondary"
           type="button"
-          disabled={body.truncated || body.encoding === 'base64' || formatting}
+          disabled={emptyBody || body.truncated || body.encoding === 'base64' || formatting}
           onClick={format}
         >
           {t('common.diagnostics.formatJson')}
@@ -345,7 +347,11 @@ export function RawErrorViewer({
         defaultOpen={body.bytes_saved <= 16_384}
         lazy
       >
-        <pre>{showRaw ? raw : (formatted ?? raw)}</pre>
+        {emptyBody && !synthetic ? (
+          <p>{t('common.diagnostics.savedBodyEmpty')}</p>
+        ) : (
+          <pre>{showRaw ? raw : (formatted ?? raw)}</pre>
+        )}
       </Fold>
       {notice && <p role="status">{notice}</p>}
     </div>

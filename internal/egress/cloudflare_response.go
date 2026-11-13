@@ -267,7 +267,10 @@ func newRouteResponseBody(source io.ReadCloser, response *http.Response, secrets
 	if routeResponseIsSSE(response) {
 		secrets.stateLimit = int64(limits.EventBytes)
 	}
-	return &routeResponseBody{source: source, response: response, reader: bufio.NewReaderSize(source, min(defaultSSEReadBuffer, limits.LineBytes)), secrets: secrets, limits: limits, streaming: routeResponseIsSSE(response), firstLine: true}
+	// Failed streaming requests can carry ordinary JSON while retaining an SSE
+	// content type. Inspect their bounded, finite body without rewriting bytes.
+	streaming := response.StatusCode < http.StatusMultipleChoices && routeResponseIsSSE(response)
+	return &routeResponseBody{source: source, response: response, reader: bufio.NewReaderSize(source, min(defaultSSEReadBuffer, limits.LineBytes)), secrets: secrets, limits: limits, streaming: streaming, firstLine: true}
 }
 func routeResponseIsSSE(response *http.Response) bool {
 	media, _, _ := mime.ParseMediaType(response.Header.Get("Content-Type"))
@@ -306,19 +309,11 @@ func (b *routeResponseBody) fill() {
 	rejected := b.secrets.contains(string(data))
 	if !rejected {
 		if b.streaming {
-			var fields []string
-			for _, line := range strings.Split(string(data), "\n") {
-				line = strings.TrimSuffix(line, "\r")
-				if value, ok := strings.CutPrefix(line, "data:"); ok {
-					fields = append(fields, strings.TrimPrefix(value, " "))
-				}
-			}
-			payload := []byte(strings.Join(fields, "\n"))
-			if bytes.HasPrefix(bytes.TrimSpace(payload), []byte("{")) || bytes.HasPrefix(bytes.TrimSpace(payload), []byte("[")) && !bytes.Equal(bytes.TrimSpace(payload), []byte("[DONE]")) {
-				rejected = b.secrets.inspectJSON(payload)
-			}
+			rejected = b.inspectEvent(data)
 		} else if json.Valid(data) || bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) || bytes.HasPrefix(bytes.TrimSpace(data), []byte("[")) {
 			rejected = b.secrets.inspectJSON(data)
+		} else if routeResponseIsSSE(b.response) {
+			rejected = b.inspectErrorEvents(data)
 		}
 	}
 	if rejected {
@@ -336,6 +331,43 @@ func (b *routeResponseBody) fill() {
 		b.secrets.cleanHeaders(b.response.Trailer)
 	}
 }
+
+func (b *routeResponseBody) inspectEvent(data []byte) bool {
+	var fields []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if value, ok := strings.CutPrefix(line, "data:"); ok {
+			fields = append(fields, strings.TrimPrefix(value, " "))
+		}
+	}
+	payload := []byte(strings.Join(fields, "\n"))
+	trimmed := bytes.TrimSpace(payload)
+	if bytes.HasPrefix(trimmed, []byte("{")) || bytes.HasPrefix(trimmed, []byte("[")) && !bytes.Equal(trimmed, []byte("[DONE]")) {
+		return b.secrets.inspectJSON(payload)
+	}
+	return false
+}
+
+// Real SSE error envelopes still need semantic inspection for credentials
+// split across events. Parse a bounded copy for inspection only; diagnostics
+// retain the original bytes, including comments and line endings.
+func (b *routeResponseBody) inspectErrorEvents(data []byte) bool {
+	parser := routeResponseBody{reader: bufio.NewReaderSize(bytes.NewReader(data), min(defaultSSEReadBuffer, b.limits.LineBytes)), limits: b.limits, firstLine: true}
+	for {
+		event, err := parser.readEvent()
+		if err != nil && !errors.Is(err, io.EOF) {
+			b.secrets.failure = err
+			return true
+		}
+		if b.inspectEvent(event) {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+	}
+}
+
 func (b *routeResponseBody) readEvent() ([]byte, error) {
 	var event []byte
 	payloadBytes := 0
