@@ -562,7 +562,7 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 		CallerFault:       result.ErrorDetail.CallerFault(),
 		StreakDisposition: result.StreakDisposition, FailureOrigin: result.FailureOrigin,
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
-		UpstreamCode: result.ErrorDetail.Code(), Backoff: result.ErrorDetail.Backoff(),
+		UpstreamCode: result.ErrorDetail.Code(), Backoff: result.ErrorDetail.Backoff(), TemporaryBackoff: result.ErrorDetail.TemporaryBackoff(),
 		Usage: result.Usage, ProtocolSuccess: result.StreakDisposition == connectorcontract.StreakSuccess && result.FailureOrigin == connectorcontract.OriginNone, ResponseStarted: result.Committed,
 	}
 }

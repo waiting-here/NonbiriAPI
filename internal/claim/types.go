@@ -327,6 +327,7 @@ type AttemptOutcome struct {
 	ErrorDiagnostics  string
 	CallerFault       upstreamerror.CallerFault
 	Backoff           smartbackoff.Classification
+	TemporaryBackoff  upstreamerror.TemporaryBackoff
 	StreakDisposition connectorcontract.StreakDisposition
 	FailureOrigin     connectorcontract.FailureOrigin
 	Kind              ResultKind

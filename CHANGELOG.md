@@ -15,6 +15,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Preserve failed Cloudflare-routed response bodies even when a JSON error is
   labelled as an event stream, so Gemini overload details reach diagnostics.
   Retain bounded reads and credential checks, including genuine SSE errors.
+- Recognize verified Google Gemini overload errors as temporary unavailability:
+  preserve the donated key's failure streak and wait 60 seconds, with valid
+  upstream retry hints taking precedence. Other 503 failures retain their policy.
 - Add A Date in the Snow, five non-explicit Christmas limited SSR cards, with
   distinct poses, character motion, a snowy-window drawing room, a group
   illustration and a separate pool cover. Its preset has no seasonal date limit.

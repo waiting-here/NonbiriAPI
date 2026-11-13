@@ -1010,6 +1010,18 @@ observations survive recovery; another attempt's cooldown is not evidence that
 this attempt carried a valid hint. Existing cancellation, manual enablement,
 approval, expiry, donor restrictions and quota rules still apply.
 
+Without a valid retry header, a Google Gemini charity response with actual HTTP
+503 and a complete error object containing `code: 503`, `status: UNAVAILABLE`
+and the recognized high-demand/overloaded message requesting a later retry gets
+a 60-second cooldown. Recognition requires the native Google connector or the
+official `generativelanguage.googleapis.com` host. It preserves the existing
+failure streak, including a nonzero streak. A valid header (even zero or a past
+deadline) takes precedence. Generic 503 responses, incomplete error bodies and
+authentication/billing failures retain ordinary failure accounting. The original
+503 and error details still reach the caller and diagnostics; no retry header is
+invented. The minimal claim-bound cooldown receipt survives recovery and replay
+without extending the deadline. This is a short temporary wait, not a quota trial.
+
 ### 4.1.3 Smart donated-key backoff
 
 Smart backoff automatically applies to charity calls without per-key setup. It keeps
@@ -1037,6 +1049,8 @@ periodic quota exhaustion: recognized business codes with matching quota context
 or explicit quota/reset wording. HTTP status alone, generic quota words, billing
 failures, expired plans, permission failures, context limits, ordinary RPM/TPM
 limits and overload are insufficient.
+The specific Google overload envelope described above uses the separate
+60-second temporary cooldown instead of the quota backoff schedule.
 Unknown, malformed or truncated responses keep the existing failure policy.
 Successful content is never searched.
 

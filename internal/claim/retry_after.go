@@ -52,20 +52,9 @@ func (s *Service) ObserveResponseHeaders(ctx context.Context, handle Handle, obs
 		}
 		return tx.Commit()
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO dispatch_retry_after_observations(claim_id,http_status,observed_at,rate_limited_until)
-VALUES(?,?,?,?) ON CONFLICT(claim_id) DO NOTHING`, record.claimID, observation.Status, observation.ObservedAt, observation.RateLimitedUntil)
+	changed, err := recordRetryAfterTx(ctx, tx, record, observation.Status, observation.ObservedAt, observation.RateLimitedUntil)
 	if err != nil {
 		return err
-	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if changed == 1 && record.donationKeyID.Valid && observation.RateLimitedUntil > observation.ObservedAt {
-		err = smartbackoff.ObserveRetryAfter(ctx, tx, record.claimID, observation.RateLimitedUntil, observation.ObservedAt)
-		if err != nil {
-			return err
-		}
 	}
 	if changed == 1 && observation.Status == 200 && record.backoffActive {
 		if err := smartbackoff.Accepted(ctx, tx, record.claimID, max(observation.ObservedAt, record.dispatchedAt.Int64)); err != nil {
@@ -81,7 +70,22 @@ VALUES(?,?,?,?) ON CONFLICT(claim_id) DO NOTHING`, record.claimID, observation.S
 	return tx.Commit()
 }
 
-func retryAfterOutcomeTx(ctx context.Context, tx *sql.Tx, record claimRecord, outcome AttemptOutcome) (AttemptOutcome, error) {
+// Header hints and verified short-lived provider errors share the existing
+// claim-bound cooldown receipt. Header snapshots still contain only real headers.
+func recordRetryAfterTx(ctx context.Context, tx *sql.Tx, record claimRecord, status int, at, until int64) (int64, error) {
+	result, err := tx.ExecContext(ctx, `INSERT INTO dispatch_retry_after_observations(claim_id,http_status,observed_at,rate_limited_until)
+VALUES(?,?,?,?) ON CONFLICT(claim_id) DO NOTHING`, record.claimID, status, at, until)
+	if err != nil {
+		return 0, err
+	}
+	changed, err := result.RowsAffected()
+	if err == nil && changed == 1 && record.donationKeyID.Valid && until > at {
+		err = smartbackoff.ObserveRetryAfter(ctx, tx, record.claimID, until, at)
+	}
+	return changed, err
+}
+
+func retryAfterOutcomeTx(ctx context.Context, tx *sql.Tx, record claimRecord, outcome AttemptOutcome, at int64) (AttemptOutcome, error) {
 	if record.purpose != PurposeCharity {
 		if outcome.StreakDisposition == connectorcontract.StreakNeutral && retryOrigin(outcome.FailureOrigin) {
 			return outcome, ErrInvalidInput
@@ -95,6 +99,16 @@ func retryAfterOutcomeTx(ctx context.Context, tx *sql.Tx, record claimRecord, ou
 	var status int
 	err := tx.QueryRowContext(ctx, `SELECT http_status FROM dispatch_retry_after_observations WHERE claim_id=?`, record.claimID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
+		if record.state == StateDispatched && outcome.Kind == ResultResponse && !outcome.ProtocolSuccess && !outcome.ResponseStarted && outcome.FailureOrigin == connectorcontract.OriginUpstreamResponse {
+			if delay := outcome.TemporaryBackoff.Delay(outcome.UpstreamStatus); delay > 0 {
+				observed := max(at, record.dispatchedAt.Int64)
+				if _, err := recordRetryAfterTx(ctx, tx, record, outcome.UpstreamStatus, observed, min(int64(253402300799), observed+delay)); err != nil {
+					return outcome, err
+				}
+				outcome.StreakDisposition = connectorcontract.StreakNeutral
+				return outcome, nil
+			}
+		}
 		if record.backoffActive && outcome.UpstreamStatus != 200 && outcome.FailureOrigin == connectorcontract.OriginUpstreamResponse {
 			neutral, err := smartbackoff.RecordClassification(ctx, tx, record.claimID, outcome.Backoff)
 			if err != nil {

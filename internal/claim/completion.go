@@ -101,7 +101,7 @@ func (s *Service) checkAttemptCompletionTx(ctx context.Context, tx *sql.Tx, hand
 	if err := verifyHandle(record, handle); err != nil {
 		return Attempt{}, err
 	}
-	outcome, err = retryAfterOutcomeTx(ctx, tx, record, outcome)
+	outcome, err = retryAfterOutcomeTx(ctx, tx, record, outcome, at)
 	if err != nil {
 		return Attempt{}, err
 	}
