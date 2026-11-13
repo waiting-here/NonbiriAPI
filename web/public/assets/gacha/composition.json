@@ -1588,7 +1588,112 @@
           },
           "highResolutionWidth": 2560
         }
-      }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-chatgpt/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-hair",
+          "label": "左侧发束",
+          "path": "motion/t-chatgpt/parts/left-hair.webp",
+          "region": [
+            97,
+            296,
+            345,
+            695
+          ]
+        },
+        {
+          "name": "right-hair",
+          "label": "右侧发束",
+          "path": "motion/t-chatgpt/parts/right-hair.webp",
+          "region": [
+            630,
+            288,
+            306,
+            843
+          ]
+        },
+        {
+          "name": "left-cape",
+          "label": "左侧披纱",
+          "path": "motion/t-chatgpt/parts/left-cape.webp",
+          "region": [
+            179,
+            551,
+            254,
+            642
+          ]
+        },
+        {
+          "name": "right-cape",
+          "label": "右侧披纱",
+          "path": "motion/t-chatgpt/parts/right-cape.webp",
+          "region": [
+            633,
+            643,
+            236,
+            526
+          ]
+        },
+        {
+          "name": "free-skirt",
+          "label": "外层裙摆",
+          "path": "motion/t-chatgpt/parts/free-skirt.webp",
+          "region": [
+            341,
+            612,
+            454,
+            249
+          ]
+        },
+        {
+          "name": "cloud",
+          "label": "云朵陪伴物",
+          "path": "motion/t-chatgpt/parts/cloud.webp",
+          "region": [
+            180,
+            184,
+            223,
+            184
+          ]
+        },
+        {
+          "name": "right-emerald",
+          "label": "右发梢翡翠坠饰",
+          "path": "motion/t-chatgpt/parts/right-emerald.webp",
+          "region": [
+            763,
+            1054,
+            75,
+            96
+          ]
+        },
+        {
+          "name": "left-emerald",
+          "label": "左发梢翡翠坠饰",
+          "path": "motion/t-chatgpt/parts/left-emerald.webp",
+          "region": [
+            109,
+            944,
+            71,
+            90
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-chatgpt/parts/window-mask.webp",
+        "motion/t-chatgpt/parts/lamp-mask.webp"
+      ]
     },
     "t-claude": {
       "background": "motion/t-claude/background.webp",
@@ -1614,7 +1719,123 @@
           },
           "highResolutionWidth": 2560
         }
-      }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物、内搭与座椅",
+          "path": "motion/t-claude/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "right-curls",
+          "label": "右侧卷发",
+          "path": "motion/t-claude/parts/right-curls.webp",
+          "region": [
+            642,
+            296,
+            163,
+            475
+          ]
+        },
+        {
+          "name": "left-curls",
+          "label": "左侧卷发",
+          "path": "motion/t-claude/parts/left-curls.webp",
+          "region": [
+            131,
+            286,
+            279,
+            503
+          ]
+        },
+        {
+          "name": "gown-bodice",
+          "label": "裙装上身与固定接缝",
+          "path": "motion/t-claude/parts/gown-bodice.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "front-skirt",
+          "label": "正面长裙",
+          "path": "motion/t-claude/parts/front-skirt.webp",
+          "region": [
+            377,
+            787,
+            419,
+            636
+          ]
+        },
+        {
+          "name": "right-train",
+          "label": "右侧裙纱",
+          "path": "motion/t-claude/parts/right-train.webp",
+          "region": [
+            700,
+            779,
+            234,
+            636
+          ]
+        },
+        {
+          "name": "left-train",
+          "label": "左侧裙纱",
+          "path": "motion/t-claude/parts/left-train.webp",
+          "region": [
+            90,
+            732,
+            357,
+            685
+          ]
+        },
+        {
+          "name": "right-sleeve",
+          "label": "右侧薄纱袖",
+          "path": "motion/t-claude/parts/right-sleeve.webp",
+          "region": [
+            622,
+            512,
+            136,
+            230
+          ]
+        },
+        {
+          "name": "left-sleeve",
+          "label": "左侧薄纱袖",
+          "path": "motion/t-claude/parts/left-sleeve.webp",
+          "region": [
+            279,
+            468,
+            246,
+            253
+          ]
+        },
+        {
+          "name": "front",
+          "label": "手、书本与前景发丝",
+          "path": "motion/t-claude/parts/front.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-claude/parts/window-mask.webp",
+        "motion/t-claude/parts/lamp-mask.webp"
+      ]
     },
     "t-glm": {
       "background": "motion/t-glm/background.webp",
@@ -1640,7 +1861,101 @@
           },
           "highResolutionWidth": 2560
         }
-      }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-glm/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-hair",
+          "label": "左侧发束",
+          "path": "motion/t-glm/parts/left-hair.webp",
+          "region": [
+            104,
+            419,
+            342,
+            434
+          ]
+        },
+        {
+          "name": "right-hair",
+          "label": "右侧发束",
+          "path": "motion/t-glm/parts/right-hair.webp",
+          "region": [
+            646,
+            303,
+            299,
+            508
+          ]
+        },
+        {
+          "name": "left-stole",
+          "label": "左侧披肩",
+          "path": "motion/t-glm/parts/left-stole.webp",
+          "region": [
+            229,
+            544,
+            209,
+            470
+          ]
+        },
+        {
+          "name": "right-stole",
+          "label": "右侧披肩",
+          "path": "motion/t-glm/parts/right-stole.webp",
+          "region": [
+            635,
+            607,
+            201,
+            432
+          ]
+        },
+        {
+          "name": "left-dress-hem",
+          "label": "侧边裙片",
+          "path": "motion/t-glm/parts/left-dress-hem.webp",
+          "region": [
+            293,
+            753,
+            215,
+            497
+          ]
+        },
+        {
+          "name": "right-bell",
+          "label": "右披肩铃铛",
+          "path": "motion/t-glm/parts/right-bell.webp",
+          "region": [
+            718,
+            931,
+            84,
+            84
+          ]
+        },
+        {
+          "name": "left-bell",
+          "label": "左披肩铃铛",
+          "path": "motion/t-glm/parts/left-bell.webp",
+          "region": [
+            265,
+            915,
+            80,
+            78
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-glm/parts/window-mask.webp",
+        "motion/t-glm/parts/lamp-mask.webp"
+      ]
     },
     "t-deepseek": {
       "background": "motion/t-deepseek/background.webp",
@@ -1666,7 +1981,79 @@
           },
           "highResolutionWidth": 2560
         }
-      }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-deepseek/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-hair",
+          "label": "左侧发束",
+          "path": "motion/t-deepseek/parts/left-hair.webp",
+          "region": [
+            93,
+            291,
+            341,
+            398
+          ]
+        },
+        {
+          "name": "right-hair",
+          "label": "右侧发束",
+          "path": "motion/t-deepseek/parts/right-hair.webp",
+          "region": [
+            609,
+            285,
+            312,
+            476
+          ]
+        },
+        {
+          "name": "left-dress-panels",
+          "label": "左侧层叠裙片",
+          "path": "motion/t-deepseek/parts/left-dress-panels.webp",
+          "region": [
+            202,
+            623,
+            283,
+            464
+          ]
+        },
+        {
+          "name": "right-dress-panels",
+          "label": "右侧层叠裙片",
+          "path": "motion/t-deepseek/parts/right-dress-panels.webp",
+          "region": [
+            613,
+            621,
+            230,
+            453
+          ]
+        },
+        {
+          "name": "tail-flukes",
+          "label": "鲸尾与尾鳍",
+          "path": "motion/t-deepseek/parts/tail-flukes.webp",
+          "region": [
+            65,
+            561,
+            329,
+            357
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-deepseek/parts/window-mask.webp",
+        "motion/t-deepseek/parts/lamp-mask.webp"
+      ]
     },
     "t-gemini": {
       "background": "motion/t-gemini/background.webp",
@@ -1692,7 +2079,79 @@
           },
           "highResolutionWidth": 2560
         }
-      }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-gemini/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-rainbow-hair",
+          "label": "左侧虹彩长发",
+          "path": "motion/t-gemini/parts/left-rainbow-hair.webp",
+          "region": [
+            50,
+            436,
+            388,
+            527
+          ]
+        },
+        {
+          "name": "right-rainbow-hair",
+          "label": "右侧虹彩长发",
+          "path": "motion/t-gemini/parts/right-rainbow-hair.webp",
+          "region": [
+            658,
+            358,
+            297,
+            556
+          ]
+        },
+        {
+          "name": "left-dress-train",
+          "label": "长裙拖尾",
+          "path": "motion/t-gemini/parts/left-dress-train.webp",
+          "region": [
+            202,
+            700,
+            315,
+            521
+          ]
+        },
+        {
+          "name": "free-blue-ribbon",
+          "label": "独立蓝色飘带",
+          "path": "motion/t-gemini/parts/free-blue-ribbon.webp",
+          "region": [
+            652,
+            744,
+            141,
+            291
+          ]
+        },
+        {
+          "name": "held-star",
+          "label": "悬挂星饰与蝴蝶结",
+          "path": "motion/t-gemini/parts/held-star.webp",
+          "region": [
+            268,
+            295,
+            110,
+            144
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-gemini/parts/window-mask.webp",
+        "motion/t-gemini/parts/lamp-mask.webp"
+      ]
     }
   },
   "groups": {
@@ -2044,6 +2503,15 @@
     ],
     "eyeRegistration": "Only registered eye pixels change; the original alpha and body remain shared.",
     "scaling": "Canvas2D high-quality resampling; larger dimensions do not add native detail.",
-    "contentRating": "general"
+    "contentRating": "general",
+    "portraitRegistrationExceptions": {
+      "t-claude": {
+        "x": 0,
+        "y": 0,
+        "width": 1024,
+        "height": 1536
+      }
+    },
+    "layering": "Registered independent hair, cloth and accessories; opaque body and transparent gown for Claude; weather and light use room masks."
   }
 }

@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { cards, themes } from '../catalog';
 import { highResolutionArt } from '../art-resolution';
+import { renderLayers } from './layers';
+import type { ChristmasCard } from './motion';
 
 it('ships every Christmas portrait, eye state, landscape and registered layer', () => {
   const root = resolve('public/assets/gacha');
@@ -22,6 +24,19 @@ it('ships every Christmas portrait, eye state, landscape and registered layer', 
       ),
     );
     thumbs.push(card.thumb);
+    const layers = renderLayers(card.id as ChristmasCard);
+    expect(entry.motion_layers.map((layer: { name: string }) => layer.name)).toEqual(
+      layers.map((layer) => layer.name),
+    );
+    for (const layer of layers) {
+      const source = `/assets/gacha/motion/${card.id}/parts/${layer.name}.webp`;
+      for (const path of [source, highResolutionArt(source)]) {
+        const bytes = readFileSync(resolve('public', '.' + path));
+        expect(bytes.subarray(8, 12).toString(), path).toBe('WEBP');
+        expect(bytes.length).toBeGreaterThan(40);
+      }
+    }
+    images.push(...entry.environment_masks.map((path: string) => '/assets/gacha/' + path));
   }
   for (const kind of ['groups', 'covers']) {
     const entry = composition[kind].t;

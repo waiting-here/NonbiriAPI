@@ -3,6 +3,7 @@ import { motionDrivers, polygonDistance } from '../sweet-hide-and-seek/motion';
 import { christmasRigs } from './rigs';
 import { christmasCards, createMotionMesh, meshColumns, meshStep, vertexStride } from './motion';
 import type { ChristmasCard, MotionMesh, Point } from './motion';
+import { renderLayers } from './layers';
 
 const meshes = new Map<ChristmasCard, MotionMesh>();
 function meshFor(id: ChristmasCard) {
@@ -150,9 +151,10 @@ it('anchors the drawn faces, hands, hard details and supports in each compositio
   ]);
   for (const [id, points] of contacts)
     for (const point of points)
-      expect(coefficients(meshFor(id), inset(point)), id + ' ' + point.join(',')).toEqual(
-        Array(vertexStride - 2).fill(0),
-      );
+      expect(
+        coefficients(meshFor(id), id === 't-claude' ? point : inset(point)),
+        id + ' ' + point.join(','),
+      ).toEqual(Array(vertexStride - 2).fill(0));
 });
 
 it('translates the isolated cloud as one rigid companion', () => {
@@ -171,40 +173,46 @@ it('translates the isolated cloud as one rigid companion', () => {
 it.each(christmasCards)(
   '%s preserves triangle orientation across combined breath/wind extrema',
   (id) => {
-    const { vertices, indices } = meshFor(id);
-    const positions = new Float32Array((vertices.length / vertexStride) * 2);
-    const drivers = new Float32Array(6);
-    let minimum = Infinity,
-      maximum = 0;
-    const times = [0, 2.584, 2.864, 6.8, 7.08, ...Array.from({ length: 43 }, (_, i) => i * 3.9)];
-    for (const time of times) {
-      motionDrivers(time, drivers);
-      for (let i = 0; i < vertices.length / vertexStride; i++) {
-        const base = i * vertexStride;
-        let x = vertices[base],
-          y = vertices[base + 1];
-        for (let driver = 0; driver < drivers.length; driver++) {
-          x += vertices[base + 2 + driver * 2] * drivers[driver];
-          y += vertices[base + 3 + driver * 2] * drivers[driver];
+    for (const layer of renderLayers(id)) {
+      const { vertices, indices } = createMotionMesh(id, {
+        region: layer.region,
+        rect: layer.rect,
+        fixed: layer.fixed,
+      });
+      const positions = new Float32Array((vertices.length / vertexStride) * 2);
+      const drivers = new Float32Array(6);
+      let minimum = Infinity,
+        maximum = 0;
+      const times = [0, 2.584, 2.864, 6.8, 7.08, ...Array.from({ length: 43 }, (_, i) => i * 3.9)];
+      for (const time of times) {
+        motionDrivers(time, drivers);
+        for (let i = 0; i < vertices.length / vertexStride; i++) {
+          const base = i * vertexStride;
+          let x = vertices[base],
+            y = vertices[base + 1];
+          for (let driver = 0; driver < drivers.length; driver++) {
+            x += vertices[base + 2 + driver * 2] * drivers[driver];
+            y += vertices[base + 3 + driver * 2] * drivers[driver];
+          }
+          positions[i * 2] = x;
+          positions[i * 2 + 1] = y;
         }
-        positions[i * 2] = x;
-        positions[i * 2 + 1] = y;
+        for (let i = 0; i < indices.length; i += 3) {
+          const a = indices[i] * 2,
+            b = indices[i + 1] * 2,
+            c = indices[i + 2] * 2;
+          const area =
+            ((positions[b] - positions[a]) * (positions[c + 1] - positions[a + 1]) -
+              (positions[b + 1] - positions[a + 1]) * (positions[c] - positions[a])) /
+            (meshStep * meshStep);
+          minimum = Math.min(minimum, area);
+          maximum = Math.max(maximum, area);
+        }
       }
-      for (let i = 0; i < indices.length; i += 3) {
-        const a = indices[i] * 2,
-          b = indices[i + 1] * 2,
-          c = indices[i + 2] * 2;
-        const area =
-          ((positions[b] - positions[a]) * (positions[c + 1] - positions[a + 1]) -
-            (positions[b + 1] - positions[a + 1]) * (positions[c] - positions[a])) /
-          (meshStep * meshStep);
-        minimum = Math.min(minimum, area);
-        maximum = Math.max(maximum, area);
-      }
+      expect(Number.isFinite(minimum + maximum)).toBe(true);
+      expect(minimum, layer.name).toBeGreaterThan(0.35);
+      expect(maximum, layer.name).toBeLessThan(1.8);
     }
-    expect(Number.isFinite(minimum + maximum)).toBe(true);
-    expect(minimum).toBeGreaterThan(0.35);
-    expect(maximum).toBeLessThan(1.8);
   },
 );
 
@@ -217,7 +225,7 @@ it('binds the visible torso in each pose to respiration without animating waist 
     ['t-gemini', [584, 425], [519, 547]],
   ];
   for (const [id, torso, anchor] of torsos) {
-    const breath = coefficients(meshFor(id), inset(torso))[9];
+    const breath = coefficients(meshFor(id), id === 't-claude' ? torso : inset(torso))[9];
     expect(breath, id).toBeLessThan(-3);
     expect(breath, id).toBeGreaterThan(-9);
     expect(coefficients(meshFor(id), inset(anchor))).toEqual(Array(vertexStride - 2).fill(0));
@@ -228,8 +236,6 @@ it('retains visible motion at actual free hair, drape and tail landmarks', () =>
   const landmarks: [ChristmasCard, Point][] = [
     ['t-chatgpt', [158, 833]],
     ['t-chatgpt', [263, 1040]],
-    ['t-claude', [230, 460]],
-    ['t-claude', [256, 1000]],
     ['t-glm', [870, 634]],
     ['t-glm', [786, 854]],
     ['t-deepseek', [186, 505]],
@@ -254,4 +260,28 @@ it('retains visible motion at actual free hair, drape and tail landmarks', () =>
     expect(max - min, id + ' ' + point.join(',')).toBeGreaterThan(8);
     expect(max - min).toBeLessThan(45);
   }
+});
+
+it.each(christmasCards)('%s keeps material flutter out of the body layer', (id) => {
+  const body = renderLayers(id).find((layer) => layer.name === 'body')!;
+  const mesh = createMotionMesh(id, { fixed: body.fixed });
+  for (let i = 0; i < mesh.vertices.length; i += vertexStride)
+    expect(Array.from(mesh.vertices.subarray(i + 2, i + 10))).toEqual(Array(8).fill(0));
+});
+
+it('moves Claude sheer skirt independently of the legs underneath', () => {
+  const layers = renderLayers('t-claude');
+  const body = createMotionMesh('t-claude', { fixed: layers[0].fixed });
+  const skirt = layers.find((layer) => layer.name === 'front-skirt')!;
+  const cloth = createMotionMesh('t-claude', { region: skirt.region, fixed: skirt.fixed });
+  const point: Point = [570, 1280];
+  expect(coefficients(body, point)).toEqual(Array(vertexStride - 2).fill(0));
+  expect(
+    coefficients(cloth, point)
+      .slice(0, 8)
+      .some((value) => Math.abs(value) > 3),
+  ).toBe(true);
+  // Body, independent translucent gown, then hands/book in the foreground.
+  expect(layers.findIndex((layer) => layer.name === 'gown-bodice')).toBeGreaterThan(0);
+  expect(layers.at(-1)?.name).toBe('front');
 });

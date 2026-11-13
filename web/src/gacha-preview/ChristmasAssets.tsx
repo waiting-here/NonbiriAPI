@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ArtworkImage } from '@shared/artwork/ArtworkImage';
 import { Field } from '@shared/components/ui/Field';
 import { cardById, cards } from '../user/activities/gacha/catalog';
+import { renderLayers } from '../user/activities/gacha/christmas/layers';
+import type { ChristmasCard } from '../user/activities/gacha/christmas/motion';
 
 const christmasCards = cards.filter((card) => card.theme === 't');
 
@@ -119,6 +121,35 @@ export function ChristmasAssets({ high }: { high: boolean }) {
           width={320}
           height={480}
         />
+      </div>
+      <h3>{card.character} · 独立动效图层</h3>
+      <p>
+        按合成顺序展示。发梢、衣料和配饰采用各自的活动范围，窗外天气与室内灯光通过遮罩限定位置。
+      </p>
+      <div className="seasonal-review__resource-grid" data-backdrop={backdrop}>
+        {renderLayers(selected as ChristmasCard).map((layer) => (
+          <Resource
+            key={layer.name}
+            title={layer.label}
+            artworkKey={'card:' + selected}
+            src={`${root}motion/${selected}/parts/${layer.name}.webp`}
+            width={Math.round(layer.rect[2] * (high ? 2.5 : 1))}
+            height={Math.round(layer.rect[3] * (high ? 2.5 : 1))}
+          />
+        ))}
+        {[
+          ['窗外天气遮罩', 'window-mask'],
+          ['暖灯光照遮罩', 'lamp-mask'],
+        ].map(([title, name]) => (
+          <Resource
+            key={name}
+            title={title}
+            artworkKey={'card:' + selected}
+            src={`${root}motion/${selected}/parts/${name}.webp`}
+            width={portrait[0]}
+            height={portrait[1]}
+          />
+        ))}
       </div>
       <h3>合图与封面的分层</h3>
       <div

@@ -19,8 +19,11 @@ Each version entry describes its source and compatibility boundary; a release ta
   preserve the donated key's failure streak and wait 60 seconds, with valid
   upstream retry hints taking precedence. Other 503 failures retain their policy.
 - Add A Date in the Snow, five non-explicit Christmas limited SSR cards, with
-  distinct poses, character motion, a snowy-window drawing room, a group
-  illustration and a separate pool cover. Its preset has no seasonal date limit.
+  distinct poses, independently layered hair, garments and accessories, and a
+  snowy-window drawing room with masked weather and lighting. Adopt Claude's
+  sheer gown over a separate opaque-underwear body, preserving the velvet design
+  in the local comparison preview. Both the group illustration and pool cover
+  include all five characters. Its preset has no seasonal date limit.
 - Correct both hands in Fairytale Theatre Gemini, remove stray fingers from
   Summer Fireworks ChatGPT, and refine finger shapes in Origin Echo DeepSeek,
   Myriad Forms ChatGPT and the Fairytale Theatre group illustration.

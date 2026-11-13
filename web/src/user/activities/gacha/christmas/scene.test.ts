@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createChristmasScene } from './scene';
+import { renderLayers } from './layers';
 
 let imageMode: 'load' | 'pending' | 'fail-closed';
 let images: MockImage[];
@@ -29,7 +30,7 @@ class MockImage {
 }
 
 let gl: WebGLRenderingContext;
-let uploads: { source?: string; width?: number; height?: number }[];
+let uploads: { source?: string; width?: number; height?: number; premultiplied?: boolean }[];
 let context: CanvasRenderingContext2D;
 let lose: ReturnType<typeof vi.fn>;
 const cleanups: (() => void)[] = [];
@@ -65,6 +66,10 @@ beforeEach(() => {
     'UNPACK_ALIGNMENT',
     'LUMINANCE',
     'TRIANGLES',
+    'BLEND',
+    'ONE',
+    'ONE_MINUS_SRC_ALPHA',
+    'UNPACK_PREMULTIPLY_ALPHA_WEBGL',
   ].forEach((name, i) => {
     api[name] = i + 1;
   });
@@ -98,6 +103,8 @@ beforeEach(() => {
     'deleteShader',
     'deleteBuffer',
     'deleteProgram',
+    'enable',
+    'blendFunc',
   ].forEach((name) => {
     api[name] = vi.fn();
   });
@@ -109,10 +116,40 @@ beforeEach(() => {
     if (source instanceof MockImage) uploads.push({ source: source.requested });
     else if (source instanceof HTMLCanvasElement)
       uploads.push({ width: source.width, height: source.height });
-    else uploads.push({ width: Number(args[3]), height: Number(args[4]) });
+    else
+      uploads.push({
+        width: Number(args[3]),
+        height: Number(args[4]),
+        premultiplied:
+          vi
+            .mocked(gl.pixelStorei)
+            .mock.calls.filter(([flag]) => flag === gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL)
+            .at(-1)?.[1] === true,
+      });
   });
   gl = api as unknown as WebGLRenderingContext;
-  context = { drawImage: vi.fn(), clearRect: vi.fn() } as unknown as CanvasRenderingContext2D;
+  context = Object.fromEntries([
+    ...[
+      'drawImage',
+      'clearRect',
+      'save',
+      'restore',
+      'scale',
+      'beginPath',
+      'ellipse',
+      'arc',
+      'clip',
+      'fill',
+      'fillRect',
+      'moveTo',
+      'lineTo',
+      'stroke',
+    ].map((name) => [name, vi.fn()]),
+    ...['createRadialGradient', 'createLinearGradient'].map((name) => [
+      name,
+      vi.fn(() => ({ addColorStop: vi.fn() })),
+    ]),
+  ]) as unknown as CanvasRenderingContext2D;
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
     this: HTMLCanvasElement,
     type: string,
@@ -136,9 +173,12 @@ it('selects high-resolution character assets without loading the background for 
   });
   cleanups.push(scene.dispose);
   expect(images.map((image) => image.requested)).toEqual(
-    ['hero', 'closed'].map((name) => '/assets/gacha/hires/motion/t-chatgpt/' + name + '.webp'),
+    ['hero', 'closed', ...renderLayers('t-chatgpt').map((layer) => 'parts/' + layer.name)].map(
+      (name) => '/assets/gacha/hires/motion/t-chatgpt/' + name + '.webp',
+    ),
   );
-  expect(uploads).toHaveLength(3);
+  expect(uploads).toHaveLength(renderLayers('t-chatgpt').length + 2);
+  expect(uploads.find((upload) => upload.height === 4)?.premultiplied).toBe(false);
   expect(images[1].src).toBe('');
   scene.resize();
   scene.paint(2.35, 1, true);
@@ -148,15 +188,15 @@ it('selects high-resolution character assets without loading the background for 
   expect(gl.clear).toHaveBeenCalledWith(gl.COLOR_BUFFER_BIT);
   scene.dispose();
   scene.dispose();
-  expect(gl.deleteTexture).toHaveBeenCalledTimes(3);
+  expect(gl.deleteTexture).toHaveBeenCalledTimes(vi.mocked(gl.createTexture).mock.calls.length);
   expect(gl.deleteShader).toHaveBeenCalledTimes(2);
-  expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+  expect(gl.deleteBuffer).toHaveBeenCalledTimes(vi.mocked(gl.createBuffer).mock.calls.length);
   expect(gl.deleteProgram).toHaveBeenCalledOnce();
   expect(lose).toHaveBeenCalledOnce();
   expect(images.every((image) => image.src === '')).toBe(true);
 });
 
-it('keeps the backdrop still and uses the same unwarped composition when motion is reduced', async () => {
+it('keeps room architecture unwarped and uses the complete flat artwork for reduced motion', async () => {
   const canvas = document.createElement('canvas');
   const scene = await createChristmasScene(canvas, 't-glm');
   cleanups.push(scene.dispose);
@@ -202,9 +242,21 @@ it('cleans partially compiled scenes on shader failure', async () => {
   );
   expect(gl.deleteShader).toHaveBeenCalledOnce();
   expect(gl.deleteProgram).toHaveBeenCalledOnce();
-  expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+  expect(gl.deleteBuffer).not.toHaveBeenCalled();
   expect(lose).toHaveBeenCalledOnce();
   expect(images.every((image) => image.src === '')).toBe(true);
+});
+
+it('releases a vertex buffer when its paired index buffer cannot be allocated', async () => {
+  vi.mocked(gl.createBuffer as () => WebGLBuffer | null)
+    .mockReturnValueOnce({} as WebGLBuffer)
+    .mockReturnValueOnce(null);
+  await expect(createChristmasScene(document.createElement('canvas'), 't-claude')).rejects.toThrow(
+    'renderer-unavailable',
+  );
+  expect(gl.deleteBuffer).toHaveBeenCalledOnce();
+  expect(gl.deleteTexture).toHaveBeenCalledTimes(vi.mocked(gl.createTexture).mock.calls.length);
+  expect(lose).toHaveBeenCalledOnce();
 });
 
 it('reveals the outer static art and stops its owner when the GL context is lost', async () => {
@@ -221,5 +273,5 @@ it('reveals the outer static art and stops its owner when the GL context is lost
   expect(failed).toHaveBeenCalledOnce();
   expect(canvas.dataset.ready).toBe('false');
   expect(canvas.style.visibility).toBe('hidden');
-  expect(gl.deleteTexture).toHaveBeenCalledTimes(3);
+  expect(gl.deleteTexture).toHaveBeenCalledTimes(vi.mocked(gl.createTexture).mock.calls.length);
 });

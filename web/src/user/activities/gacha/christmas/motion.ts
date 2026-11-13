@@ -20,7 +20,8 @@ export type ChristmasRig = {
   fixed: readonly (readonly Point[])[];
   floating?: { polygon: readonly Point[]; amplitude: Point };
 };
-export const meshStep = 8;
+// A 16px source grid keeps cloth contours smooth while bounding multi-card draw cost.
+export const meshStep = 16;
 export const meshColumns = 1024 / meshStep + 1;
 export const vertexStride = 14;
 export type MotionMesh = { vertices: Float32Array; indices: Uint16Array };
@@ -48,7 +49,14 @@ function ribsAt(rig: ChristmasRig, [x, y]: Point): readonly [number, number, num
   return [0, 0, 0];
 }
 
-export function createMotionMesh(id: ChristmasCard): MotionMesh {
+export function createMotionMesh(
+  id: ChristmasCard,
+  selection?: {
+    region?: MotionRegion;
+    rect?: readonly [number, number, number, number];
+    fixed?: readonly (readonly Point[])[];
+  },
+): MotionMesh {
   const rig = christmasRigs[id];
   const rows = 1536 / meshStep + 1;
   const vertices = new Float32Array(meshColumns * rows * vertexStride);
@@ -61,15 +69,19 @@ export function createMotionMesh(id: ChristmasCard): MotionMesh {
       vertices[index + 1] = point[1];
       let protection = 1,
         bodyProtection = 1;
-      for (const polygon of rig.fixed) {
+      for (const polygon of selection?.fixed ?? rig.fixed) {
         // Include a complete triangle beyond each contact outline.
         const distance = -polygonDistance(polygon, point);
-        protection = Math.min(protection, smooth(12, 52, distance));
-        bodyProtection = Math.min(bodyProtection, smooth(12, 36, distance));
+        protection = Math.min(protection, smooth(24, 60, distance));
+        bodyProtection = Math.min(bodyProtection, smooth(24, 48, distance));
       }
       if (protection === 0) continue;
       let totalWeight = 0;
-      for (const material of rig.materials) {
+      for (const material of selection
+        ? selection.region
+          ? [selection.region]
+          : []
+        : rig.materials) {
         const weight = regionWeight(material, point) * protection;
         if (!weight) continue;
         const dx = material.tip[0] - material.root[0];
@@ -102,7 +114,7 @@ export function createMotionMesh(id: ChristmasCard): MotionMesh {
       vertices[index + 11] = ribs[1] * bodyProtection;
       vertices[index + 12] = vertices[index + 10] * ribs[2];
       vertices[index + 13] = vertices[index + 11] * ribs[2];
-      if (rig.floating) {
+      if (rig.floating && !selection) {
         const weight = smooth(0, 20, polygonDistance(rig.floating.polygon, point));
         // An isolated companion translates rigidly inside its transparent margin.
         vertices[index + 2] += rig.floating.amplitude[0] * weight;
@@ -113,6 +125,15 @@ export function createMotionMesh(id: ChristmasCard): MotionMesh {
   let offset = 0;
   for (let row = 0; row < rows - 1; row++) {
     for (let column = 0; column < meshColumns - 1; column++) {
+      const rect = selection?.rect;
+      if (
+        rect &&
+        (column * meshStep > rect[0] + rect[2] ||
+          (column + 1) * meshStep < rect[0] ||
+          row * meshStep > rect[1] + rect[3] ||
+          (row + 1) * meshStep < rect[1])
+      )
+        continue;
       const a = row * meshColumns + column,
         b = a + 1,
         c = a + meshColumns,
@@ -121,5 +142,5 @@ export function createMotionMesh(id: ChristmasCard): MotionMesh {
       offset += 6;
     }
   }
-  return { vertices, indices };
+  return { vertices, indices: indices.subarray(0, offset) };
 }

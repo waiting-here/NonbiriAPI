@@ -6,6 +6,7 @@ import { Toggle } from '@shared/components/ui/Toggle';
 import { createClothStudy, studyLayers } from './cloth-study-scene';
 import type { StudyBackdrop, StudyLayer } from './cloth-study-scene';
 import compositeUrl from './assets/claude-chiffon/composite.webp';
+import legacyUrl from './assets/claude-chiffon/legacy-velvet.webp';
 
 export function ClaudeLayerStudy() {
   const [mode, setMode] = useState<StudyLayer>('composite');
@@ -108,10 +109,10 @@ export function ClaudeLayerStudy() {
     >
       <h2 id="claude-study-title">Claude · 新旧方案对照</h2>
       <p>
-        现有丝绒礼裙继续保留。新方案是半透明长裙候选：人物底层穿不透明内衣，裙纱单独绘制。本轮先固定人物，只检验衣料独立摆动，尚未替换正式卡面。
+        半透明长裙已采用，正式动效见上方五人卡牌。这里保留原丝绒方案与初版衣料拆层实验，便于回看；人物底层穿不透明内衣，裙纱独立绘制。
       </p>
       <div className="seasonal-review__study-controls">
-        <Field label="候选展示">
+        <Field label="拆层实验展示">
           {(props) => (
             <select
               {...props}
@@ -126,7 +127,7 @@ export function ClaudeLayerStudy() {
             </select>
           )}
         </Field>
-        <Field label="候选底色">
+        <Field label="实验底色">
           {(props) => (
             <select
               {...props}
@@ -141,7 +142,7 @@ export function ClaudeLayerStudy() {
             </select>
           )}
         </Field>
-        <Toggle label="候选静态对照" checked={still} onChange={setStill} />
+        <Toggle label="实验静态对照" checked={still} onChange={setStill} />
         <div className="nb-actions">
           <Button onClick={() => setPaused((value) => !value)}>
             {paused ? '继续衣料动效' : '暂停衣料动效'}
@@ -183,32 +184,32 @@ export function ClaudeLayerStudy() {
       <div className="seasonal-review__study-pair">
         <figure>
           <img
-            src="/assets/gacha/cards/t-claude.webp"
-            alt="Claude 现有丝绒礼裙"
+            src={legacyUrl}
+            alt="Claude 原丝绒礼裙存档"
             width="1024"
             height="1536"
             loading="lazy"
           />
-          <figcaption>现有方案 · 丝绒礼裙</figcaption>
+          <figcaption>原方案存档 · 丝绒礼裙</figcaption>
         </figure>
         <figure>
           <div className="seasonal-review__study-stage" data-backdrop={backdrop}>
             {failed ? (
-              <img src={compositeUrl} alt="Claude 半透明长裙静态候选" />
+              <img src={compositeUrl} alt="Claude 半透明长裙静态拆层实验" />
             ) : (
               <canvas
                 ref={surface}
                 width="1024"
                 height="1536"
-                aria-label="Claude 半透明长裙候选"
+                aria-label="Claude 半透明长裙拆层实验"
                 role="img"
               />
             )}
           </div>
-          <figcaption>新方案 · 半透明长裙{failed && '（动效未加载，显示静态图）'}</figcaption>
+          <figcaption>已采用款式 · 初版拆层实验{failed && '（动效未加载，显示静态图）'}</figcaption>
         </figure>
       </div>
-      <div className="nb-actions seasonal-review__study-links" aria-label="候选分层原图">
+      <div className="nb-actions seasonal-review__study-links" aria-label="实验分层原图">
         <a href={compositeUrl} target="_blank" rel="noreferrer">
           新方案合成图 ↗
         </a>
