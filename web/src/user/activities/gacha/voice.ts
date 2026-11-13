@@ -5,8 +5,8 @@ export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
   't-chatgpt': [
-    '灯是为你留的，礼物也是。快过来，我等你等得手都凉了。',
-    'The lights are for you, and so is this gift. Come here. My hands got cold waiting for you.',
+    '灯是为你留的，礼物也是。快过来，我想亲手把它交给你。',
+    'The lights are for you, and so is this gift. Come here. I want to give it to you myself.',
     '礼物待会儿再拆。先让我抱紧你，好不好？',
     'We can open the gift later. Can I hold you first? Nice and close?',
   ],

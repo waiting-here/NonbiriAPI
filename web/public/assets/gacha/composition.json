@@ -18,7 +18,8 @@
     "o": "backgrounds/o.webp",
     "p": "backgrounds/p.webp",
     "q": "backgrounds/q.webp",
-    "s": "backgrounds/s.webp"
+    "s": "backgrounds/s.webp",
+    "t": "backgrounds/t.webp"
   },
   "characters": {
     "a-chatgpt": "layers/a-chatgpt.webp",
@@ -84,7 +85,12 @@
     "q-glm": "motion/q-glm/hero.webp",
     "r-chatgpt": "motion/r-chatgpt/hero.webp",
     "s-chatgpt": "motion/s-chatgpt/hero.webp",
-    "s-claude": "motion/s-claude/hero.webp"
+    "s-claude": "motion/s-claude/hero.webp",
+    "t-chatgpt": "motion/t-chatgpt/hero.webp",
+    "t-claude": "motion/t-claude/hero.webp",
+    "t-glm": "motion/t-glm/hero.webp",
+    "t-deepseek": "motion/t-deepseek/hero.webp",
+    "t-gemini": "motion/t-gemini/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -1557,6 +1563,136 @@
           "highResolutionWidth": 3840
         }
       }
+    },
+    "t-chatgpt": {
+      "background": "motion/t-chatgpt/background.webp",
+      "character": "motion/t-chatgpt/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "motion/t-chatgpt/background.webp",
+          "canvas": [
+            1024,
+            1536
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 2560
+        }
+      }
+    },
+    "t-claude": {
+      "background": "motion/t-claude/background.webp",
+      "character": "motion/t-claude/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "motion/t-claude/background.webp",
+          "canvas": [
+            1024,
+            1536
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 2560
+        }
+      }
+    },
+    "t-glm": {
+      "background": "motion/t-glm/background.webp",
+      "character": "motion/t-glm/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "motion/t-glm/background.webp",
+          "canvas": [
+            1024,
+            1536
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 2560
+        }
+      }
+    },
+    "t-deepseek": {
+      "background": "motion/t-deepseek/background.webp",
+      "character": "motion/t-deepseek/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "motion/t-deepseek/background.webp",
+          "canvas": [
+            1024,
+            1536
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 2560
+        }
+      }
+    },
+    "t-gemini": {
+      "background": "motion/t-gemini/background.webp",
+      "character": "motion/t-gemini/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "motion/t-gemini/background.webp",
+          "canvas": [
+            1024,
+            1536
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 2560
+        }
+      }
     }
   },
   "groups": {
@@ -1685,6 +1821,15 @@
         941
       ],
       "fit": "full-canvas"
+    },
+    "t": {
+      "background": "backgrounds/t.webp",
+      "foreground": "layers/groups/t-foreground.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
     }
   },
   "covers": {
@@ -1759,9 +1904,18 @@
         941
       ],
       "fit": "full-canvas"
+    },
+    "t": {
+      "background": "backgrounds/covers/t.webp",
+      "foreground": "layers/covers/t-foreground.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
     }
   },
-  "sampling": "Lanczos3; generated native 1024x1536 portraits and approximately 1672x941 landscapes; larger derivatives do not add native detail.",
+  "sampling": "Lanczos3 unless the theme records a different method below; larger derivatives do not add native detail.",
   "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition.",
   "seasonal": {
     "theme": "s",
@@ -1801,5 +1955,83 @@
     "eyeRegistration": "Same full-canvas coordinates; half and closed layers retain only the face region.",
     "scaling": "Portraits and group: same-source Lanczos resampling. Cover: existing enhanced foreground with the cleaned current alpha and the same adopted background. Large dimensions do not imply native added detail.",
     "contentRating": "r18"
+  },
+  "christmas": {
+    "theme": "t",
+    "nativeCharacters": [
+      1024,
+      1536
+    ],
+    "nativeBackground": [
+      1536,
+      1024
+    ],
+    "portraitRegistration": {
+      "x": 51.2,
+      "y": 76.8,
+      "width": 921.6,
+      "height": 1382.4
+    },
+    "landscapeRegistration": {
+      "group": [
+        [
+          "deepseek",
+          0,
+          100,
+          540
+        ],
+        [
+          "gemini",
+          1090,
+          100,
+          530
+        ],
+        [
+          "chatgpt",
+          350,
+          80,
+          550
+        ],
+        [
+          "glm",
+          835,
+          120,
+          530
+        ],
+        [
+          "claude",
+          620,
+          185,
+          500
+        ]
+      ],
+      "cover": [
+        [
+          "gemini",
+          840,
+          -5,
+          520
+        ],
+        [
+          "chatgpt",
+          390,
+          80,
+          650
+        ],
+        [
+          "claude",
+          990,
+          230,
+          570
+        ]
+      ]
+    },
+    "eyeStates": [
+      "hero.webp",
+      "closed.webp"
+    ],
+    "eyeRegistration": "Only registered eye pixels change; the original alpha and body remain shared.",
+    "scaling": "Canvas2D high-quality resampling; larger dimensions do not add native detail.",
+    "contentRating": "general"
   }
 }

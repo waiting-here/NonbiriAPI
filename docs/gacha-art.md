@@ -30,6 +30,12 @@ character so the hand-to-door and foreground contact points remain supported.
 
 ## Artwork and identity
 
+A Date in the Snow adds five general-rated limited SSR portraits. Its Christmas
+drawing room keeps the snowy night beyond the windows and supports both standing
+poses and Claude's reading chair. Registered character and closed-eye plates
+drive localized motion over a static background; group and pool-cover compositions
+remain separate. The theme does not grant a site appearance.
+
 - Use the established character references. Preserve identifying hair, eyes, anatomy, accessories and signature motifs across outfits; create an original scene for each card.
 - Keep a clean, textless, frameless 2:3 portrait master, at least 1024 × 1536 native pixels. Retain a higher-resolution original when its detail is reliable. Upscaling does not count as added source detail.
 - Display names use “Theme · Character” (Chinese: “主题·角色”). Render names, rarity, counters and borders in the interface.

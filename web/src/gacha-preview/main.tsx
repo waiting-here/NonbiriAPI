@@ -33,7 +33,7 @@ function Preview() {
   const [english, setEnglish] = useState(new URLSearchParams(location.search).get('lang') === 'en');
   const [demo, setDemo] = useState<DrawReceipt | null>(() => {
     const run = new URLSearchParams(location.search).get('run');
-    return run && ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal'].includes(run)
+    return run && ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal', 'christmas'].includes(run)
       ? sampleReceipt(run as Scenario)
       : null;
   });
@@ -151,12 +151,17 @@ const amberPreview = new URLSearchParams(location.search).get('view') === 'amber
 const amberExport = new URLSearchParams(location.search).get('view') === 'amber-export';
 function PreviewRoot() {
   const [adult, setAdult] = useState(() => new URLSearchParams(location.search).get('r18') === '1');
-  const seasonal = new URLSearchParams(location.search).get('view') === 'seasonal';
+  const view = new URLSearchParams(location.search).get('view');
+  const seasonal = view === 'seasonal' || view === 'christmas';
   return (
     <ArtworkPolicyProvider disabled={!adult}>
       <ThemeProvider>
         {seasonal ? (
-          <SeasonalPreview adult={adult} setAdult={setAdult} />
+          <SeasonalPreview
+            adult={adult}
+            setAdult={setAdult}
+            theme={view === 'christmas' ? 't' : 's'}
+          />
         ) : amberExport ? (
           <AmberExport />
         ) : amberPreview ? (

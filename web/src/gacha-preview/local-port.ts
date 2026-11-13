@@ -81,7 +81,7 @@ function initial(): Saved {
       donation: '0',
       pools: [
         common,
-        ...(['i', 'j', 'l', 'm', 's'] as const).map((theme) => ({
+        ...(['i', 'j', 'l', 'm', 's', 't'] as const).map((theme) => ({
           ...common,
           id: theme,
           name: themeById[theme].name,

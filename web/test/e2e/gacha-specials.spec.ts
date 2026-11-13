@@ -32,6 +32,8 @@ const expandedExamples = new Set([
   'g-deepseek',
   's-chatgpt',
   's-claude',
+  't-claude',
+  't-deepseek',
 ]);
 const targets = [
   ...new Set([

@@ -5,7 +5,7 @@ import { Button } from '@shared/components/ui/Button';
 import { Field } from '@shared/components/ui/Field';
 import { Toggle } from '@shared/components/ui/Toggle';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
-import { cardById } from '../user/activities/gacha/catalog';
+import { cardById, cards, themeById } from '../user/activities/gacha/catalog';
 import { CardTile } from '../user/activities/gacha/CardTile';
 import { highResolutionArt } from '../user/activities/gacha/art-resolution';
 import { renderSSR } from '../user/activities/gacha/ssr-renderer';
@@ -86,10 +86,14 @@ function MotionCard({
 export function SeasonalPreview({
   adult,
   setAdult,
+  theme = 's',
 }: {
   adult: boolean;
   setAdult: (next: boolean) => void;
+  theme?: 's' | 't';
 }) {
+  const ids = cards.filter((card) => card.theme === theme).map((card) => card.id);
+  const name = themeById[theme].name;
   const [time, setTime] = useState<number>();
   const [paused, setPaused] = useState(false);
   const [high, setHigh] = useState(false);
@@ -102,18 +106,20 @@ export function SeasonalPreview({
     <main className="seasonal-review gacha-app">
       <header className="seasonal-review__header">
         <div>
-          <h1>糖夜迷藏</h1>
-          <p>两张单卡动效、主题插画与独立封面 · 本地美术验收</p>
+          <h1>{name}</h1>
+          <p>单卡动效、主题插画与独立封面 · 本地美术验收</p>
         </div>
         <ThemeToggle />
       </header>
       <section className="seasonal-review__controls" aria-label="预览控制">
-        <Toggle
-          label="显示 R-18 素材"
-          description="仅影响当前本地预览。"
-          checked={adult}
-          onChange={setAdult}
-        />
+        {theme === 's' && (
+          <Toggle
+            label="显示 R-18 素材"
+            description="仅影响当前本地预览。"
+            checked={adult}
+            onChange={setAdult}
+          />
+        )}
         <Toggle label="高清资源" checked={high} onChange={setHigh} />
         <Toggle
           label="对比静态原画"
@@ -159,13 +165,16 @@ export function SeasonalPreview({
           <a className="nb-btn nb-btn--secondary" href={'?r18=' + Number(adult)}>
             查看抽卡、图鉴与心动时刻
           </a>
-          <a className="nb-btn nb-btn--secondary" href={'?run=seasonal&r18=' + Number(adult)}>
-            查看两张卡的相遇演出
+          <a
+            className="nb-btn nb-btn--secondary"
+            href={`?run=${theme === 't' ? 'christmas' : 'seasonal'}&r18=${Number(adult)}`}
+          >
+            查看本组卡的相遇演出
           </a>
         </div>
       </section>
       <section className="seasonal-review__cards" aria-label="动态卡面">
-        {['s-chatgpt', 's-claude'].map((id) => (
+        {ids.map((id) => (
           <MotionCard
             key={id}
             id={id}
@@ -177,7 +186,7 @@ export function SeasonalPreview({
         ))}
       </section>
       <section className="seasonal-review__tiles" aria-label="图鉴取景">
-        {['s-chatgpt', 's-claude'].map((id) => (
+        {ids.map((id) => (
           <CardTile
             key={id}
             card={cardById[id]}
@@ -194,9 +203,9 @@ export function SeasonalPreview({
         {(['groups', 'covers'] as const).map((kind) => (
           <figure key={kind}>
             <ArtworkImage
-              artworkKey={kind === 'groups' ? 'illustration:s' : 'cover:s'}
-              src={`/assets/gacha/${high ? 'hires/' : ''}${kind}/s.webp`}
-              alt={kind === 'groups' ? '糖夜迷藏 · 主题插画' : '糖夜迷藏 · 独立封面'}
+              artworkKey={(kind === 'groups' ? 'illustration:' : 'cover:') + theme}
+              src={`/assets/gacha/${high ? 'hires/' : ''}${kind}/${theme}.webp`}
+              alt={name + (kind === 'groups' ? ' · 主题插画' : ' · 独立封面')}
             />
             <figcaption>{kind === 'groups' ? '主题插画' : '独立封面'}</figcaption>
           </figure>
