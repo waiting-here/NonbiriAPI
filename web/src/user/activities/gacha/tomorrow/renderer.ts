@@ -11,6 +11,7 @@ import { walkingEyelids } from './walking-eyelids';
 import { createWalkingRig } from './walking-rig';
 import { walkingShader } from './walking-shader';
 import { createMaterialPlates, uploadMaterialPlate } from '../romance/material-plates';
+import { createTomorrowSky } from './sky';
 
 export type TomorrowOptions = {
   walking?: boolean;
@@ -78,13 +79,14 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
   const context = canvas.getContext('2d');
   let materials: Awaited<ReturnType<typeof createMaterialPlates>> | undefined;
   let environmentMaterials: Awaited<ReturnType<typeof createMaterialPlates>> | undefined;
+  let sky: Awaited<ReturnType<typeof createTomorrowSky>> | undefined;
   if (walking) {
     const loading = new AbortController();
     const cancel = () => loading.abort();
     options.signal?.addEventListener('abort', cancel, { once: true });
     try {
       if (options.signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
-      [materials, environmentMaterials] = await Promise.all([
+      [materials, environmentMaterials, sky] = await Promise.all([
         options.backgroundOnly
           ? undefined
           : createMaterialPlates('r-chatgpt', hero, loading.signal),
@@ -96,6 +98,9 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
               loading.signal,
               `environment-${options.dark ? 'dark' : 'light'}`,
             ),
+        options.characterOnly
+          ? undefined
+          : createTomorrowSky(background, !!options.dark, loading.signal),
       ]);
       if (loading.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
     } catch (error) {
@@ -114,6 +119,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
   if (!context || !gl) {
     materials?.dispose();
     environmentMaterials?.dispose();
+    sky?.dispose();
     throw new Error('renderer-unavailable');
   }
   const shaders: WebGLShader[] = [],
@@ -145,6 +151,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     gl!.getExtension('WEBGL_lose_context')?.loseContext();
     materials?.dispose();
     environmentMaterials?.dispose();
+    sky?.dispose();
     layer.width = layer.height = 0;
     canvas.dataset.ready = 'false';
   }
@@ -299,7 +306,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     if (stopped) return;
     if (environmentMaterials) {
       gl!.activeTexture(gl!.TEXTURE0);
-      uploadMaterialPlate(gl!, textures[0], environmentMaterials.draw(elapsed));
+      uploadMaterialPlate(gl!, textures[0], environmentMaterials.draw(elapsed, sky?.draw(elapsed)));
     }
     if (materials) {
       gl!.activeTexture(gl!.TEXTURE1);

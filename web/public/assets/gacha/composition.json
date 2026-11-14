@@ -1479,6 +1479,16 @@
       "background": "backgrounds/r.webp",
       "character": "motion/r-chatgpt/hero.webp",
       "scene": "tomorrow",
+      "sky_layers": {
+        "paths": "motion/r-chatgpt/sky-{light,dark}/{clear,sky-mask,high-clouds,low-clouds}.webp",
+        "native_size": [
+          1672,
+          380
+        ],
+        "registration": "top 380 pixels of the 1672 by 941 scenery; fixed foliage, roof and mountain occlusion",
+        "motion": "independent advecting cloud decks and occasional masked distant birds",
+        "quality": "same native layers at both display qualities"
+      },
       "inputs": [
         "motion/r-chatgpt/background-light.webp",
         "motion/r-chatgpt/background-dark.webp",

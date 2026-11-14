@@ -97,6 +97,10 @@ const labels: Readonly<Record<string, string>> = {
   'canopy-left-outer': '左侧外缘树叶',
   'canopy-left-reach': '左侧伸出树叶',
   'canopy-right': '右侧树叶',
+  'tomorrow-sky-clear': '云后晴空补底',
+  'tomorrow-sky-sky-mask': '天空与枝叶建筑遮挡',
+  'tomorrow-sky-high-clouds': '高空薄云',
+  'tomorrow-sky-low-clouds': '低空积云',
   'sleeve-crystal-upper': '袖侧上方水晶',
   'sleeve-crystal-lower': '袖侧下方水晶',
   'head-ribbon-short': '发侧短缎带',
@@ -251,6 +255,10 @@ export const loadLayerResources: LayerLoader = async (id, scope, high, signal) =
     const materialId = id as MaterialSceneId;
     const layers = await materialPlateSources(materialId, 'material-layers', signal);
     if (/^[pqr]-/.test(id)) {
+      if (id === 'r-chatgpt') {
+        const { tomorrowSkySources } = await import('../user/activities/gacha/tomorrow/sky');
+        layers.unshift(...tomorrowSkySources(scope === 'dark'));
+      }
       const environment = await materialPlateSources(
         materialId,
         `environment-${scope === 'dark' ? 'dark' : 'light'}`,

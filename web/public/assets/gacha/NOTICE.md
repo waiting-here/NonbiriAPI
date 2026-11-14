@@ -19,6 +19,17 @@ Static portraits and affected appearance derivatives are composited from the
 same adopted layers. Native material plates retain their source dimensions;
 larger display derivatives are resampled rather than additional native detail.
 
+Celestial Myth's light and dark appearances and Wandering Free's light appearance
+use localized, native 1254 × 1254 hair refinements. Fine strands replace the
+earlier broad hair facets while the adopted faces, hands, garments and ornaments
+remain registered. Body, separate hair plates, eye portraits and static
+appearances share the same repaired hair. Larger exports resample those native
+patches rather than introducing additional source detail.
+
+Summer Fireworks uses a clean night-sky backing and repaired foliage beneath
+finite, separately drawn firework volleys. Trails fade completely before a quiet
+interval; the static illustrations retain their original painted fireworks.
+
 All cards now have retained background and foreground inputs. Forty ordinary card foregrounds, twenty character-free theme backgrounds, and the registered foregrounds and plates for group illustrations and covers were derived from the established artwork. `composition.json` records source-over composition and retained rare-card layers. Native generated portraits are 1024×1536; native landscape dimensions are recorded per theme below. Larger derivatives are resampled from these inputs and do not add native detail.
 
 A Date in the Snow contains five adult characters in non-explicit Christmas attire, with varied standing and seated poses. Each native 1024 × 1536 transparent portrait is inset to preserve motion margins; registered closed-eye edits contribute only eye pixels. ChatGPT and DeepSeek wear white stockings, GLM wears black stockings without glasses, and Claude and Gemini retain bare legs. ChatGPT stands with both shoes grounded and wears a green high-neck top with a separate skirt. Her skin, hands and accessories use softer material shading; the revised RGB is registered to the approved silhouette to preserve clean transparent edges. GLM offers a gift with both hands while Gemini holds a raised star ornament. DeepSeek is redrawn with a lively expression, a whale-themed navy and ivory dress, layered embroidered panels and a snow globe; her adult proportions and identity refer to her established Wandering Free portrait. Her new face, hand contacts, footwear, hair, cloth and left-facing tail use freshly registered motion regions. The native 1536 × 1024 drawing-room background keeps falling snow outside its windows. The five characters gather closely around Claude's chair; separate group and cover compositions retain foreground and background layers. Standard cards are 1024 × 1536, thumbnails 320 × 480 and landscapes 1672 × 941; 2560 × 3840 and 3840 × 2160 variants use high-quality Canvas2D resampling. Localized breathing, hair, fabric and companion movement preserve hands, feet, props and the chair. This theme adds no site appearance.
@@ -49,6 +60,14 @@ An alternate turning-back portrait retains the same adult character, clothing an
 
 The walking portrait captures the same adult character turning back during a forward step. Its retained 1024 × 1536 transparent source supplies the card, cover, illustration and responsive day/night appearances. A registered closed-eye edit is sampled only inside the eyelids; the mouth and stepping legs remain still. Hair and coat panels use anchored strips with length, width and bending constraints. The original cloud charm and tag rotate as a rigid group about their backpack attachment, with a localized generated backing plate filling the revealed area. Foliage, distant leaves and the cloud companion share the scene's restrained wind. Standard and large derivatives use the same compositions and resolutions described above; larger exports are resampled. Earlier pose studies remain available for comparison.
 
+The campus sky has independent high and low cloud plates above a cloudless
+backing. Generated hidden sky completes regions revealed by drifting clouds;
+the original visible cloud detail is retained away from occlusion edges.
+A fixed matte protects foliage, mountains and buildings. These native
+1672 × 380 layers are shared by both display qualities. Sparse distant birds
+cross behind the same matte, and soft daylight changes remain on the paving.
+Existing static scenery remains the fallback.
+
 The four additional SP scenes retain registered backgrounds, transparent portraits, closed-eye or articulated character inputs, and their accepted portrait crop. Their static card, cover, illustration and light/dark appearance derivatives share those inputs. Heartfelt-moment layers are rendered from the same scene at time zero; the background remains static and only the character animates. No encounter video or additional background music is included.
 
 Amber Vow retains its original character and eye plates, with a localized generated footwear refinement. Its 1672 × 941 hall backing plates and transparent banners and chandeliers were refined from the existing artwork using generative image editing. The 3840 × 2160 hall plates use neural upscaling; the transparent environment layers use resampling, not additional native detail. Independent banner, chandelier, light, book and gold-dust motion preserves rigid architecture. Static appearance scenery and the transparent 1037 × 1560 character plate use the same responsive placement as animation; the lower 44 pixels reserve room for the floor shadow. Card, cover, illustration and heartfelt-moment derivatives use the same registered inputs.
@@ -56,6 +75,12 @@ Amber Vow retains its original character and eye plates, with a localized genera
 Shared Daylight uses generative refinements of the existing railway platform in warm dawn and deep blue before dawn. These background sources are 1536 × 1024; the 3840 × 2560 layers are resampled and do not add native detail. Original character and eye pixels remain registered in lossless WebP plates, shared by standard and high display quality. Directional environmental light is composited consistently after the existing character motion. Sky regions, existing lamps, rail reflections and sparse depth-separated dust animate independently; architecture and overhead wires remain rigid. Static appearance backgrounds and transparent character plates share the animation's responsive placement.
 
 A Notice to Steal Your Heart uses generative refinements of the existing moonlit room and its candlelit night variant. Both sources are 1536 × 1024; the 3840 × 2560 backgrounds are resampled. The original 1086 × 1448 character and hair backing remain registered in lossless WebP and are shared by both display qualities. Existing eyelids, invitation pose and curtain masks remain in their original coordinates. A small rigid balance adjustment is anchored at the supporting forefoot after articulation; the shoe contact shadows follow the same transform. The 1086 × 1488 static character plate reserves 40 lower pixels for the ground shadow without stretching the figure. Localized sky, existing candle and city light, marble reflections and sparse dust complement the retained motion. Warm candlelight and cool moonlight are applied after character articulation, and independent appearance backgrounds and character plates use the same static and animated layout.
+
+Its wide illustration and cover include the lower floor around the supporting
+shoe. Responsive appearances preserve the adult figure's scale relative to the
+table and room projection, with the foot and contact shadow resting inside the
+floor rather than against the wall. Static and animated layouts share this
+registration.
 
 Across the Mirror Sea retains its original day and night backgrounds, standing character, eye plates, contact shadow and cover composition. Existing enhanced inputs remain derivatives of the registered originals. Water currents, mirror refraction, reflected figures and travelling glass light preserve their existing cycles; localized cloud and garden movement and stone reflections remain confined to painted scenery. Independent appearance backgrounds, mirrored character reflections, fingertip light and the character with its contact shadow are rendered from the same scene. Responsive placement keeps the raised hand inside the main mirror and the feet on the stone platform. Standard character layers are 1024 × 1536; their 2560 × 3840 counterparts use the existing enhanced inputs. Fingertip-light layers are procedural renders at 512 × 512 and 1024 × 1024.
 
