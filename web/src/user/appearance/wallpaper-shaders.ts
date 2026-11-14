@@ -15,8 +15,8 @@ vec2 turn(vec2 p,vec2 pivot,float angle) {
 export const wallpaperVertex = `
 attribute vec2 point, flex;
 varying vec2 uv;
-uniform vec2 crop, offset;
-uniform vec4 rect, eyes;
+uniform vec2 crop, offset, gardenRoot;
+uniform vec4 rect, eyes, gardenMotion;
 uniform float time, kind, screenSpace;
 ${geometry}
 void main() {
@@ -46,6 +46,14 @@ void main() {
   // Leave room outside the solid disk for a freely fading light bloom.
   if(kind>3.5 && kind<4.5) { p=(p-.5)*1.5+.5; uv=p; }
   vec2 position=rect.xy+p*rect.zw;
+  if(kind>11.5 && kind<12.5) {
+    vec2 aspect=vec2(16./9.,1.);
+    vec2 q=(position-gardenRoot)*aspect;
+    float weight=smoothstep(0.,gardenMotion.w,length(q));
+    float angle=gardenMotion.z*weight;
+    position=gardenRoot+vec2(q.x*cos(angle)-q.y*sin(angle),q.x*sin(angle)+q.y*cos(angle))/aspect;
+    position+=gardenMotion.xy*weight;
+  }
   if(screenSpace<.5) position=(position-offset)/crop;
   gl_Position=vec4(position.x*2.-1.,1.-position.y*2.,0.,1.);
 }
@@ -99,9 +107,10 @@ ${eyelidShader}
 
 void main() {
   vec2 world=rect.xy+uv*rect.zw;
+  if(kind>11.5 && kind<12.5) { gl_FragColor=texture2D(art,uv)*vec4(tint,opacity); return; }
   if(kind<.5) {
-    // The sky and architecture stay rigid; only the near flower beds sway.
-    vec2 sampleAt=celestial>.5 ? plantUV(world) : world;
+    // The scenery stays rigid; rooted foliage is drawn from independent sprites.
+    vec2 sampleAt=world;
     gl_FragColor=vec4(scenery(sampleAt),1.); return;
   }
   if(kind>4.5 && kind<5.5) {
@@ -117,7 +126,7 @@ void main() {
     return;
   }
   if((kind>6.5 && kind<7.5) || (kind>9.5 && kind<10.5)) {
-    vec2 sampleAt=plantUV(world);
+    vec2 sampleAt=world;
     // Use the registered extraction only as a depth matte. The original plate
     // supplies all colour/detail, avoiding duplicate outlines from repainting.
     float alpha=texture2D(foreground,sampleAt).a;

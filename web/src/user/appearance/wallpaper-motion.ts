@@ -1,4 +1,5 @@
-import { portraitFlex } from './wallpaper-portrait';
+import { gardenParts, gardenMotion } from './wallpaper-garden';
+import { createMythicCharacter, loadMythicImage } from '../activities/gacha/mythic/character';
 import { decorationGlints, meteorAccent } from './wallpaper-accents';
 import {
   blinkAt,
@@ -56,41 +57,73 @@ export async function renderWallpaper(
   const prefix = '/assets/gacha/appearances/layers/' + (quality === 'high' ? 'hires/' : '');
   const id = `${scene}-${theme}` as const;
   const names = [
-    id + '-background',
-    id + '-hero',
-    id + '-closed',
+    id + '/environment/scenery',
+    null,
+    null,
     'cloud',
     ...(scene === 'wandering'
       ? ['whale']
-      : ['moon', 'earth', id + '-foreground', ...(theme === 'light' ? [id + '-clouds'] : [])]),
+      : [
+          'moon',
+          'earth',
+          id + '/environment/architecture-mask',
+          ...(theme === 'light' ? [id + '-clouds'] : []),
+        ]),
   ];
-  const images = await Promise.all(
-    names.map(async (name) => {
-      const image = new Image();
-      const revision = name.endsWith('-hero') || name.endsWith('-closed') ? '?v=4' : '';
-      const directory =
-        name.endsWith('-foreground') || name.endsWith('-clouds')
-          ? '/assets/gacha/appearances/layers/'
-          : prefix;
-      image.src = directory + name + '.webp' + revision;
-      await image.decode();
-      return image;
-    }),
-  );
-  if (signal.aborted) return () => {};
-  const gl = canvas.getContext('webgl', {
-    alpha: false,
-    antialias: false,
-    depth: false,
-    stencil: false,
-  });
-  if (!gl) throw new Error('wallpaper-renderer-unavailable');
+  const extras = gardenParts[id],
+    extraOffset = names.length;
+  names.push(...extras.map((part) => id + '/environment/' + part.name));
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal.addEventListener('abort', abort, { once: true });
+  const images: HTMLImageElement[] = [];
+  let character: Awaited<ReturnType<typeof createMythicCharacter>> | undefined;
+  let gl: WebGLRenderingContext;
+  try {
+    await Promise.all(
+      names.map(async (name, index) => {
+        if (!name) return;
+        const revision = name.endsWith('-hero') || name.endsWith('-closed') ? '?v=4' : '';
+        const directory =
+          name.endsWith('-foreground') || name.endsWith('-clouds')
+            ? '/assets/gacha/appearances/layers/'
+            : prefix;
+        images[index] = await loadMythicImage(
+          directory + name + '.webp' + revision,
+          controller.signal,
+        );
+      }),
+    );
+    character = await createMythicCharacter(id, eyelidProfiles[id], {
+      highResolution: quality === 'high',
+      signal: controller.signal,
+    });
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const context = canvas.getContext('webgl', {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+    });
+    if (!context) throw new Error('wallpaper-renderer-unavailable');
+    gl = context;
+  } catch (error) {
+    controller.abort();
+    character?.dispose();
+    images.forEach((image) => (image.src = ''));
+    if (signal.aborted) return () => {};
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+  const portrait = character;
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [],
     buffers: WebGLBuffer[] = [];
   const program = gl.createProgram();
   // Wallpapers are always page backgrounds.
   const cadence = new PaintCadence(undefined, true);
+  const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
   let frameID = 0,
     stopped = false,
     elapsed = 0,
@@ -98,6 +131,8 @@ export async function renderWallpaper(
   let quad: WebGLBuffer,
     mesh: WebGLBuffer,
     portraitMesh: WebGLBuffer,
+    gardenMesh: WebGLBuffer,
+    gardenCount = 0,
     meshCount = 0;
   let bound: WebGLBuffer | undefined,
     point = 0,
@@ -105,6 +140,8 @@ export async function renderWallpaper(
   let layoutWidth = 0,
     layoutHeight = 0,
     layoutDensity = 0;
+  let portraitTextureWidth = 0,
+    portraitTextureHeight = 0;
   let reportAt = 0,
     paints = 0;
   const locations = new Map<string, WebGLUniformLocation | null>();
@@ -119,9 +156,15 @@ export async function renderWallpaper(
     window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', visibility);
     canvas.removeEventListener('webglcontextlost', lost);
+    portrait.surface.removeEventListener('webglcontextlost', lost);
+    preference.removeEventListener('change', visibility);
     signal.removeEventListener('abort', stop);
     canvas.dataset.ready = 'false';
     delete canvas.dataset.frameRate;
+    portrait.dispose();
+    images.forEach((image) => {
+      image.src = '';
+    });
     textures.forEach((texture) => gl.deleteTexture(texture));
     buffers.forEach((buffer) => gl.deleteBuffer(buffer));
     gl.deleteProgram(program);
@@ -130,6 +173,7 @@ export async function renderWallpaper(
   function lost(event: Event) {
     event.preventDefault();
     stop();
+    canvas.style.visibility = 'hidden';
   }
   function visibility() {
     cancelAnimationFrame(frameID);
@@ -159,7 +203,19 @@ export async function renderWallpaper(
       cropY = height / (scale * 9);
     gl!.uniform2f(uniform('crop'), cropX, cropY);
     gl!.uniform2f(uniform('offset'), (1 - cropX) * (width < 640 ? 1 : 0.65), (1 - cropY) * 0.5);
+    const portraitWidth = Math.max(
+      1,
+      Math.min(
+        quality === 'high' ? 3840 : 1920,
+        Math.round((canvas.width * portraits[scene][theme].rect[2]) / cropX),
+      ),
+    );
+    portrait.resize(portraitWidth, Math.round((portraitWidth * 941) / 1672));
     cadence.reset();
+    if (preference.matches && !stopped && !document.hidden) {
+      cancelAnimationFrame(frameID);
+      frameID = requestAnimationFrame(frame);
+    }
   }
   function draw(
     index: number,
@@ -169,7 +225,8 @@ export async function renderWallpaper(
     tint: [number, number, number] = [1, 1, 1],
     screen = false,
   ) {
-    const geometry = kind === 1 ? portraitMesh : kind === 3 ? mesh : quad;
+    const geometry =
+      kind === 12 ? gardenMesh : kind === 1 ? portraitMesh : kind === 3 ? mesh : quad;
     if (bound !== geometry) {
       gl!.bindBuffer(gl!.ARRAY_BUFFER, geometry);
       gl!.vertexAttribPointer(point, 2, gl!.FLOAT, false, 16, 0);
@@ -184,58 +241,101 @@ export async function renderWallpaper(
     gl!.uniform1f(uniform('planet'), index === 5 ? 1 : 0);
     gl!.uniform4f(uniform('rect'), ...rect);
     gl!.uniform3f(uniform('tint'), ...tint);
-    gl!.drawArrays(gl!.TRIANGLES, 0, geometry === quad ? 6 : meshCount);
+    gl!.drawArrays(
+      gl!.TRIANGLES,
+      0,
+      geometry === quad ? 6 : geometry === gardenMesh ? gardenCount : meshCount,
+    );
+  }
+  function paintGarden(front: boolean, time: number, active: boolean) {
+    extras.forEach((part, index) => {
+      if (part.front !== front) return;
+      gl!.uniform2f(uniform('gardenRoot'), part.root[0] / 1672, part.root[1] / 941);
+      gl!.uniform4f(uniform('gardenMotion'), ...gardenMotion(part, time, active));
+      const [x, y, w, h] = part.rect;
+      draw(extraOffset + index, 12, [x / 1672, y / 941, w / 1672, h / 941]);
+    });
   }
   function frame(now: number) {
+    frameID = 0;
     if (stopped || document.hidden) return;
     elapsed += Math.max(0, Math.min(now - previous, 100));
     previous = now;
-    if (cadence.due(now)) {
-      const t = elapsed / 1000,
-        night = theme === 'dark';
-      gl!.uniform1f(uniform('time'), t);
-      gl!.uniform1f(uniform('blink'), blinkAt(t));
-      gl!.disable(gl!.BLEND);
-      draw(0, 0, [0, 0, 1, 1]);
-      gl!.enable(gl!.BLEND);
-      if (night) draw(0, 5, [0, 0, 1, 1], 0.7);
-      if (scene === 'celestial') {
-        const meteor = night ? meteorAccent(t) : undefined;
-        if (meteor) draw(0, 8, meteor.rect, meteor.opacity);
-        const [moon, earth] = celestialRects(t);
-        draw(4, 4, moon);
-        draw(5, 4, earth);
-        if (!night) draw(0, 11, [0, 0, 1, 1]);
+    try {
+      if (cadence.due(now)) {
+        const t = preference.matches ? 0 : elapsed / 1000,
+          night = theme === 'dark';
+        gl!.uniform1f(uniform('time'), t);
+        gl!.uniform1f(uniform('blink'), blinkAt(t));
+        gl!.disable(gl!.BLEND);
+        draw(0, 0, [0, 0, 1, 1]);
+        gl!.enable(gl!.BLEND);
+        if (night) draw(0, 5, [0, 0, 1, 1], 0.7);
+        if (scene === 'celestial') {
+          const meteor = night ? meteorAccent(t) : undefined;
+          if (meteor) draw(0, 8, meteor.rect, meteor.opacity);
+          const [moon, earth] = celestialRects(t);
+          draw(4, 4, moon);
+          draw(5, 4, earth);
+          if (!night) draw(0, 11, [0, 0, 1, 1]);
+        }
+        const cloudTint: [number, number, number] = night ? [0.24, 0.38, 0.58] : [1, 1, 0.98];
+        // Clouds translate at different depths; their painted contours do not ripple.
+        const far = ((t * 0.0028 + 0.08) % 1.15) - 1.15;
+        for (const x of [far, far + 1.15]) draw(3, 2, [x, 0.35, 1.2, 0.44], 0.27, cloudTint);
+        if (scene === 'wandering') {
+          const rect = whaleRect(t, window.innerWidth, window.innerHeight);
+          draw(4, 3, rect, 1, night ? [0.55, 0.76, 1] : [1, 1, 1], true);
+          canvas.dataset.whaleX = rect[0].toFixed(3);
+        }
+        const near = ((t * 0.006 + 0.39) % 1.35) - 1.35;
+        for (const x of [near, near + 1.35]) draw(3, 2, [x, 0.56, 1.4, 0.42], 0.2, cloudTint);
+        if (scene === 'celestial') {
+          draw(0, 7, [0, 0, 1, 1]);
+          for (const accent of decorationGlints(t, theme)) draw(0, 9, accent.rect, accent.opacity);
+        }
+        paintGarden(false, t, !preference.matches);
+        portrait.paint(t, preference.matches ? 0 : blinkAt(t), !preference.matches);
+        gl!.activeTexture(gl!.TEXTURE0);
+        gl!.bindTexture(gl!.TEXTURE_2D, textures[1]);
+        if (
+          portraitTextureWidth !== portrait.surface.width ||
+          portraitTextureHeight !== portrait.surface.height
+        ) {
+          portraitTextureWidth = portrait.surface.width;
+          portraitTextureHeight = portrait.surface.height;
+          gl!.texImage2D(
+            gl!.TEXTURE_2D,
+            0,
+            gl!.RGBA,
+            gl!.RGBA,
+            gl!.UNSIGNED_BYTE,
+            portrait.surface,
+          );
+        } else {
+          gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, portrait.surface);
+        }
+        gl!.uniform1f(uniform('blink'), 0);
+        draw(1, 1, portraits[scene][theme].rect);
+        paintGarden(true, t, !preference.matches);
+        canvas.dataset.scene = id;
+        canvas.dataset.ready = 'true';
+        paints++;
+        if (now - reportAt >= 2000) {
+          canvas.dataset.frameRate = ((paints * 1000) / (now - reportAt)).toFixed(1);
+          reportAt = now;
+          paints = 0;
+        }
       }
-      const cloudTint: [number, number, number] = night ? [0.24, 0.38, 0.58] : [1, 1, 0.98];
-      // Clouds translate at different depths; their painted contours do not ripple.
-      const far = ((t * 0.0028 + 0.08) % 1.15) - 1.15;
-      for (const x of [far, far + 1.15]) draw(3, 2, [x, 0.35, 1.2, 0.44], 0.27, cloudTint);
-      if (scene === 'wandering') {
-        const rect = whaleRect(t, window.innerWidth, window.innerHeight);
-        draw(4, 3, rect, 1, night ? [0.55, 0.76, 1] : [1, 1, 1], true);
-        canvas.dataset.whaleX = rect[0].toFixed(3);
-      }
-      const near = ((t * 0.006 + 0.39) % 1.35) - 1.35;
-      for (const x of [near, near + 1.35]) draw(3, 2, [x, 0.56, 1.4, 0.42], 0.2, cloudTint);
-      if (scene === 'celestial') {
-        draw(0, 7, [0, 0, 1, 1]);
-        for (const accent of decorationGlints(t, theme)) draw(0, 9, accent.rect, accent.opacity);
-      }
-      draw(1, 1, portraits[scene][theme].rect);
-      if (scene === 'celestial') draw(0, 10, [0, 0, 1, 1]);
-      canvas.dataset.scene = id;
-      canvas.dataset.ready = 'true';
-      paints++;
-      if (now - reportAt >= 2000) {
-        canvas.dataset.frameRate = ((paints * 1000) / (now - reportAt)).toFixed(1);
-        reportAt = now;
-        paints = 0;
-      }
+    } catch {
+      stop();
+      canvas.style.visibility = 'hidden';
+      return;
     }
-    frameID = requestAnimationFrame(frame);
+    if (!preference.matches) frameID = requestAnimationFrame(frame);
   }
   try {
+    canvas.style.removeProperty('visibility');
     if (!program) throw new Error('wallpaper-renderer-unavailable');
     for (const [kind, source] of [
       [gl.VERTEX_SHADER, wallpaperVertex],
@@ -266,7 +366,10 @@ export async function renderWallpaper(
     const vertices = grid(128, 72);
     mesh = upload(vertices);
     meshCount = vertices.length / 4;
-    portraitMesh = upload(grid(128, 72, (p) => portraitFlex(id, p)));
+    portraitMesh = upload(grid(128, 72));
+    const gardenVertices = grid(16, 16);
+    gardenMesh = upload(gardenVertices);
+    gardenCount = gardenVertices.length / 4;
     point = gl.getAttribLocation(program, 'point');
     gl.enableVertexAttribArray(point);
     flex = gl.getAttribLocation(program, 'flex');
@@ -281,7 +384,8 @@ export async function renderWallpaper(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      if (image) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1i(uniform('art'), 0);
@@ -332,9 +436,17 @@ export async function renderWallpaper(
     window.addEventListener('resize', resize);
     document.addEventListener('visibilitychange', visibility);
     canvas.addEventListener('webglcontextlost', lost);
+    portrait.surface.addEventListener('webglcontextlost', lost);
+    preference.addEventListener('change', visibility);
+    images.forEach((image) => {
+      image.src = '';
+    });
     signal.addEventListener('abort', stop, { once: true });
     reportAt = previous = performance.now();
-    if (!document.hidden) frameID = requestAnimationFrame(frame);
+    if (!document.hidden) {
+      cancelAnimationFrame(frameID);
+      frameID = requestAnimationFrame(frame);
+    }
     return stop;
   } catch (error) {
     stop();
