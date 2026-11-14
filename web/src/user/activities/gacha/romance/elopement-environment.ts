@@ -19,6 +19,7 @@ function glow(
 export function elopementEnvironment(
   image: HTMLImageElement,
   background?: { draw(time: number): CanvasImageSource },
+  daylight = false,
 ) {
   // These sky regions stop before the overhead wires and the city silhouette.
   const clouds = (
@@ -115,6 +116,26 @@ export function elopementEnvironment(
       context.closePath();
       context.fillStyle = `rgba(255,207,148,${(dark ? 0.018 : 0.026) + dawn * 0.018})`;
       context.fill();
+      if (daylight) {
+        // A passing break in the dawn cloud brightens only the adopted wet rail.
+        // The skyline and platform geometry remain still, with long quiet gaps.
+        const phase = (((time + 7) % 61) + 61) % 61;
+        if (phase < 16) {
+          const progress = phase / 16;
+          const strength = Math.sin(progress * Math.PI) ** 2;
+          context.save();
+          context.clip();
+          glow(
+            context,
+            861 * (1 - progress),
+            451 + 300 * progress,
+            94,
+            dark ? '159,181,237' : '255,225,175',
+            strength * (dark ? 0.085 : 0.2),
+          );
+          context.restore();
+        }
+      }
       context.restore();
     },
     dispose() {

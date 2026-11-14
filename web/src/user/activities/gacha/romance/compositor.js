@@ -16,6 +16,7 @@ import { elopementEnvironment, elopementDust } from './elopement-environment';
 import { heartThiefEnvironment, heartThiefDust, heartThiefLight } from './heart-thief-environment';
 import { romanceAssetSources } from './assets';
 import { createMaterialPlates } from './material-plates';
+import { elopementSkyResources, makeElopementSky } from './elopement-sky';
 
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const ease = (x) => {
@@ -62,6 +63,7 @@ function load(url, signal, owned) {
 export async function createScene(id, polished = false, options = {}) {
   const claude = id === 'elopement';
   const refined = polished;
+  const daylight = refined && claude && options.variant === 'appearance';
   const sources = romanceAssetSources(id, options.highResolution, options.dark);
   const loading = new AbortController();
   const cancel = () => loading.abort();
@@ -91,12 +93,27 @@ export async function createScene(id, polished = false, options = {}) {
         claude ? images.offer : images.character,
         loading.signal,
       );
-      environmentMaterials = await createMaterialPlates(
-        claude ? 'p-claude' : 'q-glm',
-        images.background,
-        loading.signal,
-        `environment-${options.dark ? 'dark' : 'light'}`,
-      );
+      if (daylight) {
+        const resources = elopementSkyResources(options.dark, options.highResolution);
+        const [clouds, visibility] = await Promise.all(
+          [resources.clouds, resources.visibility].map(({ src }) =>
+            load(src, loading.signal, ownedImages),
+          ),
+        );
+        environmentMaterials = makeElopementSky(
+          images.background,
+          clouds,
+          visibility,
+          options.dark,
+        );
+      } else {
+        environmentMaterials = await createMaterialPlates(
+          claude ? 'p-claude' : 'q-glm',
+          images.background,
+          loading.signal,
+          `environment-${options.dark ? 'dark' : 'light'}`,
+        );
+      }
     }
     if (loading.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
     character = claude
@@ -107,7 +124,7 @@ export async function createScene(id, polished = false, options = {}) {
       (claude ? { draw: () => images.background } : makeBackgroundRenderer(images.background));
     environment = refined
       ? claude
-        ? elopementEnvironment(images.background, environmentMaterials)
+        ? elopementEnvironment(images.background, environmentMaterials, daylight)
         : heartThiefEnvironment(images.background, background)
       : undefined;
   } catch (error) {
