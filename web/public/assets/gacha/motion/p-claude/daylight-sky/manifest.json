@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "canvas": [1536, 1024],
+  "rect": [0, 0, 960, 352],
+  "periodicWidth": 1216,
+  "speed": 1.7,
+  "layers": [
+    {
+      "name": "Continuous native clouds",
+      "file": "clouds-{tone}.webp",
+      "size": [1216, 352]
+    },
+    {
+      "name": "Fixed wires / roof / horizon visibility",
+      "file": "visibility-{tone}.webp",
+      "size": [960, 352]
+    }
+  ],
+  "sourceRecords": [
+    {
+      "tone": "light",
+      "nativeSourceSha256": "19f13376bc3fcdb0efdda962e869851040706bc1aaf5c14639321a68f8fbd039"
+    },
+    {
+      "tone": "dark",
+      "nativeSourceSha256": "6d2b7dae8a34d103ea9e0d9cca7b5d94308b9d7214df605fc6eb9dec513482bf"
+    }
+  ],
+  "highResolution": {
+    "density": 2,
+    "clouds": [2432, 704],
+    "visibility": [1920, 704],
+    "derivation": "Existing 3840x2560 scenery derivative downsampled to 2x; occluded sky sampled from the same 2072x760 generative repair. Larger display assets do not imply additional native detail."
+  },
+  "generatedScope": "Only occluded sky is repaired; foreground architecture and characters remain unchanged."
+}

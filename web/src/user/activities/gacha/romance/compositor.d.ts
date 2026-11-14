@@ -5,6 +5,7 @@ export function createScene(
   id: 'elopement' | 'heart-thief',
   polished?: boolean,
   options?: {
+    variant?: SceneVariant;
     highResolution?: boolean;
     dark?: boolean;
     characterOnly?: boolean;
