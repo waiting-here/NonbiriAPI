@@ -8,9 +8,9 @@ The body and garment were generated with OpenAI's built-in image generation
 tool on 2026-11-13, from the project's retained Claude artwork. The body wears
 opaque matching underwear. The garment-only source contains no anatomy or
 underwear; its fabric alpha is calibrated separately from the golden stitching.
-The adopted underwear palette was softened to opaque dusty rose on 2026-11-13.
-Only registered fabric pixels take the generated color refinement; the original
-skin, gold embroidery, pose and outer gown are retained.
+The final inner garments use opaque pale rose beige, with a strapless front-clasp
+bra and matching briefs. Their registered edit preserves the original pose,
+hands, book and outer gown, including the gown's golden embroidery.
 The front occlusion layer retains source pixels for the hands, book and selected
 hair. All four WebP files share a native 1024 × 1536 canvas.
 
