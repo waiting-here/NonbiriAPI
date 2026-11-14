@@ -254,6 +254,31 @@ export const loadLayerResources: LayerLoader = async (id, scope, high, signal) =
       await import('../user/activities/gacha/romance/material-plates');
     const materialId = id as MaterialSceneId;
     const layers = await materialPlateSources(materialId, 'material-layers', signal);
+    if (id === 'p-claude' && scope !== 'portrait') {
+      const { elopementSkyResources } =
+        await import('../user/activities/gacha/romance/elopement-sky');
+      const sky = elopementSkyResources(scope === 'dark', high);
+      return [
+        whole(
+          'environment-source',
+          '采用的场景原画',
+          `/assets/gacha/${high ? 'hires/' : ''}motion/p-claude/background-${scope}.webp`,
+        ),
+        {
+          name: 'daylight-sky-clouds',
+          label: '远景流云',
+          path: sky.clouds.src,
+          rect: sky.clouds.rect,
+        },
+        {
+          name: 'daylight-sky-visibility',
+          label: '电线、站台与地平线遮挡',
+          path: sky.visibility.src,
+          rect: sky.visibility.rect,
+        },
+        ...layers.map(labeled),
+      ];
+    }
     if (/^[pqr]-/.test(id)) {
       if (id === 'r-chatgpt') {
         const { tomorrowSkySources } = await import('../user/activities/gacha/tomorrow/sky');

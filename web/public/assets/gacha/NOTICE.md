@@ -74,6 +74,15 @@ Amber Vow retains its original character and eye plates, with a localized genera
 
 Shared Daylight uses generative refinements of the existing railway platform in warm dawn and deep blue before dawn. These background sources are 1536 × 1024; the 3840 × 2560 layers are resampled and do not add native detail. Original character and eye pixels remain registered in lossless WebP plates, shared by standard and high display quality. Directional environmental light is composited consistently after the existing character motion. Sky regions, existing lamps, rail reflections and sparse depth-separated dust animate independently; architecture and overhead wires remain rigid. Static appearance backgrounds and transparent character plates share the animation's responsive placement.
 
+Its appearances use a continuous 1216 × 352 cloud plate with a fixed
+960 × 352 visibility matte for the station roof, overhead wires and skyline.
+Localized generative repairs complete the sky behind those structures. The
+2432 × 704 cloud and 1920 × 704 matte derivatives sample the existing larger
+scenery and the same 2072 × 760 repairs; they do not imply additional native
+detail in the original scene. Distant birds pass behind the fixed structures,
+and occasional soft light follows the existing wet rail. Character artwork,
+static fallbacks and card compositions retain their adopted sources.
+
 A Notice to Steal Your Heart uses generative refinements of the existing moonlit room and its candlelit night variant. Both sources are 1536 × 1024; the 3840 × 2560 backgrounds are resampled. The original 1086 × 1448 character and hair backing remain registered in lossless WebP and are shared by both display qualities. Existing eyelids, invitation pose and curtain masks remain in their original coordinates. A small rigid balance adjustment is anchored at the supporting forefoot after articulation; the shoe contact shadows follow the same transform. The 1086 × 1488 static character plate reserves 40 lower pixels for the ground shadow without stretching the figure. Localized sky, existing candle and city light, marble reflections and sparse dust complement the retained motion. Warm candlelight and cool moonlight are applied after character articulation, and independent appearance backgrounds and character plates use the same static and animated layout.
 
 Its wide illustration and cover include the lower floor around the supporting

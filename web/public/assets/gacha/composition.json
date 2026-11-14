@@ -1320,6 +1320,14 @@
       "background": "backgrounds/p.webp",
       "character": "motion/p-claude/hero.webp",
       "scene": "elopement",
+      "appearance_sky": {
+        "manifest": "motion/p-claude/daylight-sky/manifest.json",
+        "clouds": "motion/p-claude/daylight-sky/clouds-{light,dark}.webp",
+        "visibility": "motion/p-claude/daylight-sky/visibility-{light,dark}.webp",
+        "registration": "1536 by 1024 station, fixed roof and wire visibility in the top-left 960 by 352 region",
+        "motion": "continuous rightward clouds, intermittent distant birds and localized wet-rail light",
+        "high_resolution": "matching hires paths use two-times sampling from the existing scenery derivatives and shared sky repairs"
+      },
       "inputs": [
         "motion/p-claude/background-light.webp",
         "motion/p-claude/background-dark.webp",
