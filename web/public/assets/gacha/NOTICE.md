@@ -62,6 +62,14 @@ The retained portrait sources are 1024 × 1536; the group source is 1536 × 864 
 
 ## Moment-only expanded frames
 
+The Sweet Hide-and-Seek animations use independently registered hair, loose
+chiffon, ribbons, tassels, wrappers and rigid jewelry plates. The loose sleeve
+and skirt materials retain their own alpha without carrying skin or background
+pixels. Occluded hair is reconstructed only within the garment motion region;
+hands, fitted fabric and support contacts retain the established artwork.
+Standard, large, thumbnail and expanded portrait derivatives share the same
+material registration. These derivatives retain the theme's R-18 classification.
+
 The adopted expanded character layers under `moment/`, with matching
 `hires/moment/` paths, retain the established
 characters and original card and appearance inputs. Their separate
