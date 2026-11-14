@@ -227,7 +227,7 @@ function joint(parent: Matrix, [x, y]: Point, angle: number, dx = 0, dy = 0): Ma
   return multiply(parent, [c, s, 0, -s, c, 0, x - c * x + s * y + dx, y - s * x - c * y + dy, 1]);
 }
 
-export function poseAt(seconds: number) {
+export function poseAt(seconds: number, materialLayers = false) {
   const phase = ((seconds % 17.6) / 17.6) * Math.PI * 2;
   const wind = (lag: number) => Math.sin(phase * 2 - lag) + Math.sin(lag);
   const bones: Matrix[] = [identity()];
@@ -250,6 +250,12 @@ export function poseAt(seconds: number) {
   bones[11] = joint(bones[0], [299, 717], 0.018 * wind(0.7));
   bones[12] = joint(bones[0], [471, 717], 0.016 * wind(0.95));
   bones[13] = joint(bones[0], [384, 734], 0.013 * wind(1.2));
+  if (materialLayers) {
+    // Preserve anatomical parents, but do not warp the newly separated material
+    // a second time through the former cape/hair/hem influence fields.
+    for (let i = 7; i <= 10; i++) bones[i] = bones[1];
+    for (let i = 11; i <= 13; i++) bones[i] = bones[0];
+  }
   return new Float32Array(bones.flat());
 }
 

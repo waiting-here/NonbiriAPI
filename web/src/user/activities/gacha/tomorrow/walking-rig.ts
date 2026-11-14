@@ -251,7 +251,7 @@ function outsideDistance(p: Point, polygon: readonly Point[]) {
   return inside ? 0 : distance;
 }
 
-export function createWalkingRig() {
+export function createWalkingRig(materialLayers = false) {
   const nodes: Node[] = [],
     edges: Edge[] = [],
     triangles: Triangle[] = [],
@@ -343,6 +343,9 @@ export function createWalkingRig() {
           break;
         }
       }
+      // Independent material plates now own the four wind strips. Keep the
+      // anatomical breath map and pendulum; avoid constructing unused lookup work.
+      if (materialLayers) continue;
       const windPin = Math.max(
         ...protectedRegions.map((poly) => 1 - smooth(outsideDistance(p, poly) / 64)),
       );

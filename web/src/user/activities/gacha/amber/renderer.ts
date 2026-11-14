@@ -6,6 +6,7 @@ import { amberShader, characterShader, foregroundShader } from './shader';
 import { characterVertex, createRigMesh, poseAt } from './rig';
 import { polishedAmberEyelids } from './polished-eyelids';
 import { amberLayout } from './layout';
+import { createMaterialPlates, uploadMaterialPlate } from '../romance/material-plates';
 
 type Options = {
   polished?: boolean;
@@ -74,6 +75,10 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     options.characterOnly ? null : source('lamps'),
   ]);
   if (options.signal?.aborted) return () => {};
+  const materials =
+    options.polished && !options.backgroundOnly
+      ? await createMaterialPlates('o-claude', hero, options.signal)
+      : undefined;
   const context = canvas.getContext('2d');
   const layer = document.createElement('canvas');
   const gl = layer.getContext('webgl', {
@@ -81,7 +86,10 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     premultipliedAlpha: false,
     antialias: false,
   });
-  if (!gl || !context) throw new Error('renderer-unavailable');
+  if (!gl || !context) {
+    materials?.dispose();
+    throw new Error('renderer-unavailable');
+  }
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [];
   const programs: WebGLProgram[] = [],
@@ -105,6 +113,7 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     buffers.forEach((buffer) => gl.deleteBuffer(buffer));
     programs.forEach((program) => gl.deleteProgram(program));
     gl.getExtension('WEBGL_lose_context')?.loseContext();
+    materials?.dispose();
     layer.width = 0;
     layer.height = 0;
   };
@@ -279,9 +288,14 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
           !!options.polished,
           options.variant === 'appearance',
         );
+    const projectedView = expandMomentView(view, momentFrame);
+    materials?.setResolution(
+      (layer.width * heroBox[2]) / projectedView[2],
+      (layer.height * heroBox[3]) / projectedView[3],
+    );
     for (const program of programs) {
       gl.useProgram(program);
-      gl.uniform4fv(gl.getUniformLocation(program, 'view'), expandMomentView(view, momentFrame));
+      gl.uniform4fv(gl.getUniformLocation(program, 'view'), projectedView);
       gl.uniform4fv(gl.getUniformLocation(program, 'heroBox'), heroBox);
       gl.uniform1f(gl.getUniformLocation(program, 'aspect'), width / height);
     }
@@ -296,6 +310,10 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     last = at;
     if ((!painted || !paused) && (options.frozenTime !== undefined || cadence.due(at))) {
       const t = options.frozenTime ?? time;
+      if (materials) {
+        gl!.activeTexture(gl!.TEXTURE1);
+        uploadMaterialPlate(gl!, textures[1], materials.draw(t));
+      }
       heroAttributes.forEach((attribute) => gl!.disableVertexAttribArray(attribute));
       gl!.useProgram(sceneProgram);
       gl!.bindBuffer(gl!.ARRAY_BUFFER, sceneBuffer);
@@ -312,7 +330,7 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
         gl!.vertexAttribPointer(attribute, i === 0 ? 2 : 4, gl!.FLOAT, false, 40, [0, 8, 24][i]);
       }
       gl!.uniform1f(blinkUniform, options.blink ?? blinkAt(t));
-      gl!.uniformMatrix3fv(bonesUniform, false, poseAt(t));
+      gl!.uniformMatrix3fv(bonesUniform, false, poseAt(t, !!materials));
       gl!.enable(gl!.BLEND);
       gl!.blendFuncSeparate(
         gl!.SRC_ALPHA,

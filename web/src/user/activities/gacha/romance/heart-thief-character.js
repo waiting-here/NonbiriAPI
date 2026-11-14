@@ -310,7 +310,7 @@ function texture(gl, unit, source) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
   return t;
 }
-export function makeCharacterRenderer(image, repairImage) {
+export function makeCharacterRenderer(image, repairImage, materialLayers = false) {
   const surface = document.createElement('canvas');
   surface.width = ART_WIDTH;
   surface.height = ART_HEIGHT;
@@ -341,7 +341,17 @@ export function makeCharacterRenderer(image, repairImage) {
       weightCache.set(key, w);
     }
     const rest = w.rest;
-    data.push(x, y, arm, w.hair, w.tail, rest.head, rest.ribs, rest.left, rest.right);
+    data.push(
+      x,
+      y,
+      arm,
+      materialLayers ? 0 : w.hair,
+      materialLayers ? 0 : w.tail,
+      rest.head,
+      rest.ribs,
+      materialLayers ? 0 : rest.left,
+      materialLayers ? 0 : rest.right,
+    );
   };
   for (let r = 0; r < ys.length - 1; r++)
     for (let c = 0; c < xs.length - 1; c++) {

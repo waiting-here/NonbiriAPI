@@ -1,0 +1,975 @@
+{
+  "version": 1,
+  "canvas": [
+    1024,
+    1536
+  ],
+  "source": "offer.webp",
+  "sourceSha256": "eff82f4106d2b7999818fdab35b41a12b9afabf5c3dc785d0f55f765d786d874",
+  "cycle": 29,
+  "layers": [
+    {
+      "name": "hair-left-outer",
+      "polygon": [
+        [
+          202,
+          347
+        ],
+        [
+          270,
+          336
+        ],
+        [
+          299,
+          394
+        ],
+        [
+          268,
+          442
+        ],
+        [
+          262,
+          528
+        ],
+        [
+          292,
+          560
+        ],
+        [
+          336,
+          583
+        ],
+        [
+          329,
+          666
+        ],
+        [
+          307,
+          718
+        ],
+        [
+          145,
+          694
+        ],
+        [
+          134,
+          506
+        ]
+      ],
+      "vector": [
+        8,
+        -2
+      ],
+      "root": 345,
+      "end": 690,
+      "delay": 0.18,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            270,
+            445
+          ],
+          [
+            335,
+            423
+          ],
+          [
+            397,
+            430
+          ],
+          [
+            426,
+            502
+          ],
+          [
+            407,
+            562
+          ],
+          [
+            348,
+            572
+          ],
+          [
+            283,
+            548
+          ]
+        ],
+        [
+          [
+            681,
+            698
+          ],
+          [
+            741,
+            697
+          ],
+          [
+            768,
+            739
+          ],
+          [
+            767,
+            789
+          ],
+          [
+            744,
+            827
+          ],
+          [
+            699,
+            821
+          ],
+          [
+            695,
+            773
+          ]
+        ],
+        [
+          [
+            342,
+            714
+          ],
+          [
+            500,
+            697
+          ],
+          [
+            637,
+            718
+          ],
+          [
+            659,
+            863
+          ],
+          [
+            602,
+            1104
+          ],
+          [
+            653,
+            1370
+          ],
+          [
+            628,
+            1462
+          ],
+          [
+            515,
+            1536
+          ],
+          [
+            462,
+            1536
+          ],
+          [
+            447,
+            1261
+          ],
+          [
+            400,
+            1032
+          ]
+        ]
+      ],
+      "file": "hair-left-outer.webp",
+      "crop": [
+        133,
+        324,
+        216,
+        390
+      ],
+      "depth": 1,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-right-outer",
+      "polygon": [
+        [
+          722,
+          335
+        ],
+        [
+          897,
+          366
+        ],
+        [
+          935,
+          538
+        ],
+        [
+          866,
+          693
+        ],
+        [
+          738,
+          717
+        ],
+        [
+          719,
+          655
+        ],
+        [
+          721,
+          559
+        ],
+        [
+          710,
+          484
+        ],
+        [
+          708,
+          416
+        ]
+      ],
+      "vector": [
+        9,
+        -3
+      ],
+      "root": 330,
+      "end": 690,
+      "delay": 0.34,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            270,
+            445
+          ],
+          [
+            335,
+            423
+          ],
+          [
+            397,
+            430
+          ],
+          [
+            426,
+            502
+          ],
+          [
+            407,
+            562
+          ],
+          [
+            348,
+            572
+          ],
+          [
+            283,
+            548
+          ]
+        ],
+        [
+          [
+            681,
+            698
+          ],
+          [
+            741,
+            697
+          ],
+          [
+            768,
+            739
+          ],
+          [
+            767,
+            789
+          ],
+          [
+            744,
+            827
+          ],
+          [
+            699,
+            821
+          ],
+          [
+            695,
+            773
+          ]
+        ],
+        [
+          [
+            342,
+            714
+          ],
+          [
+            500,
+            697
+          ],
+          [
+            637,
+            718
+          ],
+          [
+            659,
+            863
+          ],
+          [
+            602,
+            1104
+          ],
+          [
+            653,
+            1370
+          ],
+          [
+            628,
+            1462
+          ],
+          [
+            515,
+            1536
+          ],
+          [
+            462,
+            1536
+          ],
+          [
+            447,
+            1261
+          ],
+          [
+            400,
+            1032
+          ]
+        ]
+      ],
+      "file": "hair-right-outer.webp",
+      "crop": [
+        696,
+        323,
+        215,
+        404
+      ],
+      "depth": 2,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-left-lower",
+      "polygon": [
+        [
+          290,
+          560
+        ],
+        [
+          353,
+          574
+        ],
+        [
+          372,
+          596
+        ],
+        [
+          336,
+          702
+        ],
+        [
+          281,
+          713
+        ],
+        [
+          244,
+          669
+        ]
+      ],
+      "vector": [
+        4,
+        1
+      ],
+      "root": 565,
+      "end": 702,
+      "delay": 0.52,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            270,
+            445
+          ],
+          [
+            335,
+            423
+          ],
+          [
+            397,
+            430
+          ],
+          [
+            426,
+            502
+          ],
+          [
+            407,
+            562
+          ],
+          [
+            348,
+            572
+          ],
+          [
+            283,
+            548
+          ]
+        ],
+        [
+          [
+            681,
+            698
+          ],
+          [
+            741,
+            697
+          ],
+          [
+            768,
+            739
+          ],
+          [
+            767,
+            789
+          ],
+          [
+            744,
+            827
+          ],
+          [
+            699,
+            821
+          ],
+          [
+            695,
+            773
+          ]
+        ],
+        [
+          [
+            342,
+            714
+          ],
+          [
+            500,
+            697
+          ],
+          [
+            637,
+            718
+          ],
+          [
+            659,
+            863
+          ],
+          [
+            602,
+            1104
+          ],
+          [
+            653,
+            1370
+          ],
+          [
+            628,
+            1462
+          ],
+          [
+            515,
+            1536
+          ],
+          [
+            462,
+            1536
+          ],
+          [
+            447,
+            1261
+          ],
+          [
+            400,
+            1032
+          ]
+        ]
+      ],
+      "file": "hair-left-lower.webp",
+      "crop": [
+        285,
+        550,
+        100,
+        167
+      ],
+      "depth": 3,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "tote-cloth",
+      "polygon": [
+        [
+          657,
+          922
+        ],
+        [
+          836,
+          928
+        ],
+        [
+          878,
+          1148
+        ],
+        [
+          736,
+          1176
+        ],
+        [
+          638,
+          1083
+        ]
+      ],
+      "vector": [
+        2.2,
+        0.5
+      ],
+      "root": 925,
+      "end": 1160,
+      "delay": 1.2,
+      "material": "heavy-cloth",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            270,
+            445
+          ],
+          [
+            335,
+            423
+          ],
+          [
+            397,
+            430
+          ],
+          [
+            426,
+            502
+          ],
+          [
+            407,
+            562
+          ],
+          [
+            348,
+            572
+          ],
+          [
+            283,
+            548
+          ]
+        ],
+        [
+          [
+            681,
+            698
+          ],
+          [
+            741,
+            697
+          ],
+          [
+            768,
+            739
+          ],
+          [
+            767,
+            789
+          ],
+          [
+            744,
+            827
+          ],
+          [
+            699,
+            821
+          ],
+          [
+            695,
+            773
+          ]
+        ],
+        [
+          [
+            342,
+            714
+          ],
+          [
+            500,
+            697
+          ],
+          [
+            637,
+            718
+          ],
+          [
+            659,
+            863
+          ],
+          [
+            602,
+            1104
+          ],
+          [
+            653,
+            1370
+          ],
+          [
+            628,
+            1462
+          ],
+          [
+            515,
+            1536
+          ],
+          [
+            462,
+            1536
+          ],
+          [
+            447,
+            1261
+          ],
+          [
+            400,
+            1032
+          ]
+        ]
+      ],
+      "file": "tote-cloth.webp",
+      "crop": [
+        628,
+        910,
+        248,
+        255
+      ],
+      "depth": 4,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-ribbon-short",
+      "polygon": [
+        [
+          574,
+          136
+        ],
+        [
+          589,
+          130
+        ],
+        [
+          598,
+          140
+        ],
+        [
+          614,
+          171
+        ],
+        [
+          578,
+          181
+        ]
+      ],
+      "root": 136,
+      "end": 180,
+      "vector": [
+        1.1,
+        0.3
+      ],
+      "delay": 0.16,
+      "material": "ribbon",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "hair-ribbon-short.webp",
+      "crop": [
+        564,
+        120,
+        60,
+        66
+      ],
+      "depth": 100,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "hair-ribbon-long",
+      "polygon": [
+        [
+          593,
+          115
+        ],
+        [
+          625,
+          124
+        ],
+        [
+          643,
+          135
+        ],
+        [
+          634,
+          156
+        ],
+        [
+          655,
+          172
+        ],
+        [
+          677,
+          198
+        ],
+        [
+          660,
+          196
+        ],
+        [
+          648,
+          213
+        ],
+        [
+          634,
+          182
+        ],
+        [
+          625,
+          159
+        ],
+        [
+          611,
+          150
+        ]
+      ],
+      "root": 125,
+      "end": 212,
+      "vector": [
+        2.1,
+        0.6
+      ],
+      "delay": 0.3,
+      "material": "ribbon",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "hair-ribbon-long.webp",
+      "crop": [
+        583,
+        105,
+        104,
+        116
+      ],
+      "depth": 101,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "wrist-ribbon-left",
+      "polygon": [
+        [
+          692,
+          713
+        ],
+        [
+          708,
+          711
+        ],
+        [
+          699,
+          743
+        ],
+        [
+          692,
+          775
+        ],
+        [
+          695,
+          808
+        ],
+        [
+          681,
+          794
+        ],
+        [
+          677,
+          778
+        ],
+        [
+          668,
+          752
+        ]
+      ],
+      "root": 714,
+      "end": 807,
+      "vector": [
+        -1.4,
+        0.5
+      ],
+      "delay": 0.38,
+      "material": "ribbon",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "wrist-ribbon-left.webp",
+      "crop": [
+        661,
+        701,
+        58,
+        115
+      ],
+      "depth": 102,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "wrist-ribbon-right",
+      "polygon": [
+        [
+          740,
+          721
+        ],
+        [
+          757,
+          728
+        ],
+        [
+          762,
+          752
+        ],
+        [
+          780,
+          769
+        ],
+        [
+          793,
+          790
+        ],
+        [
+          802,
+          811
+        ],
+        [
+          785,
+          800
+        ],
+        [
+          771,
+          802
+        ],
+        [
+          759,
+          783
+        ],
+        [
+          755,
+          762
+        ],
+        [
+          741,
+          747
+        ]
+      ],
+      "root": 723,
+      "end": 809,
+      "vector": [
+        2.0,
+        0.6
+      ],
+      "delay": 0.56,
+      "material": "ribbon",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "wrist-ribbon-right.webp",
+      "crop": [
+        730,
+        711,
+        83,
+        111
+      ],
+      "depth": 103,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "blouse-tie",
+      "polygon": [
+        [
+          555,
+          516
+        ],
+        [
+          574,
+          524
+        ],
+        [
+          586,
+          546
+        ],
+        [
+          593,
+          580
+        ],
+        [
+          602,
+          618
+        ],
+        [
+          607,
+          646
+        ],
+        [
+          591,
+          635
+        ],
+        [
+          575,
+          611
+        ],
+        [
+          565,
+          581
+        ],
+        [
+          554,
+          550
+        ]
+      ],
+      "root": 518,
+      "end": 645,
+      "vector": [
+        1.8,
+        0.4
+      ],
+      "delay": 0.8,
+      "material": "cloth",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "blouse-tie.webp",
+      "crop": [
+        544,
+        506,
+        74,
+        151
+      ],
+      "depth": 104,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    }
+  ],
+  "fixed": [
+    "Face, blouse, hands, bag handles and straps, shorts, both legs and feet keep the accepted pose.",
+    "No repeated reaching, no head scale/nod. Tote upper rim and hand contact are pinned."
+  ],
+  "repair": "detail-backing.webp",
+  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+}

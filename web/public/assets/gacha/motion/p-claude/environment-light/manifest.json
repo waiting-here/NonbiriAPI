@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "canvas": [
+    1536,
+    1024
+  ],
+  "cycle": 160,
+  "source": "background-light.webp",
+  "sourceSha256": "19f13376bc3fcdb0efdda962e869851040706bc1aaf5c14639321a68f8fbd039",
+  "layers": [
+    {
+      "name": "sunset-clouds",
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          659,
+          0
+        ],
+        [
+          790,
+          181
+        ],
+        [
+          820,
+          197
+        ],
+        [
+          615,
+          197
+        ],
+        [
+          615,
+          290
+        ],
+        [
+          0,
+          290
+        ]
+      ],
+      "vector": [
+        23,
+        0
+      ],
+      "root": -1,
+      "end": 1,
+      "delay": 0,
+      "material": "cloud",
+      "rigid": true,
+      "clip": true,
+      "file": "sunset-clouds.webp",
+      "crop": [
+        0,
+        0,
+        833,
+        303
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 24,
+      "depth": 1,
+      "parent": "fixed station wires",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    }
+  ],
+  "repair": "backing.webp",
+  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+}

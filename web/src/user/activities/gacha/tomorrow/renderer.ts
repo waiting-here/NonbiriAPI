@@ -10,6 +10,7 @@ import { refinedShader } from './refined-shader';
 import { walkingEyelids } from './walking-eyelids';
 import { createWalkingRig } from './walking-rig';
 import { walkingShader } from './walking-shader';
+import { createMaterialPlates, uploadMaterialPlate } from '../romance/material-plates';
 
 export type TomorrowOptions = {
   walking?: boolean;
@@ -62,7 +63,7 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
   const refined = !walking && options.refined && (options.variant ?? 'card') === 'card';
   const assets = walking ? walkingTomorrowAssets : refined ? refinedTomorrowAssets : tomorrowAssets;
   const eyelids = walking ? walkingEyelids : refined ? refinedEyelids : tomorrowEyelids;
-  const walkingRig = walking ? createWalkingRig() : undefined;
+  const walkingRig = walking ? createWalkingRig(true) : undefined;
   const [background, hero, closed, cloud, pendant] = await Promise.all([
     loadImage(
       options.dark && !refined ? assets.backgroundDark : assets.backgroundLight,
@@ -75,13 +76,46 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
   ]);
   if (options.signal?.aborted) return () => {};
   const context = canvas.getContext('2d');
+  let materials: Awaited<ReturnType<typeof createMaterialPlates>> | undefined;
+  let environmentMaterials: Awaited<ReturnType<typeof createMaterialPlates>> | undefined;
+  if (walking) {
+    const loading = new AbortController();
+    const cancel = () => loading.abort();
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      if (options.signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+      [materials, environmentMaterials] = await Promise.all([
+        options.backgroundOnly
+          ? undefined
+          : createMaterialPlates('r-chatgpt', hero, loading.signal),
+        options.characterOnly
+          ? undefined
+          : createMaterialPlates(
+              'r-chatgpt',
+              background,
+              loading.signal,
+              `environment-${options.dark ? 'dark' : 'light'}`,
+            ),
+      ]);
+      if (loading.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+    } catch (error) {
+      loading.abort();
+      throw error;
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+    }
+  }
   const layer = document.createElement('canvas');
   const gl = layer.getContext('webgl', {
     alpha: true,
     premultipliedAlpha: false,
     antialias: false,
   });
-  if (!context || !gl) throw new Error('renderer-unavailable');
+  if (!context || !gl) {
+    materials?.dispose();
+    environmentMaterials?.dispose();
+    throw new Error('renderer-unavailable');
+  }
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [];
   let program: WebGLProgram | null = null,
@@ -109,6 +143,8 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     gl!.deleteProgram(program);
     gl!.deleteBuffer(buffer);
     gl!.getExtension('WEBGL_lose_context')?.loseContext();
+    materials?.dispose();
+    environmentMaterials?.dispose();
     layer.width = layer.height = 0;
     canvas.dataset.ready = 'false';
   }
@@ -252,10 +288,23 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     gl!.uniform4fv(uniform('view'), layout.view);
     gl!.uniform4fv(uniform('heroBox'), layout.hero);
     gl!.uniform4fv(uniform('cloudBox'), layout.cloud);
+    materials?.setResolution(layer.width * layout.hero[2], layer.height * layout.hero[3]);
+    environmentMaterials?.setResolution(
+      layer.width / layout.view[2],
+      layer.height / layout.view[3],
+    );
     cadence.reset();
   }
   function paint() {
     if (stopped) return;
+    if (environmentMaterials) {
+      gl!.activeTexture(gl!.TEXTURE0);
+      uploadMaterialPlate(gl!, textures[0], environmentMaterials.draw(elapsed));
+    }
+    if (materials) {
+      gl!.activeTexture(gl!.TEXTURE1);
+      uploadMaterialPlate(gl!, textures[1], materials.draw(elapsed));
+    }
     if (walkingRig && walkingTexture) {
       const frame = walkingRig.update(elapsed);
       gl!.activeTexture(gl!.TEXTURE5);
