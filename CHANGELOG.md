@@ -24,6 +24,12 @@ Each version entry describes its source and compatibility boundary; a release ta
   sheer gown over a separate opaque-underwear body, preserving the velvet design
   in the local comparison preview. Both the group illustration and pool cover
   include all five characters. Its preset has no seasonal date limit.
+- Refine independent fabric and accessory motion in Across the Mirror Sea,
+  A Notice to Steal Your Heart and Tomorrow, Still Unwritten. Free hems move
+  visibly while seams and hand contacts stay fixed; ornaments follow their
+  attachments, with matching static and high-resolution artwork.
+- Align Christmas ChatGPT's face and eye animation with her established
+  character design, including the five-character illustration and pool cover.
 - Correct both hands in Fairytale Theatre Gemini, remove stray fingers from
   Summer Fireworks ChatGPT, and refine finger shapes in Origin Echo DeepSeek,
   Myriad Forms ChatGPT and the Fairytale Theatre group illustration.

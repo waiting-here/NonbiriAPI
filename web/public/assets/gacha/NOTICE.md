@@ -19,6 +19,19 @@ Static portraits and affected appearance derivatives are composited from the
 same adopted layers. Native material plates retain their source dimensions;
 larger display derivatives are resampled rather than additional native detail.
 
+Across the Mirror Sea, A Notice to Steal Your Heart and Tomorrow, Still Unwritten separate complete
+free hems and trailing panels from their fixed seams. Cloth silhouettes follow
+the breeze and settle with their lining; ornaments follow their moving attachment
+points. Registered backing and local contact constraints preserve the adopted
+faces, hands, legs and standing positions across cards and site appearances.
+
+Christmas ChatGPT uses a localized facial refinement referenced to her established
+character portrait and earlier cards. Mint-green irises, softer facial planes and
+cleaner illustrated features replace the previous face. Only the registered face
+region is adopted; the original costume, hands, pose and source alpha remain.
+Fresh eye contours and closed-eye art share that registration, as do the card,
+transparent body, five-character illustration and pool-cover derivatives.
+
 Celestial Myth's light and dark appearances and Wandering Free's light appearance
 use localized, native 1254 × 1254 hair refinements. Fine strands replace the
 earlier broad hair facets while the adopted faces, hands, garments and ornaments

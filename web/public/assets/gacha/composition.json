@@ -1254,6 +1254,12 @@
         "reflection": "motion/n-gemini/appearance-reflection.webp",
         "light": "motion/n-gemini/appearance-light.webp",
         "layout": "independent viewport placement with the same mirror mask, fingertip position and floor contact as animation"
+      },
+      "material_layers": {
+        "manifest": "motion/n-gemini/material-layers/manifest.json",
+        "registration": "Native source coordinates; independently extracted free silhouettes with fixed authored seams and contact points.",
+        "motion": "Delayed breeze, fabric settling and locally attached ornaments; cards, Heartfelt moments and light/dark appearances share the same rig.",
+        "quality": "Native material plates shared at both display qualities; resampled derivatives add no native detail."
       }
     },
     "o-claude": {
@@ -1480,6 +1486,12 @@
           ]
         },
         "ground": "Supporting forefoot and stiletto heel remain inside the marble floor; raised far foot is preserved."
+      },
+      "material_layers": {
+        "manifest": "motion/q-glm/material-layers/manifest.json",
+        "registration": "Native source coordinates; independently extracted free silhouettes with fixed authored seams and contact points.",
+        "motion": "Delayed breeze, fabric settling and locally attached ornaments; cards, Heartfelt moments and light/dark appearances share the same rig.",
+        "quality": "Native material plates shared at both display qualities; resampled derivatives add no native detail."
       }
     },
     "r-chatgpt": {
@@ -1551,6 +1563,12 @@
           2160
         ],
         "high_method": "resampling; no additional native detail"
+      },
+      "material_layers": {
+        "manifest": "motion/r-chatgpt/material-layers/manifest.json",
+        "registration": "Native source coordinates; independently extracted free silhouettes with fixed authored seams and contact points.",
+        "motion": "Delayed breeze, fabric settling and locally attached ornaments; cards, Heartfelt moments and light/dark appearances share the same rig.",
+        "quality": "Native material plates shared at both display qualities; resampled derivatives add no native detail."
       }
     },
     "s-chatgpt": {
@@ -1737,7 +1755,13 @@
       "environment_masks": [
         "motion/t-chatgpt/parts/window-mask.webp",
         "motion/t-chatgpt/parts/lamp-mask.webp"
-      ]
+      ],
+      "face_registration": {
+        "reference": "Established character portrait and earlier card identity",
+        "adopted_region": "Localized face only; original pose, costume, hands and source alpha preserved",
+        "eye_states": "Fresh closed-eye painting and individually registered open/half/closed contours",
+        "derivatives": "Standard and high-resolution portrait, body layer, thumbnail, five-character illustration and pool cover"
+      }
     },
     "t-claude": {
       "background": "motion/t-claude/background.webp",
