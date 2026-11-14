@@ -1,13 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { materialPointWeight, materialPose, type MaterialPlate } from './romance/material-plates';
 
 const manifest = JSON.parse(
   readFileSync(
-    new URL(
-      '../../../../public/assets/gacha/motion/n-gemini/material-layers/manifest.json',
-      import.meta.url,
-    ),
+    resolve('public/assets/gacha/motion/n-gemini/material-layers/manifest.json'),
     'utf8',
   ),
 ) as { cycle: number; layers: MaterialPlate[] };
