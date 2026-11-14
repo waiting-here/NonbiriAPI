@@ -36,7 +36,7 @@ const spirit = (
 });
 
 const summer = fixed(base('i-chatgpt'), [
-  flow('i-chatgpt', 'sky', [0, 0, 1024, 405], 'fireworks', '#ffd8ab'),
+  flow('i-chatgpt', 'sky', [0, 0, 1024, 405], 'fireworks'),
   flow('i-chatgpt', 'river', [39, 784, 955, 361], 'river', '#ffcf88'),
   flow('i-chatgpt', 'lanterns', [0, 137, 1024, 541], 'flame', '#ffdb9f'),
   spirit('i-chatgpt', 'foliage', [0, 0, 1024, 112], [0.4, 1.7], 0.0012, 13.4, 1.3),
@@ -222,36 +222,58 @@ export function createScenery(definition: Environment, images: readonly HTMLImag
   };
 }
 
+// Stagger the three shells on one timeline so every volley ends with clear sky.
+const fireworkCycle = 16;
 const bursts = [
-  { x: 188, y: 154, crop: [34, 0, 344, 349], period: 7.9, offset: 1.3, color: '#ffd991' },
-  { x: 844, y: 203, crop: [720, 69, 266, 264], period: 8.6, offset: 3.2, color: '#fbc2b1' },
-  { x: 934, y: 296, crop: [866, 230, 158, 175], period: 11.4, offset: 6.0, color: '#ffdbbf' },
+  { x: 188, y: 154, crop: [34, 0, 344, 349], start: 0.35, decay: 3.0, rise: 175, color: '#ffd991' },
+  {
+    x: 844,
+    y: 203,
+    crop: [720, 69, 266, 264],
+    start: 5.1,
+    decay: 2.8,
+    rise: 139,
+    color: '#fbc2b1',
+  },
+  {
+    x: 934,
+    y: 296,
+    crop: [866, 230, 158, 175],
+    start: 9.2,
+    decay: 2.2,
+    rise: 81,
+    color: '#ffdbbf',
+  },
 ] as const;
 
 function paintFireworks(ctx: CanvasRenderingContext2D, image: HTMLImageElement, time: number) {
-  const sx = image.naturalWidth / 1024;
-  const sy = image.naturalHeight / 405;
+  const phase = time % fireworkCycle;
+  const launch = 0.68;
+  const burst = bursts.find(({ start, decay }) => phase >= start && phase < start + launch + decay);
+  if (!burst) return;
+
+  const age = phase - burst.start;
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  for (const burst of bursts) {
-    const phase = (time + burst.offset) % burst.period;
-    if (phase < 0.65) {
-      const u = phase / 0.65;
-      const height = 190 * (1 - u);
-      ctx.strokeStyle = burst.color;
-      ctx.globalAlpha = u * 0.52;
-      ctx.lineWidth = 1.7;
-      ctx.beginPath();
-      ctx.moveTo(burst.x + 16 * (1 - u), burst.y + height + 29);
-      ctx.lineTo(burst.x + 16 * (1 - u), burst.y + height);
-      ctx.stroke();
-      continue;
-    }
-    const u = (phase - 0.65) / 2.9;
-    if (u >= 1) continue;
-    const spread = 0.26 + 0.81 * (1 - Math.exp(-6 * u));
+  if (age < launch) {
+    const progress = age / launch;
+    const remaining = 1 - progress;
+    const x = burst.x + 16 * remaining;
+    const y = burst.y + burst.rise * remaining ** 1.35;
+    ctx.strokeStyle = burst.color;
+    ctx.globalAlpha = Math.sin(Math.PI * progress) * 0.65;
+    ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    ctx.moveTo(x + 3 * progress, y + 29 * progress);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  } else {
+    const progress = (age - launch) / burst.decay;
+    const spread = 0.22 + 0.79 * (1 - Math.exp(-5.4 * progress));
     const [left, top, width, height] = burst.crop;
-    ctx.globalAlpha = Math.min(1, u * 12) * (1 - u) ** 1.25;
+    const sx = image.naturalWidth / 1024;
+    const sy = image.naturalHeight / 405;
+    ctx.globalAlpha = Math.min(1, progress * 12) * (1 - progress) ** 1.65;
     ctx.drawImage(
       image,
       left * sx,
@@ -259,7 +281,7 @@ function paintFireworks(ctx: CanvasRenderingContext2D, image: HTMLImageElement, 
       width * sx,
       height * sy,
       burst.x + (left - burst.x) * spread,
-      burst.y + (top - burst.y) * spread + 27 * u ** 2,
+      burst.y + (top - burst.y) * spread + 34 * progress ** 2,
       width * spread,
       height * spread,
     );
