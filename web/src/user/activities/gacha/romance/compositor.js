@@ -7,7 +7,11 @@ import {
 } from './heart-thief-character.js';
 import { portraitWindows } from '../portrait';
 import { heartThiefGroundPoint, heartThiefStance } from './heart-thief-stance';
-import { romanceAppearancePlacement, romanceBackdropPlacement } from './layout';
+import {
+  heartThiefLandscapePlacement,
+  romanceAppearancePlacement,
+  romanceBackdropPlacement,
+} from './layout';
 import { elopementEnvironment, elopementDust } from './elopement-environment';
 import { heartThiefEnvironment, heartThiefDust, heartThiefLight } from './heart-thief-environment';
 import { romanceAssetSources } from './assets';
@@ -292,34 +296,41 @@ export async function createScene(id, polished = false, options = {}) {
     const placement = cssPlacement
       ? Object.fromEntries(Object.entries(cssPlacement).map(([key, value]) => [key, value * ratio]))
       : null;
-    const scale = appearance
-      ? placement.height / height
-      : card
-        ? claude
-          ? 0.59
-          : 0.62
-        : cover
-          ? claude
-            ? 0.65
-            : 0.66
-          : claude
-            ? 0.5
-            : 0.52;
-    const hero = {
-      x: appearance
-        ? placement.left
+    const landscape =
+      !claude && refined && !card && !appearance ? heartThiefLandscapePlacement(cover) : null;
+    const scale =
+      landscape?.scale ??
+      (appearance
+        ? placement.height / height
         : card
           ? claude
-            ? 690
-            : 570
+            ? 0.59
+            : 0.62
           : cover
             ? claude
-              ? 795
-              : 810
+              ? 0.65
+              : 0.66
             : claude
-              ? 875
-              : 795,
-      y: appearance ? placement.top : card ? 64 : cover ? 40 : claude ? 54 : 115,
+              ? 0.5
+              : 0.52);
+    const hero = {
+      x:
+        landscape?.left ??
+        (appearance
+          ? placement.left
+          : card
+            ? claude
+              ? 690
+              : 570
+            : cover
+              ? claude
+                ? 795
+                : 810
+              : claude
+                ? 875
+                : 795),
+      y:
+        landscape?.top ?? (appearance ? placement.top : card ? 64 : cover ? 40 : claude ? 54 : 115),
       s: scale,
     };
     const cropX = card
@@ -350,7 +361,7 @@ export async function createScene(id, polished = false, options = {}) {
       ? !claude && layer === 'background'
         ? { left: 0, top: 0, scale: canvas.width / 1536 }
         : romanceBackdropPlacement(canvas.width, canvas.height, viewportWidth, id)
-      : { left: 0, top: 0, scale: 1 };
+      : { left: 0, top: landscape?.backgroundTop ?? 0, scale: 1 };
     if (layer !== 'hero') {
       ctx.save();
       ctx.translate(backdrop.left, backdrop.top);

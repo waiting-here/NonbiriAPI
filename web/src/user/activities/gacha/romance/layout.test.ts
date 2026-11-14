@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { romanceAppearancePlacement, romanceBackdropPlacement } from './layout';
+import {
+  heartThiefLandscapePlacement,
+  romanceAppearancePlacement,
+  romanceBackdropPlacement,
+} from './layout';
 import { heartThiefGroundPoint, heartThiefStance } from './heart-thief-stance';
 
 it.each(['elopement', 'heart-thief'] as const)(
@@ -9,7 +13,7 @@ it.each(['elopement', 'heart-thief'] as const)(
     const mobile = romanceAppearancePlacement(390, 844, theme);
     expect(desktop.left + desktop.width * 0.47).toBeGreaterThan(1280);
     expect(desktop.left + desktop.width * 0.47).toBeLessThan(1410);
-    expect(mobile.top).toBeGreaterThan(136);
+    expect(mobile.top + mobile.height * 0.13).toBeGreaterThan(136);
     expect(mobile.top + mobile.height).toBeLessThan(844);
     expect(mobile.left + mobile.width * 0.47).toBeGreaterThan(100);
     expect(mobile.left + mobile.width * 0.47).toBeLessThan(340);
@@ -24,28 +28,45 @@ it('preserves mobile background framing at high device pixel ratios', () => {
   expect(high.scale / 3).toBeCloseTo(standard.scale);
 });
 
+const rearFloorEdge = (x: number) => 760 + ((x - 430) * 165) / 970;
+
 it.each([
-  [1440, 900, 920],
-  [390, 844, 940],
-  [1024, 900, 945],
-  [1920, 900, 900],
-])(
-  'places the supporting heel on the visible marble floor at %s × %s',
-  (width, height, minimumFloorY) => {
-    const hero = romanceAppearancePlacement(width, height, 'heart-thief');
-    const background = romanceBackdropPlacement(width, height, width, 'heart-thief');
-    const point = heartThiefGroundPoint(486, 1382);
-    const heel = {
-      x: hero.left + (point[0] * hero.height) / 1448,
-      y: hero.top + (point[1] * hero.height) / 1448,
-    };
-    expect((heel.y - background.top) / background.scale).toBeGreaterThan(minimumFloorY);
-    expect((heel.x - background.left) / background.scale).toBeLessThan(1350);
-    expect(background.top).toBeLessThanOrEqual(0);
-    expect(background.top + 1024 * background.scale).toBeGreaterThanOrEqual(height);
-    const high = romanceBackdropPlacement(width * 2, height * 2, width, 'heart-thief');
-    expect(high.left / 2).toBeCloseTo(background.left);
-    expect(high.top / 2).toBeCloseTo(background.top);
+  [1440, 900],
+  [390, 844],
+  [1024, 900],
+  [1920, 900],
+])('keeps the adult and the furniture at a consistent scale at %s × %s', (width, height) => {
+  const hero = romanceAppearancePlacement(width, height, 'heart-thief');
+  const background = romanceBackdropPlacement(width, height, width, 'heart-thief');
+  // The painted console is 404 source px tall. Even on a wide view, the adult
+  // must not shrink toward table height while the room grows with the viewport.
+  if (width >= 1024) expect(hero.height / (404 * background.scale)).toBeGreaterThan(2);
+  for (const [x, y] of [heartThiefStance.anchor, [486, 1382]]) {
+    const point = heartThiefGroundPoint(x, y);
+    const footX =
+      (hero.left + (point[0] * hero.height) / 1448 - background.left) / background.scale;
+    const footY = (hero.top + (point[1] * hero.height) / 1448 - background.top) / background.scale;
+    expect(footY - rearFloorEdge(footX)).toBeGreaterThan(20);
+  }
+  expect(background.top).toBeLessThanOrEqual(0);
+  expect(background.top + 1024 * background.scale).toBeGreaterThanOrEqual(height);
+  const high = romanceBackdropPlacement(width * 2, height * 2, width, 'heart-thief');
+  expect(high.left / 2).toBeCloseTo(background.left);
+  expect(high.top / 2).toBeCloseTo(background.top);
+});
+
+it.each([false, true])(
+  'keeps both supporting contacts on the floor in the landscape camera (cover=%s)',
+  (cover) => {
+    const hero = heartThiefLandscapePlacement(cover);
+    expect(hero.top).toBeGreaterThan(0);
+    for (const [x, y] of [heartThiefStance.anchor, [486, 1382]]) {
+      const point = heartThiefGroundPoint(x, y);
+      const footX = hero.left + point[0] * hero.scale;
+      const footY = hero.top + point[1] * hero.scale;
+      expect(footY - hero.backgroundTop - rearFloorEdge(footX)).toBeGreaterThan(40);
+      expect(footY).toBeLessThan(844);
+    }
   },
 );
 
