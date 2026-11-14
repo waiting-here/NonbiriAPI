@@ -431,4 +431,4 @@ export async function createScene(id, polished = false, options = {}) {
     },
   };
 }
-/* global Image, document */
+/* global Image, document, DOMException, AbortController */

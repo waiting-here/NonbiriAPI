@@ -63,6 +63,9 @@ function Preview() {
               <a className="nb-btn nb-btn--secondary" href="?view=christmas">
                 {english ? 'Christmas artwork' : '圣诞美术预览'}
               </a>
+              <a className="nb-btn nb-btn--secondary" href="?view=motion&theme=g">
+                {english ? 'SSR / SP artwork' : '全部 SSR／SP 美术'}
+              </a>
               <button
                 onClick={() => {
                   const next = !appearanceView;
@@ -155,7 +158,13 @@ const amberExport = new URLSearchParams(location.search).get('view') === 'amber-
 function PreviewRoot() {
   const [adult, setAdult] = useState(() => new URLSearchParams(location.search).get('r18') === '1');
   const view = new URLSearchParams(location.search).get('view');
-  const seasonal = view === 'seasonal' || view === 'christmas';
+  const seasonal = view === 'seasonal' || view === 'christmas' || view === 'motion';
+  const requestedTheme = new URLSearchParams(location.search).get('theme') ?? 'g';
+  const reviewTheme = ['g', 'i', 'j', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'].includes(
+    requestedTheme,
+  )
+    ? requestedTheme
+    : 'g';
   return (
     <ArtworkPolicyProvider disabled={!adult}>
       <ThemeProvider>
@@ -163,7 +172,7 @@ function PreviewRoot() {
           <SeasonalPreview
             adult={adult}
             setAdult={setAdult}
-            theme={view === 'christmas' ? 't' : 's'}
+            theme={view === 'motion' ? reviewTheme : view === 'christmas' ? 't' : 's'}
           />
         ) : amberExport ? (
           <AmberExport />

@@ -5,12 +5,14 @@ import { Button } from '@shared/components/ui/Button';
 import { Field } from '@shared/components/ui/Field';
 import { Toggle } from '@shared/components/ui/Toggle';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
-import { cardById, cards, themeById } from '../user/activities/gacha/catalog';
+import { cardById, cards, themes, themeById } from '../user/activities/gacha/catalog';
 import { CardTile } from '../user/activities/gacha/CardTile';
 import { highResolutionArt } from '../user/activities/gacha/art-resolution';
 import { renderSSR } from '../user/activities/gacha/ssr-renderer';
 import { ChristmasAssets } from './ChristmasAssets';
 import { ClaudeLayerStudy } from './ClaudeLayerStudy';
+import { MotionAssets } from './MotionAssets';
+import { loadLayerResources } from './layer-resources';
 import '../user/activities/gacha/gacha.css';
 import './seasonal-preview.css';
 
@@ -32,16 +34,34 @@ function MotionCard({
   const allowed = policy.allowed('card:' + id);
   const surface = useRef<HTMLCanvasElement>(null);
   const pause = useRef(paused || staticOnly);
+  const visible = useRef(true);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [reduced, setReduced] = useState(
+    () => matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  useEffect(() => {
+    const preference = matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduced(preference.matches);
+    preference.addEventListener('change', update);
+    return () => preference.removeEventListener('change', update);
+  }, []);
   useEffect(() => {
     pause.current = paused || staticOnly;
   }, [paused, staticOnly]);
   useEffect(() => {
-    if (!allowed || !surface.current) return;
+    if (!surface.current) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      visible.current = entry.isIntersecting;
+    });
+    observer.observe(surface.current);
+    return () => observer.disconnect();
+  }, [allowed]);
+  useEffect(() => {
+    if (!allowed || !surface.current || (reduced && time === undefined)) return;
     const controller = new AbortController();
     let cleanup: (() => void) | undefined;
-    void renderSSR(surface.current, id, time, () => pause.current, high, {
+    void renderSSR(surface.current, id, time, () => pause.current || !visible.current, high, {
       signal: controller.signal,
     })
       .then((stop) => {
@@ -60,7 +80,7 @@ function MotionCard({
       setReady(false);
       setFailed(false);
     };
-  }, [allowed, id, time, high]);
+  }, [allowed, id, time, high, reduced]);
   return (
     <figure className="seasonal-review__card" data-card={id}>
       <div className="seasonal-review__art">
@@ -92,7 +112,7 @@ export function SeasonalPreview({
 }: {
   adult: boolean;
   setAdult: (next: boolean) => void;
-  theme?: 's' | 't';
+  theme?: string;
 }) {
   const ids = cards.filter((card) => card.theme === theme).map((card) => card.id);
   const name = themeById[theme].name;
@@ -100,6 +120,7 @@ export function SeasonalPreview({
   const [paused, setPaused] = useState(false);
   const [high, setHigh] = useState(false);
   const [staticOnly, setStaticOnly] = useState(false);
+  const eyeTimes = theme === 'q' ? [1.9575, 2.03, 2.152] : [2.265, 2.35, 2.48];
   const inspect = (seconds: number) => {
     setStaticOnly(false);
     setTime(seconds);
@@ -128,13 +149,30 @@ export function SeasonalPreview({
             Claude 新旧方案
           </a>
         )}
-        {theme === 't' && (
-          <a className="nb-btn nb-btn--secondary" href="#resources">
-            分层资源与原图
-          </a>
-        )}
+        <a className="nb-btn nb-btn--secondary" href="#resources">
+          分层资源与原图
+        </a>
       </nav>
       <section className="seasonal-review__controls" aria-label="预览控制">
+        <Field label="卡牌主题">
+          {(props) => (
+            <select
+              {...props}
+              value={theme}
+              onChange={(event) => {
+                location.href = `?view=motion&theme=${event.target.value}&r18=${Number(adult)}`;
+              }}
+            >
+              {themes
+                .filter((item) => item.rarity === 'SSR' || item.rarity === 'SP')
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.rarity} · {item.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </Field>
         {theme === 's' && (
           <Toggle
             label="显示 R-18 素材"
@@ -164,9 +202,9 @@ export function SeasonalPreview({
             {paused ? '继续播放' : '暂停动作'}
           </Button>
           <Button onClick={() => inspect(0)}>睁眼</Button>
-          <Button onClick={() => inspect(2.265)}>半闭</Button>
-          <Button onClick={() => inspect(2.35)}>闭眼</Button>
-          <Button onClick={() => inspect(2.48)}>重新睁开</Button>
+          <Button onClick={() => inspect(eyeTimes[0])}>半闭</Button>
+          <Button onClick={() => inspect(eyeTimes[1])}>闭眼</Button>
+          <Button onClick={() => inspect(eyeTimes[2])}>重新睁开</Button>
         </div>
         <Field
           label="检查循环时刻"
@@ -177,7 +215,7 @@ export function SeasonalPreview({
               {...props}
               type="range"
               min="0"
-              max="17.6"
+              max={theme === 'm' ? '120' : themeById[theme].rarity === 'SP' ? '180' : '60'}
               step="0.005"
               value={time ?? 0}
               onChange={(event) => inspect(Number(event.target.value))}
@@ -188,12 +226,22 @@ export function SeasonalPreview({
           <a className="nb-btn nb-btn--secondary" href={'?r18=' + Number(adult)}>
             查看抽卡、图鉴与心动时刻
           </a>
-          <a
-            className="nb-btn nb-btn--secondary"
-            href={`?run=${theme === 't' ? 'christmas' : 'seasonal'}&r18=${Number(adult)}`}
-          >
-            查看本组卡的相遇演出
-          </a>
+          {(theme === 's' || theme === 't') && (
+            <a
+              className="nb-btn nb-btn--secondary"
+              href={`?run=${theme === 't' ? 'christmas' : 'seasonal'}&r18=${Number(adult)}`}
+            >
+              查看本组卡的相遇演出
+            </a>
+          )}
+          {themeById[theme].rarity === 'SP' && (
+            <a
+              className="nb-btn nb-btn--secondary"
+              href={`?view=appearance&appearance=${cardById[ids[0]].appearance}`}
+            >
+              查看动态主题装扮
+            </a>
+          )}
         </div>
       </section>
       <h2 id="motion">动态卡面</h2>
@@ -249,6 +297,7 @@ export function SeasonalPreview({
       </section>
       {theme === 't' && <ClaudeLayerStudy />}
       {theme === 't' && <ChristmasAssets high={high} />}
+      {theme !== 't' && <MotionAssets ids={ids} high={high} load={loadLayerResources} />}
     </main>
   );
 }
