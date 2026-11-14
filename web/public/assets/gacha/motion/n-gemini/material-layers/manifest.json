@@ -357,14 +357,14 @@
         ]
       ],
       "vector": [
-        6,
-        3
+        19,
+        -9
       ],
-      "root": 370,
-      "end": 930,
-      "delay": 0.65,
+      "root": 405,
+      "end": 835,
+      "delay": 0.55,
       "material": "silk",
-      "seam": 24,
+      "seam": 25,
       "pins": [
         [
           [
@@ -459,8 +459,45 @@
         601
       ],
       "depth": 3,
-      "reveal": "sleeve-backing.webp, generated repair restricted to authored sleeve mask",
-      "parent": "accepted body/hand pose; wind is local material follow-through"
+      "reveal": "Free cloth contour; upper/internal cuts and original hand, leg and shoe contacts remain pinned. Exposed sleeve backing uses the retained registered hair repair.",
+      "parent": "Fixed accepted pose; cloth follows the sea breeze and returns to its lowered resting shape.",
+      "seams": [
+        [
+          [
+            174,
+            369
+          ],
+          [
+            206,
+            399
+          ],
+          [
+            245,
+            417
+          ],
+          [
+            275,
+            374
+          ],
+          [
+            305,
+            400
+          ]
+        ]
+      ],
+      "rest": [
+        -2,
+        9
+      ],
+      "pinMargin": 10,
+      "flutter": {
+        "vector": [
+          1.5,
+          2.0
+        ],
+        "period": 6.4,
+        "phase": 0.25
+      }
     },
     {
       "name": "train-left",
@@ -507,14 +544,14 @@
         ]
       ],
       "vector": [
-        6,
-        -3
+        24,
+        -10
       ],
-      "root": 940,
-      "end": 1410,
-      "delay": 1.1,
+      "root": 910,
+      "end": 1270,
+      "delay": 0.85,
       "material": "cloth",
-      "seam": 24,
+      "seam": 54,
       "pins": [
         [
           [
@@ -609,58 +646,91 @@
         562
       ],
       "depth": 4,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "accepted body/hand pose; wind is local material follow-through"
+      "reveal": "Free cloth contour; upper/internal cuts and original hand, leg and shoe contacts remain pinned. Exposed sleeve backing uses the retained registered hair repair.",
+      "parent": "Fixed accepted pose; cloth follows the sea breeze and returns to its lowered resting shape.",
+      "seams": [
+        [
+          [
+            202,
+            930
+          ],
+          [
+            368,
+            908
+          ],
+          [
+            390,
+            1036
+          ],
+          [
+            432,
+            1140
+          ],
+          [
+            438,
+            1394
+          ]
+        ]
+      ],
+      "rest": [
+        -3,
+        11
+      ],
+      "pinMargin": 14,
+      "flutter": {
+        "vector": [
+          1.8,
+          2.6
+        ],
+        "period": 7.3,
+        "phase": 0.4
+      }
     },
     {
       "name": "train-right",
       "polygon": [
         [
-          703,
-          1102
+          650,
+          835
         ],
         [
-          806,
-          1094
-        ],
-        [
-          970,
-          1146
+          885,
+          835
         ],
         [
           1024,
-          1276
+          930
         ],
         [
           1024,
           1536
         ],
         [
-          647,
+          620,
           1536
         ],
         [
-          593,
-          1410
+          578,
+          1350
         ],
         [
-          595,
-          1280
+          578,
+          1130
         ],
         [
-          661,
-          1196
+          600,
+          980
         ]
       ],
       "vector": [
-        8,
-        -4
+        26,
+        -12
       ],
-      "root": 1100,
-      "end": 1510,
-      "delay": 1.4,
+      "root": 835,
+      "end": 1190,
+      "delay": 1.15,
       "material": "cloth",
-      "seam": 24,
+      "seam": 50,
       "pins": [
         [
           [
@@ -749,14 +819,61 @@
       ],
       "file": "train-right.webp",
       "crop": [
-        582,
-        1082,
-        442,
-        454
+        566,
+        823,
+        458,
+        713
       ],
       "depth": 5,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "accepted body/hand pose; wind is local material follow-through"
+      "reveal": "Free cloth contour; upper/internal cuts and original hand, leg and shoe contacts remain pinned. Exposed sleeve backing uses the retained registered hair repair.",
+      "parent": "Fixed accepted pose; cloth follows the sea breeze and returns to its lowered resting shape.",
+      "seams": [
+        [
+          [
+            650,
+            835
+          ],
+          [
+            885,
+            835
+          ]
+        ],
+        [
+          [
+            650,
+            835
+          ],
+          [
+            600,
+            980
+          ],
+          [
+            578,
+            1130
+          ],
+          [
+            578,
+            1350
+          ],
+          [
+            620,
+            1536
+          ]
+        ]
+      ],
+      "rest": [
+        -3,
+        13
+      ],
+      "pinMargin": 15,
+      "flutter": {
+        "vector": [
+          2.2,
+          2.8
+        ],
+        "period": 8.1,
+        "phase": 1.1
+      }
     },
     {
       "name": "sleeve-crystal-upper",
@@ -804,7 +921,7 @@
         0,
         0
       ],
-      "delay": 0.65,
+      "delay": 0.95,
       "material": "crystal",
       "rootOnly": true,
       "seam": 0,
@@ -813,7 +930,7 @@
         177,
         531
       ],
-      "rotation": 0.015,
+      "rotation": 0.065,
       "file": "sleeve-crystal-upper.webp",
       "crop": [
         153,
@@ -822,7 +939,13 @@
         102
       ],
       "depth": 100,
-      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "parent": {
+        "name": "sleeve-silk",
+        "at": [
+          177,
+          531
+        ]
+      },
       "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
     },
     {
@@ -871,7 +994,7 @@
         0,
         0
       ],
-      "delay": 0.65,
+      "delay": 0.95,
       "material": "crystal",
       "rootOnly": true,
       "seam": 0,
@@ -880,7 +1003,7 @@
         191,
         644
       ],
-      "rotation": 0.012,
+      "rotation": 0.075,
       "file": "sleeve-crystal-lower.webp",
       "crop": [
         164,
@@ -889,7 +1012,13 @@
         110
       ],
       "depth": 101,
-      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "parent": {
+        "name": "sleeve-silk",
+        "at": [
+          191,
+          644
+        ]
+      },
       "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
     },
     {
@@ -943,23 +1072,35 @@
       "root": 566,
       "end": 652,
       "vector": [
-        1.4,
-        0.4
+        4,
+        2
       ],
       "delay": 0.12,
       "axis": "x",
       "material": "ribbon",
       "file": "head-ribbon-short.webp",
       "crop": [
-        558,
-        113,
-        103,
-        96
+        553,
+        108,
+        112,
+        106
       ],
       "seam": 0,
       "rootOnly": true,
       "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
-      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette"
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette",
+      "rest": [
+        0,
+        1.5
+      ],
+      "flutter": {
+        "vector": [
+          0.7,
+          0.9
+        ],
+        "period": 5.6,
+        "phase": 0.12
+      }
     },
     {
       "name": "head-ribbon-upper",
@@ -1032,23 +1173,35 @@
       "root": 641,
       "end": 833,
       "vector": [
-        3.2,
-        -0.6
+        10,
+        -5
       ],
       "delay": 0.3,
       "axis": "x",
       "material": "ribbon",
       "file": "head-ribbon-upper.webp",
       "crop": [
-        633,
-        183,
-        209,
-        103
+        631,
+        182,
+        211,
+        107
       ],
       "seam": 0,
       "rootOnly": true,
       "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
-      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette"
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette",
+      "rest": [
+        0,
+        5
+      ],
+      "flutter": {
+        "vector": [
+          0.7,
+          0.9
+        ],
+        "period": 5.6,
+        "phase": 0.3
+      }
     },
     {
       "name": "head-ribbon-lower",
@@ -1105,23 +1258,35 @@
       "root": 648,
       "end": 708,
       "vector": [
-        2.2,
-        0.4
+        8,
+        -3
       ],
       "delay": 0.42,
       "axis": "x",
       "material": "ribbon",
       "file": "head-ribbon-lower.webp",
       "crop": [
-        640,
-        203,
-        103,
-        125
+        635,
+        201,
+        108,
+        127
       ],
       "seam": 0,
       "rootOnly": true,
       "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
-      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette"
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette",
+      "rest": [
+        0,
+        6
+      ],
+      "flutter": {
+        "vector": [
+          0.7,
+          0.9
+        ],
+        "period": 5.6,
+        "phase": 0.42
+      }
     },
     {
       "name": "head-crystal-near",
@@ -1167,14 +1332,14 @@
         0,
         0
       ],
-      "delay": 0.3,
+      "delay": 0.55,
       "material": "crystal",
       "rigid": true,
       "pivot": [
         585,
         198
       ],
-      "rotation": 0.012,
+      "rotation": 0.065,
       "file": "head-crystal-near.webp",
       "crop": [
         567,
@@ -1224,17 +1389,17 @@
       "root": 0,
       "end": 1,
       "vector": [
-        2.2,
-        0.4
+        0,
+        0
       ],
-      "delay": 0.42,
+      "delay": 0.8,
       "material": "crystal",
       "rigid": true,
       "pivot": [
         708,
         303
       ],
-      "rotation": 0.012,
+      "rotation": 0.07,
       "file": "head-crystal-far.webp",
       "crop": [
         688,
@@ -1244,13 +1409,19 @@
       ],
       "seam": 0,
       "rootOnly": true,
-      "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
+      "parent": {
+        "name": "head-ribbon-lower",
+        "at": [
+          708,
+          303
+        ]
+      },
       "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette"
     }
   ],
   "fixed": [
-    "Face, body, shoulder caps, raised arm and hand, held skirt and its hand contact, inner dress and legs retain original coordinates."
+    "Face, body, shoulder caps, raised arm and hand, held skirt and hand contact, inner dress and legs retain the adopted pose."
   ],
   "repair": "detail-backing.webp",
-  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+  "status": "Registered material motion; fixed attachment seams, free contours, dependent crystals and breeze/rest profiles."
 }
