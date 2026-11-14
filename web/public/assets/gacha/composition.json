@@ -1429,7 +1429,7 @@
           1488
         ],
         "character_content_height": 1448,
-        "layout": "independent viewport placement shared by static and animated appearance"
+        "layout": "Shared static/animated viewport placement; adult scale follows both viewport height and console projection; desktop wide views crop the lower body instead of shrinking it against the furniture."
       },
       "resolution": {
         "background_native": [
@@ -1446,6 +1446,32 @@
           1448
         ],
         "character_high_method": "native plates shared by both display qualities"
+      },
+      "landscape_registration": {
+        "canvas": [
+          1536,
+          864
+        ],
+        "background": [
+          0,
+          -160,
+          1
+        ],
+        "illustration": {
+          "character": [
+            780,
+            26,
+            0.55
+          ]
+        },
+        "cover": {
+          "character": [
+            785,
+            12,
+            0.57
+          ]
+        },
+        "ground": "Supporting forefoot and stiletto heel remain inside the marble floor; raised far foot is preserved."
       }
     },
     "r-chatgpt": {
