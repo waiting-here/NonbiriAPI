@@ -1,0 +1,680 @@
+{
+  "version": 1,
+  "canvas": [
+    1536,
+    1024
+  ],
+  "cycle": 160,
+  "source": "background-light.webp",
+  "sourceSha256": "bfe9f83e351f6d598f24cf0d00b0c4a16b56e8de69b12765625cc536d2b928c8",
+  "layers": [
+    {
+      "name": "curtain-left-lower",
+      "polygon": [
+        [
+          324,
+          337
+        ],
+        [
+          349,
+          354
+        ],
+        [
+          357,
+          407
+        ],
+        [
+          370,
+          463
+        ],
+        [
+          387,
+          524
+        ],
+        [
+          402,
+          597
+        ],
+        [
+          419,
+          654
+        ],
+        [
+          438,
+          707
+        ],
+        [
+          449,
+          741
+        ],
+        [
+          441,
+          753
+        ],
+        [
+          409,
+          764
+        ],
+        [
+          420,
+          781
+        ],
+        [
+          382,
+          788
+        ],
+        [
+          343,
+          796
+        ],
+        [
+          304,
+          791
+        ],
+        [
+          289,
+          774
+        ],
+        [
+          296,
+          684
+        ],
+        [
+          298,
+          590
+        ],
+        [
+          296,
+          544
+        ],
+        [
+          303,
+          455
+        ],
+        [
+          309,
+          385
+        ]
+      ],
+      "vector": [
+        -6,
+        1.2
+      ],
+      "root": 337,
+      "end": 790,
+      "delay": 0.7,
+      "pinX": [
+        290,
+        316
+      ],
+      "material": "heavy-cloth",
+      "rootOnly": true,
+      "file": "curtain-left-lower.webp",
+      "crop": [
+        277,
+        325,
+        185,
+        484
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 33,
+      "depth": 1,
+      "parent": "fixed curtain tieback / river banks / window-frame occluders",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "curtain-right-lower",
+      "polygon": [
+        [
+          1524,
+          409
+        ],
+        [
+          1536,
+          415
+        ],
+        [
+          1536,
+          1019
+        ],
+        [
+          1470,
+          1006
+        ],
+        [
+          1410,
+          963
+        ],
+        [
+          1364,
+          911
+        ],
+        [
+          1344,
+          856
+        ],
+        [
+          1363,
+          801
+        ],
+        [
+          1391,
+          742
+        ],
+        [
+          1415,
+          680
+        ],
+        [
+          1444,
+          606
+        ],
+        [
+          1464,
+          550
+        ],
+        [
+          1492,
+          487
+        ]
+      ],
+      "vector": [
+        -7,
+        1.2
+      ],
+      "root": 420,
+      "end": 1000,
+      "delay": 1.15,
+      "pinX": [
+        1536,
+        1505
+      ],
+      "material": "heavy-cloth",
+      "rootOnly": true,
+      "file": "curtain-right-lower.webp",
+      "crop": [
+        1332,
+        397,
+        204,
+        627
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 33,
+      "depth": 2,
+      "parent": "fixed curtain tieback / river banks / window-frame occluders",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "window-clouds",
+      "polygon": [
+        [
+          565,
+          0
+        ],
+        [
+          1395,
+          0
+        ],
+        [
+          1395,
+          264
+        ],
+        [
+          1325,
+          265
+        ],
+        [
+          1325,
+          233
+        ],
+        [
+          1277,
+          233
+        ],
+        [
+          1268,
+          187
+        ],
+        [
+          1238,
+          178
+        ],
+        [
+          1228,
+          222
+        ],
+        [
+          1209,
+          215
+        ],
+        [
+          1189,
+          274
+        ],
+        [
+          1130,
+          285
+        ],
+        [
+          1055,
+          286
+        ],
+        [
+          1024,
+          282
+        ],
+        [
+          990,
+          284
+        ],
+        [
+          941,
+          275
+        ],
+        [
+          896,
+          279
+        ],
+        [
+          865,
+          274
+        ],
+        [
+          830,
+          284
+        ],
+        [
+          802,
+          266
+        ],
+        [
+          765,
+          260
+        ],
+        [
+          727,
+          254
+        ],
+        [
+          689,
+          242
+        ],
+        [
+          662,
+          261
+        ],
+        [
+          613,
+          281
+        ],
+        [
+          589,
+          273
+        ]
+      ],
+      "vector": [
+        18,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 0,
+      "material": "cloud",
+      "rigid": true,
+      "clip": true,
+      "file": "window-clouds.webp",
+      "crop": [
+        557,
+        0,
+        851,
+        298
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 33,
+      "depth": 3,
+      "parent": "fixed curtain tieback / river banks / window-frame occluders",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "river-right-reflection",
+      "polygon": [
+        [
+          1188,
+          448
+        ],
+        [
+          1241,
+          446
+        ],
+        [
+          1271,
+          448
+        ],
+        [
+          1308,
+          449
+        ],
+        [
+          1340,
+          443
+        ],
+        [
+          1365,
+          447
+        ],
+        [
+          1361,
+          485
+        ],
+        [
+          1290,
+          485
+        ],
+        [
+          1239,
+          480
+        ],
+        [
+          1214,
+          468
+        ]
+      ],
+      "vector": [
+        0.9,
+        0.3
+      ],
+      "root": 448,
+      "end": 483,
+      "delay": 0.3,
+      "material": "water",
+      "rootOnly": false,
+      "file": "river-right-reflection.webp",
+      "crop": [
+        1176,
+        431,
+        202,
+        67
+      ],
+      "seam": 3,
+      "pinMargin": 1,
+      "cycle": 33,
+      "depth": 4,
+      "parent": "fixed curtain tieback / river banks / window-frame occluders",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "river-left-reflection",
+      "polygon": [
+        [
+          1017,
+          411
+        ],
+        [
+          1043,
+          409
+        ],
+        [
+          1067,
+          417
+        ],
+        [
+          1097,
+          423
+        ],
+        [
+          1119,
+          431
+        ],
+        [
+          1108,
+          438
+        ],
+        [
+          1080,
+          437
+        ],
+        [
+          1045,
+          430
+        ],
+        [
+          1022,
+          425
+        ]
+      ],
+      "vector": [
+        0.65,
+        0.2
+      ],
+      "root": 411,
+      "end": 436,
+      "delay": 1,
+      "material": "water",
+      "rootOnly": false,
+      "file": "river-left-reflection.webp",
+      "crop": [
+        1005,
+        397,
+        127,
+        54
+      ],
+      "seam": 3,
+      "pinMargin": 1,
+      "cycle": 33,
+      "depth": 5,
+      "parent": "fixed curtain tieback / river banks / window-frame occluders",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "curtain-gold-chain-tassel",
+      "polygon": [
+        [
+          317,
+          340
+        ],
+        [
+          325,
+          341
+        ],
+        [
+          324,
+          359
+        ],
+        [
+          325,
+          381
+        ],
+        [
+          329,
+          390
+        ],
+        [
+          331,
+          410
+        ],
+        [
+          334,
+          446
+        ],
+        [
+          320,
+          451
+        ],
+        [
+          305,
+          446
+        ],
+        [
+          308,
+          416
+        ],
+        [
+          311,
+          395
+        ],
+        [
+          317,
+          381
+        ]
+      ],
+      "pivot": [
+        321,
+        341
+      ],
+      "rotation": 0.008,
+      "delay": 0.75,
+      "material": "gold-tassel",
+      "file": "curtain-gold-chain-tassel.webp",
+      "crop": [
+        299,
+        334,
+        42,
+        123
+      ],
+      "rigid": true,
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "seam": 0,
+      "cycle": 33,
+      "parent": "fixed curtain tieback",
+      "reveal": "backing.webp: registered clean blue curtain / wall"
+    },
+    {
+      "name": "candle-flame-tall",
+      "polygon": [
+        [
+          26,
+          197
+        ],
+        [
+          28,
+          208
+        ],
+        [
+          31,
+          218
+        ],
+        [
+          30,
+          228
+        ],
+        [
+          27,
+          235
+        ],
+        [
+          22,
+          231
+        ],
+        [
+          19,
+          222
+        ],
+        [
+          21,
+          214
+        ],
+        [
+          25,
+          207
+        ]
+      ],
+      "pivot": [
+        26,
+        235
+      ],
+      "rotation": 0.018,
+      "delay": 0,
+      "material": "flame",
+      "file": "candle-flame-tall.webp",
+      "crop": [
+        13,
+        191,
+        25,
+        51
+      ],
+      "rigid": true,
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "seam": 0,
+      "cycle": 33,
+      "parent": "fixed wax wick; candle pillar does not bend",
+      "reveal": "backing.webp: registered clean blue curtain / wall"
+    },
+    {
+      "name": "candle-flame-short",
+      "polygon": [
+        [
+          69,
+          250
+        ],
+        [
+          70,
+          259
+        ],
+        [
+          74,
+          268
+        ],
+        [
+          72,
+          277
+        ],
+        [
+          67,
+          283
+        ],
+        [
+          62,
+          278
+        ],
+        [
+          62,
+          269
+        ],
+        [
+          65,
+          262
+        ]
+      ],
+      "pivot": [
+        67,
+        283
+      ],
+      "rotation": 0.021,
+      "delay": 0.6,
+      "material": "flame",
+      "file": "candle-flame-short.webp",
+      "crop": [
+        56,
+        244,
+        25,
+        46
+      ],
+      "rigid": true,
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "seam": 0,
+      "cycle": 33,
+      "parent": "fixed wax wick; candle pillar does not bend",
+      "reveal": "backing.webp: registered clean blue curtain / wall"
+    }
+  ],
+  "repair": "backing.webp",
+  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+}

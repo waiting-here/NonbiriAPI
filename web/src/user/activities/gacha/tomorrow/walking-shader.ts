@@ -19,7 +19,9 @@ float wind(float seconds){
 float breath(){float t=mod(time,5.8);return smoothstep(0.,2.1,t)*(1.-smoothstep(2.1,5.8,t));}
 vec2 displacement(vec2 q){
  vec4 binding=texture2D(rig,q);
- return ((binding.rg*255.-128.)/3.+vec2(-.8,-1.9)*binding.b*breath())/vec2(1024.,1536.);
+ // Hair and coat silhouettes are assembled from separate material plates.
+ // Keep only the existing ribcage breath here; the pendant remains a rigid pass.
+ return vec2(-.8,-1.9)*binding.b*breath()/vec2(1024.,1536.);
 }
 vec4 heroColor(vec2 q){
  if(q.x<0.||q.x>1.||q.y<0.||q.y>1.)return vec4(0.);
@@ -41,8 +43,8 @@ void main(){
  vec2 p=view.xy+uv*view.zw;
  vec4 motion=texture2D(environment,p);
  vec2 sceneUV=p+vec2(.0021*sin(time*6.2831853/43.),0.)*motion.r;
- sceneUV+=vec2(.0016,.0007)*wind(time)*motion.g;
- sceneUV+=vec2(.0019,.0008)*wind(time-.4)*motion.b;
+ // Foreground foliage is drawn as leaf plates above repaired sky/branches.
+ // Keep trunks and architecture out of the old broad tree deformation fields.
  vec4 color=characterOnly>.5?vec4(0.):texture2D(scenery,sceneUV);
  if(characterOnly<.5){
   float ground=smoothstep(.67,.79,p.y);

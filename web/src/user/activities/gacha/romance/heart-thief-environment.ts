@@ -22,39 +22,14 @@ export function heartThiefLight(time: number) {
 }
 
 export function heartThiefEnvironment(
-  image: HTMLImageElement,
+  _image: HTMLImageElement,
   background: { draw(time: number): CanvasImageSource },
 ) {
-  // The moving sky stops before the moon, castle spires, flowers and window frames.
-  const cloud = document.createElement('canvas');
-  const resolution = image.naturalWidth / 1536;
-  cloud.width = Math.round(500 * resolution);
-  cloud.height = Math.round(148 * resolution);
-  const sky = cloud.getContext('2d')!;
-  sky.drawImage(
-    image,
-    655 * resolution,
-    95 * resolution,
-    500 * resolution,
-    148 * resolution,
-    0,
-    0,
-    cloud.width,
-    cloud.height,
-  );
-  sky.globalCompositeOperation = 'destination-in';
-  sky.translate(cloud.width / 2, cloud.height / 2);
-  sky.scale(cloud.width / 2, cloud.height / 2);
-  const mask = sky.createRadialGradient(0, 0, 0.55, 0, 0, 1);
-  mask.addColorStop(0, '#fff');
-  mask.addColorStop(1, 'rgba(255,255,255,0)');
-  sky.fillStyle = mask;
-  sky.fillRect(-1, -1, 2, 2);
-
+  // The material compositor now supplies an actual cloud-only sky over a clean
+  // backing, plus river reflections bounded by banks and bridge occluders.
   return {
     draw(context: CanvasRenderingContext2D, time: number, dark: boolean) {
-      context.drawImage(background.draw(12 + time), 0, 0, 1536, 1024);
-      context.drawImage(cloud, 655 + 2.5 * Math.sin((time * Math.PI * 2) / 42), 95, 500, 148);
+      context.drawImage(background.draw(time), 0, 0, 1536, 1024);
       context.save();
       context.globalCompositeOperation = 'screen';
       const { moon, candle } = heartThiefLight(time);
@@ -96,10 +71,7 @@ export function heartThiefEnvironment(
       context.restore();
       context.restore();
     },
-    dispose() {
-      cloud.width = 0;
-      cloud.height = 0;
-    },
+    dispose() {},
   };
 }
 

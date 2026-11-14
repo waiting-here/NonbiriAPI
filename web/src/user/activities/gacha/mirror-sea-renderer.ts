@@ -4,6 +4,7 @@ import { highResolutionArt } from './art-resolution';
 import { mirrorSeaEyelids } from './mirror-sea-eyelids';
 import { mirrorSeaShader } from './mirror-sea-shader';
 import { mirrorSeaLayout } from './mirror-sea-layout';
+import { createMaterialPlates, uploadMaterialPlate } from './romance/material-plates';
 
 type Options = {
   polished?: boolean;
@@ -69,6 +70,9 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     source('shadow'),
   ]);
   if (options.signal?.aborted) return () => {};
+  const materials = options.backgroundOnly
+    ? undefined
+    : await createMaterialPlates('n-gemini', hero, options.signal);
   const context = canvas.getContext('2d');
   const layer = document.createElement('canvas');
   const gl = layer.getContext('webgl', {
@@ -76,12 +80,14 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     premultipliedAlpha: false,
     antialias: false,
   });
-  if (!gl || !context) throw new Error('renderer-unavailable');
+  if (!gl || !context) {
+    materials?.dispose();
+    throw new Error('renderer-unavailable');
+  }
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [];
   const program = gl.createProgram(),
     buffer = gl.createBuffer();
-  if (!program || !buffer) throw new Error('renderer-unavailable');
   let raf = 0,
     stopped = false,
     time = 0,
@@ -101,10 +107,12 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     gl.deleteBuffer(buffer);
     gl.deleteProgram(program);
     gl.getExtension('WEBGL_lose_context')?.loseContext();
+    materials?.dispose();
     layer.width = 0;
     layer.height = 0;
   };
   try {
+    if (!program || !buffer) throw new Error('renderer-unavailable');
     for (const [type, code] of [
       [
         gl.VERTEX_SHADER,
@@ -231,8 +239,13 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
             !!options.polished,
             options.variant === 'appearance',
           );
-    gl.uniform4fv(uniform('view'), expandMomentView(layout.view, momentFrame));
+    const view = expandMomentView(layout.view, momentFrame);
+    gl.uniform4fv(uniform('view'), view);
     gl.uniform4fv(uniform('heroBox'), layout.heroBox);
+    materials?.setResolution(
+      (layer.width * layout.heroBox[2]) / view[2],
+      (layer.height * layout.heroBox[3]) / view[3],
+    );
     painted = false;
     cadence.reset();
     if (frozenTime !== undefined) frame(performance.now());
@@ -244,6 +257,10 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     last = at;
     if ((!painted || !paused) && (frozenTime !== undefined || cadence.due(at))) {
       const t = frozenTime ?? time;
+      if (materials) {
+        gl!.activeTexture(gl!.TEXTURE1);
+        uploadMaterialPlate(gl!, textures[1], materials.draw(t));
+      }
       gl!.uniform1f(timeUniform, t);
       gl!.uniform1f(blinkUniform, options.blink ?? blinkAt(t));
       gl!.drawArrays(gl!.TRIANGLES, 0, 6);

@@ -16,12 +16,19 @@ function glow(
   context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
-export function elopementEnvironment(image: HTMLImageElement) {
+export function elopementEnvironment(
+  image: HTMLImageElement,
+  background?: { draw(time: number): CanvasImageSource },
+) {
   // These sky regions stop before the overhead wires and the city silhouette.
-  const clouds = [
-    { x: 162, y: 111, rx: 154, ry: 91, period: 38, amplitude: 2.8 },
-    { x: 240, y: 263, rx: 222, ry: 31, period: 51, amplitude: 1.8 },
-  ].map((region) => {
+  const clouds = (
+    background
+      ? []
+      : [
+          { x: 162, y: 111, rx: 154, ry: 91, period: 38, amplitude: 2.8 },
+          { x: 240, y: 263, rx: 222, ry: 31, period: 51, amplitude: 1.8 },
+        ]
+  ).map((region) => {
     const layer = document.createElement('canvas');
     const resolution = image.naturalWidth / 1536;
     layer.width = Math.round(region.rx * 2 * resolution);
@@ -51,7 +58,7 @@ export function elopementEnvironment(image: HTMLImageElement) {
 
   return {
     draw(context: CanvasRenderingContext2D, time: number, dark: boolean) {
-      context.drawImage(image, 0, 0, 1536, 1024);
+      context.drawImage(background?.draw(time) ?? image, 0, 0, 1536, 1024);
       for (const cloud of clouds) {
         context.drawImage(
           cloud.layer,

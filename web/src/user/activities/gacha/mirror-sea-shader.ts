@@ -1,5 +1,6 @@
 import { eyelidShader } from '@shared/animation/illustration';
 import { mirrorSeaOptics } from './mirror-sea-optics';
+import { anatomicalBreathShader, mirrorSeaBreath } from './romance/anatomical-breath';
 
 export const mirrorSeaShader = `precision highp float;
 varying vec2 uv;
@@ -35,6 +36,7 @@ float waterMask(vec2 p){
 }
 ${eyelidShader}
 ${mirrorSeaOptics}
+${anatomicalBreathShader('ribBreath', mirrorSeaBreath)}
 vec3 touchLight(vec2 offset){
   float phase=TAU*time/17.6;
   vec2 d=offset*vec2(1.77778,1.);
@@ -106,17 +108,9 @@ void main(){
   vec4 contact=texture2D(shadow,q);
   background.rgb=mix(background.rgb,contact.rgb,contact.a);
   float phase=TAU*time/17.6;
-  // Finite fields on detached hair ends, hanging sleeve and skirt edges.
-  // Roots, face, shoulders, torso, hands and legs retain their painted coordinates.
-  float hairRight=feather(q,vec2(.90,.42),vec2(.10,.15));
-  float hairLeft=feather(q,vec2(.10,.49),vec2(.10,.13));
-  float ribbon=feather(q,vec2(.75,.16),vec2(.10,.055));
-  float sleeve=feather(q,vec2(.245,.50),vec2(.075,.12));
-  float hemLeft=feather(q,vec2(.19,.81),vec2(.14,.12));
-  float hemRight=feather(q,vec2(.85,.875),vec2(.13,.095));
-  q.x+=.006*sin(phase-q.y*4.)*hairRight+.0045*sin(phase+.7-q.y*4.)*hairLeft;
-  q.y+=.0025*sin(phase)*ribbon+.0018*sin(phase+.5)*sleeve;
-  q.x+=.0035*sin(phase-1.)*sleeve+.004*sin(phase-q.y*3.)*(hemLeft+hemRight);
+  // The art texture is assembled from registered material plates. Its free
+  // silhouettes already moved; a second texture warp would pull skin and gold.
+  q-=ribBreath(q,time);
   vec4 hero=texture2D(art,q);
   hero=eyelid(q,leftEye,.125,hero);
   hero=eyelid(q,rightEye,.625,hero);

@@ -9,6 +9,7 @@ export function createScene(
     dark?: boolean;
     characterOnly?: boolean;
     momentFrame?: MomentFrame;
+    signal?: AbortSignal;
   },
 ): Promise<{
   paintCharacter(
