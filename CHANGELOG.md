@@ -29,7 +29,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   visibly while seams and hand contacts stay fixed; ornaments follow their
   attachments, with matching static and high-resolution artwork.
 - Align Christmas ChatGPT's face and eye animation with her established
-  character design, including the five-character illustration and pool cover.
+  character design, refine waist-to-hip alignment and harmonize exposed skin
+  tones, including the five-character illustration and pool cover.
 - Correct both hands in Fairytale Theatre Gemini, remove stray fingers from
   Summer Fireworks ChatGPT, and refine finger shapes in Origin Echo DeepSeek,
   Myriad Forms ChatGPT and the Fairytale Theatre group illustration.

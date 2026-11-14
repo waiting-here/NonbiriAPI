@@ -209,8 +209,8 @@ export const christmasRigs: Record<ChristmasCard, ChristmasRig> = {
       ],
       [
         [414, 818],
-        [657, 820],
-        [661, 969],
+        [674, 820],
+        [675, 969],
         [660, 1114],
         [674, 1295],
         [674, 1558],

@@ -27,8 +27,10 @@ faces, hands, legs and standing positions across cards and site appearances.
 
 Christmas ChatGPT uses a localized facial refinement referenced to her established
 character portrait and earlier cards. Mint-green irises, softer facial planes and
-cleaner illustrated features replace the previous face. Only the registered face
-region is adopted; the original costume, hands, pose and source alpha remain.
+cleaner illustrated features replace the previous face. A subsequent local
+refinement connects the waist, pelvis and thighs more naturally while preserving
+the established face shape, costume, hands and foot placement. Exposed skin uses
+a consistent warm-peach palette with the original painted shading and texture.
 Fresh eye contours and closed-eye art share that registration, as do the card,
 transparent body, five-character illustration and pool-cover derivatives.
 

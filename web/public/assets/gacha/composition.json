@@ -1758,9 +1758,15 @@
       ],
       "face_registration": {
         "reference": "Established character portrait and earlier card identity",
-        "adopted_region": "Localized face only; original pose, costume, hands and source alpha preserved",
+        "adopted_region": "Localized face identity, with a subsequent registered posture and complexion refinement",
         "eye_states": "Fresh closed-eye painting and individually registered open/half/closed contours",
         "derivatives": "Standard and high-resolution portrait, body layer, thumbnail, five-character illustration and pool cover"
+      },
+      "posture_registration": {
+        "source": "Registered local waist, pelvis and stocking-contour refinement",
+        "fixed": "Established face shape, hands, upper costume and shoe contact positions retained",
+        "complexion": "Exposed skin harmonized to a light warm-peach palette while preserving original painted shading and detail; stockings retain their fabric color",
+        "motion": "Refined thigh boundary included in the fixed body mask; standard, high-resolution, closed-eye and group derivatives share the adopted registration"
       }
     },
     "t-claude": {
