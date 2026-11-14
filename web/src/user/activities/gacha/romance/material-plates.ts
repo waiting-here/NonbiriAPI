@@ -3,7 +3,7 @@
  * extracted free hair/cloth ends; a cut seam is never allowed to slide open.
  */
 type Point = readonly [number, number];
-type Plate = {
+export type MaterialPlate = {
   name: string;
   file: string;
   crop: readonly [number, number, number, number];
@@ -25,7 +25,13 @@ type Plate = {
   sewnGroup?: string;
   cycle?: number;
   pinMargin?: number;
+  /** Open attachment lines; free silhouette edges must not become seams. */
+  seams?: readonly (readonly Point[])[];
+  rest?: Point;
+  flutter?: { vector: Point; period: number; phase?: number };
+  parent?: string | { name: string; at: Point };
 };
+type Plate = MaterialPlate;
 type Manifest = { canvas: Point; cycle: number; source?: string; repair?: string; layers: Plate[] };
 export type MaterialSceneId = 'n-gemini' | 'o-claude' | 'p-claude' | 'q-glm' | 'r-chatgpt';
 export type MaterialDirectory = 'material-layers' | 'environment-light' | 'environment-dark';
@@ -92,9 +98,9 @@ export function materialImpulse(seconds: number, cycle: number, delay = 0, heavy
   return crest - release * (heavy ? 0.18 : 0.3);
 }
 
-function seamDistance(x: number, y: number, polygon: readonly Point[]) {
+function seamDistance(x: number, y: number, polygon: readonly Point[], closed = true) {
   let distance = Infinity;
-  for (let i = 0; i < polygon.length; i++) {
+  for (let i = 0; i < polygon.length - (closed ? 0 : 1); i++) {
     const a = polygon[i],
       b = polygon[(i + 1) % polygon.length];
     const dx = b[0] - a[0],
@@ -108,6 +114,103 @@ function seamDistance(x: number, y: number, polygon: readonly Point[]) {
   return distance;
 }
 
+/** Source-coordinate attachment weight, shared with ornament inheritance. */
+export function materialPointWeight(plate: Plate, point: Point) {
+  if (plate.rigid) return 1;
+  const [px, py] = point;
+  const coordinate = plate.axis === 'x' ? px : py;
+  const progress = smooth((coordinate - plate.root) / (plate.end - plate.root || 1));
+  const distance = Math.min(
+    ...(plate.seams
+      ? plate.seams.map((seam) => seamDistance(px, py, seam, false))
+      : [seamDistance(px, py, plate.polygon)]),
+    ...(plate.pins ?? []).map((pin) => seamDistance(px, py, pin)),
+  );
+  const margin = plate.pinMargin ?? 10;
+  const edgePin = plate.rootOnly
+    ? 1
+    : plate.seam > 0
+      ? smooth((distance - margin) / plate.seam)
+      : Number(distance > margin);
+  const contactPin = plate.pinX
+    ? smooth((px - plate.pinX[0]) / (plate.pinX[1] - plate.pinX[0]))
+    : 1;
+  return progress * edgePin * contactPin;
+}
+
+export function materialPose(plate: Plate, seconds: number, cycle: number) {
+  const impulse =
+    plate.material === 'flame'
+      ? 0.65 * Math.sin(seconds * 7.1 + plate.delay) + 0.35 * Math.sin(seconds * 11.3 - plate.delay)
+      : plate.material === 'water'
+        ? 0.62 * Math.sin(seconds * 1.23 + plate.delay) +
+          0.38 * Math.sin(seconds * 2.17 - plate.delay)
+        : materialImpulse(
+            seconds,
+            plate.cycle ?? cycle,
+            plate.delay,
+            plate.material.includes('cloth'),
+          );
+  const flutter = plate.flutter
+    ? Math.sin(
+        ((seconds - plate.delay) * Math.PI * 2) / plate.flutter.period + (plate.flutter.phase ?? 0),
+      ) *
+      (0.18 + 0.82 * Math.max(0, impulse))
+    : 0;
+  return {
+    offset: plate.vector.map((value, axis) => {
+      const rest = plate.rest?.[axis] ?? 0;
+      return rest + (value - rest) * impulse + (plate.flutter?.vector[axis] ?? 0) * flutter;
+    }) as [number, number],
+    angle: (plate.rotation ?? 0) * impulse,
+  };
+}
+
+export function materialPointDisplacement(
+  plate: Plate,
+  pose: ReturnType<typeof materialPose>,
+  point: Point,
+): Point {
+  const pivot = plate.pivot ?? [0, 0];
+  const x = point[0] - pivot[0],
+    y = point[1] - pivot[1];
+  const c = Math.cos(pose.angle),
+    s = Math.sin(pose.angle);
+  const weight = materialPointWeight(plate, point);
+  return [c * x - s * y - x + pose.offset[0] * weight, s * x + c * y - y + pose.offset[1] * weight];
+}
+
+export function materialFrame(layers: readonly Plate[], seconds: number, cycle: number) {
+  const poses = new Map(layers.map((plate) => [plate.name, materialPose(plate, seconds, cycle)]));
+  const attachments = new Map<string, Point>();
+  const byName = new Map(layers.map((plate) => [plate.name, plate]));
+  const resolveAttachment = (plate: Plate, visited = new Set<string>()): Point => {
+    const cached = attachments.get(plate.name);
+    if (cached) return cached;
+    // Historical manifests use this field as prose, not a transform link.
+    const attachment = plate.parent;
+    if (!attachment || typeof attachment === 'string') return [0, 0];
+    if (visited.has(plate.name)) throw new Error('material-parent-cycle');
+    visited.add(plate.name);
+    const parent = byName.get(attachment.name);
+    if (!parent) throw new Error('material-parent-unavailable');
+    const inherited = resolveAttachment(parent, visited);
+    const local = materialPointDisplacement(parent, poses.get(parent.name)!, attachment.at);
+    const result: Point = [inherited[0] + local[0], inherited[1] + local[1]];
+    attachments.set(plate.name, result);
+    return result;
+  };
+  return new Map(
+    layers.map((plate) => [
+      plate.name,
+      {
+        ...poses.get(plate.name)!,
+        inherited: resolveAttachment(plate),
+      },
+    ]),
+  );
+}
+
 function mesh(plate: Plate | undefined, canvas: Point) {
   const [x, y, width, height] = plate?.crop ?? [0, 0, ...canvas];
   const columns = plate ? Math.ceil(width / 12) : 1;
@@ -118,24 +221,7 @@ function mesh(plate: Plate | undefined, canvas: Point) {
       v = row / rows;
     const px = x + u * width,
       py = y + v * height;
-    const coordinate = plate?.axis === 'x' ? px : py;
-    const progress = plate ? smooth((coordinate - plate.root) / (plate.end - plate.root || 1)) : 0;
-    // A 24px undeformed collar protects all internal cuts and hand contacts.
-    const distance = plate
-      ? Math.min(
-          seamDistance(px, py, plate.polygon),
-          ...(plate.pins ?? []).map((pin) => seamDistance(px, py, pin)),
-        )
-      : 0;
-    const edgePin = plate?.rootOnly
-      ? 1
-      : plate
-        ? smooth((distance - (plate.pinMargin ?? 10)) / plate.seam)
-        : 0;
-    const contactPin = plate?.pinX
-      ? smooth((px - plate.pinX[0]) / (plate.pinX[1] - plate.pinX[0]))
-      : 1;
-    vertices.push(px, py, u, v, plate?.rigid ? 1 : progress * edgePin * contactPin);
+    vertices.push(px, py, u, v, plate ? materialPointWeight(plate, [px, py]) : 0);
   }
   for (let row = 0; row < rows; row++)
     for (let col = 0; col < columns; col++) {
@@ -254,10 +340,10 @@ export async function createMaterialPlates(
       [
         gl.VERTEX_SHADER,
         `attribute vec2 position,texcoord;attribute float weight;
-        uniform vec2 size,offset,pivot;uniform float angle;varying vec2 uv,original,projected;
+        uniform vec2 size,offset,pivot,inherited;uniform float angle;varying vec2 uv,original,projected;
         void main(){uv=texcoord;original=position/size;
         vec2 local=position-pivot;float c=cos(angle),s=sin(angle);
-        vec2 p=(pivot+vec2(c*local.x-s*local.y,s*local.x+c*local.y)+offset*weight)/size;
+        vec2 p=(pivot+vec2(c*local.x-s*local.y,s*local.x+c*local.y)+offset*weight+inherited)/size;
         projected=p;gl_Position=vec4(p.x*2.-1.,1.-p.y*2.,0.,1.);}`,
       ],
       [
@@ -352,6 +438,7 @@ export async function createMaterialPlates(
       opacity = gl.getUniformLocation(program, 'opacity');
     const pivot = gl.getUniformLocation(program, 'pivot'),
       angle = gl.getUniformLocation(program, 'angle');
+    const inherited = gl.getUniformLocation(program, 'inherited');
     const attributes = ['position', 'texcoord', 'weight'].map((name) =>
       gl.getAttribLocation(program, name),
     );
@@ -365,6 +452,7 @@ export async function createMaterialPlates(
       alpha = 1,
       rotation = 0,
       anchor: Point = [0, 0],
+      parentOffset: Point = [0, 0],
     ) {
       gl!.bindBuffer(gl!.ARRAY_BUFFER, meshes[index].buffer);
       attributes.forEach((attribute, i) => {
@@ -379,6 +467,7 @@ export async function createMaterialPlates(
       gl!.uniform1f(opacity, alpha);
       gl!.uniform2f(pivot, ...anchor);
       gl!.uniform1f(angle, rotation);
+      gl!.uniform2f(inherited, ...parentOffset);
       gl!.drawArrays(gl!.TRIANGLES, 0, meshes[index].count);
     }
     return {
@@ -419,6 +508,7 @@ export async function createMaterialPlates(
         if (repairTexture) drawPart(repairTexture, 0);
         drawPart(sourceTexture, 0, 0, 0, true);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        const poses = materialFrame(manifest.layers, seconds, manifest.cycle);
         for (const [index, plate] of renderLayers.entries()) {
           if (plate.material === 'cloud') {
             // One-way advection. A quiet dissolve closes the long drift without
@@ -446,29 +536,18 @@ export async function createMaterialPlates(
                 reset,
               );
           } else {
-            const impulse =
-              plate.material === 'flame'
-                ? 0.65 * Math.sin(seconds * 7.1 + plate.delay) +
-                  0.35 * Math.sin(seconds * 11.3 - plate.delay)
-                : plate.material === 'water'
-                  ? 0.62 * Math.sin(seconds * 1.23 + plate.delay) +
-                    0.38 * Math.sin(seconds * 2.17 - plate.delay)
-                  : materialImpulse(
-                      seconds,
-                      plate.cycle ?? manifest.cycle,
-                      plate.delay,
-                      plate.material.includes('cloth'),
-                    );
+            const pose = poses.get(plate.name)!;
             drawPart(
               plateTextures[index],
               index + 1,
-              plate.vector[0] * impulse,
-              plate.vector[1] * impulse,
+              pose.offset[0],
+              pose.offset[1],
               false,
               !!plate.clip,
               1,
-              (plate.rotation ?? 0) * impulse,
+              pose.angle,
               plate.pivot,
+              pose.inherited,
             );
           }
         }
