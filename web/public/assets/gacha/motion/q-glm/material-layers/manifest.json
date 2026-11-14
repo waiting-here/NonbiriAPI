@@ -396,1159 +396,441 @@
       "name": "coat-left-tail-outer",
       "polygon": [
         [
-          361,
-          598
+          140,
+          716
         ],
         [
-          399,
-          596
+          300,
+          716
         ],
         [
-          400,
-          658
+          310,
+          800
         ],
         [
-          345,
-          700
+          320,
+          984
         ],
         [
-          297,
-          780
+          120,
+          984
         ],
         [
-          278,
-          899
-        ],
-        [
-          314,
-          1005
-        ],
-        [
-          237,
-          976
-        ],
-        [
-          151,
-          880
-        ],
-        [
-          143,
-          785
-        ],
-        [
-          213,
-          674
+          120,
+          786
         ]
       ],
+      "root": 732,
+      "end": 940,
       "vector": [
-        5,
-        -2
+        22,
+        14
       ],
-      "root": 600,
-      "end": 980,
-      "delay": 0.9,
+      "delay": 0.65,
       "material": "heavy-cloth",
-      "seam": 24,
-      "pins": [
-        [
-          [
-            394,
-            649
-          ],
-          [
-            477,
-            650
-          ],
-          [
-            523,
-            638
-          ],
-          [
-            578,
-            615
-          ],
-          [
-            633,
-            623
-          ],
-          [
-            637,
-            681
-          ],
-          [
-            613,
-            756
-          ],
-          [
-            572,
-            835
-          ],
-          [
-            585,
-            931
-          ],
-          [
-            639,
-            1080
-          ],
-          [
-            675,
-            1190
-          ],
-          [
-            705,
-            1220
-          ],
-          [
-            705,
-            1270
-          ],
-          [
-            677,
-            1310
-          ],
-          [
-            635,
-            1333
-          ],
-          [
-            597,
-            1325
-          ],
-          [
-            603,
-            1264
-          ],
-          [
-            569,
-            1152
-          ],
-          [
-            536,
-            1116
-          ],
-          [
-            536,
-            1223
-          ],
-          [
-            496,
-            1397
-          ],
-          [
-            447,
-            1448
-          ],
-          [
-            400,
-            1447
-          ],
-          [
-            416,
-            1345
-          ],
-          [
-            434,
-            1230
-          ],
-          [
-            444,
-            1135
-          ],
-          [
-            446,
-            1030
-          ],
-          [
-            443,
-            959
-          ],
-          [
-            426,
-            866
-          ],
-          [
-            409,
-            789
-          ],
-          [
-            397,
-            732
-          ]
-        ]
-      ],
+      "flutter": {
+        "vector": [
+          3,
+          2
+        ],
+        "period": 6.75,
+        "phase": 0.6050474740247009
+      },
       "file": "coat-left-tail-outer.webp",
       "crop": [
-        141,
-        584,
-        272,
-        383
+        125,
+        704,
+        199,
+        263
       ],
-      "depth": 3,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "shared sewn panel mesh; exact common anchor and deformation prevents separating the attached lining",
-      "sewnGroup": "coat-left-tail"
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-left-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 3
     },
     {
       "name": "coat-left-tail-lining",
       "polygon": [
         [
-          361,
-          598
+          140,
+          716
         ],
         [
-          399,
-          596
+          300,
+          716
         ],
         [
-          400,
-          658
+          310,
+          800
         ],
         [
-          345,
-          700
+          320,
+          984
         ],
         [
-          297,
-          780
+          120,
+          984
         ],
         [
-          278,
-          899
-        ],
-        [
-          314,
-          1005
-        ],
-        [
-          237,
-          976
-        ],
-        [
-          151,
-          880
-        ],
-        [
-          143,
-          785
-        ],
-        [
-          213,
-          674
+          120,
+          786
         ]
       ],
+      "root": 732,
+      "end": 940,
       "vector": [
-        5,
-        -2
+        22,
+        14
       ],
-      "root": 600,
-      "end": 980,
-      "delay": 0.9,
+      "delay": 0.65,
       "material": "blue-satin",
-      "seam": 24,
-      "pins": [
-        [
-          [
-            394,
-            649
-          ],
-          [
-            477,
-            650
-          ],
-          [
-            523,
-            638
-          ],
-          [
-            578,
-            615
-          ],
-          [
-            633,
-            623
-          ],
-          [
-            637,
-            681
-          ],
-          [
-            613,
-            756
-          ],
-          [
-            572,
-            835
-          ],
-          [
-            585,
-            931
-          ],
-          [
-            639,
-            1080
-          ],
-          [
-            675,
-            1190
-          ],
-          [
-            705,
-            1220
-          ],
-          [
-            705,
-            1270
-          ],
-          [
-            677,
-            1310
-          ],
-          [
-            635,
-            1333
-          ],
-          [
-            597,
-            1325
-          ],
-          [
-            603,
-            1264
-          ],
-          [
-            569,
-            1152
-          ],
-          [
-            536,
-            1116
-          ],
-          [
-            536,
-            1223
-          ],
-          [
-            496,
-            1397
-          ],
-          [
-            447,
-            1448
-          ],
-          [
-            400,
-            1447
-          ],
-          [
-            416,
-            1345
-          ],
-          [
-            434,
-            1230
-          ],
-          [
-            444,
-            1135
-          ],
-          [
-            446,
-            1030
-          ],
-          [
-            443,
-            959
-          ],
-          [
-            426,
-            866
-          ],
-          [
-            409,
-            789
-          ],
-          [
-            397,
-            732
-          ]
-        ]
-      ],
+      "flutter": {
+        "vector": [
+          3,
+          2
+        ],
+        "period": 6.75,
+        "phase": 0.6050474740247009
+      },
       "file": "coat-left-tail-lining.webp",
       "crop": [
-        141,
-        584,
-        272,
-        383
+        125,
+        704,
+        199,
+        263
       ],
-      "depth": 3,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "shared sewn panel mesh; exact common anchor and deformation prevents separating the attached lining",
-      "sewnGroup": "coat-left-tail"
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-left-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 4
     },
     {
       "name": "coat-right-tail-outer",
       "polygon": [
         [
-          681,
-          677
+          710,
+          740
         ],
         [
-          750,
-          695
+          1064,
+          740
         ],
         [
-          869,
-          770
-        ],
-        [
-          1038,
-          912
-        ],
-        [
-          1071,
-          1031
-        ],
-        [
-          960,
-          1165
-        ],
-        [
-          900,
+          1080,
           1170
         ],
         [
-          932,
-          1037
+          835,
+          1170
         ],
         [
-          939,
-          963
+          835,
+          900
         ],
         [
-          857,
-          918
-        ],
-        [
-          725,
-          903
+          720,
+          890
         ]
       ],
+      "root": 778,
+      "end": 1105,
       "vector": [
-        7,
-        -3
+        28,
+        18
       ],
-      "root": 680,
-      "end": 1150,
-      "delay": 1.15,
+      "delay": 1.0,
       "material": "heavy-cloth",
-      "seam": 24,
-      "pins": [
-        [
-          [
-            394,
-            649
-          ],
-          [
-            477,
-            650
-          ],
-          [
-            523,
-            638
-          ],
-          [
-            578,
-            615
-          ],
-          [
-            633,
-            623
-          ],
-          [
-            637,
-            681
-          ],
-          [
-            613,
-            756
-          ],
-          [
-            572,
-            835
-          ],
-          [
-            585,
-            931
-          ],
-          [
-            639,
-            1080
-          ],
-          [
-            675,
-            1190
-          ],
-          [
-            705,
-            1220
-          ],
-          [
-            705,
-            1270
-          ],
-          [
-            677,
-            1310
-          ],
-          [
-            635,
-            1333
-          ],
-          [
-            597,
-            1325
-          ],
-          [
-            603,
-            1264
-          ],
-          [
-            569,
-            1152
-          ],
-          [
-            536,
-            1116
-          ],
-          [
-            536,
-            1223
-          ],
-          [
-            496,
-            1397
-          ],
-          [
-            447,
-            1448
-          ],
-          [
-            400,
-            1447
-          ],
-          [
-            416,
-            1345
-          ],
-          [
-            434,
-            1230
-          ],
-          [
-            444,
-            1135
-          ],
-          [
-            446,
-            1030
-          ],
-          [
-            443,
-            959
-          ],
-          [
-            426,
-            866
-          ],
-          [
-            409,
-            789
-          ],
-          [
-            397,
-            732
-          ]
-        ]
-      ],
+      "flutter": {
+        "vector": [
+          4,
+          2
+        ],
+        "period": 9,
+        "phase": 0.6981317007977318
+      },
       "file": "coat-right-tail-outer.webp",
       "crop": [
-        669,
-        665,
-        380,
-        424
+        698,
+        728,
+        351,
+        412
       ],
-      "depth": 4,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "shared sewn panel mesh; exact common anchor and deformation prevents separating the attached lining",
-      "sewnGroup": "coat-right-tail"
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-right-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 5
     },
     {
       "name": "coat-right-tail-lining",
       "polygon": [
         [
-          681,
-          677
+          710,
+          740
         ],
         [
-          750,
-          695
+          1064,
+          740
         ],
         [
-          869,
-          770
-        ],
-        [
-          1038,
-          912
-        ],
-        [
-          1071,
-          1031
-        ],
-        [
-          960,
-          1165
-        ],
-        [
-          900,
+          1080,
           1170
         ],
         [
-          932,
-          1037
+          835,
+          1170
         ],
         [
-          939,
-          963
+          835,
+          900
         ],
         [
-          857,
-          918
-        ],
-        [
-          725,
-          903
+          720,
+          890
         ]
       ],
+      "root": 778,
+      "end": 1105,
       "vector": [
-        7,
-        -3
+        28,
+        18
       ],
-      "root": 680,
-      "end": 1150,
-      "delay": 1.15,
+      "delay": 1.0,
       "material": "blue-satin",
-      "seam": 24,
-      "pins": [
-        [
-          [
-            394,
-            649
-          ],
-          [
-            477,
-            650
-          ],
-          [
-            523,
-            638
-          ],
-          [
-            578,
-            615
-          ],
-          [
-            633,
-            623
-          ],
-          [
-            637,
-            681
-          ],
-          [
-            613,
-            756
-          ],
-          [
-            572,
-            835
-          ],
-          [
-            585,
-            931
-          ],
-          [
-            639,
-            1080
-          ],
-          [
-            675,
-            1190
-          ],
-          [
-            705,
-            1220
-          ],
-          [
-            705,
-            1270
-          ],
-          [
-            677,
-            1310
-          ],
-          [
-            635,
-            1333
-          ],
-          [
-            597,
-            1325
-          ],
-          [
-            603,
-            1264
-          ],
-          [
-            569,
-            1152
-          ],
-          [
-            536,
-            1116
-          ],
-          [
-            536,
-            1223
-          ],
-          [
-            496,
-            1397
-          ],
-          [
-            447,
-            1448
-          ],
-          [
-            400,
-            1447
-          ],
-          [
-            416,
-            1345
-          ],
-          [
-            434,
-            1230
-          ],
-          [
-            444,
-            1135
-          ],
-          [
-            446,
-            1030
-          ],
-          [
-            443,
-            959
-          ],
-          [
-            426,
-            866
-          ],
-          [
-            409,
-            789
-          ],
-          [
-            397,
-            732
-          ]
-        ]
-      ],
+      "flutter": {
+        "vector": [
+          4,
+          2
+        ],
+        "period": 9,
+        "phase": 0.6981317007977318
+      },
       "file": "coat-right-tail-lining.webp",
       "crop": [
-        669,
-        665,
-        380,
-        424
+        698,
+        728,
+        351,
+        412
       ],
-      "depth": 4,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "shared sewn panel mesh; exact common anchor and deformation prevents separating the attached lining",
-      "sewnGroup": "coat-right-tail"
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-right-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 6
     },
     {
       "name": "coat-inner-left-outer",
       "polygon": [
         [
-          352,
-          696
-        ],
-        [
-          405,
-          675
-        ],
-        [
-          414,
-          748
-        ],
-        [
-          422,
-          871
-        ],
-        [
-          470,
-          941
-        ],
-        [
-          403,
-          950
-        ],
-        [
-          345,
-          879
-        ],
-        [
           325,
-          799
-        ]
-      ],
-      "vector": [
-        3,
-        1
-      ],
-      "root": 700,
-      "end": 935,
-      "delay": 0.65,
-      "material": "cloth",
-      "seam": 24,
-      "pins": [
+          754
+        ],
         [
-          [
-            394,
-            649
-          ],
-          [
-            477,
-            650
-          ],
-          [
-            523,
-            638
-          ],
-          [
-            578,
-            615
-          ],
-          [
-            633,
-            623
-          ],
-          [
-            637,
-            681
-          ],
-          [
-            613,
-            756
-          ],
-          [
-            572,
-            835
-          ],
-          [
-            585,
-            931
-          ],
-          [
-            639,
-            1080
-          ],
-          [
-            675,
-            1190
-          ],
-          [
-            705,
-            1220
-          ],
-          [
-            705,
-            1270
-          ],
-          [
-            677,
-            1310
-          ],
-          [
-            635,
-            1333
-          ],
-          [
-            597,
-            1325
-          ],
-          [
-            603,
-            1264
-          ],
-          [
-            569,
-            1152
-          ],
-          [
-            536,
-            1116
-          ],
-          [
-            536,
-            1223
-          ],
-          [
-            496,
-            1397
-          ],
-          [
-            447,
-            1448
-          ],
-          [
-            400,
-            1447
-          ],
-          [
-            416,
-            1345
-          ],
-          [
-            434,
-            1230
-          ],
-          [
-            444,
-            1135
-          ],
-          [
-            446,
-            1030
-          ],
-          [
-            443,
-            959
-          ],
-          [
-            426,
-            866
-          ],
-          [
-            409,
-            789
-          ],
-          [
-            397,
-            732
-          ]
+          420,
+          754
+        ],
+        [
+          437,
+          863
+        ],
+        [
+          460,
+          960
+        ],
+        [
+          320,
+          960
         ]
       ],
+      "root": 830,
+      "end": 926,
+      "vector": [
+        -15,
+        12
+      ],
+      "delay": 1.35,
+      "material": "cloth",
+      "flutter": {
+        "vector": [
+          -2,
+          1.5
+        ],
+        "period": 5.4,
+        "phase": 1.5707963267948966
+      },
       "file": "coat-inner-left-outer.webp",
       "crop": [
-        319,
-        668,
-        131,
-        277
+        309,
+        742,
+        141,
+        203
       ],
-      "depth": 5,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "shared sewn panel mesh; exact common anchor and deformation prevents separating the attached lining",
-      "sewnGroup": "coat-inner-left"
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-left",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 7
     },
     {
       "name": "coat-inner-left-lining",
       "polygon": [
         [
-          352,
-          696
-        ],
-        [
-          405,
-          675
-        ],
-        [
-          414,
-          748
-        ],
-        [
-          422,
-          871
-        ],
-        [
-          470,
-          941
-        ],
-        [
-          403,
-          950
-        ],
-        [
-          345,
-          879
-        ],
-        [
           325,
-          799
-        ]
-      ],
-      "vector": [
-        3,
-        1
-      ],
-      "root": 700,
-      "end": 935,
-      "delay": 0.65,
-      "material": "blue-satin",
-      "seam": 24,
-      "pins": [
+          754
+        ],
         [
-          [
-            394,
-            649
-          ],
-          [
-            477,
-            650
-          ],
-          [
-            523,
-            638
-          ],
-          [
-            578,
-            615
-          ],
-          [
-            633,
-            623
-          ],
-          [
-            637,
-            681
-          ],
-          [
-            613,
-            756
-          ],
-          [
-            572,
-            835
-          ],
-          [
-            585,
-            931
-          ],
-          [
-            639,
-            1080
-          ],
-          [
-            675,
-            1190
-          ],
-          [
-            705,
-            1220
-          ],
-          [
-            705,
-            1270
-          ],
-          [
-            677,
-            1310
-          ],
-          [
-            635,
-            1333
-          ],
-          [
-            597,
-            1325
-          ],
-          [
-            603,
-            1264
-          ],
-          [
-            569,
-            1152
-          ],
-          [
-            536,
-            1116
-          ],
-          [
-            536,
-            1223
-          ],
-          [
-            496,
-            1397
-          ],
-          [
-            447,
-            1448
-          ],
-          [
-            400,
-            1447
-          ],
-          [
-            416,
-            1345
-          ],
-          [
-            434,
-            1230
-          ],
-          [
-            444,
-            1135
-          ],
-          [
-            446,
-            1030
-          ],
-          [
-            443,
-            959
-          ],
-          [
-            426,
-            866
-          ],
-          [
-            409,
-            789
-          ],
-          [
-            397,
-            732
-          ]
+          420,
+          754
+        ],
+        [
+          437,
+          863
+        ],
+        [
+          460,
+          960
+        ],
+        [
+          320,
+          960
         ]
       ],
+      "root": 830,
+      "end": 926,
+      "vector": [
+        -15,
+        12
+      ],
+      "delay": 1.35,
+      "material": "blue-satin",
+      "flutter": {
+        "vector": [
+          -2,
+          1.5
+        ],
+        "period": 5.4,
+        "phase": 1.5707963267948966
+      },
       "file": "coat-inner-left-lining.webp",
       "crop": [
-        319,
-        668,
-        131,
-        277
+        309,
+        742,
+        141,
+        203
       ],
-      "depth": 5,
-      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
-      "parent": "shared sewn panel mesh; exact common anchor and deformation prevents separating the attached lining",
-      "sewnGroup": "coat-inner-left"
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-left",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 8
+    },
+    {
+      "name": "coat-inner-right-outer",
+      "polygon": [
+        [
+          638,
+          786
+        ],
+        [
+          725,
+          786
+        ],
+        [
+          725,
+          975
+        ],
+        [
+          640,
+          975
+        ]
+      ],
+      "root": 833,
+      "end": 946,
+      "vector": [
+        13,
+        17
+      ],
+      "delay": 1.65,
+      "material": "cloth",
+      "flutter": {
+        "vector": [
+          2,
+          2
+        ],
+        "period": 6.75,
+        "phase": 1.53588974175501
+      },
+      "file": "coat-inner-right-outer.webp",
+      "crop": [
+        627,
+        774,
+        104,
+        193
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-right",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 9
+    },
+    {
+      "name": "coat-inner-right-lining",
+      "polygon": [
+        [
+          638,
+          786
+        ],
+        [
+          725,
+          786
+        ],
+        [
+          725,
+          975
+        ],
+        [
+          640,
+          975
+        ]
+      ],
+      "root": 833,
+      "end": 946,
+      "vector": [
+        13,
+        17
+      ],
+      "delay": 1.65,
+      "material": "blue-satin",
+      "flutter": {
+        "vector": [
+          2,
+          2
+        ],
+        "period": 6.75,
+        "phase": 1.53588974175501
+      },
+      "file": "coat-inner-right-lining.webp",
+      "crop": [
+        627,
+        774,
+        104,
+        193
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-right",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 10
     },
     {
       "name": "hair-ornament-chain",
@@ -1600,7 +882,7 @@
         0,
         0
       ],
-      "delay": 0.22,
+      "delay": 0.45,
       "material": "silver-chain",
       "rootOnly": true,
       "seam": 0,
@@ -1609,7 +891,7 @@
         611,
         136
       ],
-      "rotation": 0.016,
+      "rotation": 0.085,
       "file": "hair-ornament-chain.webp",
       "crop": [
         594,
@@ -1617,9 +899,10 @@
         32,
         63
       ],
-      "depth": 100,
-      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
-      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+      "depth": 11,
+      "parent": "shared fixed hair-knot pivot [611,136]; chain and attached tassel remain one rigid suspension",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only",
+      "cycle": 27
     },
     {
       "name": "hair-ornament-tassel",
@@ -1659,7 +942,7 @@
         0,
         0
       ],
-      "delay": 0.22,
+      "delay": 0.45,
       "material": "tassel",
       "rootOnly": true,
       "seam": 0,
@@ -1668,7 +951,7 @@
         611,
         136
       ],
-      "rotation": 0.016,
+      "rotation": 0.085,
       "file": "hair-ornament-tassel.webp",
       "crop": [
         586,
@@ -1676,14 +959,18 @@
         39,
         73
       ],
-      "depth": 101,
-      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
-      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+      "depth": 12,
+      "parent": "shared fixed hair-knot pivot [611,136]; chain and attached tassel remain one rigid suspension",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only",
+      "cycle": 27
     }
   ],
   "fixed": [
-    "Settled invitation pose, mask and raised hand, glove/envelope contact, head and lifted far foot remain fixed."
+    "Accepted face, anatomical ribcage breath, hands, mask/envelope contact, legs, floor support and -2.4 degree stance are unchanged.",
+    "Upper coat roots remain source-attached; full lower free tails move including outer contour and tip. Inner left thigh contact stays above the fixed y=830 root; its free tip is unconstrained.",
+    "Coat outer/lining members are complementary original RGB on one sewn mesh; chain/tassel share the exact hair-knot pivot."
   ],
   "repair": "detail-backing.webp",
-  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+  "status": "local expression candidate: registered asset, mesh, extrema and real appearance browser checks passed; awaiting root visual audit and user adoption",
+  "revision": "v1.3.12-motion-expression"
 }
