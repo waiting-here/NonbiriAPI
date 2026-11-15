@@ -147,6 +147,26 @@ const whole = (name: string, label: string, path: string): LayerResource => ({
 
 export const loadLayerResources: LayerLoader = async (id, scope, high, signal) => {
   signal.throwIfAborted();
+  if (id === 'u-gemini' || id === 'u-glm' || id === 'u-deepseek') {
+    const { encoreLayers } = await import('../user/activities/gacha/encore/layers');
+    const root = '/assets/gacha/motion/' + id + '/';
+    return quality(
+      [
+        whole('scenery', '场景与接触阴影', root + 'background.webp'),
+        whole('hero', '采用的人物原画', root + 'hero.webp'),
+        whole('closed', '登记闭眼稿', root + 'closed.webp'),
+        whole('eye-skin', '眼睑下方补底', root + 'eye-skin.webp'),
+        whole('body', '人物与关节绑定底层', root + 'parts/body.webp'),
+        ...encoreLayers[id].map((layer) => ({
+          name: layer.name,
+          label: layer.label,
+          rect: layer.rect,
+          path: root + 'parts/' + layer.name + '.webp',
+        })),
+      ],
+      high,
+    );
+  }
   if (/^[gij]-/.test(id)) {
     const { classicArtLayers } = await import('../user/activities/gacha/classic/art-layers');
     return quality(classicArtLayers(id as ClassicCard), high);

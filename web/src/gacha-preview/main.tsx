@@ -14,6 +14,7 @@ import { GachaAudio } from '../user/activities/gacha/audio';
 import type { DrawReceipt } from '../user/activities/gacha/types';
 import { AppearanceProvider } from '../user/appearance/AppearanceProvider';
 import { AppearanceButton } from '../user/appearance/AppearanceButton';
+import { BackgroundViewButton } from '../user/appearance/BackgroundViewButton';
 import { appearanceKey } from '../user/appearance/context';
 import { localPort, localAppearancePort, appearancePreviewPort, resetPreview } from './local-port';
 import './preview.css';
@@ -34,7 +35,8 @@ function Preview() {
   const [english, setEnglish] = useState(new URLSearchParams(location.search).get('lang') === 'en');
   const [demo, setDemo] = useState<DrawReceipt | null>(() => {
     const run = new URLSearchParams(location.search).get('run');
-    return run && ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal', 'christmas'].includes(run)
+    return run &&
+      ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal', 'christmas', 'encore'].includes(run)
       ? sampleReceipt(run as Scenario)
       : null;
   });
@@ -124,6 +126,7 @@ function Preview() {
                 </>
               )}
               <AppearanceButton />
+              {!appearanceView && <BackgroundViewButton />}
               <ThemeToggle />
               <button
                 onClick={() => {
@@ -163,24 +166,21 @@ function Preview() {
 const amberPreview = new URLSearchParams(location.search).get('view') === 'amber';
 const amberExport = new URLSearchParams(location.search).get('view') === 'amber-export';
 function PreviewRoot() {
-  const [adult, setAdult] = useState(() => new URLSearchParams(location.search).get('r18') === '1');
   const view = new URLSearchParams(location.search).get('view');
   const seasonal = view === 'seasonal' || view === 'christmas' || view === 'motion';
   const requestedTheme = new URLSearchParams(location.search).get('theme') ?? 'g';
-  const reviewTheme = ['g', 'i', 'j', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'].includes(
+  const reviewTheme = ['g', 'i', 'j', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u'].includes(
     requestedTheme,
   )
     ? requestedTheme
     : 'g';
   return (
-    <ArtworkPolicyProvider disabled={!adult}>
+    <ArtworkPolicyProvider disabled={false}>
       <ThemeProvider>
         {view === 'copy' ? (
           <CopyReview />
         ) : seasonal ? (
           <SeasonalPreview
-            adult={adult}
-            setAdult={setAdult}
             theme={view === 'motion' ? reviewTheme : view === 'christmas' ? 't' : 's'}
           />
         ) : amberExport ? (

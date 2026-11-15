@@ -12,6 +12,7 @@ func TestSeasonalTemplatesUseStandardRulesAndEqualSSRChoices(t *testing.T) {
 	}{
 		{"sweet-hide-and-seek", "s", []string{"s-chatgpt", "s-claude"}},
 		{"christmas-date", "t", []string{"t-chatgpt", "t-claude", "t-glm", "t-deepseek", "t-gemini"}},
+		{"encore", "u", []string{"u-gemini", "u-glm", "u-deepseek"}},
 	} {
 		t.Run(tc.id, func(t *testing.T) {
 			assertSeasonalTemplate(t, tc.id, tc.cover, tc.featured)

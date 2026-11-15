@@ -19,7 +19,8 @@
     "p": "backgrounds/p.webp",
     "q": "backgrounds/q.webp",
     "s": "backgrounds/s.webp",
-    "t": "backgrounds/t.webp"
+    "t": "backgrounds/t.webp",
+    "u": "backgrounds/u.webp"
   },
   "characters": {
     "a-chatgpt": "layers/a-chatgpt.webp",
@@ -90,7 +91,10 @@
     "t-claude": "motion/t-claude/hero.webp",
     "t-glm": "motion/t-glm/hero.webp",
     "t-deepseek": "motion/t-deepseek/hero.webp",
-    "t-gemini": "motion/t-gemini/hero.webp"
+    "t-gemini": "motion/t-gemini/hero.webp",
+    "u-gemini": "motion/u-gemini/hero.webp",
+    "u-glm": "motion/u-glm/hero.webp",
+    "u-deepseek": "motion/u-deepseek/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -1597,6 +1601,35 @@
           "hero": "moment/s-chatgpt/hero.webp",
           "half": "moment/s-chatgpt/half.webp",
           "closed": "moment/s-chatgpt/closed.webp"
+        },
+        "scene": {
+          "path": "moment/s-chatgpt/background.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                -98,
+                -207,
+                1129,
+                1536
+              ],
+              "anchor": [
+                512,
+                1515
+              ],
+              "floor": 0.98
+            }
+          }
         }
       }
     },
@@ -1611,18 +1644,21 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
+          "path": "moment/s-claude/viewport-background.webp",
           "canvas": [
-            2731,
-            1536
+            3072,
+            1024
           ],
           "originalRegion": {
-            "x": 1707,
-            "y": 0,
-            "width": 1024,
-            "height": 1536
+            "x": 2555,
+            "y": 175,
+            "width": 512,
+            "height": 768
           },
-          "path": "moment/s-claude/background.webp",
-          "highResolutionWidth": 3840
+          "highResolutionWidth": 6144,
+          "viewport": {
+            "shadow": "motion/s-claude/moment-shadow.webp"
+          }
         }
       }
     },
@@ -1637,10 +1673,10 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
-          "path": "motion/t-chatgpt/background.webp",
+          "path": "backgrounds/t-moment.webp",
           "canvas": [
-            1024,
-            1536
+            1536,
+            1024
           ],
           "originalRegion": {
             "x": 0,
@@ -1648,7 +1684,23 @@
             "width": 1024,
             "height": 1536
           },
-          "highResolutionWidth": 2560
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                125,
+                73,
+                914,
+                1466
+              ],
+              "anchor": [
+                512,
+                1456
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-chatgpt/moment-shadow.webp"
+          }
         }
       },
       "motion_layers": [
@@ -1780,10 +1832,10 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
-          "path": "motion/t-claude/background.webp",
+          "path": "backgrounds/t-moment.webp",
           "canvas": [
-            1024,
-            1536
+            1536,
+            1024
           ],
           "originalRegion": {
             "x": 0,
@@ -1791,7 +1843,23 @@
             "width": 1024,
             "height": 1536
           },
-          "highResolutionWidth": 2560
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                96,
+                75,
+                905,
+                1449
+              ],
+              "anchor": [
+                512,
+                1439
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-claude/moment-shadow.webp"
+          }
         }
       },
       "motion_layers": [
@@ -1922,10 +1990,10 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
-          "path": "motion/t-glm/background.webp",
+          "path": "backgrounds/t-moment.webp",
           "canvas": [
-            1024,
-            1536
+            1536,
+            1024
           ],
           "originalRegion": {
             "x": 0,
@@ -1933,7 +2001,23 @@
             "width": 1024,
             "height": 1536
           },
-          "highResolutionWidth": 2560
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                117,
+                76,
+                919,
+                1457
+              ],
+              "anchor": [
+                512,
+                1447
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-glm/moment-shadow.webp"
+          }
         }
       },
       "motion_layers": [
@@ -2042,10 +2126,10 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
-          "path": "motion/t-deepseek/background.webp",
+          "path": "backgrounds/t-moment.webp",
           "canvas": [
-            1024,
-            1536
+            1536,
+            1024
           ],
           "originalRegion": {
             "x": 0,
@@ -2053,7 +2137,23 @@
             "width": 1024,
             "height": 1536
           },
-          "highResolutionWidth": 2560
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                77,
+                76,
+                894,
+                1455
+              ],
+              "anchor": [
+                512,
+                1445
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-deepseek/moment-shadow.webp"
+          }
         }
       },
       "motion_layers": [
@@ -2140,10 +2240,10 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
-          "path": "motion/t-gemini/background.webp",
+          "path": "backgrounds/t-moment.webp",
           "canvas": [
-            1024,
-            1536
+            1536,
+            1024
           ],
           "originalRegion": {
             "x": 0,
@@ -2151,7 +2251,23 @@
             "width": 1024,
             "height": 1536
           },
-          "highResolutionWidth": 2560
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                81,
+                79,
+                928,
+                1453
+              ],
+              "anchor": [
+                512,
+                1443
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-gemini/moment-shadow.webp"
+          }
         }
       },
       "motion_layers": [
@@ -2226,6 +2342,156 @@
         "motion/t-gemini/parts/window-mask.webp",
         "motion/t-gemini/parts/lamp-mask.webp"
       ]
+    },
+    "u-gemini": {
+      "background": "motion/u-gemini/background.webp",
+      "character": "motion/u-gemini/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "character_rect": [
+        0,
+        0,
+        1024,
+        1536
+      ],
+      "eye_states": "motion/u-gemini/closed.webp",
+      "motion": "Registered eyelids, pinned accessory tips, independently phased stage spots, curtain washes, lamps, floor projection and occasional party ribbon launches with complete fade-out",
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/u.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                116,
+                6,
+                903,
+                1503
+              ],
+              "anchor": [
+                512,
+                1494
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/u-gemini/moment-shadow.webp"
+          }
+        }
+      }
+    },
+    "u-glm": {
+      "background": "motion/u-glm/background.webp",
+      "character": "motion/u-glm/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "character_rect": [
+        0,
+        0,
+        1024,
+        1536
+      ],
+      "eye_states": "motion/u-glm/closed.webp",
+      "motion": "Registered eyelids, pinned accessory tips, independently phased stage spots, curtain washes, lamps, floor projection and occasional party ribbon launches with complete fade-out",
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/u.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                102,
+                27,
+                961,
+                1505
+              ],
+              "anchor": [
+                512,
+                1495
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/u-glm/moment-shadow.webp"
+          }
+        }
+      }
+    },
+    "u-deepseek": {
+      "background": "motion/u-deepseek/background.webp",
+      "character": "motion/u-deepseek/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "character_rect": [
+        0,
+        0,
+        1024,
+        1536
+      ],
+      "eye_states": "motion/u-deepseek/closed.webp",
+      "motion": "Registered eyelids, pinned accessory tips, independently phased stage spots, curtain washes, lamps, floor projection and occasional party ribbon launches with complete fade-out",
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/u.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                209,
+                8,
+                958,
+                1463
+              ],
+              "anchor": [
+                512,
+                1454
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/u-deepseek/moment-shadow.webp"
+          }
+        }
+      }
     }
   },
   "groups": {
@@ -2363,6 +2629,18 @@
         941
       ],
       "fit": "full-canvas"
+    },
+    "u": {
+      "path": "groups/u.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "members": [
+        "u-gemini",
+        "u-glm",
+        "u-deepseek"
+      ]
     }
   },
   "covers": {
@@ -2446,6 +2724,18 @@
         941
       ],
       "fit": "full-canvas"
+    },
+    "u": {
+      "path": "covers/u.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "members": [
+        "u-gemini",
+        "u-glm",
+        "u-deepseek"
+      ]
     }
   },
   "sampling": "Lanczos3 unless the theme records a different method below; larger derivatives do not add native detail.",

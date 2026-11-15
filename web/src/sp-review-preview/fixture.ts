@@ -32,8 +32,8 @@ export type Entry = EntryDetails &
 export const tomorrow: Entry = {
   id: 'tomorrow',
   kind: 'tomorrow',
-  name: '未命名的明天·ChatGPT',
-  nameEN: 'Tomorrow, Still Unwritten · ChatGPT',
+  name: '明天你好·ChatGPT',
+  nameEN: 'Hello, Tomorrow · ChatGPT',
   art: tomorrowAssets.card,
   thumb: '/assets/gacha/tomorrow/thumb.webp',
   cover: tomorrowAssets.cover,

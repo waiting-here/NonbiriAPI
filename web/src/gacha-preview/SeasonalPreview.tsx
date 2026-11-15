@@ -105,17 +105,10 @@ function MotionCard({
   );
 }
 
-export function SeasonalPreview({
-  adult,
-  setAdult,
-  theme = 's',
-}: {
-  adult: boolean;
-  setAdult: (next: boolean) => void;
-  theme?: string;
-}) {
+export function SeasonalPreview({ theme = 's' }: { theme?: string }) {
   const ids = cards.filter((card) => card.theme === theme).map((card) => card.id);
   const name = themeById[theme].name;
+  const policy = useArtworkPolicy();
   const [time, setTime] = useState<number>();
   const [paused, setPaused] = useState(false);
   const [high, setHigh] = useState(false);
@@ -163,7 +156,7 @@ export function SeasonalPreview({
               {...props}
               value={theme}
               onChange={(event) => {
-                location.href = `?view=motion&theme=${event.target.value}&r18=${Number(adult)}`;
+                location.href = `?view=motion&theme=${event.target.value}`;
               }}
             >
               {themes
@@ -176,14 +169,6 @@ export function SeasonalPreview({
             </select>
           )}
         </Field>
-        {theme === 's' && (
-          <Toggle
-            label="显示 R-18 素材"
-            description="仅影响当前本地预览。"
-            checked={adult}
-            onChange={setAdult}
-          />
-        )}
         <Toggle label="高清资源" checked={high} onChange={setHigh} />
         <Toggle
           label="对比静态原画"
@@ -218,7 +203,15 @@ export function SeasonalPreview({
               {...props}
               type="range"
               min="0"
-              max={theme === 'm' ? '120' : themeById[theme].rarity === 'SP' ? '180' : '60'}
+              max={
+                theme === 'u'
+                  ? '240'
+                  : theme === 'm'
+                    ? '120'
+                    : themeById[theme].rarity === 'SP'
+                      ? '180'
+                      : '60'
+              }
               step="0.005"
               value={time ?? 0}
               onChange={(event) => inspect(Number(event.target.value))}
@@ -226,13 +219,13 @@ export function SeasonalPreview({
           )}
         </Field>
         <div className="nb-actions">
-          <a className="nb-btn nb-btn--secondary" href={'?r18=' + Number(adult)}>
+          <a className="nb-btn nb-btn--secondary" href="?">
             查看抽卡、图鉴与心动时刻
           </a>
-          {(theme === 's' || theme === 't') && (
+          {(theme === 's' || theme === 't' || theme === 'u') && (
             <a
               className="nb-btn nb-btn--secondary"
-              href={`?run=${theme === 't' ? 'christmas' : 'seasonal'}&r18=${Number(adult)}`}
+              href={`?run=${theme === 't' ? 'christmas' : theme === 'u' ? 'encore' : 'seasonal'}`}
             >
               查看本组卡的相遇演出
             </a>
@@ -287,17 +280,33 @@ export function SeasonalPreview({
             <figcaption>
               {kind === 'groups' ? '主题插画' : '独立封面'}
               {' · '}
-              <a
-                href={`/assets/gacha/${high ? 'hires/' : ''}${kind}/${theme}.webp`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                打开原尺寸图片 ↗
-              </a>
+              {policy.allowed((kind === 'groups' ? 'illustration:' : 'cover:') + theme) && (
+                <a
+                  href={`/assets/gacha/${high ? 'hires/' : ''}${kind}/${theme}.webp`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  打开原尺寸图片 ↗
+                </a>
+              )}
             </figcaption>
           </figure>
         ))}
       </section>
+      {theme === 'u' && (
+        <section className="seasonal-review__landscapes" aria-label="备用装扮素材">
+          {(['light', 'dark'] as const).map((mode) => (
+            <figure key={mode}>
+              <ArtworkImage
+                artworkKey="illustration:u"
+                src={`/assets/gacha/appearances/encore-${mode}.webp`}
+                alt={mode === 'light' ? '浅色场景素材' : '深色场景素材'}
+              />
+              <figcaption>{mode === 'light' ? '浅色' : '深色'}场景 · 备用素材</figcaption>
+            </figure>
+          ))}
+        </section>
+      )}
       {theme === 't' && <ClaudeLayerStudy />}
       {theme === 't' && <ChristmasAssets high={high} />}
       {theme !== 't' && <MotionAssets ids={ids} high={high} load={loadLayerResources} />}

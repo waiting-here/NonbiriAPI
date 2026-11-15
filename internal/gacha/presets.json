@@ -336,10 +336,11 @@
     },
     {
       "id": "tomorrow",
-      "name": "未命名的明天",
+      "name": "明天你好",
       "pool": {
         "id": "",
-        "name": "未命名的明天",
+        "name": "明天你好",
+        "name_en": "Hello, Tomorrow",
         "cover": "r",
         "kind": "limited",
         "group": "",
@@ -398,6 +399,42 @@
           "t-glm",
           "t-deepseek",
           "t-gemini"
+        ],
+        "starts_at": null,
+        "ends_at": null,
+        "paused": false,
+        "published": false,
+        "revision": 0
+      }
+    },
+    {
+      "id": "encore",
+      "name": "安可谢礼",
+      "pool": {
+        "id": "",
+        "name": "安可谢礼",
+        "name_en": "Private Encore",
+        "cover": "u",
+        "kind": "limited",
+        "group": "",
+        "rules": {
+          "weights": [
+            5500,
+            3500,
+            900,
+            100
+          ],
+          "sr_pity": 10,
+          "ssr_pity": 60,
+          "sr_featured": 5000,
+          "ssr_featured": 5000,
+          "sr_guarantee": true,
+          "ssr_guarantee": true
+        },
+        "featured": [
+          "u-gemini",
+          "u-glm",
+          "u-deepseek"
         ],
         "starts_at": null,
         "ends_at": null,

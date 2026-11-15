@@ -81,7 +81,7 @@ function initial(): Saved {
       donation: '0',
       pools: [
         common,
-        ...(['i', 'j', 'l', 'm', 's', 't'] as const).map((theme) => ({
+        ...(['i', 'j', 'l', 'm', 's', 't', 'u'] as const).map((theme) => ({
           ...common,
           id: theme,
           name: themeById[theme].name,
@@ -96,7 +96,9 @@ function initial(): Saved {
           starts_at: at - 3600,
           ends_at: at + 30 * 86400,
           featured: cards
-            .filter((c) => c.theme === theme || (theme !== 's' && c.theme === 'h'))
+            .filter(
+              (c) => c.theme === theme || (!['s', 't', 'u'].includes(theme) && c.theme === 'h'),
+            )
             .map((c) => c.id),
         })),
       ],
@@ -126,6 +128,9 @@ function read(): Saved {
     const raw = localStorage.getItem(storageKey);
     if (raw) {
       const saved = JSON.parse(raw) as Saved;
+      const builtIns = initial().state.pools;
+      for (const pool of builtIns)
+        if (!saved.state.pools.some((old) => old.id === pool.id)) saved.state.pools.push(pool);
       saved.state.visible_themes = [...new Set(cards.map((card) => card.theme))];
       return saved;
     }

@@ -65,22 +65,18 @@ async function fixtures(page: Page, id: string, theme: string) {
 }
 
 async function visibleTop(page: Page) {
-  return page
-    .locator(
-      '.nb-moment-character > img:not(.nb-moment-character__plate, .nb-moment-character__scene)',
-    )
-    .evaluate((image: HTMLImageElement) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const context = canvas.getContext('2d')!;
-      context.drawImage(image, 0, 0);
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      let first = 0;
-      while (first < canvas.width * canvas.height && pixels[first * 4 + 3] <= 8) first++;
-      const top = Math.floor(first / canvas.width);
-      return { top: top / canvas.height, sourceTop: top, sourceHeight: canvas.height };
-    });
+  return page.locator('.nb-moment-character__hero').evaluate((image: HTMLImageElement) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let first = 0;
+    while (first < canvas.width * canvas.height && pixels[first * 4 + 3] <= 8) first++;
+    const top = Math.floor(first / canvas.width);
+    return { top: top / canvas.height, sourceTop: top, sourceHeight: canvas.height };
+  });
 }
 
 for (const theme of ['light', 'dark'])
@@ -91,9 +87,7 @@ for (const theme of ['light', 'dark'])
       await page.setViewportSize(viewports[0]);
       await fixtures(page, card.id, theme);
       await page.goto(USER_ORIGIN + '/activities');
-      const hero = page.locator(
-        '.nb-moment-character > img:not(.nb-moment-character__plate, .nb-moment-character__scene)',
-      );
+      const hero = page.locator('.nb-moment-character__hero');
       await expect(page.locator('.nb-moment-backdrop')).toHaveAttribute(
         'data-moment',
         'card:' + card.id,

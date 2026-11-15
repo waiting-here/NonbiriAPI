@@ -56,7 +56,7 @@ test('Tomorrow unlocks through its limited pool, collection reward and account a
     expect(result).toHaveProperty('snapshot');
     return result;
   };
-  const name = 'Tomorrow, Still Unwritten';
+  const name = 'Hello, Tomorrow';
   try {
     const config = await api<Configuration>(admin, fixture.admin_url, '/admin/api/gacha');
     const preset = config.presets.find((item) => item.id === 'tomorrow')!;

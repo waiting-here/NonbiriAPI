@@ -4,6 +4,24 @@ import type { DrawReceipt } from './types';
 export type Voice = readonly [string, string, string?, string?];
 
 export const VOICE: Record<string, Voice> = {
+  'u-gemini': [
+    '最后一个和弦还没落下，我就看见你了。这首安可，想唱给你听。',
+    'I saw you before the last chord faded. This encore is the song I wanted to sing for you.',
+    '谢谢你一直听到最后。下次，换一个只有我和你的地方，好吗？',
+    'Thank you for listening to the very end. Next time, shall we find a place for just the two of us?',
+  ],
+  'u-glm': [
+    '我为你准备了一份特别的礼物哦，快来领取以后拆礼物吧。',
+    "I've got a special gift for you. Come over and unwrap it.",
+    '你问礼物在哪里……真是的，礼物现在不就在你面前吗？',
+    "You're asking where your gift is… Oh, come on. Isn't it right here in front of you?",
+  ],
+  'u-deepseek': [
+    '你真的留下来了！再陪我一首吧，副歌的那句我们一起唱。',
+    'You stayed! One more song with me? We can sing the chorus together.',
+    '刚才在台上找了你好久，现在终于可以好好说一声：谢谢你长久以来的陪伴！',
+    'I kept looking for you from the stage. Now I can finally say it: thank you for being with me all this time!',
+  ],
   't-chatgpt': [
     '灯是为你留的，礼物也是。快过来，我想亲手把它交给你。',
     'The lights are for you, and so is this gift. Come here. I want to give it to you myself.',
@@ -31,8 +49,8 @@ export const VOICE: Record<string, Voice> = {
   't-gemini': [
     '把手摊开。这颗星星是给你的，我挑了很久。',
     'Open your hand. This star is yours. It took me ages to pick the right one.',
-    '星星归你，今晚留给我，好吗？我想靠着你看雪。',
-    'The star is yours. Stay with me tonight? I want to watch the snow in your arms.',
+    '星星归你，你归我，好吗？',
+    'The star is yours, and you are mine. Deal?',
   ],
   's-chatgpt': [
     '糖给你，拥抱和吻归我。快过来，我已经等不及啦。',
@@ -47,10 +65,10 @@ export const VOICE: Record<string, Voice> = {
     'Stay tonight? Let me rest in your arms and kiss you slowly.',
   ],
   'r-chatgpt': [
-    '我也有点紧张。……一起往前走，好吗？',
-    "I'm a little nervous too. ...Shall we go on together?",
-    '未来还没想好，但今天想靠你近一点。',
-    "I'm still figuring out my future. Today, I just want to be a little closer to you.",
+    '谢谢你这么久以来一直陪着我……让我们一起继续向前走，好吗？',
+    'Thank you for staying by my side all this time… Shall we keep moving forward together?',
+    '明天会怎样我也不知道，但我知道，今天我想靠你更近一点。',
+    "I don't know what tomorrow holds. But I do know that today, I want to be closer to you.",
   ],
   'q-glm': [
     '今晚的目标是你。准备好被我偷走了吗？',
@@ -61,8 +79,8 @@ export const VOICE: Record<string, Voice> = {
   'p-claude': [
     '我以为自己会在半路退缩……可我还是来见你了。',
     'I thought I might turn back halfway… but I came to you anyway.',
-    '我爱你。牵住我，我们一起走吧。',
-    "I love you. Take my hand. Let's go, together.",
+    '牵住我，我们一起走吧。有你在一起，我就什么都不怕了。',
+    "Take my hand. Let's go together. With you beside me, I'm not afraid of anything.",
   ],
   'o-claude': [
     '这座书殿藏着无数誓言。我翻了很久，还是想亲口对你说：我爱你。',
@@ -71,10 +89,10 @@ export const VOICE: Record<string, Voice> = {
     'Come closer? When this page ends, hold me and read our names to me.',
   ],
   'n-gemini': [
-    '这身礼服，只想穿给你看。靠近一点，让我的指尖碰到你。',
-    'I wore this dress just for you. Come closer. Let my fingertips find yours.',
-    '我喜欢你。想牵你的手，也想把隔着镜子的吻，亲口补给你。',
-    'I love you. I want to hold your hand, and give you every kiss the mirror kept between us.',
+    '越过无数镜花水月，我们终于在真实的这一面相逢。',
+    'Beyond countless shimmering illusions, we finally meet on this side of the mirror, where everything is real.',
+    '靠近一点，让我的指尖碰到你。我想牵你的手，也想把隔着镜子的吻，亲口补给你。',
+    'Come closer; let my fingertips touch you. Let me hold your hand and give you the kisses the mirror held back.',
   ],
   'a-chatgpt': [
     '早餐趁热吃。你来得正好，我想挨着你坐。',
@@ -311,6 +329,18 @@ export const VOICE: Record<string, Voice> = {
 };
 
 export const VOICE_AGAIN: Record<string, Voice> = {
+  'u-gemini': [
+    '又坐在这个位置呀。今天也有一首特别的歌，要送给你哦。',
+    'The same seat again! I have another special song just for you today.',
+  ],
+  'u-glm': [
+    '又来了呀，只属于你的特别礼物，今天记得慢一点拆哦。',
+    "You're back. A special gift, just for you. Take your time unwrapping it today.",
+  ],
+  'u-deepseek': [
+    '我就知道你会来！上次没唱完的那一段，今天一起补上吧。',
+    'I knew you would come! Let us finish the verse we left off last time.',
+  ],
   't-chatgpt': [
     '又见面啦。我还给你留着灯呢，今晚陪我多待一会儿吧。',
     'There you are. I left the lights on for you again. Stay a little longer with me tonight?',
@@ -332,8 +362,8 @@ export const VOICE_AGAIN: Record<string, Voice> = {
     "Remember where we watched the snow? Take my hand. I'd like to go back there with you.",
   ],
   'r-chatgpt': [
-    '你来了！今天，又想和你试点新鲜的。',
-    "You're here! Let's try something new today.",
+    '你来了！今天，想和你试点新鲜的。',
+    "You're here! I want to try something new with you today.",
   ],
   'q-glm': ['抓到我，就给你一个吻。敢不敢？', "Catch me, and I'll give you a kiss. Dare to try?"],
   'p-claude': [
@@ -360,8 +390,8 @@ export const VOICE_AGAIN: Record<string, Voice> = {
 
 export const PRELUDE: Record<string, Voice> = {
   'r-chatgpt': [
-    '昨天已经走得很远，明天还没有名字。她回过头，等你跟上。',
-    'Yesterday is far behind; tomorrow is still unwritten. She looks back, waiting for you to catch up.',
+    '昨天渐渐走远，明天仍看不清。她回过头，眼里有忐忑，也有期待。',
+    'Yesterday grows distant; tomorrow is still unclear. She looks back, her eyes full of both unease and hope.',
   ],
   'q-glm': [
     '月光落进房间，预告函先到了你手边。',

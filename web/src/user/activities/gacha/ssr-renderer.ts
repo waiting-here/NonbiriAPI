@@ -36,6 +36,11 @@ export async function renderSSR(
     if (options.signal?.aborted) return () => {};
     return renderChristmas(canvas, id, { ...options, frozenTime, paused, highResolution });
   }
+  if (id === 'u-gemini' || id === 'u-glm' || id === 'u-deepseek') {
+    const { renderEncore } = await import('./encore/renderer');
+    if (options.signal?.aborted) return () => {};
+    return renderEncore(canvas, id, { ...options, frozenTime, paused, highResolution });
+  }
   const theme = specialCards[id];
   if (theme) {
     const { renderSpecial } = await import('./special-renderer');

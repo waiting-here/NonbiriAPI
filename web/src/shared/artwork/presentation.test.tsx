@@ -20,8 +20,20 @@ import {
 } from '../../user/appearance/context';
 import { MomentBackdrop } from '../../user/appearance/MomentBackdrop';
 import { MomentPicker } from '../../user/appearance/MomentPicker';
+import compositions from '../../../public/assets/gacha/composition.json';
+import type { MomentRegistration } from '../../user/activities/gacha/moment-frame';
 
 vi.mock('../../user/activities/gacha/ssr-renderer', () => ({ renderSSR: vi.fn() }));
+vi.mock('../../user/activities/gacha/moment-registration', () => ({
+  useMomentExpansion: (id?: string) => ({
+    ...(id
+      ? (compositions.cards as unknown as Record<string, { moment_layers?: MomentRegistration }>)[
+          id
+        ]?.moment_layers
+      : {}),
+    ready: true,
+  }),
+}));
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -214,18 +226,19 @@ it('keeps the seasonal contact scenery aligned with its character and hides both
       </ArtworkPolicyProvider>
     );
     const view = render(tree(false));
+    const registration = (
+      compositions.cards as unknown as Record<string, { moment_layers: MomentRegistration }>
+    )[id].moment_layers;
     expect(view.container.querySelector('.nb-moment-backdrop__scene')).toHaveAttribute(
       'src',
-      `/assets/gacha/motion/${id}/background.webp`,
+      '/assets/gacha/' + registration.scene!.path,
     );
     const character = view.container.querySelector('.nb-moment-character');
-    expect(character?.querySelector('.nb-moment-character__plate')).toHaveAttribute(
+    expect(character?.querySelector('.nb-moment-character__plate')).toBeNull();
+    expect(character?.querySelector('.nb-moment-character__scene')).toBeNull();
+    expect(character?.querySelector('.nb-moment-character__hero')).toHaveAttribute(
       'src',
-      `/assets/gacha/motion/${id}/background.webp`,
-    );
-    expect(character?.querySelector('img:not(.nb-moment-character__plate)')).toHaveAttribute(
-      'src',
-      `/assets/gacha/motion/${id}/hero.webp`,
+      '/assets/gacha/' + (registration.expansion?.hero ?? `motion/${id}/hero.webp`),
     );
     expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
     view.rerender(tree(true));
