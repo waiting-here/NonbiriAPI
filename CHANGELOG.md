@@ -4,8 +4,15 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.3.12 — Unreleased
+## 1.3.12 — 2026-11-15
 
+- Use existing subject indexes when deduplicating upstream diagnostics, avoiding
+  a scan of retained error bodies while holding the sole database writer.
+- Reuse sliding quota totals within the current authorized snapshot and read
+  changed ranges for nearby windows. Limit model success statistics to the
+  returned capability set and avoid repeating filtered availability projections.
+- Skip idle image-task expiry write transactions; due work retains the original
+  transactional deadline check and refund behavior.
 - Add Private Encore, three R-18 limited SSR cards with registered blinking,
   separate hair layers, breathing, constrained arm and accessory motion, and stage lighting. Its unpublished template follows
   the seasonal SSR rules; the theme uses the existing adult-artwork gate and
