@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // Only operations whose successful response is always JSON may send leading
@@ -103,6 +104,8 @@ func (w *jsonKeepaliveWriter) armHeartbeat() {
 }
 
 func (w *jsonKeepaliveWriter) Header() http.Header { return w.header }
+
+func (w *jsonKeepaliveWriter) ErrorLanguage() string { return httperr.Language(w.writer) }
 
 func (w *jsonKeepaliveWriter) contextErrorLocked() error {
 	err := w.ctx.Err()

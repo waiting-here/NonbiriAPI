@@ -86,31 +86,41 @@ func TestJSONKeepaliveFlushesBeforeFinalJSONOverHTTP(t *testing.T) {
 }
 
 func TestJSONKeepaliveEarlyAndLateFailures(t *testing.T) {
-	for _, late := range []bool{false, true} {
-		t.Run(fmt.Sprint(late), func(t *testing.T) {
-			w := &jsonHeartbeatRecorder{ResponseRecorder: httptest.NewRecorder(), heartbeat: make(chan struct{}, 1)}
-			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-			defer cancel()
-			interval := time.Second
-			if late {
-				interval = 5 * time.Millisecond
-			}
-			writer, _ := newJSONKeepaliveWriter(ctx, w, interval)
-			defer writer.cancel()
-			writer.armHeartbeat()
-			want := http.StatusTooManyRequests
-			if late {
-				if err := awaitJSONHeartbeat(ctx, w); err != nil {
-					t.Fatal(err)
+	for _, tc := range []struct {
+		language, message string
+	}{
+		{"en", "at capacity"},
+		{"zh", "请求过于频繁，请稍后重试。"},
+	} {
+		for _, late := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/late=%v", tc.language, late), func(t *testing.T) {
+				w := &jsonHeartbeatRecorder{ResponseRecorder: httptest.NewRecorder(), heartbeat: make(chan struct{}, 1)}
+				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+				defer cancel()
+				interval := time.Second
+				if late {
+					interval = 5 * time.Millisecond
 				}
-				want = http.StatusOK
-			}
-			writer.stopHeartbeat()
-			writer.finishFailure(platformFailure(httperr.CodeRateLimited, "at capacity"))
-			if w.Code != want || !json.Valid(w.Body.Bytes()) || !strings.Contains(w.Body.String(), `"error"`) {
-				t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
-			}
-		})
+				writer, _ := newJSONKeepaliveWriter(ctx, httperr.WithLanguage(w, tc.language), interval)
+				defer writer.cancel()
+				writer.armHeartbeat()
+				want := http.StatusTooManyRequests
+				if late {
+					if err := awaitJSONHeartbeat(ctx, w); err != nil {
+						t.Fatal(err)
+					}
+					want = http.StatusOK
+				}
+				writer.stopHeartbeat()
+				writer.finishFailure(platformFailure(httperr.CodeRateLimited, "at capacity"))
+				if w.Code != want || !json.Valid(w.Body.Bytes()) || !strings.Contains(w.Body.String(), `"error"`) {
+					t.Fatalf("status=%d body=%q", w.Code, w.Body.String())
+				}
+				if !strings.Contains(w.Body.String(), tc.message) {
+					t.Fatalf("language=%s body=%q", tc.language, w.Body.String())
+				}
+			})
+		}
 	}
 }
 
