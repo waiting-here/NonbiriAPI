@@ -220,6 +220,7 @@ func newUpstream(t *testing.T) *fakeUpstream {
 }
 
 type fixture struct {
+	store                                *db.Store
 	database                             *sql.DB
 	service                              *Service
 	limited                              *limitedactivities.Service
@@ -250,7 +251,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	warmReaders(t, store.ReadDB())
-	f := &fixture{database: store.DB(), vault: vault, upstream: newUpstream(t), actors: map[int64]authz.Actor{}}
+	f := &fixture{store: store, database: store.DB(), vault: vault, upstream: newUpstream(t), actors: map[int64]authz.Actor{}}
 	f.now.Store(testNow)
 	if _, err = f.database.Exec("UPDATE maintenance_state SET enabled=0 WHERE id=1"); err != nil {
 		t.Fatal(err)
