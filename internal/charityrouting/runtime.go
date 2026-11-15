@@ -707,18 +707,23 @@ WHERE enabled=1 ORDER BY id`)
 	if err := rows.Close(); err != nil {
 		return Capability{}, fmt.Errorf("charity routing: close capability models: %w", err)
 	}
-	rates, err := observability.RecentSuccessBatchTx(ctx, tx, modelIDs, decisionNow)
-	if err != nil {
-		return Capability{}, err
-	}
 	allowedIDs := make([]int64, 0, len(modelIDs))
 	for index, id := range modelIDs {
-		models[index].RecentSuccess = rates[id]
 		if charityGate == "1" && allowed[index] {
 			allowedIDs = append(allowedIDs, id)
 		}
 	}
 	availability, err := callerAvailabilityTx(ctx, tx, userID, level, decisionNow, allowedIDs)
+	if err != nil {
+		return Capability{}, err
+	}
+	availableIDs := make([]int64, 0, len(allowedIDs))
+	for _, id := range allowedIDs {
+		if availability[id] {
+			availableIDs = append(availableIDs, id)
+		}
+	}
+	rates, err := observability.RecentSuccessBatchTx(ctx, tx, availableIDs, decisionNow)
 	if err != nil {
 		return Capability{}, err
 	}
@@ -742,6 +747,7 @@ WHERE enabled=1 ORDER BY id`)
 			continue
 		}
 		if availability[id] {
+			models[index].RecentSuccess = rates[id]
 			available = append(available, models[index])
 		}
 	}

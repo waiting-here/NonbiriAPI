@@ -33,13 +33,11 @@ WITH token_budget AS MATERIALIZED (
 ), quota_remaining AS MATERIALIZED (
  SELECT q.metric,q.retired_at,nbi_u128_remaining(q.limit_mag,
  COALESCE(CASE WHEN q.mode='sliding' THEN
-   (SELECT nbi_u128_sum(b.used_mag) FROM donation_quota_buckets b
-    WHERE b.rule_id=q.rule_id AND b.epoch=q.epoch AND b.success_at>q.window_start AND b.success_at<=q.observed_now)
+   %[6]s
  ELSE (SELECT p.used_mag FROM donation_quota_periods p
        WHERE p.rule_id=q.rule_id AND p.epoch=q.epoch AND p.start_at=q.period_start) END,nbi_u128(0)),
  COALESCE(CASE WHEN q.mode='sliding' THEN
-   (SELECT nbi_u128_sum(b.reserved_mag) FROM donation_quota_buckets b
-    WHERE b.rule_id=q.rule_id AND b.epoch=q.epoch AND b.success_at>q.window_start AND b.success_at<=q.observed_now)
+   %[7]s
  ELSE (SELECT p.reserved_mag FROM donation_quota_periods p
        WHERE p.rule_id=q.rule_id AND p.epoch=q.epoch AND p.start_at=q.period_start) END,nbi_u128(0)),
  q.pending_reserved) AS remaining
@@ -56,7 +54,38 @@ SELECT 1 FROM token_budget b WHERE
  OR (q.metric IN ('input_tokens','output_tokens') AND b.input_token_reserve IS NULL)
  OR q.remaining<nbi_u128(CASE q.metric WHEN 'calls' THEN 1 WHEN 'tokens' THEN b.effective_reserve
  WHEN 'input_tokens' THEN b.input_token_reserve WHEN 'output_tokens' THEN b.output_token_reserve WHEN 'credits' THEN %[3]s ELSE -1 END))
-)`, keyID, decisionNow, credits, tokens, model)
+)`, keyID, decisionNow, credits, tokens, model, slidingWindowAmountSQL("used_mag", "window_used"), slidingWindowAmountSQL("reserved_mag", "window_reserved"))
+}
+
+// slidingWindowAmountSQL mirrors moveWindow without advancing the stored clock.
+// Reuse overlapping windows when their changed time ranges are smaller than
+// the new window; a long idle gap should not scan a mostly expired old window.
+// Subtraction must fail on drift instead of silently clamping an invalid cache.
+func slidingWindowAmountSQL(amount, cached string) string {
+	return fmt.Sprintf(`(CASE
+ WHEN q.window_at=q.observed_now AND q.window_left=q.window_start THEN q.%[2]s
+ WHEN q.window_at IS NOT NULL AND q.window_at<=q.observed_now
+  AND q.window_left<q.window_at AND q.window_start<q.window_at
+  AND q.observed_now-q.window_at+ABS(q.window_start-q.window_left)<q.observed_now-q.window_start THEN (
+ WITH leaving AS MATERIALIZED (
+  SELECT nbi_u128_sum(b.%[1]s) AS amount FROM donation_quota_buckets b
+  WHERE b.rule_id=q.rule_id AND b.epoch=q.epoch
+   AND b.success_at>q.window_left AND b.success_at<=MIN(q.window_start,q.window_at)
+ )
+ SELECT nbi_u128_sum(amount) FROM (
+  SELECT CASE WHEN leaving.amount>q.%[2]s THEN nbi_u128(-1)
+   ELSE nbi_u128_remaining(q.%[2]s,leaving.amount,nbi_u128(0),nbi_u128(0)) END AS amount FROM leaving
+  UNION ALL SELECT b.%[1]s FROM donation_quota_buckets b
+   WHERE b.rule_id=q.rule_id AND b.epoch=q.epoch
+    AND b.success_at>q.window_start AND b.success_at<=q.window_left
+  UNION ALL SELECT b.%[1]s FROM donation_quota_buckets b
+   WHERE b.rule_id=q.rule_id AND b.epoch=q.epoch
+    AND b.success_at>MAX(q.window_start,q.window_at) AND b.success_at<=q.observed_now
+ ))
+ ELSE (SELECT nbi_u128_sum(b.%[1]s) FROM donation_quota_buckets b
+  WHERE b.rule_id=q.rule_id AND b.epoch=q.epoch
+   AND b.success_at>q.window_start AND b.success_at<=q.observed_now)
+ END)`, amount, cached)
 }
 
 // ModelAvailabilityPredicate checks one exact upstream target. Arguments are

@@ -94,7 +94,7 @@ type routingTestEnv struct {
 	caller  int64
 }
 
-func newRoutingTestEnv(t *testing.T) *routingTestEnv {
+func newRoutingTestEnv(t testing.TB) *routingTestEnv {
 	t.Helper()
 	master := bytes.Repeat([]byte{0x52}, secret.MasterKeyBytes)
 	vault, err := secret.New(master)
@@ -128,7 +128,7 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 	return environment
 }
 
-func (environment *routingTestEnv) seedUser(t *testing.T, admin bool, level *int64) int64 {
+func (environment *routingTestEnv) seedUser(t testing.TB, admin bool, level *int64) int64 {
 	t.Helper()
 	zero := make([]byte, 16)
 	var discord any = fmt.Sprintf("routing-%d", environment.userSeq.Add(1))
@@ -383,11 +383,11 @@ func (environment *routingTestEnv) seedAutomaticCatalog(t *testing.T, physicalKe
 	}
 }
 
-func (environment *routingTestEnv) seedCandidateWithConnector(t *testing.T, ownerID int64, identity, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
+func (environment *routingTestEnv) seedCandidateWithConnector(t testing.TB, ownerID int64, identity, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
 	return environment.seedCandidateAt(t, ownerID, 0, identity, fmt.Sprintf("https://%s.routing.test/v1", identity), upstream, connectorType, channel...)
 }
 
-func (environment *routingTestEnv) seedCandidateAt(t *testing.T, ownerID, donationID int64, identity, baseURL, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
+func (environment *routingTestEnv) seedCandidateAt(t testing.TB, ownerID, donationID int64, identity, baseURL, upstream string, connectorType connectorcontract.Type, channel ...string) (int64, int64, int64) {
 	t.Helper()
 	now := environment.clock.Load()
 	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
