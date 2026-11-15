@@ -21,6 +21,7 @@ import { AppearancePreview } from './AppearancePreview';
 import { AmberPreview } from './AmberPreview';
 import { AmberExport } from './AmberExport';
 import { SeasonalPreview } from './SeasonalPreview';
+import { CopyReview } from './copy-review/CopyReview';
 import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -60,6 +61,12 @@ function Preview() {
               {english ? 'LOCAL PREVIEW · independent sample data' : '本地预览 · 使用独立体验数据'}
             </span>
             <div>
+              <a
+                className="nb-btn nb-btn--secondary"
+                href={'?view=copy' + (english ? '&lang=en' : '')}
+              >
+                {english ? 'Copy review' : '文案校对'}
+              </a>
               <a className="nb-btn nb-btn--secondary" href="?view=christmas">
                 {english ? 'Christmas artwork' : '圣诞美术预览'}
               </a>
@@ -168,7 +175,9 @@ function PreviewRoot() {
   return (
     <ArtworkPolicyProvider disabled={!adult}>
       <ThemeProvider>
-        {seasonal ? (
+        {view === 'copy' ? (
+          <CopyReview />
+        ) : seasonal ? (
           <SeasonalPreview
             adult={adult}
             setAdult={setAdult}

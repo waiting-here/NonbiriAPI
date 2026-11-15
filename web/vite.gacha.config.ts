@@ -2,12 +2,14 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import { cpSync, mkdirSync } from 'node:fs';
+import { gachaCopyReviewPlugin } from './src/gacha-preview/copy-review/source-plugin';
 
 export default defineConfig({
   root: fileURLToPath(new URL('./src/gacha-preview', import.meta.url)),
   publicDir: fileURLToPath(new URL('./public', import.meta.url)),
   plugins: [
     react(),
+    gachaCopyReviewPlugin(),
     {
       name: 'gacha-preview-assets',
       apply: 'build',

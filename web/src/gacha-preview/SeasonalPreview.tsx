@@ -135,6 +135,9 @@ export function SeasonalPreview({
         <ThemeToggle />
       </header>
       <nav className="seasonal-review__navigation nb-actions" aria-label="美术资源导航">
+        <a className="nb-btn nb-btn--secondary" href="?view=copy">
+          文案校对
+        </a>
         <a className="nb-btn nb-btn--secondary" href="#motion">
           动态卡面
         </a>
