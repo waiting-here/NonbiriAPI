@@ -24,6 +24,12 @@ var (
 
 const RetentionSeconds int64 = 30 * 24 * 60 * 60
 
+const (
+	errorBodyRequestExistsQuery   = "SELECT EXISTS(SELECT 1 FROM request_error_bodies WHERE request_log_id=? AND attempt_seq=? AND event_seq=?)"
+	errorBodyTaskExistsQuery      = "SELECT EXISTS(SELECT 1 FROM request_error_bodies WHERE task_id=? AND attempt_seq=? AND event_seq=?)"
+	errorBodyOperationExistsQuery = "SELECT EXISTS(SELECT 1 FROM request_error_bodies WHERE operation_id=? AND attempt_seq=? AND event_seq=?)"
+)
+
 type Repository struct {
 	db  *sql.DB
 	now func() time.Time
@@ -138,12 +144,14 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 	var logID any
 	var taskID any
 	var operationID any
+	var subject any
+	lookup := errorBodyRequestExistsQuery
 	if ref.RequestID != "" {
 		var id int64
 		if err = tx.QueryRowContext(ctx, `SELECT id FROM request_logs WHERE logical_request_id=?`, ref.RequestID).Scan(&id); err != nil {
 			return err
 		}
-		logID = id
+		logID, subject = id, id
 	} else if ref.TaskID != "" {
 		var live bool
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM image_activity_tasks WHERE id=? AND user_id IS NOT NULL)`, ref.TaskID).Scan(&live); err != nil {
@@ -152,15 +160,19 @@ func (r *Repository) recordError(ctx context.Context, ref DiagnosticRef, seq int
 		if !live {
 			return nil
 		}
-		taskID = ref.TaskID
+		taskID, subject = ref.TaskID, ref.TaskID
+		lookup = errorBodyTaskExistsQuery
 	} else {
-		operationID = ref.OperationID
+		operationID, subject = ref.OperationID, ref.OperationID
+		lookup = errorBodyOperationExistsQuery
 	}
-	var existing int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM request_error_bodies WHERE request_log_id IS ? AND task_id IS ? AND operation_id IS ? AND attempt_seq=? AND event_seq=?`, logID, taskID, operationID, ref.AttemptSeq, seq).Scan(&existing); err != nil {
+	// Each error has exactly one subject. Equality also makes its existing
+	// non-NULL partial unique index available to the duplicate check.
+	var existing bool
+	if err = tx.QueryRowContext(ctx, lookup, subject, ref.AttemptSeq, seq).Scan(&existing); err != nil {
 		return err
 	}
-	if existing > 0 {
+	if existing {
 		return nil
 	}
 	var rawBudget string

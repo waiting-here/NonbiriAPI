@@ -81,8 +81,11 @@ type loadUpstream struct {
 	active   atomic.Int64
 	peak     atomic.Int64
 	canceled atomic.Int64
+	failed   atomic.Int64
 	mode     string
 }
+
+const loadErrorBodyBytes = 512
 
 func (u *loadUpstream) finish() { u.once.Do(func() { close(u.release) }) }
 
@@ -91,10 +94,22 @@ func (u *loadUpstream) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	var input struct{ Stream bool }
+	var input struct {
+		Stream   bool
+		Messages json.RawMessage
+	}
 	if json.NewDecoder(r.Body).Decode(&input) != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
+	}
+	fail := false
+	if u.mode == "error_mix" {
+		var messages []struct{ Content string }
+		if json.Unmarshal(input.Messages, &messages) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		fail = len(messages) > 0 && strings.HasPrefix(messages[0].Content, "fixture-error:")
 	}
 	u.entered.Add(1)
 	active := u.active.Add(1)
@@ -108,6 +123,13 @@ func (u *loadUpstream) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if fail {
+			u.failed.Add(1)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			body := `{"error":{"message":"Synthetic upstream unavailable","type":"server_error","code":"fixture_unavailable"}}`
+			_, _ = io.WriteString(w, body+strings.Repeat(" ", loadErrorBodyBytes-len(body)))
+			return
+		}
 		_, _ = io.WriteString(w, `{"id":"synthetic","object":"chat.completion","created":1,"model":"private-model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1024,"completion_tokens":2,"total_tokens":1026}}`)
 		return
 	}
