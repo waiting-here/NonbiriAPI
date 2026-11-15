@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GachaApp } from './GachaApp';
 import { Shop } from './Shop';
@@ -258,12 +258,16 @@ it.each([
       expect(ten).toHaveAttribute('aria-describedby', 'gacha-upcoming-notice');
 
       clock.mockReturnValue(localNow + 59_000);
-      fireEvent.focus(window);
+      await act(async () => {
+        fireEvent.focus(window);
+      });
       expect(screen.getByText(status)).toBeVisible();
       expect(ten).toBeDisabled();
 
       clock.mockReturnValue(localNow + 60_000);
-      fireEvent.focus(window);
+      await act(async () => {
+        fireEvent.focus(window);
+      });
       expect(screen.queryByText(status)).not.toBeInTheDocument();
       expect(screen.queryByText(notice)).not.toBeInTheDocument();
       if (paused) {
@@ -275,7 +279,9 @@ it.each([
       }
 
       clock.mockReturnValue(localNow + 120_000);
-      fireEvent.focus(window);
+      await act(async () => {
+        fireEvent.focus(window);
+      });
       expect(screen.queryByText(status)).not.toBeInTheDocument();
       expect(once).toBeDisabled();
       expect(ten).toBeDisabled();
