@@ -6,10 +6,20 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.3.12 — Unreleased
 
+- Add Private Encore, three R-18 limited SSR cards with registered blinking,
+  separate hair layers, breathing, constrained arm and accessory motion, and stage lighting. Its unpublished template follows
+  the seasonal SSR rules; the theme uses the existing adult-artwork gate and
+  does not grant a dedicated site appearance.
+- Add a copy-review page to the gacha preview, with source-backed bilingual text,
+  filters, persistent drafts, and JSON import and export with conflict review.
+- Refine Chinese encounter and reunion lines with matching English translations.
+- Rename Tomorrow, Still Unwritten to Hello, Tomorrow, with a prelude that
+  combines uncertainty and hope. Card ownership and appearance identifiers remain unchanged.
 - Add optional administrator-controlled JSON response keepalives, disabled by
   default, with a configurable interval of 60 seconds by default. Errors retain
   their HTTP status until the first heartbeat; later errors remain in JSON.
   Upstream failure accounting, retries and billing use the original upstream result.
+  Platform errors retain the request's language before and after keepalives begin.
 - Reserve OAuth state capacity for each flow and cap aggregate decoded image
   pixels in each image-generation activity result.
 - Preserve failed Cloudflare-routed response bodies even when a JSON error is
@@ -25,7 +35,7 @@ Each version entry describes its source and compatibility boundary; a release ta
   in the local comparison preview. Both the group illustration and pool cover
   include all five characters. Its preset has no seasonal date limit.
 - Refine independent fabric and accessory motion in Across the Mirror Sea,
-  A Notice to Steal Your Heart and Tomorrow, Still Unwritten. Free hems move
+  A Notice to Steal Your Heart and Hello, Tomorrow. Free hems move
   visibly while seams and hand contacts stay fixed; ornaments follow their
   attachments, with matching static and high-resolution artwork.
 - Align Christmas ChatGPT's face and eye animation with her established
@@ -36,6 +46,10 @@ Each version entry describes its source and compatibility boundary; a release ta
   Myriad Forms ChatGPT and the Fairytale Theatre group illustration.
 - Keep the matching card, thumbnail, transparent, eye-state, heartfelt-moment
   and high-resolution artwork consistent with the corrected sources.
+- Improve layered animation throughout existing SSR and SP cards and SP site
+  appearances, including complete fireworks fade-outs, detailed hair, moving
+  clouds and corrected character placement. Seasonal SSR Heartfelt Moments use
+  full-screen scenery with separate animated characters and contact shadows.
 - Keep storage schema 54 and account export format 36 unchanged.
 
 ## 1.3.11 — 2026-11-11

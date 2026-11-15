@@ -6,8 +6,11 @@ NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. U
 
 **v1.3.12 (unreleased)** adds optional administrator-controlled non-streaming
 JSON keepalives, bounds image-result pixels, reserves OAuth capacity per flow,
-and adds five animated Christmas limited SSR cards. It also corrects hand
-anatomy across several existing gacha illustrations and their matching layers.
+and recognizes verified Google Gemini overloads for temporary backoff. Gacha
+adds five Christmas limited SSR cards and three R-18 Private Encore limited SSR
+cards, refines layered SSR/SP animation and full-screen Heartfelt Moments, and
+corrects character details. Its development preview includes bilingual copy
+review with importable and exportable edits.
 Database schema remains 54 and account export remains format 36; existing databases
 on an earlier schema require the explicit offline upgrade before starting this
 version. See [service connections](docs/service-connections.md),
@@ -180,6 +183,10 @@ transparent clothing. These assets and their derivatives are included in the
 public source distribution. Its unpublished pool
 template gives the two featured cards equal weight. Collections and saved choices
 remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
+
+Private Encore adds three adult-only limited SSR cards, Gemini, GLM and DeepSeek,
+with the same default-off artwork gate, seasonal pool rules and no dedicated
+site appearance. Its portraits, illustration, cover and derivatives contain nudity.
 
 The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.
