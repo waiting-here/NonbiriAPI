@@ -45,6 +45,75 @@ func TestCallerParameterRequiresExactWireValue(t *testing.T) {
 	}
 }
 
+func TestCallerParameterNestedThinkingRequiresUnchangedPresentMember(t *testing.T) {
+	for _, tc := range []struct {
+		name, root, original, wire, param string
+		want                              bool
+	}{
+		{"type", "thinking", `{"type":"enabled","budget_tokens":4096}`, `{"type":"enabled","budget_tokens":4096}`, "thinking.type", true},
+		{"budget", "thinking", `{"budget_tokens":4096}`, `{"budget_tokens":4096}`, "thinking.budget_tokens", true},
+		{"effort", "reasoning", `{"effort":"low"}`, `{"effort":"low"}`, "reasoning.effort", true},
+		{"explicit null", "thinking", `{"type":null}`, `{"type":null}`, "thinking.type", true},
+		{"missing member", "thinking", `{}`, `{}`, "thinking.type", false},
+		{"scalar parent", "reasoning", `"low"`, `"low"`, "reasoning.effort", false},
+		{"null parent", "thinking", `null`, `null`, "thinking.type", false},
+		{"array parent", "thinking", `[{"type":"enabled"}]`, `[{"type":"enabled"}]`, "thinking.type", false},
+		{"duplicate member", "reasoning", `{"effort":"low","effort":"high"}`, `{"effort":"low","effort":"high"}`, "reasoning.effort", false},
+		{"literal dotted key", "reasoning.effort", `"low"`, `"low"`, "reasoning.effort", false},
+		{"changed sibling", "thinking", `{"type":"enabled","budget_tokens":4096}`, `{"type":"enabled","budget_tokens":8192}`, "thinking.type", false},
+		{"normalized parent", "reasoning", `{"effort": "low"}`, `{"effort":"low"}`, "reasoning.effort", false},
+		{"injected member", "thinking", `{}`, `{"type":"enabled"}`, "thinking.type", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := []byte(tc.original)
+			wire := []byte(fmt.Sprintf(`{%q:%s}`, tc.root, tc.wire))
+			match := unchangedCallerParameters(smartbackoff.WithCharityCall(t.Context(), true), &http.Response{StatusCode: 400}, []jsonField{{name: tc.root, value: original}}, wire, contract.AttemptPolicy{})
+			clear(wire)
+			clear(original)
+			if got := match != nil && match(tc.param); got != tc.want {
+				t.Fatalf("matched=%t want=%t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestThinkingParameterHTTPFailurePreservesDiagnostics(t *testing.T) {
+	const payload = `{"error":{"message":"\"thinking\" is not supported on /v1/chat/completions and was not applied. Use \"reasoning_effort\" (or \"reasoning.effort\") to control thinking.","type":"invalid_request_error","param":"thinking","code":"unsupported_parameter"}}`
+	for _, stream := range []bool{false, true} {
+		for _, supplied := range []bool{false, true} {
+			t.Run(fmt.Sprintf("stream=%t/supplied=%t", stream, supplied), func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var sent map[string]json.RawMessage
+					if json.NewDecoder(r.Body).Decode(&sent) != nil || (sent["thinking"] != nil) != supplied || supplied && string(sent["thinking"]) != `{"type":"enabled","budget_tokens":4096}` {
+						t.Error("unexpected outbound thinking parameter")
+					}
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(400)
+					_, _ = io.WriteString(w, payload)
+				}))
+				defer server.Close()
+				extra := ""
+				if supplied {
+					extra = `,"thinking":{"type":"enabled","budget_tokens":4096}`
+				}
+				request := decodeAdapterRequest(t, fmt.Sprintf(`{"model":"public/model","messages":[],"stream":%t%s}`, stream, extra))
+				ctx := smartbackoff.WithCharityCall(t.Context(), true)
+				captured := ""
+				ctx = upstreamerror.WithCapture(ctx, func(_ context.Context, e upstreamerror.Event) { captured = string(e.Bytes()) })
+				writer := httptest.NewRecorder()
+				result := adapterForServer(t, server.URL, nil, nil).Attempt(ctx, writer, testTarget(server.URL, []byte("secret-material"), nil), request, "caller")
+				want := contract.StreakUpstreamFailure
+				if supplied {
+					want = contract.StreakNeutral
+				}
+				if result.StreakDisposition != want || result.ErrorDetail.CallerFault().Matches(400, "unsupported_parameter") != supplied || result.Success || result.Committed || result.UpstreamStatus != 400 || writer.Body.Len() != 0 || captured != payload {
+					t.Fatalf("unexpected thinking failure: %+v", result)
+				}
+			})
+		}
+	}
+}
+
 func TestCallerParameterHTTPFailurePreservesDiagnostics(t *testing.T) {
 	const payload = `{"error":{"type":"invalid_request_error","code":"unsupported_parameter","param":"temperature","message":"Unsupported generation parameter."}}`
 	for _, charity := range []bool{false, true} {

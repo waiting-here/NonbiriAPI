@@ -35,6 +35,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Recognize verified Google Gemini overload errors as temporary unavailability:
   preserve the donated key's failure streak and wait 60 seconds, with valid
   upstream retry hints taking precedence. Other 503 failures retain their policy.
+- Recognize structured thinking-parameter errors, including AMD responses and
+  supported nested thinking/reasoning fields, when the caller supplied the
+  unchanged parameter. Preserve existing key failure streaks without suppressing
+  authentication, service failures or errors caused by configured rewrites.
 - Add A Date in the Snow, five non-explicit Christmas limited SSR cards, with
   distinct poses, independently layered hair, garments and accessories, and a
   snowy-window drawing room with masked weather and lighting. Adopt Claude's

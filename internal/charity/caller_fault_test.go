@@ -19,6 +19,10 @@ func TestCallerParameterFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 		{"invalid_request_error", "invalid_value", "temperature"},
 		{"invalid_request_error", "invalid_value", "aspect_ratio"},
 		{"BadRequest", "InvalidParameter", "reasoning_effort"},
+		{"invalid_request_error", "unsupported_parameter", "thinking"},
+		{"invalid_request_error", "invalid_type", "thinking.type"},
+		{"invalid_request_error", "invalid_value", "thinking.budget_tokens"},
+		{"invalid_request_error", "unsupported_value", "reasoning.effort"},
 	} {
 		t.Run(tc.code+"/"+tc.param, func(t *testing.T) {
 			testCallerParameterFaultAccounting(t, tc.kind, tc.code, tc.param)
