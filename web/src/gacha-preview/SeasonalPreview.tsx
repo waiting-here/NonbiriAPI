@@ -156,7 +156,8 @@ export function SeasonalPreview({ theme = 's' }: { theme?: string }) {
               {...props}
               value={theme}
               onChange={(event) => {
-                location.href = `?view=motion&theme=${event.target.value}`;
+                const next = themes.find((item) => item.id === event.target.value);
+                if (next) location.href = `?view=motion&theme=${next.id}`;
               }}
             >
               {themes

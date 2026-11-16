@@ -73,7 +73,10 @@ export function ChristmasAssets({ high }: { high: boolean }) {
               {...props}
               className="nb-select"
               value={selected}
-              onChange={(event) => setSelected(event.target.value)}
+              onChange={(event) => {
+                const next = christmasCards.find((item) => item.id === event.target.value);
+                if (next) setSelected(next.id);
+              }}
             >
               {christmasCards.map((item) => (
                 <option key={item.id} value={item.id}>
