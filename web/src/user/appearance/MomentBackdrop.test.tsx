@@ -11,10 +11,11 @@ vi.mock('../activities/gacha/moment-registration', () => ({
     scene:
       id === 's-claude'
         ? {
-            path: 'moment/s-claude/background.webp',
-            canvas: [2731, 1536],
-            originalRegion: { x: 1707, y: 0, width: 1024, height: 1536 },
-            highResolutionWidth: 3840,
+            path: 'moment/s-claude/viewport-background.webp',
+            canvas: [3072, 1024],
+            originalRegion: { x: 2555, y: 175, width: 512, height: 768 },
+            highResolutionWidth: 6144,
+            viewport: { shadow: 'motion/s-claude/moment-shadow.webp' },
           }
         : undefined,
     expansion:
@@ -109,6 +110,36 @@ it('releases a late character renderer after selection changes', async () => {
   expect(view.container.querySelector('canvas')).toBeNull();
 });
 
+it('rechecks resolution after the canvas layout changes and disconnects its observer', async () => {
+  preference();
+  let resized: ResizeObserverCallback = () => {};
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        resized = callback;
+      }
+      observe() {}
+      disconnect = disconnect;
+    },
+  );
+  let width = 700;
+  vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockImplementation(
+    () => ({ width, height: width * 1.5 }) as DOMRect,
+  );
+  vi.mocked(renderSSR).mockResolvedValue(vi.fn());
+  const view = render(<MomentBackdrop moment="card:g-chatgpt" />);
+  await waitFor(() => expect(renderSSR).toHaveBeenCalledOnce());
+  expect(vi.mocked(renderSSR).mock.calls[0][4]).toBe(false);
+  width = 1200;
+  await act(async () => resized([], {} as ResizeObserver));
+  await waitFor(() => expect(renderSSR).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(renderSSR).mock.calls[1][4]).toBe(true);
+  view.unmount();
+  expect(disconnect).toHaveBeenCalledOnce();
+});
+
 it('updates the artwork hue after loading and clears it on selection changes and unmount', () => {
   const context = {
     drawImage: vi.fn(),
@@ -171,7 +202,7 @@ it('expands only a registered moment canvas while preserving the original static
   ).toBeNull();
 });
 
-it('anchors an expanded scene to the original character instead of covering the viewport independently', async () => {
+it('uses one full-screen scene with a separately registered transparent character', async () => {
   preference();
   vi.mocked(renderSSR).mockResolvedValue(vi.fn());
   const view = render(
@@ -182,23 +213,35 @@ it('anchors an expanded scene to the original character instead of covering the 
   await waitFor(() => expect(renderSSR).toHaveBeenCalledOnce());
   expect(view.container.querySelector('.nb-moment-backdrop__scene')).toHaveAttribute(
     'src',
-    '/assets/gacha/moment/s-claude/background.webp',
+    '/assets/gacha/moment/s-claude/viewport-background.webp',
   );
   expect(view.container.querySelector('.nb-moment-backdrop')).toHaveAttribute(
     'data-registered',
     'true',
   );
-  const scene = view.container.querySelector<HTMLImageElement>('.nb-moment-character__scene')!;
-  expect(scene.src).toContain('/assets/gacha/moment/s-claude/background.webp');
-  expect(scene.style.left).toBe('-166.69921875%');
-  expect(scene.style.width).toBe('266.69921875%');
-  expect(scene.style.height).toBe('100%');
+  expect(view.container.querySelector('.nb-moment-backdrop')).toHaveAttribute(
+    'data-viewport',
+    'true',
+  );
+  expect(view.container.querySelector('.nb-moment-character__scene')).toBeNull();
   expect(view.container.querySelector('.nb-moment-character__plate')).toBeNull();
   expect(
-    view.container.querySelector('.nb-moment-character > img:not(.nb-moment-character__scene)'),
+    view.container.querySelector('.nb-moment-character__hero'),
   ).toHaveAttribute('src', '/assets/gacha/motion/s-claude/hero.webp');
   expect(vi.mocked(renderSSR).mock.calls[0][5]?.momentFrame).toBeUndefined();
-  expect(document.documentElement.style.getPropertyValue('--nb-moment-extra-reserve')).toBe('');
+  const character = view.container.querySelector<HTMLElement>('.nb-moment-character')!;
+  const hero = view.container.querySelector<HTMLImageElement>('.nb-moment-character__hero')!;
+  const shadow = view.container.querySelector<HTMLImageElement>('.nb-moment-character__shadow')!;
+  const initialWidth = character.style.width;
+  expect(hero.sizes).toBe(initialWidth);
+  expect(shadow.sizes).toBe(initialWidth);
+  vi.stubGlobal('innerWidth', 390);
+  vi.stubGlobal('innerHeight', 844);
+  fireEvent.resize(window);
+  expect(character.style.width).not.toBe(initialWidth);
+  expect(hero.sizes).toBe(character.style.width);
+  expect(shadow.sizes).toBe(character.style.width);
+  expect(document.documentElement.style.getPropertyValue('--nb-moment-extra-reserve')).toBe('0px');
   expect(document.documentElement.style.getPropertyValue('--nb-moment-height-ratio')).toBe('');
 });
 

@@ -283,10 +283,15 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	if err != nil {
 		return nil, fmt.Errorf("load artwork policy: %w", err)
 	}
+	jsonKeepalive, err := loadJSONKeepalivePolicy(startupContext, store)
+	if err != nil {
+		return nil, fmt.Errorf("load non-stream keepalive policy: %w", err)
+	}
 	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
 		Store: store, FinalAuthorizer: roleAuthorizer,
 		Committed: func(change adminapi.SiteConfigCommit) {
 			artworkPolicy.committed(change)
+			jsonKeepalive.committed(change)
 			audits.configurationChanged(change)
 			for _, key := range change.Keys {
 				if strings.HasPrefix(key, "mfa_required_level_") {
@@ -550,7 +555,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
 		store, vault, adaptations, authRuntime.IdentityContinuity(), claimService, charityService, charityRoutingService, resourceRepository,
-		connectorRegistry, localBackend, debugHub, gate, rpmLimits, activityEngines.CancelUserTx, audits, userInvalidations.InvalidateUserAuthority,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits, activityEngines.CancelUserTx, audits, jsonKeepalive.interval, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
 		return nil, err

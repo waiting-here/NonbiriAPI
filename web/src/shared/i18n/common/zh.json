@@ -1449,6 +1449,7 @@
       "logPrivacyRedacted": "根据当前授权，此条错误中的 IPv4 地址和非主流渠道域名标识已隐藏；复制和下载与当前展示一致。",
       "ipv4Redacted": "根据当前授权，此条错误中的 IPv4 地址已隐藏；复制和下载的内容与当前展示一致。",
       "bodyPreview": "正文预览",
+      "savedBodyEmpty": "此记录保存的错误正文为空（0 字节），无法从中还原错误详情。",
       "rawBodyReadFailed": "读取上游原文失败。",
       "rawBodyStorageFailed": "原文已读取，但保存失败。",
       "rawBodyUnspecifiedFailure": "此旧记录未区分读取失败或保存失败。"

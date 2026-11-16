@@ -73,8 +73,8 @@ export function Preview() {
         <PageHeader
           title={t('SP 成品对照', 'SP artwork review')}
           description={t(
-            '未命名的明天：迈步版、站定参考、伸手版与已发布 SP 对照。',
-            'Tomorrow, Still Unwritten: compare the walking pose, standing reference, reaching pose and published SP cards.',
+            '明天你好：迈步版、站定参考、伸手版与已发布 SP 对照。',
+            'Hello, Tomorrow: compare the walking pose, standing reference, reaching pose and published SP cards.',
           )}
           actions={
             <>

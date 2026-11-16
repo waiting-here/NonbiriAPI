@@ -14,6 +14,7 @@ import { GachaAudio } from '../user/activities/gacha/audio';
 import type { DrawReceipt } from '../user/activities/gacha/types';
 import { AppearanceProvider } from '../user/appearance/AppearanceProvider';
 import { AppearanceButton } from '../user/appearance/AppearanceButton';
+import { BackgroundViewButton } from '../user/appearance/BackgroundViewButton';
 import { appearanceKey } from '../user/appearance/context';
 import { localPort, localAppearancePort, appearancePreviewPort, resetPreview } from './local-port';
 import './preview.css';
@@ -21,6 +22,7 @@ import { AppearancePreview } from './AppearancePreview';
 import { AmberPreview } from './AmberPreview';
 import { AmberExport } from './AmberExport';
 import { SeasonalPreview } from './SeasonalPreview';
+import { CopyReview } from './copy-review/CopyReview';
 import { sampleReceipt, previewPreferences, type Scenario } from './scenarios';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -33,7 +35,8 @@ function Preview() {
   const [english, setEnglish] = useState(new URLSearchParams(location.search).get('lang') === 'en');
   const [demo, setDemo] = useState<DrawReceipt | null>(() => {
     const run = new URLSearchParams(location.search).get('run');
-    return run && ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal'].includes(run)
+    return run &&
+      ['ten', 'plain', 'ssr', 'sp2', 'n', 'seasonal', 'christmas', 'encore'].includes(run)
       ? sampleReceipt(run as Scenario)
       : null;
   });
@@ -60,6 +63,18 @@ function Preview() {
               {english ? 'LOCAL PREVIEW · independent sample data' : '本地预览 · 使用独立体验数据'}
             </span>
             <div>
+              <a
+                className="nb-btn nb-btn--secondary"
+                href={'?view=copy' + (english ? '&lang=en' : '')}
+              >
+                {english ? 'Copy review' : '文案校对'}
+              </a>
+              <a className="nb-btn nb-btn--secondary" href="?view=christmas">
+                {english ? 'Christmas artwork' : '圣诞美术预览'}
+              </a>
+              <a className="nb-btn nb-btn--secondary" href="?view=motion&theme=g">
+                {english ? 'SSR / SP artwork' : '全部 SSR／SP 美术'}
+              </a>
               <button
                 onClick={() => {
                   const next = !appearanceView;
@@ -111,6 +126,7 @@ function Preview() {
                 </>
               )}
               <AppearanceButton />
+              {!appearanceView && <BackgroundViewButton />}
               <ThemeToggle />
               <button
                 onClick={() => {
@@ -150,13 +166,23 @@ function Preview() {
 const amberPreview = new URLSearchParams(location.search).get('view') === 'amber';
 const amberExport = new URLSearchParams(location.search).get('view') === 'amber-export';
 function PreviewRoot() {
-  const [adult, setAdult] = useState(() => new URLSearchParams(location.search).get('r18') === '1');
-  const seasonal = new URLSearchParams(location.search).get('view') === 'seasonal';
+  const view = new URLSearchParams(location.search).get('view');
+  const seasonal = view === 'seasonal' || view === 'christmas' || view === 'motion';
+  const requestedTheme = new URLSearchParams(location.search).get('theme') ?? 'g';
+  const reviewTheme = ['g', 'i', 'j', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u'].includes(
+    requestedTheme,
+  )
+    ? requestedTheme
+    : 'g';
   return (
-    <ArtworkPolicyProvider disabled={!adult}>
+    <ArtworkPolicyProvider disabled={false}>
       <ThemeProvider>
-        {seasonal ? (
-          <SeasonalPreview adult={adult} setAdult={setAdult} />
+        {view === 'copy' ? (
+          <CopyReview />
+        ) : seasonal ? (
+          <SeasonalPreview
+            theme={view === 'motion' ? reviewTheme : view === 'christmas' ? 't' : 's'}
+          />
         ) : amberExport ? (
           <AmberExport />
         ) : amberPreview ? (

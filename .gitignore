@@ -226,3 +226,6 @@ draft/
 
 # Published collectible-card illustrations and animation layers.
 !web/public/assets/gacha/**/*.webp
+
+# Candidate layers consumed only by the local artwork comparison preview.
+!web/src/gacha-preview/assets/claude-chiffon/*.webp

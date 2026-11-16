@@ -34,6 +34,7 @@ type embeddingHTTPFixture struct {
 	store                  *db.Store
 	app                    *application
 	forward                *publicForwardRuntime
+	jsonKeepalive          *jsonKeepalivePolicy
 	server                 *httptest.Server
 	caller                 string
 	userCookies            []*http.Cookie
@@ -179,7 +180,11 @@ func newModelHTTPFixtureWithEgress(t *testing.T, configure func(*db.Store, strin
 		t.Fatal(err)
 	}
 	invalidations := &userSessionInvalidationFanout{debug: f.app.debug}
-	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits, invalidations.InvalidateUserAuthority)
+	f.jsonKeepalive, err = loadJSONKeepalivePolicy(t.Context(), f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := newPublicForwardRuntime(f.store, vault, f.app.adaptations, f.app.authRuntime.IdentityContinuity(), f.app.claims, f.app.charity, f.app.charityRouting, f.app.resourceRepo, connector.NewDefaultRegistry(), local, f.app.debug, f.app.gate, ratelimit.RPMConfig{GlobalLimit: 600, PerUserLimit: 600}, f.app.games.CancelUserDuelsTx, f.app.audits, f.jsonKeepalive.interval, invalidations.InvalidateUserAuthority)
 	if err != nil {
 		t.Fatal(err)
 	}

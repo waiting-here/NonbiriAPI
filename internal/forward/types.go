@@ -219,6 +219,8 @@ type Config struct {
 	Observer       *connector.SafeObserver
 	Adaptations    AdaptationReader
 	GatewayModels  GatewayModelReader
+	// JSONKeepalive is read once after acceptance; nil or zero disables it.
+	JSONKeepalive  func() time.Duration
 	Now            func() time.Time
 	ForwardTimeout time.Duration
 	Settlement     time.Duration

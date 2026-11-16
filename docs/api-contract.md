@@ -9,6 +9,32 @@ Service, endpoint, service-owned key, model-list and donation semantics are desc
 
 ## 1. Shared wire rules
 
+### Optional non-streaming JSON keepalives
+
+The administrator-only site setting `non_stream_keepalive_enabled` defaults to
+false. When enabled, accepted non-streaming requests may send leading JSON
+whitespace while waiting in a key queue or for an upstream response. The first
+and recurring interval is `non_stream_keepalive_interval_seconds`, default 60
+seconds and adjustable from 5 to 120 seconds. Both settings are snapshotted for
+each accepted request. Authentication, admission and audit failures still run
+before this timer starts. Existing SSE heartbeat behavior is unchanged.
+
+This applies to chat completions, embeddings, image generations/edits/variations,
+Decisions, Responses (including compact and input-token operations), completions,
+moderations, rerank and System One. Audio routes, model discovery, streaming
+requests and Debug captures are excluded. Whitespace does not represent model
+output, successful upstream acceptance, a retry boundary or a billing event.
+
+Before the first keepalive, failures retain their normal HTTP status. The first
+keepalive commits HTTP 200 with `application/json`; any later failure uses the
+normal sanitized JSON error envelope within that response. Clients must inspect
+the error body instead of relying solely on HTTP status or status-based retries.
+Successful responses remain a single JSON value with optional leading whitespace.
+Disconnect cancellation, the overall request budget, upstream failure counters
+and settlement rules remain unchanged. An interval below the proxy idle timeout
+and sufficient client total timeout are still required; proxy buffering can
+prevent keepalives from reaching the client promptly.
+
 ### 1.1 Stations and authentication
 
 | Station | Host | Authentication |
@@ -984,6 +1010,18 @@ observations survive recovery; another attempt's cooldown is not evidence that
 this attempt carried a valid hint. Existing cancellation, manual enablement,
 approval, expiry, donor restrictions and quota rules still apply.
 
+Without a valid retry header, a Google Gemini charity response with actual HTTP
+503 and a complete error object containing `code: 503`, `status: UNAVAILABLE`
+and the recognized high-demand/overloaded message requesting a later retry gets
+a 60-second cooldown. Recognition requires the native Google connector or the
+official `generativelanguage.googleapis.com` host. It preserves the existing
+failure streak, including a nonzero streak. A valid header (even zero or a past
+deadline) takes precedence. Generic 503 responses, incomplete error bodies and
+authentication/billing failures retain ordinary failure accounting. The original
+503 and error details still reach the caller and diagnostics; no retry header is
+invented. The minimal claim-bound cooldown receipt survives recovery and replay
+without extending the deadline. This is a short temporary wait, not a quota trial.
+
 ### 4.1.3 Smart donated-key backoff
 
 Smart backoff automatically applies to charity calls without per-key setup. It keeps
@@ -1011,6 +1049,8 @@ periodic quota exhaustion: recognized business codes with matching quota context
 or explicit quota/reset wording. HTTP status alone, generic quota words, billing
 failures, expired plans, permission failures, context limits, ordinary RPM/TPM
 limits and overload are insufficient.
+The specific Google overload envelope described above uses the separate
+60-second temporary cooldown instead of the quota backoff schedule.
 Unknown, malformed or truncated responses keep the existing failure policy.
 Successful content is never searched.
 

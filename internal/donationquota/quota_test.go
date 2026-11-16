@@ -25,7 +25,7 @@ func rule(metric, limit string) RuleInput {
 }
 func mag(n int64) db.U128 { v, _ := db.U128FromBig(big.NewInt(n)); return v }
 
-func newQuotaDB(t *testing.T) *sql.DB {
+func newQuotaDB(t testing.TB) *sql.DB {
 	t.Helper()
 	vault, err := secret.New(bytes.Repeat([]byte{0x31}, secret.MasterKeyBytes))
 	if err != nil {
@@ -267,8 +267,11 @@ func TestSlidingCalendarLeftBoundaryCanReenterRetainedFacts(t *testing.T) {
 	after := instant("2026-03-09T07:00:00Z")
 	move(before)
 	requireUsage(t, views(t, q, before)[0], "0", "0", "1", "available")
+	assertBrowseAvailability(t, q, before, a, true)
+	assertBrowseAvailability(t, q, after, a, false)
 	move(after)
 	requireUsage(t, views(t, q, after)[0], "1", "0", "0", "limited")
+	assertBrowseAvailability(t, q, after, a, false)
 	if views(t, q, after)[0].NextTransitionAt != nil {
 		t.Fatal("sliding view promised an unproven transition")
 	}

@@ -198,6 +198,55 @@ func TestTomorrowArtworkRemainsAvailableWithR18Disabled(t *testing.T) {
 	}
 }
 
+func TestEncoreArtworkAndDerivativesRemainRestricted(t *testing.T) {
+	for _, key := range []string{"card:u-gemini", "card:u-glm", "card:u-deepseek", "illustration:u", "cover:u"} {
+		if Allowed(key, true) || MomentAllowed(key, true) || !Allowed(key, false) || !MomentAllowed(key, false) {
+			t.Fatal("encore rating gate mismatch", key)
+		}
+	}
+	for _, path := range []string{
+		"cards/u-gemini.webp", "hires/cards/u-glm.webp", "thumbs/u-deepseek.webp",
+		"motion/u-gemini/parts/body.webp", "hires/motion/u-glm/parts/ribbon-left-free.webp",
+		"motion/u-deepseek/foreground.webp", "hires/motion/u-deepseek/parts/tail-fin.webp",
+		"groups/u.webp", "hires/groups/u.webp", "covers/u.webp", "hires/covers/u.webp",
+		"backgrounds/u.webp", "hires/backgrounds/u.webp",
+		"appearances/encore-light.webp", "appearances/encore-dark.webp",
+	} {
+		if rating, ok := AssetRating(path); !ok || rating != R18 {
+			t.Error("encore derivative missing restriction", path, rating, ok)
+		}
+	}
+}
+
+func TestChristmasArtworkRemainsAvailableWithR18Disabled(t *testing.T) {
+	files := []string{
+		"groups/t.webp", "hires/groups/t.webp", "backgrounds/t.webp", "hires/backgrounds/t.webp",
+		"layers/groups/t-foreground.webp", "hires/layers/groups/t-foreground.webp",
+		"covers/t.webp", "hires/covers/t.webp", "backgrounds/covers/t.webp", "hires/backgrounds/covers/t.webp",
+		"layers/covers/t-foreground.webp", "hires/layers/covers/t-foreground.webp",
+	}
+	keys := []string{"illustration:t", "cover:t"}
+	for _, id := range []string{"t-chatgpt", "t-claude", "t-glm", "t-deepseek", "t-gemini"} {
+		keys = append(keys, "card:"+id)
+		files = append(files, "cards/"+id+".webp", "hires/cards/"+id+".webp", "thumbs/"+id+".webp")
+		for _, prefix := range []string{"motion/", "hires/motion/"} {
+			for _, layer := range []string{"background", "hero", "closed"} {
+				files = append(files, prefix+id+"/"+layer+".webp")
+			}
+		}
+	}
+	for _, key := range keys {
+		if rating, ok := Rating(key); !ok || rating != General || !MomentAllowed(key, true) {
+			t.Error("Christmas artwork is unavailable with R-18 disabled", key, rating)
+		}
+	}
+	for _, file := range files {
+		if rating, ok := AssetRating(file); !ok || rating != General {
+			t.Error("Christmas asset is not general", file, rating)
+		}
+	}
+}
+
 func TestSweetHideAndSeekArtworkIsRestricted(t *testing.T) {
 	for _, key := range []string{"card:s-chatgpt", "card:s-claude", "illustration:s", "cover:s"} {
 		definition, ok := builtIn.definitions[key]

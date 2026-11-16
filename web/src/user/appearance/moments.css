@@ -94,7 +94,8 @@
   object-fit: cover;
   object-position: center;
 }
-.nb-moment-backdrop[data-registered='true'] > .nb-moment-backdrop__scene {
+.nb-moment-backdrop[data-registered='true']:not([data-viewport='true'])
+  > .nb-moment-backdrop__scene {
   filter: blur(1.25rem);
   transform: scale(1.06);
 }
@@ -113,6 +114,12 @@
   );
 }
 .nb-moment-character[data-expanded='true'] {
+  mask-image: none;
+}
+.nb-moment-backdrop[data-viewport='true'] .nb-moment-character {
+  right: auto;
+  bottom: auto;
+  transform: none;
   mask-image: none;
 }
 .nb-moment-character > img,
@@ -139,7 +146,11 @@
   opacity: 1;
 }
 .nb-moment-character:has(canvas[data-ready='true'])
-  > img:not(.nb-moment-character__plate, .nb-moment-character__scene) {
+  > img:not(
+    .nb-moment-character__plate,
+    .nb-moment-character__scene,
+    .nb-moment-character__shadow
+  ) {
   visibility: hidden;
 }
 /*

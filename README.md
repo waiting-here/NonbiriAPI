@@ -4,8 +4,15 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.11** fixes upcoming gacha pool button alignment and corrects hand anatomy
-in several gacha illustrations, including their layered and high-resolution variants.
+**v1.3.12** adds optional administrator-controlled non-streaming
+JSON keepalives, bounds image-result pixels, reserves OAuth capacity per flow,
+and recognizes verified Google Gemini overloads for temporary backoff. Gacha
+adds five Christmas limited SSR cards and three R-18 Private Encore limited SSR
+cards, refines layered SSR/SP animation and full-screen Heartfelt Moments, and
+corrects character details. Its development preview includes bilingual copy
+review with importable and exportable edits.
+Backend changes shorten diagnostic writes, reuse sliding quota ranges and avoid
+idle image-task write transactions; see [performance validation](docs/performance-validation.md).
 Database schema remains 54 and account export remains format 36; existing databases
 on an earlier schema require the explicit offline upgrade before starting this
 version. See [service connections](docs/service-connections.md),
@@ -178,6 +185,10 @@ transparent clothing. These assets and their derivatives are included in the
 public source distribution. Its unpublished pool
 template gives the two featured cards equal weight. Collections and saved choices
 remain intact when artwork is disabled; see [artwork availability](docs/gacha.md#artwork-availability).
+
+Private Encore adds three adult-only limited SSR cards, Gemini, GLM and DeepSeek,
+with the same default-off artwork gate, seasonal pool rules and no dedicated
+site appearance. Its portraits, illustration, cover and derivatives contain nudity.
 
 The mystery shop offers daily bundles of ten standard or limited tickets for
 10,000 credits each, using game credits first. Each bundle has its own daily limit.

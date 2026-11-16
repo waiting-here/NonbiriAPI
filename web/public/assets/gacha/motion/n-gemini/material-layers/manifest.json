@@ -1,0 +1,1427 @@
+{
+  "version": 1,
+  "canvas": [
+    1024,
+    1536
+  ],
+  "source": "portrait.webp",
+  "sourceSha256": "70c877a6916201cd6edeba317c0f8246ca098b5a59e7f354358ac5858f4f62b3",
+  "cycle": 26,
+  "layers": [
+    {
+      "name": "rear-hair-left",
+      "polygon": [
+        [
+          0,
+          440
+        ],
+        [
+          150,
+          440
+        ],
+        [
+          175,
+          540
+        ],
+        [
+          170,
+          730
+        ],
+        [
+          223,
+          836
+        ],
+        [
+          210,
+          942
+        ],
+        [
+          0,
+          970
+        ]
+      ],
+      "vector": [
+        7,
+        -2
+      ],
+      "root": 440,
+      "end": 920,
+      "delay": 0.2,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            124,
+            180
+          ],
+          [
+            181,
+            173
+          ],
+          [
+            201,
+            300
+          ],
+          [
+            263,
+            363
+          ],
+          [
+            293,
+            381
+          ],
+          [
+            251,
+            437
+          ],
+          [
+            205,
+            410
+          ],
+          [
+            170,
+            333
+          ],
+          [
+            128,
+            279
+          ]
+        ],
+        [
+          [
+            488,
+            690
+          ],
+          [
+            577,
+            679
+          ],
+          [
+            610,
+            785
+          ],
+          [
+            561,
+            989
+          ],
+          [
+            564,
+            1226
+          ],
+          [
+            607,
+            1400
+          ],
+          [
+            581,
+            1518
+          ],
+          [
+            425,
+            1536
+          ],
+          [
+            421,
+            1390
+          ],
+          [
+            471,
+            1260
+          ],
+          [
+            467,
+            1000
+          ]
+        ]
+      ],
+      "file": "rear-hair-left.webp",
+      "crop": [
+        0,
+        428,
+        236,
+        514
+      ],
+      "depth": 1,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "rear-hair-right",
+      "polygon": [
+        [
+          819,
+          304
+        ],
+        [
+          1024,
+          285
+        ],
+        [
+          1024,
+          860
+        ],
+        [
+          934,
+          865
+        ],
+        [
+          865,
+          773
+        ],
+        [
+          813,
+          722
+        ],
+        [
+          820,
+          588
+        ],
+        [
+          858,
+          454
+        ]
+      ],
+      "vector": [
+        9,
+        -3
+      ],
+      "root": 310,
+      "end": 850,
+      "delay": 0.35,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            124,
+            180
+          ],
+          [
+            181,
+            173
+          ],
+          [
+            201,
+            300
+          ],
+          [
+            263,
+            363
+          ],
+          [
+            293,
+            381
+          ],
+          [
+            251,
+            437
+          ],
+          [
+            205,
+            410
+          ],
+          [
+            170,
+            333
+          ],
+          [
+            128,
+            279
+          ]
+        ],
+        [
+          [
+            488,
+            690
+          ],
+          [
+            577,
+            679
+          ],
+          [
+            610,
+            785
+          ],
+          [
+            561,
+            989
+          ],
+          [
+            564,
+            1226
+          ],
+          [
+            607,
+            1400
+          ],
+          [
+            581,
+            1518
+          ],
+          [
+            425,
+            1536
+          ],
+          [
+            421,
+            1390
+          ],
+          [
+            471,
+            1260
+          ],
+          [
+            467,
+            1000
+          ]
+        ]
+      ],
+      "file": "rear-hair-right.webp",
+      "crop": [
+        801,
+        291,
+        223,
+        587
+      ],
+      "depth": 2,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "sleeve-silk",
+      "polygon": [
+        [
+          174,
+          369
+        ],
+        [
+          206,
+          399
+        ],
+        [
+          245,
+          417
+        ],
+        [
+          275,
+          374
+        ],
+        [
+          305,
+          400
+        ],
+        [
+          314,
+          489
+        ],
+        [
+          303,
+          553
+        ],
+        [
+          321,
+          641
+        ],
+        [
+          352,
+          752
+        ],
+        [
+          342,
+          831
+        ],
+        [
+          304,
+          888
+        ],
+        [
+          252,
+          946
+        ],
+        [
+          256,
+          888
+        ],
+        [
+          206,
+          780
+        ],
+        [
+          186,
+          664
+        ],
+        [
+          166,
+          520
+        ]
+      ],
+      "vector": [
+        19,
+        -9
+      ],
+      "root": 405,
+      "end": 835,
+      "delay": 0.55,
+      "material": "silk",
+      "seam": 25,
+      "pins": [
+        [
+          [
+            124,
+            180
+          ],
+          [
+            181,
+            173
+          ],
+          [
+            201,
+            300
+          ],
+          [
+            263,
+            363
+          ],
+          [
+            293,
+            381
+          ],
+          [
+            251,
+            437
+          ],
+          [
+            205,
+            410
+          ],
+          [
+            170,
+            333
+          ],
+          [
+            128,
+            279
+          ]
+        ],
+        [
+          [
+            488,
+            690
+          ],
+          [
+            577,
+            679
+          ],
+          [
+            610,
+            785
+          ],
+          [
+            561,
+            989
+          ],
+          [
+            564,
+            1226
+          ],
+          [
+            607,
+            1400
+          ],
+          [
+            581,
+            1518
+          ],
+          [
+            425,
+            1536
+          ],
+          [
+            421,
+            1390
+          ],
+          [
+            471,
+            1260
+          ],
+          [
+            467,
+            1000
+          ]
+        ]
+      ],
+      "file": "sleeve-silk.webp",
+      "crop": [
+        155,
+        357,
+        210,
+        601
+      ],
+      "depth": 3,
+      "reveal": "Free cloth contour; upper/internal cuts and original hand, leg and shoe contacts remain pinned. Exposed sleeve backing uses the retained registered hair repair.",
+      "parent": "Fixed accepted pose; cloth follows the sea breeze and returns to its lowered resting shape.",
+      "seams": [
+        [
+          [
+            174,
+            369
+          ],
+          [
+            206,
+            399
+          ],
+          [
+            245,
+            417
+          ],
+          [
+            275,
+            374
+          ],
+          [
+            305,
+            400
+          ]
+        ]
+      ],
+      "rest": [
+        -2,
+        9
+      ],
+      "pinMargin": 10,
+      "flutter": {
+        "vector": [
+          1.5,
+          2.0
+        ],
+        "period": 6.4,
+        "phase": 0.25
+      }
+    },
+    {
+      "name": "train-left",
+      "polygon": [
+        [
+          202,
+          930
+        ],
+        [
+          368,
+          908
+        ],
+        [
+          390,
+          1036
+        ],
+        [
+          432,
+          1140
+        ],
+        [
+          438,
+          1394
+        ],
+        [
+          353,
+          1450
+        ],
+        [
+          215,
+          1430
+        ],
+        [
+          29,
+          1390
+        ],
+        [
+          25,
+          1170
+        ],
+        [
+          73,
+          1036
+        ]
+      ],
+      "vector": [
+        24,
+        -10
+      ],
+      "root": 910,
+      "end": 1270,
+      "delay": 0.85,
+      "material": "cloth",
+      "seam": 54,
+      "pins": [
+        [
+          [
+            124,
+            180
+          ],
+          [
+            181,
+            173
+          ],
+          [
+            201,
+            300
+          ],
+          [
+            263,
+            363
+          ],
+          [
+            293,
+            381
+          ],
+          [
+            251,
+            437
+          ],
+          [
+            205,
+            410
+          ],
+          [
+            170,
+            333
+          ],
+          [
+            128,
+            279
+          ]
+        ],
+        [
+          [
+            488,
+            690
+          ],
+          [
+            577,
+            679
+          ],
+          [
+            610,
+            785
+          ],
+          [
+            561,
+            989
+          ],
+          [
+            564,
+            1226
+          ],
+          [
+            607,
+            1400
+          ],
+          [
+            581,
+            1518
+          ],
+          [
+            425,
+            1536
+          ],
+          [
+            421,
+            1390
+          ],
+          [
+            471,
+            1260
+          ],
+          [
+            467,
+            1000
+          ]
+        ]
+      ],
+      "file": "train-left.webp",
+      "crop": [
+        21,
+        896,
+        429,
+        562
+      ],
+      "depth": 4,
+      "reveal": "Free cloth contour; upper/internal cuts and original hand, leg and shoe contacts remain pinned. Exposed sleeve backing uses the retained registered hair repair.",
+      "parent": "Fixed accepted pose; cloth follows the sea breeze and returns to its lowered resting shape.",
+      "seams": [
+        [
+          [
+            202,
+            930
+          ],
+          [
+            368,
+            908
+          ],
+          [
+            390,
+            1036
+          ],
+          [
+            432,
+            1140
+          ],
+          [
+            438,
+            1394
+          ]
+        ]
+      ],
+      "rest": [
+        -3,
+        11
+      ],
+      "pinMargin": 14,
+      "flutter": {
+        "vector": [
+          1.8,
+          2.6
+        ],
+        "period": 7.3,
+        "phase": 0.4
+      }
+    },
+    {
+      "name": "train-right",
+      "polygon": [
+        [
+          650,
+          835
+        ],
+        [
+          885,
+          835
+        ],
+        [
+          1024,
+          930
+        ],
+        [
+          1024,
+          1536
+        ],
+        [
+          620,
+          1536
+        ],
+        [
+          578,
+          1350
+        ],
+        [
+          578,
+          1130
+        ],
+        [
+          600,
+          980
+        ]
+      ],
+      "vector": [
+        26,
+        -12
+      ],
+      "root": 835,
+      "end": 1190,
+      "delay": 1.15,
+      "material": "cloth",
+      "seam": 50,
+      "pins": [
+        [
+          [
+            124,
+            180
+          ],
+          [
+            181,
+            173
+          ],
+          [
+            201,
+            300
+          ],
+          [
+            263,
+            363
+          ],
+          [
+            293,
+            381
+          ],
+          [
+            251,
+            437
+          ],
+          [
+            205,
+            410
+          ],
+          [
+            170,
+            333
+          ],
+          [
+            128,
+            279
+          ]
+        ],
+        [
+          [
+            488,
+            690
+          ],
+          [
+            577,
+            679
+          ],
+          [
+            610,
+            785
+          ],
+          [
+            561,
+            989
+          ],
+          [
+            564,
+            1226
+          ],
+          [
+            607,
+            1400
+          ],
+          [
+            581,
+            1518
+          ],
+          [
+            425,
+            1536
+          ],
+          [
+            421,
+            1390
+          ],
+          [
+            471,
+            1260
+          ],
+          [
+            467,
+            1000
+          ]
+        ]
+      ],
+      "file": "train-right.webp",
+      "crop": [
+        566,
+        823,
+        458,
+        713
+      ],
+      "depth": 5,
+      "reveal": "Free cloth contour; upper/internal cuts and original hand, leg and shoe contacts remain pinned. Exposed sleeve backing uses the retained registered hair repair.",
+      "parent": "Fixed accepted pose; cloth follows the sea breeze and returns to its lowered resting shape.",
+      "seams": [
+        [
+          [
+            650,
+            835
+          ],
+          [
+            885,
+            835
+          ]
+        ],
+        [
+          [
+            650,
+            835
+          ],
+          [
+            600,
+            980
+          ],
+          [
+            578,
+            1130
+          ],
+          [
+            578,
+            1350
+          ],
+          [
+            620,
+            1536
+          ]
+        ]
+      ],
+      "rest": [
+        -3,
+        13
+      ],
+      "pinMargin": 15,
+      "flutter": {
+        "vector": [
+          2.2,
+          2.8
+        ],
+        "period": 8.1,
+        "phase": 1.1
+      }
+    },
+    {
+      "name": "sleeve-crystal-upper",
+      "polygon": [
+        [
+          175,
+          529
+        ],
+        [
+          183,
+          532
+        ],
+        [
+          182,
+          555
+        ],
+        [
+          181,
+          564
+        ],
+        [
+          195,
+          584
+        ],
+        [
+          183,
+          610
+        ],
+        [
+          175,
+          603
+        ],
+        [
+          163,
+          584
+        ],
+        [
+          174,
+          564
+        ]
+      ],
+      "root": 530,
+      "end": 612,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.95,
+      "material": "crystal",
+      "rootOnly": true,
+      "seam": 0,
+      "rigid": true,
+      "pivot": [
+        177,
+        531
+      ],
+      "rotation": 0.065,
+      "file": "sleeve-crystal-upper.webp",
+      "crop": [
+        153,
+        519,
+        53,
+        102
+      ],
+      "depth": 100,
+      "parent": {
+        "name": "sleeve-silk",
+        "at": [
+          177,
+          531
+        ]
+      },
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "sleeve-crystal-lower",
+      "polygon": [
+        [
+          187,
+          642
+        ],
+        [
+          196,
+          642
+        ],
+        [
+          197,
+          660
+        ],
+        [
+          211,
+          691
+        ],
+        [
+          198,
+          719
+        ],
+        [
+          189,
+          731
+        ],
+        [
+          178,
+          711
+        ],
+        [
+          174,
+          693
+        ],
+        [
+          188,
+          666
+        ]
+      ],
+      "root": 642,
+      "end": 732,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.95,
+      "material": "crystal",
+      "rootOnly": true,
+      "seam": 0,
+      "rigid": true,
+      "pivot": [
+        191,
+        644
+      ],
+      "rotation": 0.075,
+      "file": "sleeve-crystal-lower.webp",
+      "crop": [
+        164,
+        632,
+        58,
+        110
+      ],
+      "depth": 101,
+      "parent": {
+        "name": "sleeve-silk",
+        "at": [
+          191,
+          644
+        ]
+      },
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "head-ribbon-short",
+      "polygon": [
+        [
+          566,
+          121
+        ],
+        [
+          594,
+          125
+        ],
+        [
+          620,
+          135
+        ],
+        [
+          652,
+          148
+        ],
+        [
+          651,
+          175
+        ],
+        [
+          631,
+          185
+        ],
+        [
+          615,
+          191
+        ],
+        [
+          639,
+          200
+        ],
+        [
+          613,
+          194
+        ],
+        [
+          593,
+          184
+        ],
+        [
+          577,
+          162
+        ]
+      ],
+      "root": 566,
+      "end": 652,
+      "vector": [
+        4,
+        2
+      ],
+      "delay": 0.12,
+      "axis": "x",
+      "material": "ribbon",
+      "file": "head-ribbon-short.webp",
+      "crop": [
+        553,
+        108,
+        112,
+        106
+      ],
+      "seam": 0,
+      "rootOnly": true,
+      "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette",
+      "rest": [
+        0,
+        1.5
+      ],
+      "flutter": {
+        "vector": [
+          0.7,
+          0.9
+        ],
+        "period": 5.6,
+        "phase": 0.12
+      }
+    },
+    {
+      "name": "head-ribbon-upper",
+      "polygon": [
+        [
+          641,
+          199
+        ],
+        [
+          675,
+          192
+        ],
+        [
+          704,
+          191
+        ],
+        [
+          738,
+          198
+        ],
+        [
+          770,
+          209
+        ],
+        [
+          797,
+          225
+        ],
+        [
+          817,
+          243
+        ],
+        [
+          834,
+          261
+        ],
+        [
+          808,
+          255
+        ],
+        [
+          783,
+          260
+        ],
+        [
+          766,
+          277
+        ],
+        [
+          758,
+          244
+        ],
+        [
+          742,
+          223
+        ],
+        [
+          719,
+          217
+        ],
+        [
+          687,
+          216
+        ],
+        [
+          661,
+          211
+        ]
+      ],
+      "root": 641,
+      "end": 833,
+      "vector": [
+        10,
+        -5
+      ],
+      "delay": 0.3,
+      "axis": "x",
+      "material": "ribbon",
+      "file": "head-ribbon-upper.webp",
+      "crop": [
+        631,
+        182,
+        211,
+        107
+      ],
+      "seam": 0,
+      "rootOnly": true,
+      "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette",
+      "rest": [
+        0,
+        5
+      ],
+      "flutter": {
+        "vector": [
+          0.7,
+          0.9
+        ],
+        "period": 5.6,
+        "phase": 0.3
+      }
+    },
+    {
+      "name": "head-ribbon-lower",
+      "polygon": [
+        [
+          648,
+          211
+        ],
+        [
+          674,
+          223
+        ],
+        [
+          699,
+          242
+        ],
+        [
+          716,
+          263
+        ],
+        [
+          734,
+          291
+        ],
+        [
+          734,
+          296
+        ],
+        [
+          714,
+          293
+        ],
+        [
+          698,
+          305
+        ],
+        [
+          677,
+          319
+        ],
+        [
+          680,
+          284
+        ],
+        [
+          675,
+          261
+        ],
+        [
+          665,
+          235
+        ]
+      ],
+      "root": 648,
+      "end": 708,
+      "vector": [
+        8,
+        -3
+      ],
+      "delay": 0.42,
+      "axis": "x",
+      "material": "ribbon",
+      "file": "head-ribbon-lower.webp",
+      "crop": [
+        635,
+        201,
+        108,
+        127
+      ],
+      "seam": 0,
+      "rootOnly": true,
+      "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette",
+      "rest": [
+        0,
+        6
+      ],
+      "flutter": {
+        "vector": [
+          0.7,
+          0.9
+        ],
+        "period": 5.6,
+        "phase": 0.42
+      }
+    },
+    {
+      "name": "head-crystal-near",
+      "polygon": [
+        [
+          590,
+          221
+        ],
+        [
+          608,
+          243
+        ],
+        [
+          598,
+          273
+        ],
+        [
+          575,
+          243
+        ]
+      ],
+      "chain": [
+        [
+          585,
+          198
+        ],
+        [
+          587,
+          207
+        ],
+        [
+          582,
+          217
+        ],
+        [
+          590,
+          225
+        ]
+      ],
+      "root": 0,
+      "end": 1,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.55,
+      "material": "crystal",
+      "rigid": true,
+      "pivot": [
+        585,
+        198
+      ],
+      "rotation": 0.065,
+      "file": "head-crystal-near.webp",
+      "crop": [
+        567,
+        190,
+        50,
+        92
+      ],
+      "seam": 0,
+      "rootOnly": true,
+      "parent": "fixed temple clasp; far crystal inherits lower ribbon endpoint translation",
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette"
+    },
+    {
+      "name": "head-crystal-far",
+      "polygon": [
+        [
+          711,
+          326
+        ],
+        [
+          731,
+          345
+        ],
+        [
+          714,
+          378
+        ],
+        [
+          696,
+          347
+        ]
+      ],
+      "chain": [
+        [
+          708,
+          303
+        ],
+        [
+          708,
+          314
+        ],
+        [
+          713,
+          324
+        ]
+      ],
+      "root": 0,
+      "end": 1,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.8,
+      "material": "crystal",
+      "rigid": true,
+      "pivot": [
+        708,
+        303
+      ],
+      "rotation": 0.07,
+      "file": "head-crystal-far.webp",
+      "crop": [
+        688,
+        295,
+        52,
+        92
+      ],
+      "seam": 0,
+      "rootOnly": true,
+      "parent": {
+        "name": "head-ribbon-lower",
+        "at": [
+          708,
+          303
+        ]
+      },
+      "reveal": "detail-backing.webp: original rainbow hair reconstructed under free ribbon/crystal silhouette"
+    }
+  ],
+  "fixed": [
+    "Face, body, shoulder caps, raised arm and hand, held skirt and hand contact, inner dress and legs retain the adopted pose."
+  ],
+  "repair": "detail-backing.webp",
+  "status": "Registered material motion; fixed attachment seams, free contours, dependent crystals and breeze/rest profiles."
+}

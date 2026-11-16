@@ -151,6 +151,52 @@ test('administrator edits separate light and heavy concurrency defaults', async 
   }
 });
 
+test('administrator configures non-streaming JSON keepalives', async ({ browser }, info) => {
+  const state = fixture();
+  const manager = await session(browser, 'admin');
+  type Snapshot = { revision: string; values: Record<string, boolean | number> };
+  const read = () => api<Snapshot>(manager, state.admin_url, '/admin/api/site-config');
+  const keys = ['non_stream_keepalive_enabled', 'non_stream_keepalive_interval_seconds'] as const;
+  const original = await read();
+  try {
+    expect(keys.map((key) => original.values[key])).toEqual([false, 60]);
+    const page = await manager.newPage();
+    await page.goto(state.admin_url + '/settings?group=connector');
+    const enabled = page.getByRole('switch', {
+      name: 'Keep non-streaming JSON requests alive',
+      exact: true,
+    });
+    const interval = page.getByRole('spinbutton', {
+      name: 'Non-streaming keepalive interval',
+      exact: true,
+    });
+    await expect(enabled).not.toBeChecked();
+    await expect(interval).toHaveValue('60');
+    await expect(interval).toHaveAttribute('min', '5');
+    await expect(interval).toHaveAttribute('max', '120');
+    await setControlChecked(enabled, true);
+    await interval.fill('45');
+    const saved = responseFor(page, 'PATCH', '/admin/api/site-config');
+    await page.getByRole('button', { name: admin.admin.settings.saveAll, exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    const current = await read();
+    expect(keys.map((key) => current.values[key])).toEqual([true, 45]);
+    await page.reload();
+    await expect(enabled).toBeChecked();
+    await expect(interval).toHaveValue('45');
+    await capture(page, info, 'json-keepalive-settings', enabled);
+  } finally {
+    const current = await read();
+    if (keys.some((key) => current.values[key] !== original.values[key])) {
+      await api(manager, state.admin_url, '/admin/api/site-config', 'PATCH', {
+        expected_revision: current.revision,
+        values: Object.fromEntries(keys.map((key) => [key, original.values[key]])),
+      });
+    }
+    await manager.close();
+  }
+});
+
 function fixture(): Fixture {
   return JSON.parse(readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8')) as Fixture;
 }

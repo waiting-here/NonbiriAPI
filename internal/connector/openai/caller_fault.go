@@ -31,6 +31,27 @@ func unchangedCallerParameters(ctx context.Context, response *http.Response, fie
 			matched[field.name] = true
 		}
 	}
+	// A dotted error parameter names a member, not a literal top-level key.
+	// Prove the whole parent unchanged and the member present exactly once.
+	// Keep only booleans: the wire body is cleared before this callback runs.
+	for _, path := range [][2]string{{"thinking", "type"}, {"thinking", "budget_tokens"}, {"reasoning", "effort"}} {
+		name := path[0] + "." + path[1]
+		matched[name] = false
+		if !matched[path[0]] {
+			continue
+		}
+		children, ok := borrowedObjectFields(original[path[0]])
+		if !ok {
+			continue
+		}
+		count := 0
+		for _, child := range children {
+			if child.name == path[1] {
+				count++
+			}
+		}
+		matched[name] = count == 1
+	}
 	return func(name string) bool { return matched[name] }
 }
 

@@ -4,6 +4,109 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+## Diagnostic history and idle image tasks
+
+Diagnostic deduplication selects the existing partial unique index for the
+request, image task or assistant operation being recorded. The former combined
+nullable predicate scanned retained error bodies. The revised equality lookup
+preserves event identity, body budgets, deleted-owner handling and the original
+write transaction; it adds no index or schema change.
+
+Run the bounded experiments serially with Go 1.26.10:
+
+```sh
+NONBIRI_ERROR_LOOKUP_SCALE=1 GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 \
+  go test -p 1 ./internal/observability -run '^TestErrorRecordingScale$' -count=1 -v
+NONBIRI_ERROR_MIXED_LOAD=1 GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 \
+  go test -p 1 ./internal/app -run '^TestApplicationErrorHistoryMixedLoad$' \
+  -count=1 -v -timeout=10m
+NONBIRI_QUERY_SCALE=1 GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 \
+  go test -p 1 ./internal/imageactivity -run '^TestIdleQueueExpiryScale$' -count=1 -v
+```
+
+The error experiments retain 10,000 or 100,000 independent request errors with
+512-byte bodies. The application experiment performs 60 successful calls,
+60 failed calls, 60 catalog reads and 60 session reads through eight workers.
+It verifies exact HTTP outcomes, saved bodies and byte budgets, terminal
+accounting and ledger consistency. Setup and warmup are outside the measurement.
+Compare identical test inputs against the original and revised implementations;
+`NONBIRI_ERROR_LOAD_VARIANT` only labels the output.
+
+One Windows/amd64 run with SQLite 3.54.1 produced these before/after totals:
+
+| Retained errors | Chat writer transaction time | All writer hold time | Writer pool waiting | Failed-call p95 |
+| ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 294 / 35 ms | 1,338 / 1,110 ms | 2,927 / 1,746 ms | 126.59 / 89.53 ms |
+| 100,000 | 3,498 / 32 ms | 4,579 / 1,143 ms | 14,220 / 1,913 ms | 353.80 / 89.31 ms |
+
+Waiting is summed across concurrent operations, not elapsed time. Hold and
+transaction spans overlap and must not be added. Background batch counts can
+change with timing: at 100,000 errors, claim-batch transactions rose from 79 to
+203 and their cumulative hold rose from 350 to 436 ms. This single sequential
+comparison shows the cost of the lookup under fixed synthetic work, not a
+production throughput guarantee or a reduction in every operation count.
+
+Image-task expiry now checks the reader before taking the writer. A nonempty
+pass retains its bounded transaction and rechecks the deadline and state before
+refunding. An arrival after an empty probe is handled by dispatch or the next
+worker pass. With 1,000 and 10,000 terminal tasks, 100 empty passes took zero
+write transactions instead of 100. In the concurrent read/write sample, writer
+waiting fell from about 30/26 ms to zero while elapsed time stayed near 31–34 ms.
+This measures removed idle contention; it does not attribute all unclassified
+production transactions to this worker.
+
+## Sliding quotas and model projections
+
+Browse queries reuse persisted sliding-window totals in their current read
+snapshot. They subtract facts leaving the window, add facts reentering after a
+calendar boundary moves backwards, and add new facts. Missing or disjoint windows
+use the original full-range aggregate. A time-span heuristic also selects that
+fallback when the changed ranges are at least as wide as the new window.
+It avoids scanning a mostly expired old window, but does not estimate bucket
+density. Exact U128 arithmetic, pending and started reservations, current
+permissions and authoritative claim writes remain unchanged.
+
+Capability reads recent-success statistics only for models it returns. A catalog
+availability filter supplies the matching projection value in the same snapshot.
+There is no cross-request permission, balance or quota cache.
+
+```sh
+GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 go test -p 1 \
+  ./internal/donationquota ./internal/charityrouting -run '^$' \
+  -bench 'BenchmarkBrowseSlidingWindow|BenchmarkBrowseModelProjection' \
+  -benchtime=1x -count=1 -timeout=15m
+NONBIRI_BROWSE_MIXED=1 GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 \
+  go test -p 1 ./internal/charityrouting -run '^TestBrowseMixedLoad$' \
+  -count=1 -v -timeout=10m
+```
+
+The fixed mixed workload uses 100 or 327 models, 16 keys and varied binding
+counts. Four readers perform 16 filtered catalog and 16 capability calls while
+two writers complete 32 quota claims through reserve, reconcile, start and
+idempotent settlement. Rule cases concentrate 1,000 or 10,000 historical buckets
+on one key, with 16 on each other key and a window 60 seconds stale. Assertions
+check complete results, exact quota exhaustion and rollback of the next claim.
+This is service-level concurrency on the real SQLite engine; HTTP, upstream
+work and the user credits ledger are outside this experiment.
+
+One Windows/amd64, Go 1.26.10, SQLite 3.54.1 comparison produced these cumulative
+milliseconds, before / after:
+
+| Models / recurring rules | Batch elapsed | Reader pool waiting | Writer pool waiting | Writer hold |
+| --- | ---: | ---: | ---: | ---: |
+| 100 / none | 798.57 / 628.85 | 1,195.97 / 947.38 | 79.98 / 77.09 | 82.51 / 77.09 |
+| 100 / 1,000 hot-key buckets | 2,932.94 / 1,161.04 | 3,956.94 / 2,026.63 | 127.35 / 98.22 | 125.69 / 98.73 |
+| 327 / none | 1,083.31 / 839.15 | 1,846.71 / 1,550.86 | 89.68 / 68.06 | 87.68 / 69.06 |
+| 327 / 10,000 hot-key buckets | 12,027.50 / 1,542.34 | 16,459.51 / 2,867.24 | 168.97 / 101.10 | 164.27 / 109.54 |
+
+Writers finish before the fixed readers, so this does not model a sustained
+arrival rate. In the 327-model no-rule case, capability median latency rose from
+100.67 to 101.82 ms despite lower batch time. An earlier isolated unfiltered
+catalog run rose from roughly 16 to 18 ms; mostly expired window reads also
+retained a small overhead. Production rule prevalence and window freshness are
+not established by these fixtures, and the measured latency samples do not
+constitute a production SLA.
+
 ## Charity log search combinations
 
 Model-name search now reuses the same bounded historical-name lookup when

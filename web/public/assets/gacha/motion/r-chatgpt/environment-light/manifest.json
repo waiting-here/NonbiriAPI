@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "canvas": [
+    1672,
+    941
+  ],
+  "cycle": 24,
+  "source": "background-light.webp",
+  "sourceSha256": "28a2a97648d39bf8f1664a1f91b1a02e4ba6f52d2406e8142ca952c2be8885f7",
+  "layers": [
+    {
+      "name": "canopy-left-outer",
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          180,
+          0
+        ],
+        [
+          180,
+          100
+        ],
+        [
+          90,
+          180
+        ],
+        [
+          0,
+          220
+        ]
+      ],
+      "vector": [
+        -2,
+        1
+      ],
+      "root": 150,
+      "end": 0,
+      "axis": "x",
+      "delay": 0.18,
+      "material": "leaves",
+      "rootOnly": true,
+      "file": "canopy-left-outer.webp",
+      "crop": [
+        0,
+        0,
+        193,
+        233
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 24,
+      "depth": 1,
+      "parent": "fixed trunk and branch network",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "canopy-left-reach",
+      "polygon": [
+        [
+          180,
+          0
+        ],
+        [
+          870,
+          0
+        ],
+        [
+          870,
+          80
+        ],
+        [
+          650,
+          250
+        ],
+        [
+          330,
+          220
+        ],
+        [
+          180,
+          130
+        ]
+      ],
+      "vector": [
+        3.2,
+        1.6
+      ],
+      "root": 180,
+      "end": 850,
+      "axis": "x",
+      "delay": 0.38,
+      "material": "leaves",
+      "rootOnly": true,
+      "file": "canopy-left-reach.webp",
+      "crop": [
+        168,
+        0,
+        715,
+        260
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 24,
+      "depth": 2,
+      "parent": "fixed trunk and branch network",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    },
+    {
+      "name": "canopy-right",
+      "polygon": [
+        [
+          1150,
+          0
+        ],
+        [
+          1672,
+          0
+        ],
+        [
+          1672,
+          350
+        ],
+        [
+          1430,
+          350
+        ],
+        [
+          1260,
+          220
+        ],
+        [
+          1150,
+          100
+        ]
+      ],
+      "vector": [
+        -3.1,
+        1.4
+      ],
+      "root": 1660,
+      "end": 1170,
+      "axis": "x",
+      "delay": 0.62,
+      "material": "leaves",
+      "rootOnly": true,
+      "file": "canopy-right.webp",
+      "crop": [
+        1170,
+        0,
+        502,
+        363
+      ],
+      "seam": 24,
+      "pinMargin": 10,
+      "cycle": 24,
+      "depth": 3,
+      "parent": "fixed trunk and branch network",
+      "reveal": "backing.webp: imagegen only in the removed material footprint"
+    }
+  ],
+  "repair": "backing.webp",
+  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+}

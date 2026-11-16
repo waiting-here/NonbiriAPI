@@ -13,6 +13,13 @@ Shared textures have one owner, and artwork that reuses them declares `uses`
 dependencies so its effective rating includes those sources. Card `scene`
 references additionally govern heartfelt-moment backgrounds.
 
+Private Encore's three adult character cards, illustration, cover and all
+derived scene and animation assets are also `r18`. Its registered eye openings
+preserve surrounding facial artwork during blinking; separately pinned accessory
+tips move over a restored backing. Stage light and confetti clear every frame
+and leave a quiet interval between events. The theme remains SSR and grants no
+dedicated site appearance.
+
 New artwork must register its files or literal path prefixes and pass catalog
 coverage validation. Keep default appearance and fallback cover general. The
 administrator's R-18 switch controls both rendering and direct asset delivery;
@@ -30,6 +37,12 @@ character so the hand-to-door and foreground contact points remain supported.
 
 ## Artwork and identity
 
+A Date in the Snow adds five general-rated limited SSR portraits. Its Christmas
+drawing room keeps the snowy night beyond the windows and supports both standing
+poses and Claude's reading chair. Registered character and closed-eye plates
+drive localized motion over a static background; group and pool-cover compositions
+remain separate. The theme does not grant a site appearance.
+
 - Use the established character references. Preserve identifying hair, eyes, anatomy, accessories and signature motifs across outfits; create an original scene for each card.
 - Keep a clean, textless, frameless 2:3 portrait master, at least 1024 × 1536 native pixels. Retain a higher-resolution original when its detail is reliable. Upscaling does not count as added source detail.
 - Display names use “Theme · Character” (Chinese: “主题·角色”). Render names, rarity, counters and borders in the interface.
@@ -44,6 +57,10 @@ character so the hand-to-door and foreground contact points remain supported.
 Create the character-free theme background first. Author transparent character foregrounds against that background, then compose the card, companion illustration and pool cover from the retained layers. Independent compositions may retain connected props in their foreground layer to preserve contact and occlusion. Keep registration, alpha, source references and composition parameters with the artwork; flattened output is a delivery derivative.
 
 Inspect transparent corrections on light and dark neutral backgrounds and on the actual scene. Check corners, finger gaps, fine hair and translucent fabric for unwanted opacity, dark haze, patch seams and duplicated outlines. A transparent preview alone does not establish clean alpha. Keep accepted and rejected revisions distinct so a later export cannot restore an earlier defect.
+
+Check extracted hair against the original silhouette before repairing its alpha. Hair layers must exclude hands, clothing, supports and tails, including any seam overlap. Private Encore uses separate rear locks, continuous shoulder/elbow/wrist weights and restrained thoracic breathing. Supported hands and planted feet stay anchored; hands touching the head follow its transform. Nearly straight supported arms use soft extension to avoid an inverse-kinematics snap.
+
+The standalone gacha preview includes a copy-review page at `?view=copy`. It reads theme, card, dialogue, pool, appearance and interface copy from the current sources in both languages. Reviewers can filter and edit text, retain browser drafts, and export or import a JSON change package. Source changes and competing edits remain available for review; this page does not write production copy or call a server mutation.
 
 Keep the objects that make an action coherent in the same registered foreground: a receiving cup beneath a pouring teapot, a supported saucer, a table beneath writing or sealing, a seat beneath a seated figure, and water contact beneath a fingertip. Verify these relationships in the complete scene, small previews and independent character views. Prop corrections must reach standard and high-resolution cards, thumbnails and foreground layers together.
 

@@ -430,10 +430,34 @@ function axis(limit: number, before = 0, after = 0) {
   return values.sort((a, b) => a - b);
 }
 
-export function createMotionMesh(id: SweetCard, frame?: MomentFrame): MotionMesh {
+export function createMotionMesh(
+  id: SweetCard,
+  frame?: MomentFrame,
+  selection?: {
+    rect?: readonly [number, number, number, number];
+    materials?: readonly MotionRegion[];
+    fixed?: readonly (readonly Point[])[];
+    breathing?: boolean;
+  },
+): MotionMesh {
   const region = frame?.originalRegion;
-  const xs = axis(1024, region?.x, frame ? frame.canvas[0] - frame.originalRegion.x - 1024 : 0);
-  const ys = axis(1536, region?.y, frame ? frame.canvas[1] - frame.originalRegion.y - 1536 : 0);
+  const cropAxis = (start: number, length: number) => {
+    const values = [start];
+    for (
+      let p = Math.ceil((start + 0.001) / meshStep) * meshStep;
+      p < start + length;
+      p += meshStep
+    )
+      values.push(p);
+    values.push(start + length);
+    return values;
+  };
+  const xs = selection?.rect
+    ? cropAxis(selection.rect[0], selection.rect[2])
+    : axis(1024, region?.x, frame ? frame.canvas[0] - frame.originalRegion.x - 1024 : 0);
+  const ys = selection?.rect
+    ? cropAxis(selection.rect[1], selection.rect[3])
+    : axis(1536, region?.y, frame ? frame.canvas[1] - frame.originalRegion.y - 1536 : 0);
   const columns = xs.length,
     rows = ys.length;
   if (columns * rows > 65535) throw new Error('motion-mesh-unavailable');
@@ -451,14 +475,14 @@ export function createMotionMesh(id: SweetCard, frame?: MomentFrame): MotionMesh
       vertices[index + 1] = position[1];
       let protection = 1,
         bodyProtection = 1;
-      for (const polygon of fixedRegions[id]) {
+      for (const polygon of selection?.fixed ?? fixedRegions[id]) {
         const distance = -polygonDistance(polygon, point);
         protection = Math.min(protection, smooth(12, 76, distance));
         bodyProtection = Math.min(bodyProtection, smooth(12, 60, distance));
       }
       if (protection === 0) continue;
       let totalWeight = 0;
-      for (const region of motionRegions[id]) {
+      for (const region of selection?.materials ?? motionRegions[id]) {
         const weight = regionWeight(region, point) * protection;
         if (weight === 0) continue;
         totalWeight += weight;
@@ -478,7 +502,7 @@ export function createMotionMesh(id: SweetCard, frame?: MomentFrame): MotionMesh
       // Shared pixels at a hair/cloth overlap follow the blended material motion.
       if (totalWeight > 1)
         for (let channel = 2; channel < 10; channel++) vertices[index + channel] /= totalWeight;
-      const ribs = breathingOffset(id, point);
+      const ribs = selection?.breathing === false ? [0, 0, 0] : breathingOffset(id, point);
       vertices[index + 10] = ribs[0] * bodyProtection;
       vertices[index + 11] = ribs[1] * bodyProtection;
       vertices[index + 12] = vertices[index + 10] * ribs[2];

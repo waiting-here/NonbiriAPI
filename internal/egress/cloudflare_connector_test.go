@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/gemini"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -35,6 +36,8 @@ func testCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T, retain bool) {
 	const key = "connector-provider-key-private"
 	const token = "connector-gateway-token-private"
 	const source = "https://native-provider.example/v1beta"
+	const overloadMessage = "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+	const overload = `{"error":{"code":503,"message":"` + overloadMessage + `","status":"UNAVAILABLE"}}`
 	var calls atomic.Int32
 	var mode string
 	wantHeader := ""
@@ -48,6 +51,12 @@ func testCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T, retain bool) {
 		}
 		if !strings.HasPrefix(r.URL.Path, "/gateway/v1beta/models") {
 			t.Error("connector suffix changed", r.URL.Path)
+		}
+		if mode == "overloaded" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, overload)
+			return
 		}
 		if mode == "invalid" {
 			w.Header().Set("Content-Type", "application/json")
@@ -132,6 +141,27 @@ func testCloudflareGeminiDiscoveryGenerationAndSSE(t *testing.T, retain bool) {
 		}
 		if stream && !strings.Contains(sink.Body.String(), "[DONE]") {
 			t.Fatal("missing protocol completion")
+		}
+	}
+	mode = "overloaded"
+	for _, stream := range []bool{false, true} {
+		before, captures := calls.Load(), 0
+		ctx := upstreamerror.WithCapture(context.Background(), func(_ context.Context, event upstreamerror.Event) {
+			captures++
+			if event.Status() != 503 || event.Unavailable() || string(event.Bytes()) != overload {
+				t.Fatal("Gemini overload body lost before capture")
+			}
+		})
+		ctx = smartbackoff.WithCharityCall(ctx, true)
+		request, err := openai.DecodeChatRequest(strings.NewReader(fmt.Sprintf(`{"model":"public","messages":[{"role":"user","content":"hello"}],"stream":%t}`, stream)), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sink := httptest.NewRecorder()
+		result := adapter.Attempt(ctx, sink, target, secret(), request, contract.AttemptPolicy{})
+		request.Clear()
+		if result.Success || result.Committed || result.UpstreamStatus != 503 || result.FailureOrigin != contract.OriginUpstreamResponse || result.ErrorDetail.Code() != "503" || result.ErrorDetail.Message() != overloadMessage || result.ErrorDetail.TemporaryBackoff().Delay(503) != 60 || captures != 1 || calls.Load() != before+1 {
+			t.Fatalf("Gemini overload classification or detail changed: stream=%t result=%+v captures=%d", stream, result, captures)
 		}
 	}
 	for _, failure := range []string{"invalid", "reflect"} {

@@ -1,0 +1,976 @@
+{
+  "version": 1,
+  "canvas": [
+    1086,
+    1448
+  ],
+  "source": "character.webp",
+  "sourceSha256": "3693a24922a28e7a1aef7cf16913bcaa5d681b75462f4ac6d22b3ef7f99ea1ec",
+  "cycle": 27,
+  "layers": [
+    {
+      "name": "hair-left-outer",
+      "polygon": [
+        [
+          229,
+          375
+        ],
+        [
+          289,
+          355
+        ],
+        [
+          309,
+          414
+        ],
+        [
+          263,
+          475
+        ],
+        [
+          266,
+          538
+        ],
+        [
+          234,
+          585
+        ],
+        [
+          254,
+          642
+        ],
+        [
+          151,
+          748
+        ],
+        [
+          54,
+          754
+        ],
+        [
+          36,
+          581
+        ],
+        [
+          91,
+          458
+        ]
+      ],
+      "vector": [
+        8,
+        -2
+      ],
+      "root": 380,
+      "end": 740,
+      "delay": 0.18,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            394,
+            649
+          ],
+          [
+            477,
+            650
+          ],
+          [
+            523,
+            638
+          ],
+          [
+            578,
+            615
+          ],
+          [
+            633,
+            623
+          ],
+          [
+            637,
+            681
+          ],
+          [
+            613,
+            756
+          ],
+          [
+            572,
+            835
+          ],
+          [
+            585,
+            931
+          ],
+          [
+            639,
+            1080
+          ],
+          [
+            675,
+            1190
+          ],
+          [
+            705,
+            1220
+          ],
+          [
+            705,
+            1270
+          ],
+          [
+            677,
+            1310
+          ],
+          [
+            635,
+            1333
+          ],
+          [
+            597,
+            1325
+          ],
+          [
+            603,
+            1264
+          ],
+          [
+            569,
+            1152
+          ],
+          [
+            536,
+            1116
+          ],
+          [
+            536,
+            1223
+          ],
+          [
+            496,
+            1397
+          ],
+          [
+            447,
+            1448
+          ],
+          [
+            400,
+            1447
+          ],
+          [
+            416,
+            1345
+          ],
+          [
+            434,
+            1230
+          ],
+          [
+            444,
+            1135
+          ],
+          [
+            446,
+            1030
+          ],
+          [
+            443,
+            959
+          ],
+          [
+            426,
+            866
+          ],
+          [
+            409,
+            789
+          ],
+          [
+            397,
+            732
+          ]
+        ]
+      ],
+      "file": "hair-left-outer.webp",
+      "crop": [
+        54,
+        343,
+        268,
+        397
+      ],
+      "depth": 1,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-right-outer",
+      "polygon": [
+        [
+          854,
+          398
+        ],
+        [
+          951,
+          416
+        ],
+        [
+          1052,
+          487
+        ],
+        [
+          1075,
+          684
+        ],
+        [
+          1004,
+          782
+        ],
+        [
+          925,
+          770
+        ],
+        [
+          899,
+          702
+        ],
+        [
+          891,
+          607
+        ],
+        [
+          863,
+          558
+        ]
+      ],
+      "vector": [
+        9,
+        -2.5
+      ],
+      "root": 400,
+      "end": 765,
+      "delay": 0.35,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            394,
+            649
+          ],
+          [
+            477,
+            650
+          ],
+          [
+            523,
+            638
+          ],
+          [
+            578,
+            615
+          ],
+          [
+            633,
+            623
+          ],
+          [
+            637,
+            681
+          ],
+          [
+            613,
+            756
+          ],
+          [
+            572,
+            835
+          ],
+          [
+            585,
+            931
+          ],
+          [
+            639,
+            1080
+          ],
+          [
+            675,
+            1190
+          ],
+          [
+            705,
+            1220
+          ],
+          [
+            705,
+            1270
+          ],
+          [
+            677,
+            1310
+          ],
+          [
+            635,
+            1333
+          ],
+          [
+            597,
+            1325
+          ],
+          [
+            603,
+            1264
+          ],
+          [
+            569,
+            1152
+          ],
+          [
+            536,
+            1116
+          ],
+          [
+            536,
+            1223
+          ],
+          [
+            496,
+            1397
+          ],
+          [
+            447,
+            1448
+          ],
+          [
+            400,
+            1447
+          ],
+          [
+            416,
+            1345
+          ],
+          [
+            434,
+            1230
+          ],
+          [
+            444,
+            1135
+          ],
+          [
+            446,
+            1030
+          ],
+          [
+            443,
+            959
+          ],
+          [
+            426,
+            866
+          ],
+          [
+            409,
+            789
+          ],
+          [
+            397,
+            732
+          ]
+        ]
+      ],
+      "file": "hair-right-outer.webp",
+      "crop": [
+        842,
+        386,
+        224,
+        355
+      ],
+      "depth": 2,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "coat-left-tail-outer",
+      "polygon": [
+        [
+          140,
+          716
+        ],
+        [
+          300,
+          716
+        ],
+        [
+          310,
+          800
+        ],
+        [
+          320,
+          984
+        ],
+        [
+          120,
+          984
+        ],
+        [
+          120,
+          786
+        ]
+      ],
+      "root": 732,
+      "end": 940,
+      "vector": [
+        22,
+        14
+      ],
+      "delay": 0.65,
+      "material": "heavy-cloth",
+      "flutter": {
+        "vector": [
+          3,
+          2
+        ],
+        "period": 6.75,
+        "phase": 0.6050474740247009
+      },
+      "file": "coat-left-tail-outer.webp",
+      "crop": [
+        125,
+        704,
+        199,
+        263
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-left-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 3
+    },
+    {
+      "name": "coat-left-tail-lining",
+      "polygon": [
+        [
+          140,
+          716
+        ],
+        [
+          300,
+          716
+        ],
+        [
+          310,
+          800
+        ],
+        [
+          320,
+          984
+        ],
+        [
+          120,
+          984
+        ],
+        [
+          120,
+          786
+        ]
+      ],
+      "root": 732,
+      "end": 940,
+      "vector": [
+        22,
+        14
+      ],
+      "delay": 0.65,
+      "material": "blue-satin",
+      "flutter": {
+        "vector": [
+          3,
+          2
+        ],
+        "period": 6.75,
+        "phase": 0.6050474740247009
+      },
+      "file": "coat-left-tail-lining.webp",
+      "crop": [
+        125,
+        704,
+        199,
+        263
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-left-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 4
+    },
+    {
+      "name": "coat-right-tail-outer",
+      "polygon": [
+        [
+          710,
+          740
+        ],
+        [
+          1064,
+          740
+        ],
+        [
+          1080,
+          1170
+        ],
+        [
+          835,
+          1170
+        ],
+        [
+          835,
+          900
+        ],
+        [
+          720,
+          890
+        ]
+      ],
+      "root": 778,
+      "end": 1105,
+      "vector": [
+        28,
+        18
+      ],
+      "delay": 1.0,
+      "material": "heavy-cloth",
+      "flutter": {
+        "vector": [
+          4,
+          2
+        ],
+        "period": 9,
+        "phase": 0.6981317007977318
+      },
+      "file": "coat-right-tail-outer.webp",
+      "crop": [
+        698,
+        728,
+        351,
+        412
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-right-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 5
+    },
+    {
+      "name": "coat-right-tail-lining",
+      "polygon": [
+        [
+          710,
+          740
+        ],
+        [
+          1064,
+          740
+        ],
+        [
+          1080,
+          1170
+        ],
+        [
+          835,
+          1170
+        ],
+        [
+          835,
+          900
+        ],
+        [
+          720,
+          890
+        ]
+      ],
+      "root": 778,
+      "end": 1105,
+      "vector": [
+        28,
+        18
+      ],
+      "delay": 1.0,
+      "material": "blue-satin",
+      "flutter": {
+        "vector": [
+          4,
+          2
+        ],
+        "period": 9,
+        "phase": 0.6981317007977318
+      },
+      "file": "coat-right-tail-lining.webp",
+      "crop": [
+        698,
+        728,
+        351,
+        412
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-right-tail",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 6
+    },
+    {
+      "name": "coat-inner-left-outer",
+      "polygon": [
+        [
+          325,
+          754
+        ],
+        [
+          420,
+          754
+        ],
+        [
+          437,
+          863
+        ],
+        [
+          460,
+          960
+        ],
+        [
+          320,
+          960
+        ]
+      ],
+      "root": 830,
+      "end": 926,
+      "vector": [
+        -15,
+        12
+      ],
+      "delay": 1.35,
+      "material": "cloth",
+      "flutter": {
+        "vector": [
+          -2,
+          1.5
+        ],
+        "period": 5.4,
+        "phase": 1.5707963267948966
+      },
+      "file": "coat-inner-left-outer.webp",
+      "crop": [
+        309,
+        742,
+        141,
+        203
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-left",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 7
+    },
+    {
+      "name": "coat-inner-left-lining",
+      "polygon": [
+        [
+          325,
+          754
+        ],
+        [
+          420,
+          754
+        ],
+        [
+          437,
+          863
+        ],
+        [
+          460,
+          960
+        ],
+        [
+          320,
+          960
+        ]
+      ],
+      "root": 830,
+      "end": 926,
+      "vector": [
+        -15,
+        12
+      ],
+      "delay": 1.35,
+      "material": "blue-satin",
+      "flutter": {
+        "vector": [
+          -2,
+          1.5
+        ],
+        "period": 5.4,
+        "phase": 1.5707963267948966
+      },
+      "file": "coat-inner-left-lining.webp",
+      "crop": [
+        309,
+        742,
+        141,
+        203
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-left",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 8
+    },
+    {
+      "name": "coat-inner-right-outer",
+      "polygon": [
+        [
+          638,
+          786
+        ],
+        [
+          725,
+          786
+        ],
+        [
+          725,
+          975
+        ],
+        [
+          640,
+          975
+        ]
+      ],
+      "root": 833,
+      "end": 946,
+      "vector": [
+        13,
+        17
+      ],
+      "delay": 1.65,
+      "material": "cloth",
+      "flutter": {
+        "vector": [
+          2,
+          2
+        ],
+        "period": 6.75,
+        "phase": 1.53588974175501
+      },
+      "file": "coat-inner-right-outer.webp",
+      "crop": [
+        627,
+        774,
+        104,
+        193
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-right",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 9
+    },
+    {
+      "name": "coat-inner-right-lining",
+      "polygon": [
+        [
+          638,
+          786
+        ],
+        [
+          725,
+          786
+        ],
+        [
+          725,
+          975
+        ],
+        [
+          640,
+          975
+        ]
+      ],
+      "root": 833,
+      "end": 946,
+      "vector": [
+        13,
+        17
+      ],
+      "delay": 1.65,
+      "material": "blue-satin",
+      "flutter": {
+        "vector": [
+          2,
+          2
+        ],
+        "period": 6.75,
+        "phase": 1.53588974175501
+      },
+      "file": "coat-inner-right-lining.webp",
+      "crop": [
+        627,
+        774,
+        104,
+        193
+      ],
+      "rootOnly": true,
+      "seam": 0,
+      "sewnGroup": "coat-inner-right",
+      "parent": "one sewn panel; fixed horizontal root; original outer fabric, silver piping and blue lining share one mesh",
+      "reveal": "transparent exterior below fixed root; no body, hair, hand or furniture pixels in moving coverage",
+      "depth": 10
+    },
+    {
+      "name": "hair-ornament-chain",
+      "polygon": [
+        [
+          609,
+          135
+        ],
+        [
+          616,
+          137
+        ],
+        [
+          617,
+          150
+        ],
+        [
+          612,
+          160
+        ],
+        [
+          616,
+          166
+        ],
+        [
+          611,
+          177
+        ],
+        [
+          604,
+          174
+        ],
+        [
+          602,
+          165
+        ],
+        [
+          607,
+          157
+        ],
+        [
+          604,
+          150
+        ]
+      ],
+      "root": 135,
+      "end": 177,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.45,
+      "material": "silver-chain",
+      "rootOnly": true,
+      "seam": 0,
+      "rigid": true,
+      "pivot": [
+        611,
+        136
+      ],
+      "rotation": 0.085,
+      "file": "hair-ornament-chain.webp",
+      "crop": [
+        594,
+        125,
+        32,
+        63
+      ],
+      "depth": 11,
+      "parent": "shared fixed hair-knot pivot [611,136]; chain and attached tassel remain one rigid suspension",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only",
+      "cycle": 27
+    },
+    {
+      "name": "hair-ornament-tassel",
+      "polygon": [
+        [
+          604,
+          174
+        ],
+        [
+          612,
+          174
+        ],
+        [
+          614,
+          199
+        ],
+        [
+          616,
+          225
+        ],
+        [
+          609,
+          230
+        ],
+        [
+          596,
+          227
+        ],
+        [
+          599,
+          207
+        ]
+      ],
+      "root": 174,
+      "end": 229,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.45,
+      "material": "tassel",
+      "rootOnly": true,
+      "seam": 0,
+      "rigid": true,
+      "pivot": [
+        611,
+        136
+      ],
+      "rotation": 0.085,
+      "file": "hair-ornament-tassel.webp",
+      "crop": [
+        586,
+        166,
+        39,
+        73
+      ],
+      "depth": 12,
+      "parent": "shared fixed hair-knot pivot [611,136]; chain and attached tassel remain one rigid suspension",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only",
+      "cycle": 27
+    }
+  ],
+  "fixed": [
+    "Accepted face, anatomical ribcage breath, hands, mask/envelope contact, legs, floor support and -2.4 degree stance are unchanged.",
+    "Upper coat roots remain source-attached; full lower free tails move including outer contour and tip. Inner left thigh contact stays above the fixed y=830 root; its free tip is unconstrained.",
+    "Coat outer/lining members are complementary original RGB on one sewn mesh; chain/tassel share the exact hair-knot pivot."
+  ],
+  "repair": "detail-backing.webp",
+  "status": "local expression candidate: registered asset, mesh, extrema and real appearance browser checks passed; awaiting root visual audit and user adoption",
+  "revision": "v1.3.12-motion-expression"
+}

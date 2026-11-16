@@ -115,7 +115,7 @@ export function TomorrowArtwork({
       ref={root}
       className={`tomorrow-art tomorrow-art--${variant} ${className}`}
       role="img"
-      aria-label="未命名的明天 · ChatGPT / Tomorrow, Still Unwritten · ChatGPT"
+      aria-label="明天你好 · ChatGPT / Hello, Tomorrow · ChatGPT"
     >
       {variant === 'appearance' || (dark && !portraitStudy) ? (
         <div className="tomorrow-art__still">

@@ -39,6 +39,23 @@ it('keeps the foreshortened far-eye ribbon on actual ink and retains its wider o
 });
 
 it.each(['s-chatgpt', 's-claude'] as const)(
+  '%s body plate retains breathing without inheriting cloth or hair wind',
+  (id) => {
+    const mesh = createMotionMesh(id, undefined, { materials: [] });
+    let breathing = false;
+    for (let i = 0; i < mesh.vertices.length; i += vertexStride) {
+      expect([...mesh.vertices.subarray(i + 2, i + 10)].every((value) => value === 0)).toBe(true);
+      if (mesh.vertices[i + 10] !== 0 || mesh.vertices[i + 11] !== 0) breathing = true;
+      if (mesh.vertices[i + 1] >= 1320)
+        expect(
+          [...mesh.vertices.subarray(i + 10, i + vertexStride)].every((value) => value === 0),
+        ).toBe(true);
+    }
+    expect(breathing).toBe(true);
+  },
+);
+
+it.each(['s-chatgpt', 's-claude'] as const)(
   '%s eye atlas stays registered and contains full masks and all three states',
   (id) => {
     const data = eyeTextures(id),

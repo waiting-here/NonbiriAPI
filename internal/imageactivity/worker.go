@@ -140,6 +140,15 @@ func (s *Service) Step(ctx context.Context) error {
 // Queue deadlines belong to each accepted task. A protected FIFO head must not
 // prevent later tasks with shorter configuration snapshots from being refunded.
 func (s *Service) expireQueued(ctx context.Context, now int64) error {
+	var due bool
+	if err := s.config.ReadDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM image_activity_tasks WHERE state='queued' AND queue_deadline<=?)`, now).Scan(&due); err != nil {
+		return err
+	}
+	if !due {
+		return nil
+	}
+	// Recheck the deadline and state in the refund transaction. Work accepted
+	// after an empty probe is handled by dispatch or the next worker tick.
 	tx, err := s.config.Database.BeginTx(ctx, nil)
 	if err != nil {
 		return err

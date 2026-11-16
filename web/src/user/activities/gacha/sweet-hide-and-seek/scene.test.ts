@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSweetScene } from './scene';
+import { createSweetEnvironment } from './environment';
+
+vi.mock('./environment', () => ({
+  createSweetEnvironment: vi.fn(() => ({ paint: vi.fn(), dispose: vi.fn() })),
+}));
 
 let imageMode: 'load' | 'pending' | 'fail-half';
 let images: MockImage[];
@@ -53,6 +58,7 @@ beforeEach(() => {
     'STATIC_DRAW',
     'FLOAT',
     'TEXTURE0',
+    'TEXTURE4',
     'TEXTURE_2D',
     'TEXTURE_MIN_FILTER',
     'TEXTURE_MAG_FILTER',
@@ -63,6 +69,10 @@ beforeEach(() => {
     'RGBA',
     'UNSIGNED_BYTE',
     'UNPACK_ALIGNMENT',
+    'UNPACK_PREMULTIPLY_ALPHA_WEBGL',
+    'BLEND',
+    'ONE',
+    'ONE_MINUS_SRC_ALPHA',
     'LUMINANCE',
     'TRIANGLES',
   ].forEach((name, i) => {
@@ -94,6 +104,8 @@ beforeEach(() => {
     'viewport',
     'drawElements',
     'clear',
+    'enable',
+    'blendFunc',
     'deleteTexture',
     'deleteShader',
     'deleteBuffer',
@@ -129,33 +141,43 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('uploads only one full character and a cropped two-state eye atlas, and releases every GL resource', async () => {
+it('uploads independent material plates and a cropped eye atlas, then releases every allocation', async () => {
   const canvas = document.createElement('canvas');
   const scene = await createSweetScene(canvas, 's-chatgpt', {
     characterOnly: true,
     highResolution: true,
   });
   cleanups.push(scene.dispose);
-  expect(images.map((image) => image.requested)).toEqual(
+  expect(images.slice(0, 3).map((image) => image.requested)).toEqual(
     ['hero', 'half', 'closed'].map((name) => `/assets/gacha/hires/motion/s-chatgpt/${name}.webp`),
   );
-  expect(uploads).toHaveLength(4);
+  const plates = images.slice(3);
+  expect(plates.length).toBeGreaterThan(1);
+  expect(plates.every((image) => image.requested.includes('/hires/motion/s-chatgpt/parts/'))).toBe(
+    true,
+  );
+  expect(uploads).toHaveLength(4 + plates.length);
   expect(uploads[0].source).toContain('/hero.webp');
   expect(uploads[1]).toEqual({ width: 900, height: 1800 });
   expect(images.slice(1).every((image) => image.src === '')).toBe(true);
   scene.resize();
   scene.paint(2.35, 1, true);
-  expect(gl.drawElements).toHaveBeenCalledWith(gl.TRIANGLES, 147456, gl.UNSIGNED_SHORT, 0);
+  expect(gl.drawElements).toHaveBeenCalledTimes(plates.length);
+  expect(gl.blendFunc).toHaveBeenCalledWith(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   expect(gl.clear).toHaveBeenCalledWith(gl.COLOR_BUFFER_BIT);
   const uploadsBeforePaint = vi.mocked(gl.bufferData).mock.calls.length;
   scene.paint(4.7, 0, true);
   expect(gl.bufferData).toHaveBeenCalledTimes(uploadsBeforePaint);
   scene.dispose();
   scene.dispose();
-  expect(gl.deleteTexture).toHaveBeenCalledTimes(4);
+  expect(vi.mocked(gl.deleteTexture).mock.calls.map(([value]) => value)).toEqual(
+    vi.mocked(gl.createTexture).mock.results.map(({ value }) => value),
+  );
   expect(gl.deleteShader).toHaveBeenCalledTimes(2);
   expect(gl.deleteProgram).toHaveBeenCalledOnce();
-  expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(gl.deleteBuffer).mock.calls.map(([value]) => value)).toEqual(
+    vi.mocked(gl.createBuffer).mock.results.map(({ value }) => value),
+  );
   expect(lose).toHaveBeenCalledOnce();
   expect(images.every((image) => image.src === '')).toBe(true);
 });
@@ -210,7 +232,7 @@ it('clears the animation and stops its owner when the WebGL context is lost', as
   expect(failed).toHaveBeenCalledOnce();
   expect(canvas.dataset.ready).toBe('false');
   expect(canvas.style.visibility).toBe('hidden');
-  expect(gl.deleteTexture).toHaveBeenCalledTimes(4);
+  expect(gl.deleteTexture).toHaveBeenCalledTimes(vi.mocked(gl.createTexture).mock.calls.length);
 });
 
 it('samples expanded eye states at translated canonical coordinates without moving the rig', async () => {
@@ -229,11 +251,14 @@ it('samples expanded eye states at translated canonical coordinates without movi
     momentFrame: frame,
   });
   cleanups.push(scene.dispose);
-  expect(images.map((image) => image.requested)).toEqual(
+  expect(images.slice(0, 3).map((image) => image.requested)).toEqual(
     ['hero', 'half', 'closed'].map(
       (name) => '/assets/gacha/hires/moment/s-chatgpt/' + name + '.webp',
     ),
   );
+  expect(
+    images.slice(3).every((image) => image.requested.includes('/hires/moment/s-chatgpt/parts/')),
+  ).toBe(true);
   expect(uploads[1]).toEqual({ width: 900, height: 1800 });
   expect(context.drawImage).toHaveBeenNthCalledWith(
     1,
@@ -262,6 +287,33 @@ it('samples expanded eye states at translated canonical coordinates without movi
   expect(gl.uniform4f).toHaveBeenCalledWith(expect.anything(), 300, 190, 360, 360);
   expect(gl.uniform2f).toHaveBeenCalledWith(expect.anything(), 256, 256);
   expect(gl.uniform2f).toHaveBeenCalledWith(expect.anything(), 1536, 1792);
+});
+
+it('releases allocated graphics resources when environment setup fails', async () => {
+  vi.mocked(createSweetEnvironment).mockImplementationOnce(() => {
+    throw new Error('environment-unavailable');
+  });
+  await expect(createSweetScene(document.createElement('canvas'), 's-claude')).rejects.toThrow(
+    'environment-unavailable',
+  );
+  expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+  expect(gl.deleteProgram).toHaveBeenCalledOnce();
+  expect(lose).toHaveBeenCalledOnce();
+  expect(images.every((image) => image.src === '')).toBe(true);
+});
+
+it('releases a partially allocated material mesh when its index buffer fails', async () => {
+  vi.mocked(gl.createBuffer)
+    .mockReturnValueOnce({} as WebGLBuffer)
+    .mockReturnValueOnce({} as WebGLBuffer)
+    .mockReturnValueOnce({} as WebGLBuffer)
+    .mockReturnValueOnce(null as unknown as WebGLBuffer);
+  await expect(
+    createSweetScene(document.createElement('canvas'), 's-chatgpt', { characterOnly: true }),
+  ).rejects.toThrow('renderer-unavailable');
+  expect(gl.deleteBuffer).toHaveBeenCalledTimes(3);
+  expect(lose).toHaveBeenCalledOnce();
+  expect(images.every((image) => image.src === '')).toBe(true);
 });
 
 it('rejects incomplete expanded eye registration before requesting assets', async () => {

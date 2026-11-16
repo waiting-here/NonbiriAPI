@@ -3,6 +3,7 @@ package donationquota
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -105,5 +106,160 @@ func assertBrowseAvailability(t *testing.T, q *sql.DB, at int64, amounts Amounts
 	var after int64
 	if err := tx.QueryRow(`SELECT total_changes()`).Scan(&after); err != nil || after != before {
 		t.Fatalf("browse wrote data: %d->%d, %v", before, after, err)
+	}
+}
+
+func TestBrowseSlidingWindowProjectionRetainsReservationsAndWideLimits(t *testing.T) {
+	q, now := newBrowseWindowFixture(t, 4, 1)
+	probe := Amounts{Calls: mag(1)}
+	for _, at := range []int64{now - 1, now, now + 60, now + 2*86400} {
+		assertBrowseAvailability(t, q, at, probe, true)
+	}
+	if _, err := q.Exec(`UPDATE donation_quota_epochs SET limit_mag=nbi_u128(5),pending_reserved=nbi_u128(1)`); err != nil {
+		t.Fatal(err)
+	}
+	assertBrowseAvailability(t, q, now, probe, false)
+	assertBrowseAvailability(t, q, now+60, probe, false)
+	assertBrowseAvailability(t, q, now+86400-2, probe, true)
+	assertBrowseAvailability(t, q, now+2*86400, probe, true)
+	if _, err := q.Exec(`UPDATE donation_quota_buckets SET used_mag=CASE WHEN success_at=? THEN X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' ELSE zeroblob(16) END`, testNow+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.Exec(`UPDATE donation_quota_epochs SET limit_mag=X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',window_used=X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',pending_reserved=zeroblob(16)`); err != nil {
+		t.Fatal(err)
+	}
+	assertBrowseAvailability(t, q, now, probe, false)
+	assertBrowseAvailability(t, q, now+60, probe, false)
+	assertBrowseAvailability(t, q, now+2*86400, probe, true)
+}
+
+func TestBrowseSlidingDeltaRejectsWideCounterDrift(t *testing.T) {
+	for _, overflow := range []bool{false, true} {
+		t.Run(strconv.FormatBool(overflow), func(t *testing.T) {
+			q, now := newBrowseWindowFixture(t, 4, 1, true)
+			at := now + 1
+			if overflow {
+				if _, err := q.Exec(`UPDATE donation_quota_buckets SET used_mag=CASE WHEN success_at=(SELECT MAX(success_at) FROM donation_quota_buckets) THEN X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' ELSE zeroblob(16) END`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := q.Exec(`UPDATE donation_quota_epochs SET window_used=X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := q.Exec(`INSERT INTO donation_quota_buckets SELECT rule_id,epoch,?,nbi_u128(1),zeroblob(16) FROM donation_quota_epochs`, now+1); err != nil {
+					t.Fatal(err)
+				}
+				at = now + 1
+			} else {
+				if _, err := q.Exec(`UPDATE donation_quota_epochs SET window_used=zeroblob(16)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := Available(t.Context(), q, 1, at, Amounts{Calls: mag(1)}); !errors.Is(err, ErrInvariant) {
+				t.Fatalf("runtime drift error: %v", err)
+			}
+			var available bool
+			err := q.QueryRowContext(t.Context(), "SELECT "+AvailabilityPredicate("1", "?", "0", "0"), at).Scan(&available)
+			if err == nil {
+				t.Fatalf("browse accepted counter drift: %v", available)
+			}
+		})
+	}
+}
+
+func TestBrowseModelSlidingWindowMatchesExactUpstream(t *testing.T) {
+	q := newQuotaDB(t)
+	r := rule("tokens", "3")
+	r.Mode, r.Interval, r.Alignment = "sliding", "day", nil
+	err := transaction(t, q, func(tx *sql.Tx) error {
+		if err := ReplaceModel(t.Context(), tx, 1, testNow, "selected", []RuleInput{r}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO donation_quota_buckets SELECT id,1,?,nbi_u128(2),zeroblob(16) FROM donation_quota_rules WHERE upstream_model_id='selected'`, testNow+1); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE donation_quota_epochs SET window_left=?,window_at=?,last_observed_at=?,window_used=nbi_u128(2),window_reserved=zeroblob(16)`, testNow+1-86400, testNow+1, testNow+1)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range []string{"selected", "unrelated"} {
+		for _, at := range []int64{testNow + 1, testNow + 2, testNow + 61, testNow + 86402} {
+			want, err := ModelAvailable(t.Context(), q, 1, at, model, TokenVector{Total: 2})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got bool
+			err = q.QueryRowContext(t.Context(), "SELECT "+ModelAvailabilityPredicate("1", "?1", "?2", "2"), model, at).Scan(&got)
+			if err != nil || got != want {
+				t.Fatalf("model=%s at=%d browse=%v runtime=%v err=%v", model, at, got, want, err)
+			}
+		}
+	}
+}
+
+func TestBrowseStartedReservationLeavesAndReentersSlidingWindow(t *testing.T) {
+	q := newQuotaDB(t)
+	instant := func(text string) int64 {
+		value, err := time.Parse(time.RFC3339, text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value.Unix()
+	}
+	success := instant("2026-03-08T07:30:00Z")
+	before := instant("2026-03-09T06:59:00Z")
+	after := instant("2026-03-09T07:00:00Z")
+	r := rule("tokens", "10")
+	r.Mode, r.Interval, r.TimeZone, r.Alignment = "sliding", "day", "America/New_York", nil
+	replace(t, q, success, r)
+	reserved := Amounts{Calls: mag(1), Tokens: mag(7)}
+	id, err := newClaim(t, q, success, reserved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatch(t, q, id, success); err != nil {
+		t.Fatal(err)
+	}
+	start(t, q, id, success)
+	requireUsage(t, views(t, q, success)[0], "0", "7", "3", "available")
+	var nonzero bool
+	if err := q.QueryRow(`SELECT EXISTS(SELECT 1 FROM donation_quota_buckets b JOIN donation_quota_epochs e ON e.rule_id=b.rule_id AND e.epoch=b.epoch JOIN donation_quota_receipts r ON r.rule_id=b.rule_id AND r.epoch=b.epoch AND r.success_at=b.success_at WHERE r.claim_id=? AND r.state='started' AND b.reserved_mag=nbi_u128(7) AND e.window_reserved=nbi_u128(7))`, id).Scan(&nonzero); err != nil || !nonzero {
+		t.Fatalf("missing live window reservation: %v %v", nonzero, err)
+	}
+	probe := Amounts{Tokens: mag(4)}
+	for _, at := range []int64{success, success + 1, success + 60} {
+		assertBrowseAvailability(t, q, at, probe, false)
+	}
+	advanceTo := func(at int64) {
+		t.Helper()
+		if err := transaction(t, q, func(tx *sql.Tx) error {
+			epochs, err := currentEpochs(t.Context(), tx, 1)
+			if err != nil {
+				return err
+			}
+			return advance(t.Context(), tx, &epochs[0], at)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertBrowseAvailability(t, q, before, probe, true)
+	advanceTo(before)
+	requireUsage(t, views(t, q, before)[0], "0", "0", "10", "available")
+	// The retained started receipt reenters when the calendar left edge moves
+	// backwards; no settlement has replaced its reservation with actual usage.
+	assertBrowseAvailability(t, q, after, probe, false)
+	advanceTo(after)
+	requireUsage(t, views(t, q, after)[0], "0", "7", "3", "available")
+	for _, at := range []int64{after + 1, after + 60} {
+		assertBrowseAvailability(t, q, at, probe, false)
+	}
+	terminal(t, q, id, after+61, Amounts{Calls: mag(1), Tokens: mag(3)}, true)
+	requireUsage(t, views(t, q, after+61)[0], "3", "0", "7", "available")
+	assertBrowseAvailability(t, q, after+61, Amounts{Tokens: mag(7)}, true)
+	assertBrowseAvailability(t, q, after+61, Amounts{Tokens: mag(8)}, false)
+	var settled bool
+	if err := q.QueryRow(`SELECT EXISTS(SELECT 1 FROM donation_quota_receipts WHERE claim_id=? AND state='settled' AND actual_mag=nbi_u128(3) AND remaining_reserved_mag IS NULL) AND NOT EXISTS(SELECT 1 FROM donation_quota_buckets WHERE reserved_mag<>zeroblob(16)) AND NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE window_reserved<>zeroblob(16) OR pending_reserved<>zeroblob(16))`, id).Scan(&settled); err != nil || !settled {
+		t.Fatalf("settlement left a reservation: %v %v", settled, err)
 	}
 }

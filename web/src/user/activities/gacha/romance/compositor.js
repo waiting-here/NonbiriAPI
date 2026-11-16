@@ -7,10 +7,16 @@ import {
 } from './heart-thief-character.js';
 import { portraitWindows } from '../portrait';
 import { heartThiefGroundPoint, heartThiefStance } from './heart-thief-stance';
-import { romanceAppearancePlacement, romanceBackdropPlacement } from './layout';
+import {
+  heartThiefLandscapePlacement,
+  romanceAppearancePlacement,
+  romanceBackdropPlacement,
+} from './layout';
 import { elopementEnvironment, elopementDust } from './elopement-environment';
 import { heartThiefEnvironment, heartThiefDust, heartThiefLight } from './heart-thief-environment';
 import { romanceAssetSources } from './assets';
+import { createMaterialPlates } from './material-plates';
+import { elopementSkyResources, makeElopementSky } from './elopement-sky';
 
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const ease = (x) => {
@@ -24,11 +30,32 @@ function blink(t, start, close, hold, open) {
   if (p < close + hold) return 1;
   return 1 - ease((p - close - hold) / open);
 }
-function load(url) {
+function load(url, signal, owned) {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(Error('Artwork could not be loaded.'));
+    owned.add(image);
+    const finish = () => {
+      signal.removeEventListener('abort', abort);
+      image.onload = image.onerror = null;
+    };
+    const abort = () => {
+      finish();
+      image.src = '';
+      reject(new DOMException('Cancelled', 'AbortError'));
+    };
+    image.onload = () => {
+      finish();
+      resolve(image);
+    };
+    image.onerror = () => {
+      finish();
+      reject(Error('Artwork could not be loaded.'));
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener('abort', abort, { once: true });
     image.src = url;
   });
 }
@@ -36,23 +63,83 @@ function load(url) {
 export async function createScene(id, polished = false, options = {}) {
   const claude = id === 'elopement';
   const refined = polished;
+  const daylight = refined && claude && options.variant === 'appearance';
   const sources = romanceAssetSources(id, options.highResolution, options.dark);
-  const images = Object.fromEntries(
-    await Promise.all(
-      Object.entries(sources).map(async ([name, source]) => [name, await load(source)]),
-    ),
-  );
-  const character = claude
-    ? makeClaude(images)
-    : makeGLM(images.character, images['hair-backing-v3']);
-  const background = claude
-    ? { draw: () => images.background }
-    : makeBackgroundRenderer(images.background);
-  const environment = refined
-    ? claude
-      ? elopementEnvironment(images.background)
-      : heartThiefEnvironment(images.background, background)
-    : undefined;
+  const loading = new AbortController();
+  const cancel = () => loading.abort();
+  const ownedImages = new Set();
+  const releaseImages = () => {
+    for (const image of ownedImages) {
+      image.onload = image.onerror = null;
+      image.src = '';
+    }
+    ownedImages.clear();
+  };
+  options.signal?.addEventListener('abort', cancel, { once: true });
+  let images, materials, environmentMaterials, character, background, environment;
+  try {
+    if (options.signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+    images = Object.fromEntries(
+      await Promise.all(
+        Object.entries(sources).map(async ([name, source]) => [
+          name,
+          await load(source, loading.signal, ownedImages),
+        ]),
+      ),
+    );
+    if (refined) {
+      materials = await createMaterialPlates(
+        claude ? 'p-claude' : 'q-glm',
+        claude ? images.offer : images.character,
+        loading.signal,
+      );
+      if (daylight) {
+        const resources = elopementSkyResources(options.dark, options.highResolution);
+        const [clouds, visibility] = await Promise.all(
+          [resources.clouds, resources.visibility].map(({ src }) =>
+            load(src, loading.signal, ownedImages),
+          ),
+        );
+        environmentMaterials = makeElopementSky(
+          images.background,
+          clouds,
+          visibility,
+          options.dark,
+        );
+      } else {
+        environmentMaterials = await createMaterialPlates(
+          claude ? 'p-claude' : 'q-glm',
+          images.background,
+          loading.signal,
+          `environment-${options.dark ? 'dark' : 'light'}`,
+        );
+      }
+    }
+    if (loading.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+    character = claude
+      ? makeClaude(images, !!materials)
+      : makeGLM(images.character, images['hair-backing-v3'], !!materials);
+    background =
+      environmentMaterials ??
+      (claude ? { draw: () => images.background } : makeBackgroundRenderer(images.background));
+    environment = refined
+      ? claude
+        ? elopementEnvironment(images.background, environmentMaterials, daylight)
+        : heartThiefEnvironment(images.background, background)
+      : undefined;
+  } catch (error) {
+    loading.abort();
+    character?.dispose?.();
+    background?.dispose?.();
+    environment?.dispose?.();
+    materials?.dispose();
+    environmentMaterials?.dispose();
+    releaseImages();
+    throw error;
+  } finally {
+    options.signal?.removeEventListener('abort', cancel);
+  }
+  let sceneDisposed = false;
   const dust = claude ? elopementDust : heartThiefDust;
   const width = claude ? 1024 : 1086,
     height = claude ? 1536 : 1448;
@@ -126,7 +213,7 @@ export async function createScene(id, polished = false, options = {}) {
           1,
         )
       : character.draw(phase, invitationPose(9), eyelid);
-    return { phase, eyelid, body };
+    return { phase, eyelid, body: materials ? materials.draw(motion ? time : 0, body) : body };
   }
   function shadow(ctx, hero, scale) {
     ctx.save();
@@ -187,6 +274,7 @@ export async function createScene(id, polished = false, options = {}) {
     ctx.restore();
   }
   function paintCharacter(canvas, dark = false, time = 0, forcedBlink = 0) {
+    materials?.setResolution(canvas.width, canvas.height);
     const ctx = canvas.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -225,39 +313,53 @@ export async function createScene(id, polished = false, options = {}) {
     const placement = cssPlacement
       ? Object.fromEntries(Object.entries(cssPlacement).map(([key, value]) => [key, value * ratio]))
       : null;
-    const scale = appearance
-      ? placement.height / height
-      : card
-        ? claude
-          ? 0.59
-          : 0.62
-        : cover
-          ? claude
-            ? 0.65
-            : 0.66
-          : claude
-            ? 0.5
-            : 0.52;
-    const hero = {
-      x: appearance
-        ? placement.left
+    const landscape =
+      !claude && refined && !card && !appearance ? heartThiefLandscapePlacement(cover) : null;
+    const scale =
+      landscape?.scale ??
+      (appearance
+        ? placement.height / height
         : card
           ? claude
-            ? 690
-            : 570
+            ? 0.59
+            : 0.62
           : cover
             ? claude
-              ? 795
-              : 810
+              ? 0.65
+              : 0.66
             : claude
-              ? 875
-              : 795,
-      y: appearance ? placement.top : card ? 64 : cover ? 40 : claude ? 54 : 115,
+              ? 0.5
+              : 0.52);
+    const hero = {
+      x:
+        landscape?.left ??
+        (appearance
+          ? placement.left
+          : card
+            ? claude
+              ? 690
+              : 570
+            : cover
+              ? claude
+                ? 795
+                : 810
+              : claude
+                ? 875
+                : 795),
+      y:
+        landscape?.top ?? (appearance ? placement.top : card ? 64 : cover ? 40 : claude ? 54 : 115),
       s: scale,
     };
     const cropX = card
       ? hero.x + (width * hero.s) / 2 - 1024 / 3 + ((1024 * 2) / 3) * window[0]
       : 0;
+    const sourceScale =
+      momentReferenceSize(
+        canvas.width,
+        canvas.height,
+        options.characterOnly ? options.momentFrame : undefined,
+      ).width / stageWidth;
+    materials?.setResolution(width * scale * sourceScale, height * scale * sourceScale);
     const { phase, eyelid, body } = pose(time, motion, forcedBlink);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -276,7 +378,7 @@ export async function createScene(id, polished = false, options = {}) {
       ? !claude && layer === 'background'
         ? { left: 0, top: 0, scale: canvas.width / 1536 }
         : romanceBackdropPlacement(canvas.width, canvas.height, viewportWidth, id)
-      : { left: 0, top: 0, scale: 1 };
+      : { left: 0, top: landscape?.backgroundTop ?? 0, scale: 1 };
     if (layer !== 'hero') {
       ctx.save();
       ctx.translate(backdrop.left, backdrop.top);
@@ -284,6 +386,10 @@ export async function createScene(id, polished = false, options = {}) {
       const projection = ctx.getTransform();
       background.setProjectionScale?.(Math.max(Math.abs(projection.a), Math.abs(projection.d)));
       if (environment) {
+        environmentMaterials?.setResolution(
+          1536 * backdrop.scale * sourceScale,
+          1024 * backdrop.scale * sourceScale,
+        );
         environment.draw(ctx, motion ? time : 0, dark);
         dust(ctx, motion ? time : 0, dark, false);
       } else {
@@ -341,10 +447,16 @@ export async function createScene(id, polished = false, options = {}) {
     paint,
     paintCharacter,
     dispose() {
+      if (sceneDisposed) return;
+      sceneDisposed = true;
+      loading.abort();
       character.dispose?.();
+      materials?.dispose();
       background.dispose?.();
       environment?.dispose();
+      releaseImages();
+      lit.width = lit.height = 0;
     },
   };
 }
-/* global Image, document */
+/* global Image, document, DOMException, AbortController */

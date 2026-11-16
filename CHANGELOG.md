@@ -4,6 +4,65 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.3.12 — 2026-11-15
+
+- Use existing subject indexes when deduplicating upstream diagnostics, avoiding
+  a scan of retained error bodies while holding the sole database writer.
+- Reuse sliding quota totals within the current authorized snapshot and read
+  changed ranges for nearby windows. Limit model success statistics to the
+  returned capability set and avoid repeating filtered availability projections.
+- Skip idle image-task expiry write transactions; due work retains the original
+  transactional deadline check and refund behavior.
+- Add Private Encore, three R-18 limited SSR cards with registered blinking,
+  separate hair layers, breathing, constrained arm and accessory motion, and stage lighting. Its unpublished template follows
+  the seasonal SSR rules; the theme uses the existing adult-artwork gate and
+  does not grant a dedicated site appearance.
+- Add a copy-review page to the gacha preview, with source-backed bilingual text,
+  filters, persistent drafts, and JSON import and export with conflict review.
+- Refine Chinese encounter and reunion lines with matching English translations.
+- Rename Tomorrow, Still Unwritten to Hello, Tomorrow, with a prelude that
+  combines uncertainty and hope. Card ownership and appearance identifiers remain unchanged.
+- Add optional administrator-controlled JSON response keepalives, disabled by
+  default, with a configurable interval of 60 seconds by default. Errors retain
+  their HTTP status until the first heartbeat; later errors remain in JSON.
+  Upstream failure accounting, retries and billing use the original upstream result.
+  Platform errors retain the request's language before and after keepalives begin.
+- Reserve OAuth state capacity for each flow and cap aggregate decoded image
+  pixels in each image-generation activity result.
+- Preserve failed Cloudflare-routed response bodies even when a JSON error is
+  labelled as an event stream, so Gemini overload details reach diagnostics.
+  Retain bounded reads and credential checks, including genuine SSE errors.
+- Recognize verified Google Gemini overload errors as temporary unavailability:
+  preserve the donated key's failure streak and wait 60 seconds, with valid
+  upstream retry hints taking precedence. Other 503 failures retain their policy.
+- Recognize structured thinking-parameter errors, including AMD responses and
+  supported nested thinking/reasoning fields, when the caller supplied the
+  unchanged parameter. Preserve existing key failure streaks without suppressing
+  authentication, service failures or errors caused by configured rewrites.
+- Add A Date in the Snow, five non-explicit Christmas limited SSR cards, with
+  distinct poses, independently layered hair, garments and accessories, and a
+  snowy-window drawing room with masked weather and lighting. Adopt Claude's
+  sheer gown over a separate opaque-underwear body, preserving the velvet design
+  in the local comparison preview. Both the group illustration and pool cover
+  include all five characters. Its preset has no seasonal date limit.
+- Refine independent fabric and accessory motion in Across the Mirror Sea,
+  A Notice to Steal Your Heart and Hello, Tomorrow. Free hems move
+  visibly while seams and hand contacts stay fixed; ornaments follow their
+  attachments, with matching static and high-resolution artwork.
+- Align Christmas ChatGPT's face and eye animation with her established
+  character design, refine waist-to-hip alignment and harmonize exposed skin
+  tones, including the five-character illustration and pool cover.
+- Correct both hands in Fairytale Theatre Gemini, remove stray fingers from
+  Summer Fireworks ChatGPT, and refine finger shapes in Origin Echo DeepSeek,
+  Myriad Forms ChatGPT and the Fairytale Theatre group illustration.
+- Keep the matching card, thumbnail, transparent, eye-state, heartfelt-moment
+  and high-resolution artwork consistent with the corrected sources.
+- Improve layered animation throughout existing SSR and SP cards and SP site
+  appearances, including complete fireworks fade-outs, detailed hair, moving
+  clouds and corrected character placement. Seasonal SSR Heartfelt Moments use
+  full-screen scenery with separate animated characters and contact shadows.
+- Keep storage schema 54 and account export format 36 unchanged.
+
 ## 1.3.11 — 2026-11-11
 
 - Keep upcoming gacha pool draw buttons aligned with open pools, with the

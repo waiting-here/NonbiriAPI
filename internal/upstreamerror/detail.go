@@ -26,15 +26,17 @@ const redacted = "[redacted]"
 // Detail can only be populated through the extraction boundary. Its zero
 // value requests the caller's ordinary generic error message.
 type Detail struct {
-	message string
-	code    string
-	backoff smartbackoff.Classification
-	caller  CallerFault
+	message   string
+	code      string
+	backoff   smartbackoff.Classification
+	temporary TemporaryBackoff
+	caller    CallerFault
 }
 
 func (d Detail) Message() string                      { return d.message }
 func (d Detail) Code() string                         { return d.code }
 func (d Detail) Backoff() smartbackoff.Classification { return d.backoff }
+func (d Detail) TemporaryBackoff() TemporaryBackoff   { return d.temporary }
 func (d Detail) CallerFault() CallerFault             { return d.caller }
 
 // Context holds source identifiers and an exact secret detector backed by
@@ -42,6 +44,7 @@ func (d Detail) CallerFault() CallerFault             { return d.caller }
 // ContainsSecret must start with fresh rolling state on every call.
 type Context struct {
 	CharityCall    bool
+	GoogleAPI      bool
 	Rules          []smartbackoff.Rule
 	BaseURL        string
 	PrivateModel   string
@@ -100,6 +103,7 @@ func (c Context) Parse(body []byte) Detail {
 	}
 	var message, code string
 	var classified smartbackoff.Classification
+	var temporary TemporaryBackoff
 	var caller CallerFault
 	if body[0] == '{' {
 		if strictjson.ValidateObject(body) != nil {
@@ -132,6 +136,7 @@ func (c Context) Parse(body []byte) Detail {
 			var errorFields map[string]json.RawMessage
 			if c.CharityCall && json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
 				classified = smartbackoff.Classify(errorFields, c.Rules...)
+				temporary = c.temporaryBackoff(errorFields)
 				caller = c.callerFault(errorFields)
 			}
 		}
@@ -156,7 +161,7 @@ func (c Context) Parse(body []byte) Detail {
 	if !caller.Matches(c.responseStatus, cleanCode) {
 		caller = CallerFault{}
 	}
-	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified, caller: caller}
+	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified, temporary: temporary, caller: caller}
 }
 
 // IsEvent reports an explicit error envelope without interpreting an ordinary

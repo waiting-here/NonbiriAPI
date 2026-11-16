@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,113 @@ import (
 	"testing"
 	"time"
 )
+
+func TestJSONKeepaliveCoversAcceptedCharityQueue(t *testing.T) {
+	for _, canceled := range []bool{false, true} {
+		t.Run(fmt.Sprint(canceled), func(t *testing.T) {
+			entered := make(chan struct{}, 2)
+			release := make(chan struct{})
+			var once sync.Once
+			defer once.Do(func() { close(release) })
+			f := newModelHTTPFixture(t, nil, "openai-compatible", func(w http.ResponseWriter, r *http.Request) {
+				entered <- struct{}{}
+				select {
+				case <-release:
+				case <-r.Context().Done():
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"id":"queue-result","object":"chat.completion","created":1,"model":"private-model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`)
+			})
+			// Keep the real HTTP/claim/ledger path; shorten only the timer for this fixture.
+			f.jsonKeepalive.state.Store(&jsonKeepaliveSnapshot{revision: 1, enabled: true, interval: 5 * time.Millisecond})
+			f.exec(t, `UPDATE site_config SET value='0' WHERE key='charity_min_chars'`)
+			f.exec(t, `INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,concurrency_overflow) VALUES(?,1,'queue')`, f.keyID)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			call := func(ctx context.Context) *http.Response {
+				t.Helper()
+				r, err := http.NewRequestWithContext(ctx, http.MethodPost, f.server.URL+"/v1/chat/completions", strings.NewReader(`{"model":"[公益]provider/per_request","messages":[{"role":"user","content":"hello"}]}`))
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.Host = auditUserHost
+				r.Header.Set("Authorization", "Bearer "+f.caller)
+				r.Header.Set("Content-Type", "application/json")
+				out, err := f.server.Client().Do(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var heartbeat [1]byte
+				if _, err := io.ReadFull(out.Body, heartbeat[:]); err != nil || heartbeat[0] != '\n' || out.StatusCode != 200 {
+					_ = out.Body.Close()
+					t.Fatalf("heartbeat status=%d byte=%q err=%v", out.StatusCode, heartbeat, err)
+				}
+				return out
+			}
+			first := call(ctx)
+			defer first.Body.Close()
+			select {
+			case <-entered:
+			case <-ctx.Done():
+				t.Fatal("first request did not dispatch")
+			}
+			queuedCtx, queuedCancel := context.WithCancel(ctx)
+			defer queuedCancel()
+			second := call(queuedCtx)
+			defer second.Body.Close()
+			var requestID string
+			if err := f.store.ReadDB().QueryRowContext(ctx, `SELECT id FROM logical_requests WHERE user_id=? AND state='accepted'`, f.userID).Scan(&requestID); err != nil {
+				t.Fatal(err)
+			}
+			if canceled {
+				queuedCancel()
+				_ = second.Body.Close()
+			} else {
+				f.exec(t, `UPDATE endpoint_key_limits SET concurrency_overflow='reject' WHERE endpoint_key_id=?`, f.keyID)
+				f.app.claims.NotifyKey(f.keyID)
+				body, err := io.ReadAll(second.Body)
+				if err != nil || !json.Valid(body) || !strings.Contains(string(body), `"error"`) {
+					t.Fatalf("late queue rejection JSON=%q err=%v", body, err)
+				}
+			}
+			ticker := time.NewTicker(time.Millisecond)
+			defer ticker.Stop()
+			for {
+				var state, accounting, reservation string
+				var charge, attempts, failures int
+				err := f.store.ReadDB().QueryRowContext(ctx, `SELECT l.state,l.accounting_state,r.state,r.user_charge_milli,
+					(SELECT count(*) FROM dispatch_claims WHERE logical_request_id=l.id),
+					(SELECT count(*) FROM donation_service_health WHERE failure_streak<>nbi_u128(0))
+					FROM logical_requests l JOIN charity_reservations r ON r.logical_request_id=l.id WHERE l.id=?`, requestID).Scan(&state, &accounting, &reservation, &charge, &attempts, &failures)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if state == "terminal" {
+					if accounting != "released" || reservation != "released" || charge != 0 || attempts != 0 || failures != 0 {
+						t.Fatalf("queued settlement accounting=%s reservation=%s charge=%d attempts=%d failures=%d", accounting, reservation, charge, attempts, failures)
+					}
+					break
+				}
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					t.Fatal("queued cancellation did not settle")
+				}
+			}
+			select {
+			case <-entered:
+				t.Fatal("queued request reached upstream")
+			default:
+			}
+			once.Do(func() { close(release) })
+			body, err := io.ReadAll(first.Body)
+			if err != nil || !json.Valid(body) {
+				t.Fatalf("first JSON=%q err=%v", body, err)
+			}
+		})
+	}
+}
 
 func TestKeyQueueHTTPDispatchAndDynamicRejection(t *testing.T) {
 	for _, strategy := range []string{"ordered", "cache_balanced"} {

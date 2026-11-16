@@ -28,6 +28,13 @@ func TestHeaderFactsSameTransactionBudgetCascadeAndLateCallback(t *testing.T) {
 	request.Header.Set("Authorization", "secret-never-persisted")
 	ctx := headerfacts.WithRequest(context.Background(), request)
 	ids := make([]string, 4)
+	// Gzip output size can differ between Go versions. Test the storage budget
+	// against the captured size, not an assumed compression ratio.
+	bytesPerFact := int64(headerfacts.Request(ctx).BytesSaved())
+	wantSaved := int64(1<<20) / bytesPerFact
+	if wantSaved < 1 || wantSaved >= int64(len(ids)) {
+		t.Fatal("fixture must both save and omit header facts", bytesPerFact)
+	}
 	for i := range ids {
 		ids[i], _ = observedLog(t, r, user, r.now().Unix())
 	}
@@ -54,7 +61,7 @@ func TestHeaderFactsSameTransactionBudgetCascadeAndLateCallback(t *testing.T) {
 	saved := scalar(t, r.db, "SELECT count(*) FROM request_header_facts WHERE save_state='saved'")
 	omitted := scalar(t, r.db, "SELECT count(*) FROM request_header_facts WHERE save_state='capacity_exhausted'")
 	used := scalar(t, r.db, "SELECT header_bytes FROM observability_state WHERE id=1")
-	if saved != 2 || omitted != 2 || used <= 0 || used > 1<<20 || used != scalar(t, r.db, "SELECT SUM(bytes_saved) FROM request_header_facts") {
+	if saved != wantSaved || omitted != int64(len(ids))-wantSaved || used != wantSaved*bytesPerFact || used > 1<<20 || used != scalar(t, r.db, "SELECT SUM(bytes_saved) FROM request_header_facts") {
 		t.Fatal(saved, omitted, used)
 	}
 	tx, _ := r.db.Begin()

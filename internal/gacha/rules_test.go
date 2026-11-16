@@ -98,7 +98,7 @@ func TestProtectedPityAcrossRepeatedConfigurationChanges(t *testing.T) {
 	}
 }
 func TestCatalogCardAndThemeIntegrity(t *testing.T) {
-	if len(catalog.Cards) != 64 || len(catalog.Themes) != 19 {
+	if len(catalog.Cards) != 72 || len(catalog.Themes) != 21 {
 		t.Fatal("unexpected card catalog")
 	}
 	for _, theme := range catalog.Themes {
@@ -116,6 +116,8 @@ func TestCatalogCardAndThemeIntegrity(t *testing.T) {
 			expected = 1
 		} else if theme.ID == "s" {
 			expected = 2
+		} else if theme.ID == "u" {
+			expected = 3
 		}
 		if len(seen) != expected {
 			t.Fatal(theme)

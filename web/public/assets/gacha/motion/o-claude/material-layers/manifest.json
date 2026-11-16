@@ -1,0 +1,773 @@
+{
+  "version": 1,
+  "canvas": [
+    1037,
+    1516
+  ],
+  "source": "hero.png",
+  "sourceSha256": "c91dc63088847eaa84fa27332b45db76752152e2476072c76333580bd521e8f2",
+  "cycle": 31,
+  "layers": [
+    {
+      "name": "cape-lower",
+      "polygon": [
+        [
+          156,
+          699
+        ],
+        [
+          282,
+          730
+        ],
+        [
+          368,
+          662
+        ],
+        [
+          382,
+          754
+        ],
+        [
+          335,
+          899
+        ],
+        [
+          286,
+          1046
+        ],
+        [
+          251,
+          1122
+        ],
+        [
+          178,
+          1090
+        ],
+        [
+          133,
+          936
+        ],
+        [
+          133,
+          822
+        ]
+      ],
+      "vector": [
+        7,
+        2
+      ],
+      "root": 720,
+      "end": 1090,
+      "delay": 0.8,
+      "material": "heavy-cloth",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            690,
+            426
+          ],
+          [
+            1037,
+            367
+          ],
+          [
+            1037,
+            600
+          ],
+          [
+            829,
+            617
+          ],
+          [
+            829,
+            661
+          ],
+          [
+            778,
+            703
+          ],
+          [
+            734,
+            678
+          ],
+          [
+            708,
+            589
+          ]
+        ]
+      ],
+      "file": "cape-lower.webp",
+      "crop": [
+        131,
+        650,
+        264,
+        485
+      ],
+      "depth": 1,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-right-ends",
+      "polygon": [
+        [
+          704,
+          667
+        ],
+        [
+          743,
+          670
+        ],
+        [
+          780,
+          640
+        ],
+        [
+          850,
+          651
+        ],
+        [
+          893,
+          688
+        ],
+        [
+          898,
+          812
+        ],
+        [
+          742,
+          853
+        ],
+        [
+          694,
+          797
+        ]
+      ],
+      "vector": [
+        6,
+        -2
+      ],
+      "root": 650,
+      "end": 820,
+      "delay": 0.25,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            690,
+            426
+          ],
+          [
+            1037,
+            367
+          ],
+          [
+            1037,
+            600
+          ],
+          [
+            829,
+            617
+          ],
+          [
+            829,
+            661
+          ],
+          [
+            778,
+            703
+          ],
+          [
+            734,
+            678
+          ],
+          [
+            708,
+            589
+          ]
+        ]
+      ],
+      "file": "hair-right-ends.webp",
+      "crop": [
+        682,
+        636,
+        217,
+        214
+      ],
+      "depth": 2,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "robe-left-hem",
+      "polygon": [
+        [
+          257,
+          1097
+        ],
+        [
+          409,
+          1086
+        ],
+        [
+          415,
+          1254
+        ],
+        [
+          483,
+          1298
+        ],
+        [
+          477,
+          1343
+        ],
+        [
+          342,
+          1346
+        ],
+        [
+          200,
+          1230
+        ]
+      ],
+      "vector": [
+        3,
+        1
+      ],
+      "root": 1090,
+      "end": 1320,
+      "delay": 1.0,
+      "material": "heavy-cloth",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            690,
+            426
+          ],
+          [
+            1037,
+            367
+          ],
+          [
+            1037,
+            600
+          ],
+          [
+            829,
+            617
+          ],
+          [
+            829,
+            661
+          ],
+          [
+            778,
+            703
+          ],
+          [
+            734,
+            678
+          ],
+          [
+            708,
+            589
+          ]
+        ]
+      ],
+      "file": "robe-left-hem.webp",
+      "crop": [
+        198,
+        1074,
+        298,
+        249
+      ],
+      "depth": 3,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "robe-right-hem",
+      "polygon": [
+        [
+          588,
+          1090
+        ],
+        [
+          742,
+          1085
+        ],
+        [
+          808,
+          1192
+        ],
+        [
+          832,
+          1271
+        ],
+        [
+          689,
+          1348
+        ],
+        [
+          573,
+          1339
+        ],
+        [
+          574,
+          1260
+        ]
+      ],
+      "vector": [
+        3.5,
+        1
+      ],
+      "root": 1090,
+      "end": 1330,
+      "delay": 1.3,
+      "material": "heavy-cloth",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            690,
+            426
+          ],
+          [
+            1037,
+            367
+          ],
+          [
+            1037,
+            600
+          ],
+          [
+            829,
+            617
+          ],
+          [
+            829,
+            661
+          ],
+          [
+            778,
+            703
+          ],
+          [
+            734,
+            678
+          ],
+          [
+            708,
+            589
+          ]
+        ]
+      ],
+      "file": "robe-right-hem.webp",
+      "crop": [
+        561,
+        1073,
+        271,
+        281
+      ],
+      "depth": 4,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "tabard-lower",
+      "polygon": [
+        [
+          427,
+          758
+        ],
+        [
+          581,
+          753
+        ],
+        [
+          590,
+          1145
+        ],
+        [
+          397,
+          1141
+        ]
+      ],
+      "vector": [
+        2.5,
+        0.5
+      ],
+      "root": 775,
+      "end": 1130,
+      "delay": 0.95,
+      "material": "heavy-cloth",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            690,
+            426
+          ],
+          [
+            1037,
+            367
+          ],
+          [
+            1037,
+            600
+          ],
+          [
+            829,
+            617
+          ],
+          [
+            829,
+            661
+          ],
+          [
+            778,
+            703
+          ],
+          [
+            734,
+            678
+          ],
+          [
+            708,
+            589
+          ]
+        ]
+      ],
+      "file": "tabard-lower.webp",
+      "crop": [
+        389,
+        741,
+        213,
+        416
+      ],
+      "depth": 5,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "sleeve-left-free",
+      "polygon": [
+        [
+          216,
+          492
+        ],
+        [
+          256,
+          503
+        ],
+        [
+          304,
+          503
+        ],
+        [
+          348,
+          489
+        ],
+        [
+          410,
+          489
+        ],
+        [
+          414,
+          514
+        ],
+        [
+          394,
+          558
+        ],
+        [
+          369,
+          603
+        ],
+        [
+          331,
+          646
+        ],
+        [
+          306,
+          669
+        ],
+        [
+          271,
+          631
+        ],
+        [
+          245,
+          583
+        ],
+        [
+          227,
+          539
+        ]
+      ],
+      "root": 494,
+      "end": 665,
+      "vector": [
+        3.2,
+        1
+      ],
+      "delay": 0.7,
+      "material": "cloth",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "sleeve-left-free.webp",
+      "crop": [
+        206,
+        479,
+        219,
+        201
+      ],
+      "depth": 100,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "sleeve-right-free",
+      "polygon": [
+        [
+          729,
+          552
+        ],
+        [
+          779,
+          563
+        ],
+        [
+          826,
+          560
+        ],
+        [
+          824,
+          592
+        ],
+        [
+          811,
+          631
+        ],
+        [
+          792,
+          666
+        ],
+        [
+          773,
+          685
+        ],
+        [
+          750,
+          675
+        ],
+        [
+          735,
+          642
+        ],
+        [
+          723,
+          601
+        ]
+      ],
+      "root": 555,
+      "end": 682,
+      "vector": [
+        2.5,
+        0.7
+      ],
+      "delay": 0.95,
+      "material": "cloth",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "sleeve-right-free.webp",
+      "crop": [
+        713,
+        542,
+        124,
+        154
+      ],
+      "depth": 101,
+      "parent": "fixed adopted knot/seam/attachment; hands and held objects excluded",
+      "reveal": "detail-backing.webp, generated reconstruction under precise semantic cut only"
+    },
+    {
+      "name": "waist-bell",
+      "polygon": [
+        [
+          394,
+          523
+        ],
+        [
+          403,
+          523
+        ],
+        [
+          402,
+          539
+        ],
+        [
+          410,
+          544
+        ],
+        [
+          416,
+          568
+        ],
+        [
+          418,
+          591
+        ],
+        [
+          421,
+          598
+        ],
+        [
+          408,
+          603
+        ],
+        [
+          382,
+          601
+        ],
+        [
+          375,
+          597
+        ],
+        [
+          378,
+          582
+        ],
+        [
+          382,
+          553
+        ],
+        [
+          389,
+          541
+        ]
+      ],
+      "root": 524,
+      "end": 603,
+      "vector": [
+        0,
+        0
+      ],
+      "delay": 0.8,
+      "material": "metal-bell",
+      "rootOnly": true,
+      "seam": 0,
+      "rigid": true,
+      "pivot": [
+        398,
+        524
+      ],
+      "rotation": 0.018,
+      "file": "waist-bell.webp",
+      "crop": [
+        367,
+        515,
+        62,
+        95
+      ],
+      "parent": "belt/seal attachment remains fixed",
+      "reveal": "detail-backing.webp: white robe or orange tabard reconstructed beneath attachment"
+    },
+    {
+      "name": "seal-ribbon-left",
+      "polygon": [
+        [
+          551,
+          544
+        ],
+        [
+          559,
+          545
+        ],
+        [
+          557,
+          585
+        ],
+        [
+          552,
+          594
+        ],
+        [
+          549,
+          590
+        ]
+      ],
+      "root": 545,
+      "end": 594,
+      "vector": [
+        1,
+        0.25
+      ],
+      "delay": 0.85,
+      "material": "ribbon",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "seal-ribbon-left.webp",
+      "crop": [
+        541,
+        536,
+        27,
+        67
+      ],
+      "parent": "belt/seal attachment remains fixed",
+      "reveal": "detail-backing.webp: white robe or orange tabard reconstructed beneath attachment"
+    },
+    {
+      "name": "seal-ribbon-right",
+      "polygon": [
+        [
+          559,
+          544
+        ],
+        [
+          568,
+          544
+        ],
+        [
+          568,
+          596
+        ],
+        [
+          563,
+          604
+        ],
+        [
+          559,
+          596
+        ]
+      ],
+      "root": 545,
+      "end": 603,
+      "vector": [
+        1.2,
+        0.3
+      ],
+      "delay": 1.05,
+      "material": "ribbon",
+      "rootOnly": true,
+      "seam": 0,
+      "file": "seal-ribbon-right.webp",
+      "crop": [
+        551,
+        536,
+        26,
+        77
+      ],
+      "parent": "belt/seal attachment remains fixed",
+      "reveal": "detail-backing.webp: white robe or orange tabard reconstructed beneath attachment"
+    }
+  ],
+  "fixed": [
+    "Existing shoulder, elbow and wrist bones keep staff and book contact."
+  ],
+  "repair": "detail-backing.webp",
+  "status": "source registration, native rest/crest and dedicated scene snapshots checked; continuous playback and final product acceptance not claimed"
+}

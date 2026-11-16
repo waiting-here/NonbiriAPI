@@ -18,7 +18,9 @@
     "o": "backgrounds/o.webp",
     "p": "backgrounds/p.webp",
     "q": "backgrounds/q.webp",
-    "s": "backgrounds/s.webp"
+    "s": "backgrounds/s.webp",
+    "t": "backgrounds/t.webp",
+    "u": "backgrounds/u.webp"
   },
   "characters": {
     "a-chatgpt": "layers/a-chatgpt.webp",
@@ -84,7 +86,15 @@
     "q-glm": "motion/q-glm/hero.webp",
     "r-chatgpt": "motion/r-chatgpt/hero.webp",
     "s-chatgpt": "motion/s-chatgpt/hero.webp",
-    "s-claude": "motion/s-claude/hero.webp"
+    "s-claude": "motion/s-claude/hero.webp",
+    "t-chatgpt": "motion/t-chatgpt/hero.webp",
+    "t-claude": "motion/t-claude/hero.webp",
+    "t-glm": "motion/t-glm/hero.webp",
+    "t-deepseek": "motion/t-deepseek/hero.webp",
+    "t-gemini": "motion/t-gemini/hero.webp",
+    "u-gemini": "motion/u-gemini/hero.webp",
+    "u-glm": "motion/u-glm/hero.webp",
+    "u-deepseek": "motion/u-deepseek/hero.webp"
   },
   "cards": {
     "a-chatgpt": {
@@ -1248,6 +1258,12 @@
         "reflection": "motion/n-gemini/appearance-reflection.webp",
         "light": "motion/n-gemini/appearance-light.webp",
         "layout": "independent viewport placement with the same mirror mask, fingertip position and floor contact as animation"
+      },
+      "material_layers": {
+        "manifest": "motion/n-gemini/material-layers/manifest.json",
+        "registration": "Native source coordinates; independently extracted free silhouettes with fixed authored seams and contact points.",
+        "motion": "Delayed breeze, fabric settling and locally attached ornaments; cards, Heartfelt moments and light/dark appearances share the same rig.",
+        "quality": "Native material plates shared at both display qualities; resampled derivatives add no native detail."
       }
     },
     "o-claude": {
@@ -1314,6 +1330,14 @@
       "background": "backgrounds/p.webp",
       "character": "motion/p-claude/hero.webp",
       "scene": "elopement",
+      "appearance_sky": {
+        "manifest": "motion/p-claude/daylight-sky/manifest.json",
+        "clouds": "motion/p-claude/daylight-sky/clouds-{light,dark}.webp",
+        "visibility": "motion/p-claude/daylight-sky/visibility-{light,dark}.webp",
+        "registration": "1536 by 1024 station, fixed roof and wire visibility in the top-left 960 by 352 region",
+        "motion": "continuous rightward clouds, intermittent distant birds and localized wet-rail light",
+        "high_resolution": "matching hires paths use two-times sampling from the existing scenery derivatives and shared sky repairs"
+      },
       "inputs": [
         "motion/p-claude/background-light.webp",
         "motion/p-claude/background-dark.webp",
@@ -1423,7 +1447,7 @@
           1488
         ],
         "character_content_height": 1448,
-        "layout": "independent viewport placement shared by static and animated appearance"
+        "layout": "Shared static/animated viewport placement; adult scale follows both viewport height and console projection; desktop wide views crop the lower body instead of shrinking it against the furniture."
       },
       "resolution": {
         "background_native": [
@@ -1440,6 +1464,38 @@
           1448
         ],
         "character_high_method": "native plates shared by both display qualities"
+      },
+      "landscape_registration": {
+        "canvas": [
+          1536,
+          864
+        ],
+        "background": [
+          0,
+          -160,
+          1
+        ],
+        "illustration": {
+          "character": [
+            780,
+            26,
+            0.55
+          ]
+        },
+        "cover": {
+          "character": [
+            785,
+            12,
+            0.57
+          ]
+        },
+        "ground": "Supporting forefoot and stiletto heel remain inside the marble floor; raised far foot is preserved."
+      },
+      "material_layers": {
+        "manifest": "motion/q-glm/material-layers/manifest.json",
+        "registration": "Native source coordinates; independently extracted free silhouettes with fixed authored seams and contact points.",
+        "motion": "Delayed breeze, fabric settling and locally attached ornaments; cards, Heartfelt moments and light/dark appearances share the same rig.",
+        "quality": "Native material plates shared at both display qualities; resampled derivatives add no native detail."
       }
     },
     "r-chatgpt": {
@@ -1447,6 +1503,16 @@
       "background": "backgrounds/r.webp",
       "character": "motion/r-chatgpt/hero.webp",
       "scene": "tomorrow",
+      "sky_layers": {
+        "paths": "motion/r-chatgpt/sky-{light,dark}/{clear,sky-mask,high-clouds,low-clouds}.webp",
+        "native_size": [
+          1672,
+          380
+        ],
+        "registration": "top 380 pixels of the 1672 by 941 scenery; fixed foliage, roof and mountain occlusion",
+        "motion": "independent advecting cloud decks and occasional masked distant birds",
+        "quality": "same native layers at both display qualities"
+      },
       "inputs": [
         "motion/r-chatgpt/background-light.webp",
         "motion/r-chatgpt/background-dark.webp",
@@ -1501,6 +1567,12 @@
           2160
         ],
         "high_method": "resampling; no additional native detail"
+      },
+      "material_layers": {
+        "manifest": "motion/r-chatgpt/material-layers/manifest.json",
+        "registration": "Native source coordinates; independently extracted free silhouettes with fixed authored seams and contact points.",
+        "motion": "Delayed breeze, fabric settling and locally attached ornaments; cards, Heartfelt moments and light/dark appearances share the same rig.",
+        "quality": "Native material plates shared at both display qualities; resampled derivatives add no native detail."
       }
     },
     "s-chatgpt": {
@@ -1529,6 +1601,35 @@
           "hero": "moment/s-chatgpt/hero.webp",
           "half": "moment/s-chatgpt/half.webp",
           "closed": "moment/s-chatgpt/closed.webp"
+        },
+        "scene": {
+          "path": "moment/s-chatgpt/background.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                -98,
+                -207,
+                1129,
+                1536
+              ],
+              "anchor": [
+                512,
+                1515
+              ],
+              "floor": 0.98
+            }
+          }
         }
       }
     },
@@ -1543,18 +1644,852 @@
       "characterFit": "full-canvas",
       "moment_layers": {
         "scene": {
+          "path": "moment/s-claude/viewport-background.webp",
           "canvas": [
-            2731,
-            1536
+            3072,
+            1024
           ],
           "originalRegion": {
-            "x": 1707,
+            "x": 2555,
+            "y": 175,
+            "width": 512,
+            "height": 768
+          },
+          "highResolutionWidth": 6144,
+          "viewport": {
+            "shadow": "motion/s-claude/moment-shadow.webp"
+          }
+        }
+      }
+    },
+    "t-chatgpt": {
+      "background": "motion/t-chatgpt/background.webp",
+      "character": "motion/t-chatgpt/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/t-moment.webp",
+          "canvas": [
+            1536,
+            1024
+          ],
+          "originalRegion": {
+            "x": 0,
             "y": 0,
             "width": 1024,
             "height": 1536
           },
-          "path": "moment/s-claude/background.webp",
-          "highResolutionWidth": 3840
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                125,
+                73,
+                914,
+                1466
+              ],
+              "anchor": [
+                512,
+                1456
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-chatgpt/moment-shadow.webp"
+          }
+        }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-chatgpt/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-hair",
+          "label": "左侧发束",
+          "path": "motion/t-chatgpt/parts/left-hair.webp",
+          "region": [
+            97,
+            296,
+            345,
+            695
+          ]
+        },
+        {
+          "name": "right-hair",
+          "label": "右侧发束",
+          "path": "motion/t-chatgpt/parts/right-hair.webp",
+          "region": [
+            630,
+            288,
+            306,
+            843
+          ]
+        },
+        {
+          "name": "left-cape",
+          "label": "左侧披纱",
+          "path": "motion/t-chatgpt/parts/left-cape.webp",
+          "region": [
+            179,
+            551,
+            254,
+            642
+          ]
+        },
+        {
+          "name": "right-cape",
+          "label": "右侧披纱",
+          "path": "motion/t-chatgpt/parts/right-cape.webp",
+          "region": [
+            633,
+            643,
+            236,
+            526
+          ]
+        },
+        {
+          "name": "free-skirt",
+          "label": "外层裙摆",
+          "path": "motion/t-chatgpt/parts/free-skirt.webp",
+          "region": [
+            341,
+            612,
+            454,
+            249
+          ]
+        },
+        {
+          "name": "cloud",
+          "label": "云朵陪伴物",
+          "path": "motion/t-chatgpt/parts/cloud.webp",
+          "region": [
+            180,
+            184,
+            223,
+            184
+          ]
+        },
+        {
+          "name": "right-emerald",
+          "label": "右发梢翡翠坠饰",
+          "path": "motion/t-chatgpt/parts/right-emerald.webp",
+          "region": [
+            763,
+            1054,
+            75,
+            96
+          ]
+        },
+        {
+          "name": "left-emerald",
+          "label": "左发梢翡翠坠饰",
+          "path": "motion/t-chatgpt/parts/left-emerald.webp",
+          "region": [
+            109,
+            944,
+            71,
+            90
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-chatgpt/parts/window-mask.webp",
+        "motion/t-chatgpt/parts/lamp-mask.webp"
+      ],
+      "face_registration": {
+        "reference": "Established character portrait and earlier card identity",
+        "adopted_region": "Localized face identity, with a subsequent registered posture and complexion refinement",
+        "eye_states": "Fresh closed-eye painting and individually registered open/half/closed contours",
+        "derivatives": "Standard and high-resolution portrait, body layer, thumbnail, five-character illustration and pool cover"
+      },
+      "posture_registration": {
+        "source": "Registered local waist, pelvis and stocking-contour refinement",
+        "fixed": "Established face shape, hands, upper costume and shoe contact positions retained",
+        "complexion": "Exposed skin harmonized to a light warm-peach palette while preserving original painted shading and detail; stockings retain their fabric color",
+        "motion": "Refined thigh boundary included in the fixed body mask; standard, high-resolution, closed-eye and group derivatives share the adopted registration"
+      }
+    },
+    "t-claude": {
+      "background": "motion/t-claude/background.webp",
+      "character": "motion/t-claude/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/t-moment.webp",
+          "canvas": [
+            1536,
+            1024
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                96,
+                75,
+                905,
+                1449
+              ],
+              "anchor": [
+                512,
+                1439
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-claude/moment-shadow.webp"
+          }
+        }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物、内搭与座椅",
+          "path": "motion/t-claude/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "right-curls",
+          "label": "右侧卷发",
+          "path": "motion/t-claude/parts/right-curls.webp",
+          "region": [
+            642,
+            296,
+            163,
+            475
+          ]
+        },
+        {
+          "name": "left-curls",
+          "label": "左侧卷发",
+          "path": "motion/t-claude/parts/left-curls.webp",
+          "region": [
+            131,
+            286,
+            279,
+            503
+          ]
+        },
+        {
+          "name": "gown-bodice",
+          "label": "裙装上身与固定接缝",
+          "path": "motion/t-claude/parts/gown-bodice.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "front-skirt",
+          "label": "正面长裙",
+          "path": "motion/t-claude/parts/front-skirt.webp",
+          "region": [
+            377,
+            787,
+            419,
+            636
+          ]
+        },
+        {
+          "name": "right-train",
+          "label": "右侧裙纱",
+          "path": "motion/t-claude/parts/right-train.webp",
+          "region": [
+            700,
+            779,
+            234,
+            636
+          ]
+        },
+        {
+          "name": "left-train",
+          "label": "左侧裙纱",
+          "path": "motion/t-claude/parts/left-train.webp",
+          "region": [
+            90,
+            732,
+            357,
+            685
+          ]
+        },
+        {
+          "name": "right-sleeve",
+          "label": "右侧薄纱袖",
+          "path": "motion/t-claude/parts/right-sleeve.webp",
+          "region": [
+            622,
+            512,
+            136,
+            230
+          ]
+        },
+        {
+          "name": "left-sleeve",
+          "label": "左侧薄纱袖",
+          "path": "motion/t-claude/parts/left-sleeve.webp",
+          "region": [
+            279,
+            468,
+            246,
+            253
+          ]
+        },
+        {
+          "name": "front",
+          "label": "手、书本与前景发丝",
+          "path": "motion/t-claude/parts/front.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-claude/parts/window-mask.webp",
+        "motion/t-claude/parts/lamp-mask.webp"
+      ]
+    },
+    "t-glm": {
+      "background": "motion/t-glm/background.webp",
+      "character": "motion/t-glm/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/t-moment.webp",
+          "canvas": [
+            1536,
+            1024
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                117,
+                76,
+                919,
+                1457
+              ],
+              "anchor": [
+                512,
+                1447
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-glm/moment-shadow.webp"
+          }
+        }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-glm/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-hair",
+          "label": "左侧发束",
+          "path": "motion/t-glm/parts/left-hair.webp",
+          "region": [
+            104,
+            419,
+            342,
+            434
+          ]
+        },
+        {
+          "name": "right-hair",
+          "label": "右侧发束",
+          "path": "motion/t-glm/parts/right-hair.webp",
+          "region": [
+            646,
+            303,
+            299,
+            508
+          ]
+        },
+        {
+          "name": "left-stole",
+          "label": "左侧披肩",
+          "path": "motion/t-glm/parts/left-stole.webp",
+          "region": [
+            229,
+            544,
+            209,
+            470
+          ]
+        },
+        {
+          "name": "right-stole",
+          "label": "右侧披肩",
+          "path": "motion/t-glm/parts/right-stole.webp",
+          "region": [
+            635,
+            607,
+            201,
+            432
+          ]
+        },
+        {
+          "name": "left-dress-hem",
+          "label": "侧边裙片",
+          "path": "motion/t-glm/parts/left-dress-hem.webp",
+          "region": [
+            293,
+            753,
+            215,
+            497
+          ]
+        },
+        {
+          "name": "right-bell",
+          "label": "右披肩铃铛",
+          "path": "motion/t-glm/parts/right-bell.webp",
+          "region": [
+            718,
+            931,
+            84,
+            84
+          ]
+        },
+        {
+          "name": "left-bell",
+          "label": "左披肩铃铛",
+          "path": "motion/t-glm/parts/left-bell.webp",
+          "region": [
+            265,
+            915,
+            80,
+            78
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-glm/parts/window-mask.webp",
+        "motion/t-glm/parts/lamp-mask.webp"
+      ]
+    },
+    "t-deepseek": {
+      "background": "motion/t-deepseek/background.webp",
+      "character": "motion/t-deepseek/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/t-moment.webp",
+          "canvas": [
+            1536,
+            1024
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                77,
+                76,
+                894,
+                1455
+              ],
+              "anchor": [
+                512,
+                1445
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-deepseek/moment-shadow.webp"
+          }
+        }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-deepseek/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-hair",
+          "label": "左侧发束",
+          "path": "motion/t-deepseek/parts/left-hair.webp",
+          "region": [
+            93,
+            291,
+            341,
+            398
+          ]
+        },
+        {
+          "name": "right-hair",
+          "label": "右侧发束",
+          "path": "motion/t-deepseek/parts/right-hair.webp",
+          "region": [
+            609,
+            285,
+            312,
+            476
+          ]
+        },
+        {
+          "name": "left-dress-panels",
+          "label": "左侧层叠裙片",
+          "path": "motion/t-deepseek/parts/left-dress-panels.webp",
+          "region": [
+            202,
+            623,
+            283,
+            464
+          ]
+        },
+        {
+          "name": "right-dress-panels",
+          "label": "右侧层叠裙片",
+          "path": "motion/t-deepseek/parts/right-dress-panels.webp",
+          "region": [
+            613,
+            621,
+            230,
+            453
+          ]
+        },
+        {
+          "name": "tail-flukes",
+          "label": "鲸尾与尾鳍",
+          "path": "motion/t-deepseek/parts/tail-flukes.webp",
+          "region": [
+            65,
+            561,
+            329,
+            357
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-deepseek/parts/window-mask.webp",
+        "motion/t-deepseek/parts/lamp-mask.webp"
+      ]
+    },
+    "t-gemini": {
+      "background": "motion/t-gemini/background.webp",
+      "character": "motion/t-gemini/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/t-moment.webp",
+          "canvas": [
+            1536,
+            1024
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3072,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                81,
+                79,
+                928,
+                1453
+              ],
+              "anchor": [
+                512,
+                1443
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/t-gemini/moment-shadow.webp"
+          }
+        }
+      },
+      "motion_layers": [
+        {
+          "name": "body",
+          "label": "人物与固定部件",
+          "path": "motion/t-gemini/parts/body.webp",
+          "region": [
+            0,
+            0,
+            1024,
+            1536
+          ]
+        },
+        {
+          "name": "left-rainbow-hair",
+          "label": "左侧虹彩长发",
+          "path": "motion/t-gemini/parts/left-rainbow-hair.webp",
+          "region": [
+            50,
+            436,
+            388,
+            527
+          ]
+        },
+        {
+          "name": "right-rainbow-hair",
+          "label": "右侧虹彩长发",
+          "path": "motion/t-gemini/parts/right-rainbow-hair.webp",
+          "region": [
+            658,
+            358,
+            297,
+            556
+          ]
+        },
+        {
+          "name": "left-dress-train",
+          "label": "长裙拖尾",
+          "path": "motion/t-gemini/parts/left-dress-train.webp",
+          "region": [
+            202,
+            700,
+            315,
+            521
+          ]
+        },
+        {
+          "name": "free-blue-ribbon",
+          "label": "独立蓝色飘带",
+          "path": "motion/t-gemini/parts/free-blue-ribbon.webp",
+          "region": [
+            652,
+            744,
+            141,
+            291
+          ]
+        },
+        {
+          "name": "held-star",
+          "label": "悬挂星饰与蝴蝶结",
+          "path": "motion/t-gemini/parts/held-star.webp",
+          "region": [
+            268,
+            295,
+            110,
+            144
+          ]
+        }
+      ],
+      "environment_masks": [
+        "motion/t-gemini/parts/window-mask.webp",
+        "motion/t-gemini/parts/lamp-mask.webp"
+      ]
+    },
+    "u-gemini": {
+      "background": "motion/u-gemini/background.webp",
+      "character": "motion/u-gemini/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "character_rect": [
+        0,
+        0,
+        1024,
+        1536
+      ],
+      "eye_states": "motion/u-gemini/closed.webp",
+      "motion": "Registered eyelids, pinned accessory tips, independently phased stage spots, curtain washes, lamps, floor projection and occasional party ribbon launches with complete fade-out",
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/u.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                116,
+                6,
+                903,
+                1503
+              ],
+              "anchor": [
+                512,
+                1494
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/u-gemini/moment-shadow.webp"
+          }
+        }
+      }
+    },
+    "u-glm": {
+      "background": "motion/u-glm/background.webp",
+      "character": "motion/u-glm/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "character_rect": [
+        0,
+        0,
+        1024,
+        1536
+      ],
+      "eye_states": "motion/u-glm/closed.webp",
+      "motion": "Registered eyelids, pinned accessory tips, independently phased stage spots, curtain washes, lamps, floor projection and occasional party ribbon launches with complete fade-out",
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/u.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                102,
+                27,
+                961,
+                1505
+              ],
+              "anchor": [
+                512,
+                1495
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/u-glm/moment-shadow.webp"
+          }
+        }
+      }
+    },
+    "u-deepseek": {
+      "background": "motion/u-deepseek/background.webp",
+      "character": "motion/u-deepseek/hero.webp",
+      "canvas": [
+        1024,
+        1536
+      ],
+      "character_rect": [
+        0,
+        0,
+        1024,
+        1536
+      ],
+      "eye_states": "motion/u-deepseek/closed.webp",
+      "motion": "Registered eyelids, pinned accessory tips, independently phased stage spots, curtain washes, lamps, floor projection and occasional party ribbon launches with complete fade-out",
+      "backgroundFit": "full-canvas",
+      "characterFit": "full-canvas",
+      "moment_layers": {
+        "scene": {
+          "path": "backgrounds/u.webp",
+          "canvas": [
+            1672,
+            941
+          ],
+          "originalRegion": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 1536
+          },
+          "highResolutionWidth": 3344,
+          "viewport": {
+            "placement": {
+              "bounds": [
+                209,
+                8,
+                958,
+                1463
+              ],
+              "anchor": [
+                512,
+                1454
+              ],
+              "floor": 0.95
+            },
+            "shadow": "motion/u-deepseek/moment-shadow.webp"
+          }
         }
       }
     }
@@ -1685,6 +2620,27 @@
         941
       ],
       "fit": "full-canvas"
+    },
+    "t": {
+      "background": "backgrounds/t.webp",
+      "foreground": "layers/groups/t-foreground.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
+    },
+    "u": {
+      "path": "groups/u.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "members": [
+        "u-gemini",
+        "u-glm",
+        "u-deepseek"
+      ]
     }
   },
   "covers": {
@@ -1759,9 +2715,30 @@
         941
       ],
       "fit": "full-canvas"
+    },
+    "t": {
+      "background": "backgrounds/covers/t.webp",
+      "foreground": "layers/covers/t-foreground.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "fit": "full-canvas"
+    },
+    "u": {
+      "path": "covers/u.webp",
+      "canvas": [
+        1672,
+        941
+      ],
+      "members": [
+        "u-gemini",
+        "u-glm",
+        "u-deepseek"
+      ]
     }
   },
-  "sampling": "Lanczos3; generated native 1024x1536 portraits and approximately 1672x941 landscapes; larger derivatives do not add native detail.",
+  "sampling": "Lanczos3 unless the theme records a different method below; larger derivatives do not add native detail.",
   "compositing": "Background first, then registered transparent foreground using source-over. Existing rare cards retain their registered motion composition.",
   "seasonal": {
     "theme": "s",
@@ -1801,5 +2778,104 @@
     "eyeRegistration": "Same full-canvas coordinates; half and closed layers retain only the face region.",
     "scaling": "Portraits and group: same-source Lanczos resampling. Cover: existing enhanced foreground with the cleaned current alpha and the same adopted background. Large dimensions do not imply native added detail.",
     "contentRating": "r18"
+  },
+  "christmas": {
+    "theme": "t",
+    "nativeCharacters": [
+      1024,
+      1536
+    ],
+    "nativeBackground": [
+      1536,
+      1024
+    ],
+    "portraitRegistration": {
+      "x": 51.2,
+      "y": 76.8,
+      "width": 921.6,
+      "height": 1382.4
+    },
+    "landscapeRegistration": {
+      "group": [
+        [
+          "deepseek",
+          130,
+          100,
+          540
+        ],
+        [
+          "gemini",
+          1090,
+          100,
+          530
+        ],
+        [
+          "chatgpt",
+          350,
+          80,
+          550
+        ],
+        [
+          "glm",
+          835,
+          120,
+          530
+        ],
+        [
+          "claude",
+          620,
+          185,
+          500
+        ]
+      ],
+      "cover": [
+        [
+          "deepseek",
+          65,
+          -55,
+          605
+        ],
+        [
+          "gemini",
+          1100,
+          -45,
+          590
+        ],
+        [
+          "chatgpt",
+          350,
+          -30,
+          620
+        ],
+        [
+          "glm",
+          825,
+          -15,
+          605
+        ],
+        [
+          "claude",
+          600,
+          130,
+          590
+        ]
+      ]
+    },
+    "eyeStates": [
+      "hero.webp",
+      "closed.webp"
+    ],
+    "eyeRegistration": "Only registered eye pixels change; the original alpha and body remain shared.",
+    "scaling": "Canvas2D high-quality resampling; larger dimensions do not add native detail.",
+    "contentRating": "general",
+    "portraitRegistrationExceptions": {
+      "t-claude": {
+        "x": 0,
+        "y": 0,
+        "width": 1024,
+        "height": 1536
+      }
+    },
+    "layering": "Registered independent hair, cloth and accessories; opaque body and transparent gown for Claude; weather and light use room masks."
   }
 }

@@ -276,6 +276,12 @@ Initial HTTP 200 resets consecutive failures even if later transport/stream
 validation fails; those later failures still return/log normally and retain the
 ordinary protocol-completion and billing rules. A non-200 response with a valid
 hint does not increment consecutive failures, including zero or past deadlines.
+Without a valid hint, a verified Google Gemini high-demand/overloaded HTTP 503
+error gets a 60-second temporary cooldown and leaves the existing streak
+unchanged. This requires a complete structured Google error from the native
+connector or official host; arbitrary 503 and authentication/billing failures do
+not qualify. A valid header, including zero or a past deadline, takes priority.
+The upstream error remains visible and this does not start the quota-trial schedule.
 Other failures, except the recognized caller-parameter and input-length cases below, keep their ordinary counter behavior. This does not change automation authentication,
 creation limits, response budgets or failure-policy fields.
 

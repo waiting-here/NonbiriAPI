@@ -1,4 +1,5 @@
 import { makeArmRig } from './elopement-arm.js';
+import { anatomicalBreathShader, elopementBreath } from './anatomical-breath';
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const mix = (a, b, t) => a + (b - a) * t;
 // Eye openings are individually registered to the 1024 × 1536 source.
@@ -7,7 +8,7 @@ const eyes = [
   { cx: 508, cy: 148, width: 46, height: 20, angle: -0.25 },
 ];
 
-export function makeCharacterRenderer(images) {
+export function makeCharacterRenderer(images, materialLayers = false) {
   const armRig = makeArmRig(images);
   let cachedExtension = -1,
     cachedSmile = -1,
@@ -104,6 +105,7 @@ export function makeCharacterRenderer(images) {
         'precision mediump float; varying vec2 uv;',
         'uniform sampler2D art; uniform sampler2D weights; uniform sampler2D closed; uniform sampler2D lids;',
         'uniform float phase; uniform float blink; uniform vec4 leftEye; uniform vec4 rightEye;',
+        anatomicalBreathShader('ribBreath', elopementBreath),
         'vec4 eyelid(vec2 p,vec4 box,float row,vec4 original){',
         'if(blink<=0.)return original;vec2 q=(p-box.xy)/box.zw;if(q.x<=0.||q.x>=1.||q.y<=0.||q.y>=1.)return original;',
         'float sx=(q.x*47.+.5)/48.;vec4 o=texture2D(lids,vec2(sx,row));vec3 s=texture2D(lids,vec2(sx,row+.25)).rgb;float e=.015;',
@@ -115,7 +117,7 @@ export function makeCharacterRenderer(images) {
         'vec4 color=mix(original,rest,1.-aperture);float ribbon=smoothstep(top-e,top+e,q.y)*(1.-smoothstep(low-e,low+e,q.y));float along=clamp((q.y-top)/max(.005,low-top),0.,1.);',
         'vec2 fromOpen=vec2(p.x,box.y+mix(o.b,o.a,along)*box.w);vec2 fromClosed=vec2(p.x,box.y+mix(s.x,s.y,along)*box.w);',
         'color=mix(color,mix(texture2D(art,fromOpen),texture2D(closed,fromClosed),blink),ribbon);color=mix(color,texture2D(closed,p),smoothstep(.96,1.,blink));return mix(original,color,coverage);}',
-        'void main(){float w=texture2D(weights,uv).r;vec2 q=uv;q.x+=w*.0044*sin(phase*1.6-uv.y*4.);q.y+=w*.0014*sin(phase*1.6-uv.y*3.6);vec4 c=texture2D(art,q);c=eyelid(q,leftEye,.125,c);c=eyelid(q,rightEye,.625,c);gl_FragColor=vec4(c.rgb*c.a,c.a);}',
+        `void main(){float w=texture2D(weights,uv).r*${materialLayers ? '0.' : '1.'};vec2 q=uv;q.x+=w*.0044*sin(phase*1.6-uv.y*4.);q.y+=w*.0014*sin(phase*1.6-uv.y*3.6);${materialLayers ? 'q-=ribBreath(q,max(0.,phase-8.));' : ''}vec4 c=texture2D(art,q);c=eyelid(q,leftEye,.125,c);c=eyelid(q,rightEye,.625,c);gl_FragColor=vec4(c.rgb*c.a,c.a);}`,
       ].join('\n'),
     );
     program = gl.createProgram();

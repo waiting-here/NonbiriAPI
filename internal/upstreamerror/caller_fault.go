@@ -38,12 +38,13 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 	}
 	// Resource references, model selection, identity, storage and service tiers
 	// can fail because of upstream configuration or permissions. Unknown names
-	// and nested paths are deliberately outside this small generation list.
+	// and unrecognized nested paths remain outside this generation list.
 	switch param {
 	case "temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty",
 		"seed", "stop", "n", "logprobs", "top_logprobs", "logit_bias",
 		"max_tokens", "max_completion_tokens", "max_output_tokens", "reasoning_effort",
-		"reasoning", "verbosity", "response_format", "dimensions", "encoding_format",
+		"reasoning", "reasoning.effort", "thinking", "thinking.type", "thinking.budget_tokens",
+		"verbosity", "response_format", "dimensions", "encoding_format",
 		"size", "quality", "style", "output_format", "output_compression", "partial_images",
 		"aspect_ratio", "resolution", "steps", "cfg_scale", "negative_prompt", "async",
 		"speed", "language":

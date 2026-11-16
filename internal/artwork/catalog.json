@@ -257,6 +257,26 @@
       "rating": "r18",
       "scene": "illustration:s"
     },
+    "card:t-chatgpt": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-claude": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-glm": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-deepseek": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
+    "card:t-gemini": {
+      "rating": "general",
+      "scene": "illustration:t"
+    },
     "illustration:a": {
       "rating": "general"
     },
@@ -313,6 +333,9 @@
     },
     "illustration:s": {
       "rating": "r18"
+    },
+    "illustration:t": {
+      "rating": "general"
     },
     "cover:permanent": {
       "rating": "general",
@@ -371,13 +394,18 @@
     },
     "cover:r": {
       "rating": "general",
-      "name": "未命名的明天",
-      "name_en": "Tomorrow, Still Unwritten"
+      "name": "明天你好",
+      "name_en": "Hello, Tomorrow"
     },
     "cover:s": {
       "rating": "r18",
       "name": "糖夜迷藏",
       "name_en": "Sweet Hide-and-Seek"
+    },
+    "cover:t": {
+      "rating": "general",
+      "name": "雪夜赴约",
+      "name_en": "A Date in the Snow"
     },
     "appearance:default": {
       "rating": "general"
@@ -426,6 +454,26 @@
       "uses": [
         "card:r-chatgpt"
       ]
+    },
+    "card:u-gemini": {
+      "rating": "r18",
+      "scene": "illustration:u"
+    },
+    "card:u-glm": {
+      "rating": "r18",
+      "scene": "illustration:u"
+    },
+    "card:u-deepseek": {
+      "rating": "r18",
+      "scene": "illustration:u"
+    },
+    "illustration:u": {
+      "rating": "r18"
+    },
+    "cover:u": {
+      "rating": "r18",
+      "name": "安可谢礼",
+      "name_en": "Private Encore"
     }
   },
   "assets": [
@@ -480,6 +528,90 @@
       ]
     },
     {
+      "owner": "card:t-chatgpt",
+      "files": [
+        "cards/t-chatgpt.webp",
+        "hires/cards/t-chatgpt.webp",
+        "thumbs/t-chatgpt.webp"
+      ],
+      "prefixes": [
+        "motion/t-chatgpt/",
+        "hires/motion/t-chatgpt/"
+      ]
+    },
+    {
+      "owner": "card:t-claude",
+      "files": [
+        "cards/t-claude.webp",
+        "hires/cards/t-claude.webp",
+        "thumbs/t-claude.webp"
+      ],
+      "prefixes": [
+        "motion/t-claude/",
+        "hires/motion/t-claude/"
+      ]
+    },
+    {
+      "owner": "card:t-glm",
+      "files": [
+        "cards/t-glm.webp",
+        "hires/cards/t-glm.webp",
+        "thumbs/t-glm.webp"
+      ],
+      "prefixes": [
+        "motion/t-glm/",
+        "hires/motion/t-glm/"
+      ]
+    },
+    {
+      "owner": "card:t-deepseek",
+      "files": [
+        "cards/t-deepseek.webp",
+        "hires/cards/t-deepseek.webp",
+        "thumbs/t-deepseek.webp"
+      ],
+      "prefixes": [
+        "motion/t-deepseek/",
+        "hires/motion/t-deepseek/"
+      ]
+    },
+    {
+      "owner": "card:t-gemini",
+      "files": [
+        "cards/t-gemini.webp",
+        "hires/cards/t-gemini.webp",
+        "thumbs/t-gemini.webp"
+      ],
+      "prefixes": [
+        "motion/t-gemini/",
+        "hires/motion/t-gemini/"
+      ]
+    },
+    {
+      "owner": "illustration:t",
+      "files": [
+        "groups/t.webp",
+        "hires/groups/t.webp",
+        "backgrounds/t.webp",
+        "hires/backgrounds/t.webp",
+        "layers/groups/t-foreground.webp",
+        "hires/layers/groups/t-foreground.webp",
+        "backgrounds/t-moment.webp",
+        "hires/backgrounds/t-moment.webp"
+      ]
+    },
+    {
+      "owner": "cover:t",
+      "files": [
+        "covers/t.webp",
+        "hires/covers/t.webp",
+        "backgrounds/covers/t.webp",
+        "hires/backgrounds/covers/t.webp",
+        "layers/covers/t-foreground.webp",
+        "hires/layers/covers/t-foreground.webp"
+      ]
+    },
+    {
       "owner": "appearance:amber",
       "files": [
         "appearances/amber-dark.webp",
@@ -513,6 +645,12 @@
         "appearances/layers/hires/celestial-light-hero.webp",
         "hires/appearances/celestial-dark.webp",
         "hires/appearances/celestial-light.webp"
+      ],
+      "prefixes": [
+        "appearances/layers/celestial-dark/",
+        "appearances/layers/celestial-light/",
+        "appearances/layers/hires/celestial-dark/",
+        "appearances/layers/hires/celestial-light/"
       ]
     },
     {
@@ -582,6 +720,12 @@
         "appearances/wandering-light.webp",
         "hires/appearances/wandering-dark.webp",
         "hires/appearances/wandering-light.webp"
+      ],
+      "prefixes": [
+        "appearances/layers/wandering-dark/",
+        "appearances/layers/wandering-light/",
+        "appearances/layers/hires/wandering-dark/",
+        "appearances/layers/hires/wandering-light/"
       ]
     },
     {
@@ -1701,6 +1845,60 @@
       "files": [
         "covers/r.webp",
         "hires/covers/r.webp"
+      ]
+    },
+    {
+      "owner": "card:u-gemini",
+      "files": [
+        "cards/u-gemini.webp",
+        "hires/cards/u-gemini.webp",
+        "thumbs/u-gemini.webp"
+      ],
+      "prefixes": [
+        "motion/u-gemini/",
+        "hires/motion/u-gemini/"
+      ]
+    },
+    {
+      "owner": "card:u-glm",
+      "files": [
+        "cards/u-glm.webp",
+        "hires/cards/u-glm.webp",
+        "thumbs/u-glm.webp"
+      ],
+      "prefixes": [
+        "motion/u-glm/",
+        "hires/motion/u-glm/"
+      ]
+    },
+    {
+      "owner": "card:u-deepseek",
+      "files": [
+        "cards/u-deepseek.webp",
+        "hires/cards/u-deepseek.webp",
+        "thumbs/u-deepseek.webp"
+      ],
+      "prefixes": [
+        "motion/u-deepseek/",
+        "hires/motion/u-deepseek/"
+      ]
+    },
+    {
+      "owner": "illustration:u",
+      "files": [
+        "groups/u.webp",
+        "hires/groups/u.webp",
+        "backgrounds/u.webp",
+        "hires/backgrounds/u.webp",
+        "appearances/encore-light.webp",
+        "appearances/encore-dark.webp"
+      ]
+    },
+    {
+      "owner": "cover:u",
+      "files": [
+        "covers/u.webp",
+        "hires/covers/u.webp"
       ]
     }
   ]

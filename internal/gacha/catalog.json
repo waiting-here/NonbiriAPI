@@ -146,8 +146,8 @@
       "name_en": "Across the Mirror Sea",
       "rarity": "SP",
       "source": "limited",
-      "tagline": "这一次，想越过镜面亲吻你。",
-      "tagline_en": "This time, I want to cross the mirror and kiss you.",
+      "tagline": "这一次，也想越过镜面亲吻你。",
+      "tagline_en": "This time, too, I want to cross the mirror and kiss you.",
       "art": "/assets/gacha/groups/n.webp",
       "appearance": "mirrorsea"
     },
@@ -186,8 +186,8 @@
     },
     {
       "id": "r",
-      "name": "未命名的明天",
-      "name_en": "Tomorrow, Still Unwritten",
+      "name": "明天你好",
+      "name_en": "Hello, Tomorrow",
       "rarity": "SP",
       "source": "limited",
       "tagline": "把昨天放进背包，向还没有答案的明天出发。",
@@ -204,6 +204,26 @@
       "tagline": "找到我，今晚的糖分你一半。",
       "tagline_en": "Find me, and half of tonight's candy is yours.",
       "art": "/assets/gacha/groups/s.webp"
+    },
+    {
+      "id": "t",
+      "name": "雪夜赴约",
+      "name_en": "A Date in the Snow",
+      "rarity": "SSR",
+      "source": "limited",
+      "tagline": "雪还在下，我们在灯下等你赴约。",
+      "tagline_en": "The snow is still falling. We'll be under the lights, waiting for you.",
+      "art": "/assets/gacha/groups/t.webp"
+    },
+    {
+      "id": "u",
+      "name": "安可谢礼",
+      "name_en": "Private Encore",
+      "rarity": "SSR",
+      "source": "limited",
+      "tagline": "掌声渐远，这一首只唱给你。",
+      "tagline_en": "The applause fades. This last song is just for you.",
+      "art": "/assets/gacha/groups/u.webp"
     }
   ],
   "cards": [
@@ -888,8 +908,8 @@
       "id": "r-chatgpt",
       "theme": "r",
       "character": "ChatGPT",
-      "name": "未命名的明天·ChatGPT",
-      "name_en": "Tomorrow, Still Unwritten · ChatGPT",
+      "name": "明天你好·ChatGPT",
+      "name_en": "Hello, Tomorrow · ChatGPT",
       "rarity": "SP",
       "source": "limited",
       "art": "/assets/gacha/cards/r-chatgpt.webp",
@@ -917,6 +937,94 @@
       "source": "limited",
       "art": "/assets/gacha/cards/s-claude.webp",
       "thumb": "/assets/gacha/thumbs/s-claude.webp"
+    },
+    {
+      "id": "t-chatgpt",
+      "theme": "t",
+      "character": "ChatGPT",
+      "name": "雪夜赴约·ChatGPT",
+      "name_en": "A Date in the Snow · ChatGPT",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-chatgpt.webp",
+      "thumb": "/assets/gacha/thumbs/t-chatgpt.webp"
+    },
+    {
+      "id": "t-claude",
+      "theme": "t",
+      "character": "Claude",
+      "name": "雪夜赴约·Claude",
+      "name_en": "A Date in the Snow · Claude",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-claude.webp",
+      "thumb": "/assets/gacha/thumbs/t-claude.webp"
+    },
+    {
+      "id": "t-glm",
+      "theme": "t",
+      "character": "GLM",
+      "name": "雪夜赴约·GLM",
+      "name_en": "A Date in the Snow · GLM",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-glm.webp",
+      "thumb": "/assets/gacha/thumbs/t-glm.webp"
+    },
+    {
+      "id": "t-deepseek",
+      "theme": "t",
+      "character": "DeepSeek",
+      "name": "雪夜赴约·DeepSeek",
+      "name_en": "A Date in the Snow · DeepSeek",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-deepseek.webp",
+      "thumb": "/assets/gacha/thumbs/t-deepseek.webp"
+    },
+    {
+      "id": "t-gemini",
+      "theme": "t",
+      "character": "Gemini",
+      "name": "雪夜赴约·Gemini",
+      "name_en": "A Date in the Snow · Gemini",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/t-gemini.webp",
+      "thumb": "/assets/gacha/thumbs/t-gemini.webp"
+    },
+    {
+      "id": "u-gemini",
+      "theme": "u",
+      "character": "Gemini",
+      "name": "安可谢礼·Gemini",
+      "name_en": "Private Encore · Gemini",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/u-gemini.webp",
+      "thumb": "/assets/gacha/thumbs/u-gemini.webp"
+    },
+    {
+      "id": "u-glm",
+      "theme": "u",
+      "character": "GLM",
+      "name": "安可谢礼·GLM",
+      "name_en": "Private Encore · GLM",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/u-glm.webp",
+      "thumb": "/assets/gacha/thumbs/u-glm.webp"
+    },
+    {
+      "id": "u-deepseek",
+      "theme": "u",
+      "character": "DeepSeek",
+      "name": "安可谢礼·DeepSeek",
+      "name_en": "Private Encore · DeepSeek",
+      "rarity": "SSR",
+      "source": "limited",
+      "art": "/assets/gacha/cards/u-deepseek.webp",
+      "thumb": "/assets/gacha/thumbs/u-deepseek.webp"
     }
   ]
 }

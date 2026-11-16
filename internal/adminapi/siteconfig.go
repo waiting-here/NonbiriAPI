@@ -113,6 +113,8 @@ const (
 	KeyCharityTokenReserveMilli      = "charity_token_reserve_milli"
 	KeyAnthropicDefaultMaxTokens     = "anthropic_default_max_tokens"
 	KeyGatewayUserAttributionEnabled = "gateway_user_attribution_enabled"
+	KeyNonStreamKeepaliveEnabled     = "non_stream_keepalive_enabled"
+	KeyNonStreamKeepaliveInterval    = "non_stream_keepalive_interval_seconds"
 	KeyAnnouncementEpoch             = "announcement_epoch"
 	KeyLevelDisplayName1             = "level_display_name_1"
 	KeyLevelDisplayName2             = "level_display_name_2"
@@ -315,6 +317,8 @@ var knownSiteConfig = func() map[string]keySpec {
 
 		KeyRegistrationOpen:              {kind: kindBool, def: 1},
 		KeyGatewayUserAttributionEnabled: {kind: kindBool, def: 0},
+		KeyNonStreamKeepaliveEnabled:     {kind: kindBool, def: 0},
+		KeyNonStreamKeepaliveInterval:    {kind: kindInt, min: 5, max: 120, def: 60},
 		KeySiteTimezoneOffsetMinutes:     {kind: kindTimezoneOffset},
 		KeyLevelThreshold2Milli:          {kind: kindAmount},
 		KeyLevelThreshold3Milli:          {kind: kindAmount},

@@ -152,7 +152,9 @@ it.each([
       'src',
       `/assets/gacha/motion/${id}/appearance-hero-dark.webp`,
     );
-    expect(parseFloat(character.style.top)).toBeGreaterThan(136);
+    // Hair can extend above the face; navigation must leave the painted face clear.
+    const faceTop = parseFloat(character.style.top) + parseFloat(character.style.height) * 0.13;
+    expect(faceTop).toBeGreaterThan(136);
     expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
     view.unmount();
   },

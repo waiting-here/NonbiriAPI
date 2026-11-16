@@ -1,0 +1,1751 @@
+{
+  "version": 1,
+  "canvas": [
+    1024,
+    1536
+  ],
+  "source": "body.webp",
+  "sourceSha256": "3a4c63068885b49c8ccaa8327af2954748dfbbc92dd10702bdda24578e0db876",
+  "cycle": 24,
+  "layers": [
+    {
+      "name": "hair-left-upper",
+      "polygon": [
+        [
+          246,
+          326
+        ],
+        [
+          291,
+          327
+        ],
+        [
+          309,
+          384
+        ],
+        [
+          289,
+          441
+        ],
+        [
+          243,
+          486
+        ],
+        [
+          166,
+          533
+        ],
+        [
+          92,
+          528
+        ],
+        [
+          84,
+          457
+        ],
+        [
+          134,
+          384
+        ]
+      ],
+      "vector": [
+        6,
+        -3
+      ],
+      "root": 330,
+      "end": 530,
+      "delay": 0.2,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            340,
+            805
+          ],
+          [
+            470,
+            817
+          ],
+          [
+            551,
+            853
+          ],
+          [
+            634,
+            897
+          ],
+          [
+            688,
+            1060
+          ],
+          [
+            785,
+            1535
+          ],
+          [
+            315,
+            1535
+          ],
+          [
+            310,
+            1250
+          ],
+          [
+            420,
+            1170
+          ],
+          [
+            401,
+            1030
+          ],
+          [
+            354,
+            928
+          ]
+        ],
+        [
+          [
+            292,
+            305
+          ],
+          [
+            383,
+            302
+          ],
+          [
+            399,
+            350
+          ],
+          [
+            365,
+            433
+          ],
+          [
+            334,
+            491
+          ],
+          [
+            301,
+            444
+          ]
+        ],
+        [
+          [
+            422,
+            574
+          ],
+          [
+            487,
+            566
+          ],
+          [
+            508,
+            620
+          ],
+          [
+            477,
+            656
+          ],
+          [
+            435,
+            641
+          ]
+        ],
+        [
+          [
+            530,
+            335
+          ],
+          [
+            593,
+            359
+          ],
+          [
+            645,
+            402
+          ],
+          [
+            675,
+            490
+          ],
+          [
+            721,
+            561
+          ],
+          [
+            748,
+            684
+          ],
+          [
+            729,
+            735
+          ],
+          [
+            643,
+            736
+          ],
+          [
+            592,
+            692
+          ],
+          [
+            565,
+            597
+          ],
+          [
+            544,
+            510
+          ]
+        ],
+        [
+          [
+            878,
+            815
+          ],
+          [
+            920,
+            827
+          ],
+          [
+            930,
+            861
+          ],
+          [
+            887,
+            864
+          ]
+        ]
+      ],
+      "file": "hair-left-upper.webp",
+      "crop": [
+        81,
+        314,
+        230,
+        232
+      ],
+      "depth": 1,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-left-lower",
+      "polygon": [
+        [
+          105,
+          492
+        ],
+        [
+          240,
+          474
+        ],
+        [
+          278,
+          523
+        ],
+        [
+          291,
+          572
+        ],
+        [
+          262,
+          657
+        ],
+        [
+          194,
+          742
+        ],
+        [
+          65,
+          755
+        ],
+        [
+          34,
+          664
+        ],
+        [
+          36,
+          568
+        ]
+      ],
+      "vector": [
+        9,
+        -5
+      ],
+      "root": 495,
+      "end": 735,
+      "delay": 0.4,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            340,
+            805
+          ],
+          [
+            470,
+            817
+          ],
+          [
+            551,
+            853
+          ],
+          [
+            634,
+            897
+          ],
+          [
+            688,
+            1060
+          ],
+          [
+            785,
+            1535
+          ],
+          [
+            315,
+            1535
+          ],
+          [
+            310,
+            1250
+          ],
+          [
+            420,
+            1170
+          ],
+          [
+            401,
+            1030
+          ],
+          [
+            354,
+            928
+          ]
+        ],
+        [
+          [
+            292,
+            305
+          ],
+          [
+            383,
+            302
+          ],
+          [
+            399,
+            350
+          ],
+          [
+            365,
+            433
+          ],
+          [
+            334,
+            491
+          ],
+          [
+            301,
+            444
+          ]
+        ],
+        [
+          [
+            422,
+            574
+          ],
+          [
+            487,
+            566
+          ],
+          [
+            508,
+            620
+          ],
+          [
+            477,
+            656
+          ],
+          [
+            435,
+            641
+          ]
+        ],
+        [
+          [
+            530,
+            335
+          ],
+          [
+            593,
+            359
+          ],
+          [
+            645,
+            402
+          ],
+          [
+            675,
+            490
+          ],
+          [
+            721,
+            561
+          ],
+          [
+            748,
+            684
+          ],
+          [
+            729,
+            735
+          ],
+          [
+            643,
+            736
+          ],
+          [
+            592,
+            692
+          ],
+          [
+            565,
+            597
+          ],
+          [
+            544,
+            510
+          ]
+        ],
+        [
+          [
+            878,
+            815
+          ],
+          [
+            920,
+            827
+          ],
+          [
+            930,
+            861
+          ],
+          [
+            887,
+            864
+          ]
+        ]
+      ],
+      "file": "hair-left-lower.webp",
+      "crop": [
+        49,
+        471,
+        255,
+        285
+      ],
+      "depth": 2,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-right-upper",
+      "polygon": [
+        [
+          671,
+          227
+        ],
+        [
+          806,
+          220
+        ],
+        [
+          857,
+          300
+        ],
+        [
+          822,
+          369
+        ],
+        [
+          944,
+          393
+        ],
+        [
+          969,
+          482
+        ],
+        [
+          903,
+          514
+        ],
+        [
+          818,
+          485
+        ],
+        [
+          757,
+          425
+        ],
+        [
+          713,
+          345
+        ]
+      ],
+      "vector": [
+        8,
+        -4
+      ],
+      "root": 230,
+      "end": 500,
+      "delay": 0.25,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            340,
+            805
+          ],
+          [
+            470,
+            817
+          ],
+          [
+            551,
+            853
+          ],
+          [
+            634,
+            897
+          ],
+          [
+            688,
+            1060
+          ],
+          [
+            785,
+            1535
+          ],
+          [
+            315,
+            1535
+          ],
+          [
+            310,
+            1250
+          ],
+          [
+            420,
+            1170
+          ],
+          [
+            401,
+            1030
+          ],
+          [
+            354,
+            928
+          ]
+        ],
+        [
+          [
+            292,
+            305
+          ],
+          [
+            383,
+            302
+          ],
+          [
+            399,
+            350
+          ],
+          [
+            365,
+            433
+          ],
+          [
+            334,
+            491
+          ],
+          [
+            301,
+            444
+          ]
+        ],
+        [
+          [
+            422,
+            574
+          ],
+          [
+            487,
+            566
+          ],
+          [
+            508,
+            620
+          ],
+          [
+            477,
+            656
+          ],
+          [
+            435,
+            641
+          ]
+        ],
+        [
+          [
+            530,
+            335
+          ],
+          [
+            593,
+            359
+          ],
+          [
+            645,
+            402
+          ],
+          [
+            675,
+            490
+          ],
+          [
+            721,
+            561
+          ],
+          [
+            748,
+            684
+          ],
+          [
+            729,
+            735
+          ],
+          [
+            643,
+            736
+          ],
+          [
+            592,
+            692
+          ],
+          [
+            565,
+            597
+          ],
+          [
+            544,
+            510
+          ]
+        ],
+        [
+          [
+            878,
+            815
+          ],
+          [
+            920,
+            827
+          ],
+          [
+            930,
+            861
+          ],
+          [
+            887,
+            864
+          ]
+        ]
+      ],
+      "file": "hair-right-upper.webp",
+      "crop": [
+        659,
+        214,
+        321,
+        313
+      ],
+      "depth": 3,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "hair-right-lower",
+      "polygon": [
+        [
+          753,
+          468
+        ],
+        [
+          883,
+          482
+        ],
+        [
+          1018,
+          500
+        ],
+        [
+          1024,
+          791
+        ],
+        [
+          845,
+          823
+        ],
+        [
+          762,
+          739
+        ],
+        [
+          751,
+          647
+        ]
+      ],
+      "vector": [
+        11,
+        -5
+      ],
+      "root": 470,
+      "end": 790,
+      "delay": 0.5,
+      "material": "hair",
+      "seam": 24,
+      "pins": [
+        [
+          [
+            340,
+            805
+          ],
+          [
+            470,
+            817
+          ],
+          [
+            551,
+            853
+          ],
+          [
+            634,
+            897
+          ],
+          [
+            688,
+            1060
+          ],
+          [
+            785,
+            1535
+          ],
+          [
+            315,
+            1535
+          ],
+          [
+            310,
+            1250
+          ],
+          [
+            420,
+            1170
+          ],
+          [
+            401,
+            1030
+          ],
+          [
+            354,
+            928
+          ]
+        ],
+        [
+          [
+            292,
+            305
+          ],
+          [
+            383,
+            302
+          ],
+          [
+            399,
+            350
+          ],
+          [
+            365,
+            433
+          ],
+          [
+            334,
+            491
+          ],
+          [
+            301,
+            444
+          ]
+        ],
+        [
+          [
+            422,
+            574
+          ],
+          [
+            487,
+            566
+          ],
+          [
+            508,
+            620
+          ],
+          [
+            477,
+            656
+          ],
+          [
+            435,
+            641
+          ]
+        ],
+        [
+          [
+            530,
+            335
+          ],
+          [
+            593,
+            359
+          ],
+          [
+            645,
+            402
+          ],
+          [
+            675,
+            490
+          ],
+          [
+            721,
+            561
+          ],
+          [
+            748,
+            684
+          ],
+          [
+            729,
+            735
+          ],
+          [
+            643,
+            736
+          ],
+          [
+            592,
+            692
+          ],
+          [
+            565,
+            597
+          ],
+          [
+            544,
+            510
+          ]
+        ],
+        [
+          [
+            878,
+            815
+          ],
+          [
+            920,
+            827
+          ],
+          [
+            930,
+            861
+          ],
+          [
+            887,
+            864
+          ]
+        ]
+      ],
+      "file": "hair-right-lower.webp",
+      "crop": [
+        739,
+        456,
+        283,
+        380
+      ],
+      "depth": 4,
+      "reveal": "transparent exterior; internal extraction seams are pinned within 24 native pixels",
+      "parent": "accepted body/hand pose; wind is local material follow-through"
+    },
+    {
+      "name": "coat-left-tail",
+      "polygon": [
+        [
+          290,
+          648
+        ],
+        [
+          339,
+          626
+        ],
+        [
+          362,
+          665
+        ],
+        [
+          323,
+          765
+        ],
+        [
+          311,
+          852
+        ],
+        [
+          343,
+          909
+        ],
+        [
+          284,
+          918
+        ],
+        [
+          221,
+          858
+        ],
+        [
+          213,
+          769
+        ],
+        [
+          245,
+          691
+        ]
+      ],
+      "vector": [
+        -15,
+        -9
+      ],
+      "root": 644,
+      "end": 874,
+      "delay": 0.85,
+      "material": "cloth",
+      "seam": 40,
+      "pins": [],
+      "file": "coat-left-tail.webp",
+      "crop": [
+        202,
+        614,
+        173,
+        315
+      ],
+      "depth": 5,
+      "reveal": "Free jacket contour above transparent exterior; skirt contact edge stays attached.",
+      "parent": "fixed upper jacket; wind leads the heavier skirt by 0.1 seconds",
+      "rest": [
+        0,
+        4
+      ],
+      "pinMargin": 12,
+      "seams": [
+        [
+          [
+            339,
+            626
+          ],
+          [
+            362,
+            665
+          ],
+          [
+            335,
+            739
+          ],
+          [
+            313,
+            789
+          ]
+        ]
+      ],
+      "flutter": {
+        "vector": [
+          -1.6,
+          -0.8
+        ],
+        "period": 4.8,
+        "phase": 0.2
+      }
+    },
+    {
+      "name": "coat-right-tail",
+      "polygon": [
+        [
+          627,
+          741
+        ],
+        [
+          737,
+          748
+        ],
+        [
+          830,
+          771
+        ],
+        [
+          878,
+          814
+        ],
+        [
+          859,
+          848
+        ],
+        [
+          889,
+          888
+        ],
+        [
+          905,
+          974
+        ],
+        [
+          881,
+          1039
+        ],
+        [
+          825,
+          1037
+        ],
+        [
+          787,
+          977
+        ],
+        [
+          687,
+          967
+        ],
+        [
+          617,
+          918
+        ],
+        [
+          585,
+          866
+        ],
+        [
+          593,
+          809
+        ]
+      ],
+      "vector": [
+        23,
+        -25
+      ],
+      "root": 746,
+      "end": 1000,
+      "delay": 1.05,
+      "material": "cloth",
+      "seam": 86,
+      "pins": [],
+      "file": "coat-right-tail.webp",
+      "crop": [
+        582,
+        729,
+        326,
+        292
+      ],
+      "depth": 6,
+      "reveal": "Free jacket contour moves over transparent exterior; inner jacket/leg seam stays fixed.",
+      "parent": "fixed jacket at backpack hem; right drawcord inherits attachment displacement",
+      "rest": [
+        0,
+        10
+      ],
+      "pinMargin": 12,
+      "seams": [
+        [
+          [
+            627,
+            741
+          ],
+          [
+            593,
+            809
+          ],
+          [
+            585,
+            866
+          ],
+          [
+            617,
+            918
+          ],
+          [
+            687,
+            967
+          ]
+        ],
+        [
+          [
+            627,
+            741
+          ],
+          [
+            737,
+            748
+          ],
+          [
+            830,
+            771
+          ],
+          [
+            878,
+            814
+          ]
+        ]
+      ],
+      "flutter": {
+        "vector": [
+          2,
+          -1.5
+        ],
+        "period": 5.6,
+        "phase": 1.1
+      }
+    },
+    {
+      "name": "skirt-front-hem",
+      "polygon": [
+        [
+          352,
+          690
+        ],
+        [
+          516,
+          700
+        ],
+        [
+          543,
+          738
+        ],
+        [
+          581,
+          772
+        ],
+        [
+          611,
+          802
+        ],
+        [
+          641,
+          817
+        ],
+        [
+          640,
+          827
+        ],
+        [
+          654,
+          839
+        ],
+        [
+          646,
+          848
+        ],
+        [
+          610,
+          862
+        ],
+        [
+          614,
+          867
+        ],
+        [
+          588,
+          877
+        ],
+        [
+          562,
+          882
+        ],
+        [
+          535,
+          881
+        ],
+        [
+          418,
+          880
+        ],
+        [
+          400,
+          878
+        ],
+        [
+          380,
+          876
+        ],
+        [
+          364,
+          873
+        ],
+        [
+          357,
+          870
+        ],
+        [
+          359,
+          856
+        ],
+        [
+          350,
+          854
+        ],
+        [
+          348,
+          864
+        ],
+        [
+          344,
+          866
+        ],
+        [
+          338,
+          864
+        ],
+        [
+          326,
+          859
+        ],
+        [
+          313,
+          852
+        ],
+        [
+          301,
+          847
+        ],
+        [
+          290,
+          840
+        ],
+        [
+          289,
+          835
+        ],
+        [
+          293,
+          827
+        ],
+        [
+          281,
+          820
+        ],
+        [
+          274,
+          814
+        ],
+        [
+          271,
+          801
+        ],
+        [
+          302,
+          761
+        ],
+        [
+          329,
+          727
+        ]
+      ],
+      "vector": [
+        0,
+        12
+      ],
+      "root": 695,
+      "end": 842,
+      "delay": 1.35,
+      "material": "heavy-cloth",
+      "seam": 30,
+      "pins": [],
+      "file": "skirt-front-hem.webp",
+      "crop": [
+        261,
+        678,
+        405,
+        213
+      ],
+      "depth": 7,
+      "reveal": "Lower hem relaxes downward over unchanged legs; its minimum displacement stays below the adopted hem. No skin pixels travel with cloth.",
+      "parent": "waist and fitted upper skirt fixed; gravity release with the same campus breeze",
+      "seams": [
+        [
+          [
+            352,
+            690
+          ],
+          [
+            516,
+            700
+          ]
+        ],
+        [
+          [
+            352,
+            690
+          ],
+          [
+            329,
+            727
+          ],
+          [
+            302,
+            761
+          ],
+          [
+            271,
+            801
+          ]
+        ],
+        [
+          [
+            516,
+            700
+          ],
+          [
+            543,
+            738
+          ],
+          [
+            581,
+            772
+          ],
+          [
+            611,
+            802
+          ],
+          [
+            641,
+            817
+          ],
+          [
+            654,
+            839
+          ]
+        ],
+        [
+          [
+            271,
+            801
+          ],
+          [
+            274,
+            814
+          ],
+          [
+            281,
+            820
+          ],
+          [
+            293,
+            827
+          ],
+          [
+            289,
+            835
+          ],
+          [
+            290,
+            840
+          ],
+          [
+            301,
+            847
+          ],
+          [
+            313,
+            852
+          ],
+          [
+            326,
+            859
+          ],
+          [
+            338,
+            864
+          ],
+          [
+            344,
+            866
+          ],
+          [
+            348,
+            864
+          ],
+          [
+            350,
+            854
+          ],
+          [
+            359,
+            856
+          ],
+          [
+            357,
+            870
+          ],
+          [
+            364,
+            873
+          ],
+          [
+            380,
+            876
+          ],
+          [
+            400,
+            878
+          ],
+          [
+            418,
+            880
+          ]
+        ],
+        [
+          [
+            654,
+            839
+          ],
+          [
+            646,
+            848
+          ],
+          [
+            610,
+            862
+          ],
+          [
+            614,
+            867
+          ],
+          [
+            588,
+            877
+          ],
+          [
+            562,
+            882
+          ],
+          [
+            535,
+            881
+          ]
+        ]
+      ],
+      "pinMargin": 12,
+      "rest": [
+        0,
+        2.5
+      ]
+    },
+    {
+      "name": "left-short-cord",
+      "file": "left-short-cord.webp",
+      "crop": [
+        159,
+        583,
+        193,
+        143
+      ],
+      "polygon": [
+        [
+          162,
+          586
+        ],
+        [
+          349,
+          586
+        ],
+        [
+          349,
+          723
+        ],
+        [
+          162,
+          723
+        ]
+      ],
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 0.75,
+      "material": "cord",
+      "rigid": true,
+      "pivot": [
+        337,
+        598
+      ],
+      "rotation": 0.07,
+      "seam": 0,
+      "depth": 100,
+      "parent": "left-short anchored at coat seam; cap inherits exactly the cord transform",
+      "reveal": "Approved registered cord backing expanded to complete rope outline; cord and cap share exact rigid transform."
+    },
+    {
+      "name": "left-short-metal-cap",
+      "file": "left-short-metal-cap.webp",
+      "crop": [
+        147,
+        692,
+        48,
+        64
+      ],
+      "polygon": [
+        [
+          170,
+          706
+        ],
+        [
+          180,
+          709
+        ],
+        [
+          172,
+          741
+        ],
+        [
+          160,
+          737
+        ]
+      ],
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 0.75,
+      "material": "metal-cap",
+      "rigid": true,
+      "pivot": [
+        337,
+        598
+      ],
+      "rotation": 0.07,
+      "seam": 0,
+      "depth": 101,
+      "parent": "left-short anchored at coat seam; cap inherits exactly the cord transform",
+      "reveal": "Approved registered cord backing expanded to complete rope outline; cord and cap share exact rigid transform."
+    },
+    {
+      "name": "left-long-cord",
+      "file": "left-long-cord.webp",
+      "crop": [
+        179,
+        538,
+        191,
+        327
+      ],
+      "polygon": [
+        [
+          184,
+          540
+        ],
+        [
+          367,
+          540
+        ],
+        [
+          367,
+          862
+        ],
+        [
+          184,
+          862
+        ]
+      ],
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 1.05,
+      "material": "cord",
+      "rigid": true,
+      "pivot": [
+        354,
+        550
+      ],
+      "rotation": -0.052,
+      "seam": 0,
+      "depth": 102,
+      "parent": "left-long anchored at coat seam; cap inherits exactly the cord transform",
+      "reveal": "Approved registered cord backing expanded to complete rope outline; cord and cap share exact rigid transform."
+    },
+    {
+      "name": "left-long-metal-cap",
+      "file": "left-long-metal-cap.webp",
+      "crop": [
+        185,
+        836,
+        50,
+        71
+      ],
+      "polygon": [
+        [
+          199,
+          851
+        ],
+        [
+          211,
+          850
+        ],
+        [
+          220,
+          885
+        ],
+        [
+          208,
+          892
+        ]
+      ],
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 1.05,
+      "material": "metal-cap",
+      "rigid": true,
+      "pivot": [
+        354,
+        550
+      ],
+      "rotation": -0.052,
+      "seam": 0,
+      "depth": 103,
+      "parent": "left-long anchored at coat seam; cap inherits exactly the cord transform",
+      "reveal": "Approved registered cord backing expanded to complete rope outline; cord and cap share exact rigid transform."
+    },
+    {
+      "name": "right-cord",
+      "file": "right-cord.webp",
+      "crop": [
+        863,
+        790,
+        71,
+        84
+      ],
+      "polygon": [
+        [
+          867,
+          793
+        ],
+        [
+          930,
+          793
+        ],
+        [
+          930,
+          871
+        ],
+        [
+          867,
+          871
+        ]
+      ],
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 0.95,
+      "material": "cord",
+      "rigid": true,
+      "pivot": [
+        878,
+        805
+      ],
+      "rotation": 0.095,
+      "seam": 0,
+      "depth": 104,
+      "parent": {
+        "name": "coat-right-tail",
+        "at": [
+          878,
+          805
+        ]
+      },
+      "reveal": "Approved registered cord backing expanded to complete rope outline; cord and cap share exact rigid transform."
+    },
+    {
+      "name": "right-metal-cap",
+      "file": "right-metal-cap.webp",
+      "crop": [
+        897,
+        841,
+        57,
+        69
+      ],
+      "polygon": [
+        [
+          911,
+          857
+        ],
+        [
+          923,
+          855
+        ],
+        [
+          939,
+          890
+        ],
+        [
+          927,
+          897
+        ]
+      ],
+      "vector": [
+        0,
+        0
+      ],
+      "root": 0,
+      "end": 1,
+      "delay": 0.95,
+      "material": "metal-cap",
+      "rigid": true,
+      "pivot": [
+        878,
+        805
+      ],
+      "rotation": 0.095,
+      "seam": 0,
+      "depth": 105,
+      "parent": {
+        "name": "coat-right-tail",
+        "at": [
+          878,
+          805
+        ]
+      },
+      "reveal": "Approved registered cord backing expanded to complete rope outline; cord and cap share exact rigid transform."
+    }
+  ],
+  "fixed": [
+    "Face/eyes, ribcage breath, shoulder/pocket hands, hood, backpack/straps, legs, shoes and walking stance retain the adopted registration.",
+    "Four existing hair strips, pendant, companion, foliage and campus sky retain their accepted animation.",
+    "Skirt contains fabric only and relaxes downward over fixed legs; coat free contours respond to the shared breeze; right cord/cap follows its coat attachment."
+  ],
+  "repair": "cord-backing.webp",
+  "status": "registered cloth contours and inherited cord attachments; reviewed source and extremes"
+}

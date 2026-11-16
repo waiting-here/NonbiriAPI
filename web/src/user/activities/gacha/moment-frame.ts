@@ -5,6 +5,16 @@ export type MomentFrame = {
 export type MomentScene = MomentFrame & {
   path: string;
   highResolutionWidth?: number;
+  /** A single full-screen plate. Older registered local scenes keep their own path. */
+  viewport?: {
+    /** Absent for architectural scenes that must share the original camera. */
+    placement?: {
+      bounds: [number, number, number, number];
+      anchor: [number, number];
+      floor?: number;
+    };
+    shadow?: string;
+  };
 };
 export type MomentRegistration = {
   expansion?: MomentExpansion;

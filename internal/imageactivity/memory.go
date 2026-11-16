@@ -3,8 +3,9 @@ package imageactivity
 import "sync"
 
 type imageBytes struct {
-	data []byte
-	mime string
+	data   []byte
+	mime   string
+	pixels int64
 }
 type memoryItem struct {
 	owner                       int64
