@@ -645,6 +645,12 @@
         "appearances/layers/hires/celestial-light-hero.webp",
         "hires/appearances/celestial-dark.webp",
         "hires/appearances/celestial-light.webp"
+      ],
+      "prefixes": [
+        "appearances/layers/celestial-dark/",
+        "appearances/layers/celestial-light/",
+        "appearances/layers/hires/celestial-dark/",
+        "appearances/layers/hires/celestial-light/"
       ]
     },
     {
@@ -714,6 +720,12 @@
         "appearances/wandering-light.webp",
         "hires/appearances/wandering-dark.webp",
         "hires/appearances/wandering-light.webp"
+      ],
+      "prefixes": [
+        "appearances/layers/wandering-dark/",
+        "appearances/layers/wandering-light/",
+        "appearances/layers/hires/wandering-dark/",
+        "appearances/layers/hires/wandering-light/"
       ]
     },
     {
