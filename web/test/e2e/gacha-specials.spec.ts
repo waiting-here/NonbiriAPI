@@ -8,6 +8,7 @@ import type { Card } from '../../src/user/activities/gacha/types';
 import { loanActivity } from '../fixtures/loans';
 import type { MomentRegistration } from '../../src/user/activities/gacha/moment-frame';
 import { specialCards } from '../../src/user/activities/gacha/special-scenes';
+import { heartThiefStance } from '../../src/user/activities/gacha/romance/heart-thief-stance';
 
 const { cards } = JSON.parse(readFileSync(resolve('../internal/gacha/catalog.json'), 'utf8')) as {
   cards: Card[];
@@ -219,8 +220,23 @@ for (const theme of ['light', 'dark'])
                 )
                 .toBe(true);
               const bounds = await character.boundingBox();
-              expect(bounds!.y).toBeGreaterThan(68);
-              const contentRatio = appearance === 'heart-thief' ? 1448 / 1488 : 1;
+              const visibleTop = await character.evaluate((image: HTMLImageElement) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = image.naturalWidth;
+                canvas.height = image.naturalHeight;
+                const context = canvas.getContext('2d')!;
+                context.drawImage(image, 0, 0);
+                const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+                let first = 0;
+                while (first < canvas.width * canvas.height && pixels[first * 4 + 3] <= 8) first++;
+                return Math.floor(first / canvas.width) / canvas.height;
+              });
+              expect(bounds!.y + bounds!.height * visibleTop).toBeGreaterThan(68);
+              // The rotated plate extends below the supporting shoe for cloth motion.
+              const contentRatio =
+                appearance === 'heart-thief'
+                  ? heartThiefStance.anchor[1] / heartThiefStance.plateHeight
+                  : 1;
               expect(bounds!.y + bounds!.height * contentRatio).toBeLessThanOrEqual(
                 width === 390 ? 844 : 900,
               );
@@ -267,49 +283,83 @@ for (const theme of ['light', 'dark'])
             await expect(page.locator('.nb-user-shell')).not.toHaveAttribute('data-layout', 'game');
             const layers = compositions[id]?.moment_layers;
             const expansion = layers?.expansion;
-            const hero = page.locator(
-              '.nb-moment-character > img:not(.nb-moment-character__plate, .nb-moment-character__scene)',
-            );
+            const hero = page.locator('.nb-moment-character__hero');
             const source = expansion?.hero ?? 'motion/' + id + '/hero.webp';
             await expect(hero).toHaveAttribute('src', '/assets/gacha/' + source);
             await hero.evaluate((image: HTMLImageElement) => image.decode());
             const registeredScene = page.locator('.nb-moment-character__scene');
             if (layers?.scene) {
-              await expect(registeredScene).toHaveAttribute(
-                'src',
-                '/assets/gacha/' + layers.scene.path,
-              );
-              await registeredScene.evaluate((image: HTMLImageElement) => image.decode());
-              const background = (await registeredScene.boundingBox())!;
-              const backdrop = (await page.locator('.nb-moment-backdrop__scene').boundingBox())!;
+              const scene = layers.scene;
+              const backdropImage = page.locator('.nb-moment-backdrop__scene');
+              const sceneImage = scene.viewport ? backdropImage : registeredScene;
+              await expect(sceneImage).toHaveAttribute('src', '/assets/gacha/' + scene.path);
+              await sceneImage.evaluate((image: HTMLImageElement) => image.decode());
+              const background = (await sceneImage.boundingBox())!;
+              const backdrop = (await backdropImage.boundingBox())!;
               const viewport = page.viewportSize()!;
               expect(backdrop.x).toBeLessThanOrEqual(1);
               expect(backdrop.y).toBeLessThanOrEqual(1);
               expect(backdrop.x + backdrop.width).toBeGreaterThanOrEqual(viewport.width - 1);
               expect(backdrop.y + backdrop.height).toBeGreaterThanOrEqual(viewport.height - 1);
-              const original = layers.scene.originalRegion;
-              const character = (await hero.boundingBox())!;
-              expect(
-                Math.abs(
-                  background.x +
-                    (background.width * original.x) / layers.scene.canvas[0] -
-                    character.x,
-                ),
-              ).toBeLessThan(1);
-              expect(
-                Math.abs(
-                  background.y +
-                    (background.height * original.y) / layers.scene.canvas[1] -
-                    character.y,
-                ),
-              ).toBeLessThan(1);
+              if (scene.viewport) {
+                await expect(registeredScene).toHaveCount(0);
+                await expect(backdropImage).toHaveCSS('filter', 'none');
+                await expect(backdropImage).toHaveCSS('transform', 'none');
+                const shadow = page.locator('.nb-moment-character__shadow');
+                if (scene.viewport.shadow) {
+                  await expect(shadow).toHaveAttribute(
+                    'src',
+                    '/assets/gacha/' + scene.viewport.shadow,
+                  );
+                  await shadow.evaluate((image: HTMLImageElement) => image.decode());
+                } else await expect(shadow).toHaveCount(0);
+              }
+              const character = (await page.locator('.nb-moment-character').boundingBox())!;
+              const placement = scene.viewport?.placement;
+              if (placement) {
+                const [left, top, right, bottom] = placement.bounds;
+                expect(character.x + (left * character.width) / 1024).toBeGreaterThanOrEqual(-1);
+                expect(character.x + (right * character.width) / 1024).toBeLessThanOrEqual(
+                  viewport.width + 1,
+                );
+                expect(character.y + (top * character.height) / 1536).toBeGreaterThanOrEqual(67);
+                expect(character.y + (bottom * character.height) / 1536).toBeLessThanOrEqual(
+                  viewport.height + 1,
+                );
+                const ground = character.y + (placement.anchor[1] * character.height) / 1536;
+                expect(Math.abs(ground - viewport.height * (placement.floor ?? 0.95))).toBeLessThan(
+                  1,
+                );
+              } else {
+                const original = scene.originalRegion;
+                expect(
+                  Math.abs(
+                    background.x + (background.width * original.x) / scene.canvas[0] - character.x,
+                  ),
+                ).toBeLessThan(1);
+                expect(
+                  Math.abs(
+                    background.y + (background.height * original.y) / scene.canvas[1] - character.y,
+                  ),
+                ).toBeLessThan(1);
+                expect(
+                  Math.abs((background.width * original.width) / scene.canvas[0] - character.width),
+                ).toBeLessThan(1);
+              }
             }
             const frame = await hero.boundingBox();
             expect(frame).not.toBeNull();
             if ((expansion || layers?.scene) && width >= 1280) {
-              expect(frame!.x).toBeGreaterThanOrEqual(-1);
-              expect(frame!.x + frame!.width).toBeLessThanOrEqual(width + 1);
-              if (expansion) {
+              const placement = layers?.scene?.viewport?.placement;
+              const character = (await page.locator('.nb-moment-character').boundingBox())!;
+              const visibleLeft = placement
+                ? character.x + (placement.bounds[0] * character.width) / 1024
+                : frame!.x;
+              if (!placement) {
+                expect(frame!.x).toBeGreaterThanOrEqual(-1);
+                expect(frame!.x + frame!.width).toBeLessThanOrEqual(width + 1);
+              }
+              if (expansion && !layers?.scene?.viewport) {
                 const transparentTop =
                   (frame!.height * (expansion.contentTop ?? 0)) / expansion.canvas[1];
                 expect(frame!.y + transparentTop).toBeGreaterThanOrEqual(67);
@@ -324,7 +374,7 @@ for (const theme of ['light', 'dark'])
                   right = parseFloat(style.paddingRight);
                 return { right: bounds.right - right, width: bounds.width - left - right };
               });
-              expect(main.right).toBeLessThanOrEqual(frame!.x - 31);
+              expect(main.right).toBeLessThanOrEqual(visibleLeft - 31);
               expect(main.width).toBeGreaterThan(640);
             }
             if (process.env.NONBIRI_VISUAL_DIR)

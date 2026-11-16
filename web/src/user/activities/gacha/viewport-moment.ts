@@ -23,15 +23,16 @@ export function viewportMomentLayout(scene: MomentScene, width: number, height: 
       width - imageWidth,
       0,
     );
+    const left = background.left + frame.x * imageScale;
     return {
       background,
       character: {
-        left: background.left + frame.x * imageScale,
+        left,
         top: background.top + frame.y * imageScale,
         width: frame.width * imageScale,
         height: frame.height * imageScale,
       },
-      reserve: frame.width * imageScale,
+      reserve: width - left,
     };
   }
   const [left, top, right, bottom] = placement.bounds;
