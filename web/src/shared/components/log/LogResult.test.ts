@@ -74,7 +74,7 @@ describe('caller-safe log result presentation', () => {
   it.each(['user', 'admin', 'steward'] as const)('uses the %s translation namespace', (role) => {
     for (const key of ['missingModel', 'noUsableKey'] as const) {
       expect(logResultCopyKey(role, key)).toBe(
-        role === 'user'
+        role === 'user' && key === 'missingModel'
           ? 'user.logs.result.' + key
           : 'common.operations.logs.presentation.result.' + key,
       );

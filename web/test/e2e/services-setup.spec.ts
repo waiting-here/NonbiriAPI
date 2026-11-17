@@ -397,7 +397,7 @@ for (const locale of ['en', 'zh'] as const) {
       if (path === '/api/models')
         return fulfill(
           numberedPage(
-            url.searchParams.get('q') === 'demo/model-a' ? [model('51', 'model-a')] : [],
+            'demo/model-a'.includes(url.searchParams.get('q') ?? '') ? [model('51', 'model-a')] : [],
             url.searchParams,
           ),
         );

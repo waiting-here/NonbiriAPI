@@ -2271,6 +2271,7 @@
       "entryURL": "Endpoint URL",
       "existingCredential": "Use existing key",
       "existingModel": "Existing model",
+      "noExistingModel": "Enter a provider and model name below to create your first model.",
       "impact": "Usage scope",
       "impactCounts": "Personal keys {{keys}} · Charity members {{donations}} · Discovery sources {{sources}}",
       "independentDiscovery": "Enter the full URL used to fetch the model list, such as https://api.example.com/v1/models.",

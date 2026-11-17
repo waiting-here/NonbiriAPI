@@ -39,6 +39,29 @@ const copy = {
   },
 };
 
+async function expectPageToFit(page: Page) {
+  const overflow = await page.evaluate(() => {
+    const width = document.documentElement.scrollWidth;
+    if (width <= innerWidth) return null;
+    const elements = [...document.querySelectorAll('body *')]
+      .filter((element) => {
+        const right = element.getBoundingClientRect().right;
+        return right > innerWidth && right <= width + 1 && element.checkVisibility();
+      })
+      .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)
+      .slice(0, 6)
+      .map((element) => ({
+        tag: element.tagName.toLowerCase(),
+        class: element.className,
+        parent: element.parentElement?.className,
+        text: element.textContent?.trim().slice(0, 28),
+        right: Math.round(element.getBoundingClientRect().right),
+      }));
+    return { viewport: innerWidth, width, elements };
+  });
+  expect(overflow).toBeNull();
+}
+
 function row(role: Role, index: number, charity = false) {
   const common = {
     id: requestID(index),
@@ -303,9 +326,7 @@ test('complete header lists fetch lazily and remain usable in light and dark des
       await request.getByRole('button', { name: 'Go', exact: true }).click();
       await expect(request.getByText('X-Header-124', { exact: true })).toBeVisible();
       await request.getByRole('navigation').scrollIntoViewIfNeeded();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-        true,
-      );
+      await expectPageToFit(page);
       expect(await request.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
         true,
       );
@@ -436,9 +457,7 @@ for (const scenario of [
       .click();
     await expect(dialog.locator('.log-attempt')).toHaveCount(3);
     await expect(dialog.getByText('upstream-23', { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    await expectPageToFit(page);
     if (process.env.NONBIRI_VISUAL_DIR)
       await page.screenshot({
         path: resolve(
@@ -475,9 +494,7 @@ for (const scenario of [
         expect(bounds!.x).toBeGreaterThanOrEqual(0);
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual((await page.viewportSize())!.width);
         expect(bounds!.y + bounds!.height).toBeLessThanOrEqual((await page.viewportSize())!.height);
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-          true,
-        );
+        await expectPageToFit(page);
       }
     }
     await page.getByRole('button', { name: labels.previous, exact: true }).click();
@@ -587,10 +604,8 @@ for (const role of ['admin', 'steward', 'user'] as const)
       ).toHaveCount(1);
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-          true,
-        );
-        await expect(page.locator('.log-filters summary')).toBeVisible();
+        await expectPageToFit(page);
+        await expect(page.locator('.log-filters .nb-filter__more > summary')).toBeVisible();
         await expect(page.locator('.log-filters .nb-filter__fields')).toBeHidden();
         if (role !== 'user') {
           const filters = page.getByTestId('log-filters');
@@ -601,7 +616,8 @@ for (const role of ['admin', 'steward', 'user'] as const)
           });
           const upstream = filters.getByRole('textbox', { name: 'Model used', exact: true });
           await expect(discord).toBeVisible();
-          await expect(filters.getByLabel('User ID', { exact: true })).toBeVisible();
+          const siteUser = filters.getByLabel('User ID', { exact: true });
+          await expect(siteUser).toBeHidden();
           await expect(charity).toBeVisible();
           await expect(upstream).toBeHidden();
           if (width === 1440 || width === 390) {
@@ -615,12 +631,11 @@ for (const role of ['admin', 'steward', 'user'] as const)
               });
             const more = filters.locator('.nb-filter__more > summary');
             await more.click();
+            await expect(siteUser).toBeVisible();
             await expect(upstream).toBeVisible();
             await expect(discord).toBeVisible();
             await expect(charity).toBeVisible();
-            expect(
-              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-            ).toBe(true);
+            await expectPageToFit(page);
             if (process.env.NONBIRI_VISUAL_DIR)
               await filters.screenshot({
                 path: resolve(
@@ -729,9 +744,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
             await expect(results).toHaveCount(2);
             await expect(results.nth(0)).toHaveText(missing);
             await expect(results.nth(1)).toHaveText(unavailable);
-            expect(
-              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-            ).toBe(true);
+            await expectPageToFit(page);
             if (process.env.NONBIRI_VISUAL_DIR)
               await page.screenshot({
                 path: resolve(

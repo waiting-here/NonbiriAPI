@@ -1042,6 +1042,7 @@ tr:first-child td {
 }
 .log-attempt dl {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.7rem;
   margin: 1rem 0 0;
 }
@@ -1057,6 +1058,7 @@ tr:first-child td {
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 .log-attempt-notice {
   margin: 0.7rem 0 0;

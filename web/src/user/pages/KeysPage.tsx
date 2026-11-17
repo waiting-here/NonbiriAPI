@@ -34,6 +34,7 @@ import '../features/core/home.css';
 import '../features/core/api-access.css';
 
 const pageCopyKeys = {
+  'common.refresh': 'common.refresh',
   'user.core.keys.apiAddress': 'user.core.keys.apiAddress',
   'user.core.keys.charityModels': 'user.core.keys.charityModels',
   'user.core.keys.clientHelp': 'user.core.keys.clientHelp',
@@ -120,6 +121,19 @@ function ClientModelNames({ accountId }: { accountId: string }) {
           )}
         </div>
       ))}
+      <div className="api-model-names__actions">
+        <button
+          type="button"
+          className="nb-btn nb-btn--secondary"
+          disabled={own.isFetching || charity.isFetching}
+          onClick={() => {
+            void own.refetch();
+            void charity.refetch();
+          }}
+        >
+          {t('common.refresh')}
+        </button>
+      </div>
     </div>
   );
 }

@@ -184,6 +184,12 @@
   .log-table .nb-table td[data-cell='status'] {
     white-space: normal;
   }
+  .log-result .nb-badge {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: start;
+  }
   .log-table .nb-table td[data-cell='action'] button {
     width: 100%;
     min-height: 2.5rem;

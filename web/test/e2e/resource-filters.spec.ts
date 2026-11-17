@@ -117,11 +117,9 @@ for (const locale of ['en', 'zh'] as const) {
       await route.fulfill({ json: body });
     });
     const searchLabel = locale === 'en' ? 'Search' : '搜索';
-    const connectionList = page.locator('section.nb-panel').filter({
-      has: page.getByRole('heading', {
-        name: locale === 'en' ? 'My services' : '我的服务',
-        exact: true,
-      }),
+    const connectionList = page.getByRole('region', {
+      name: locale === 'en' ? 'My services' : '我的服务',
+      exact: true,
     });
     await page.goto(USER_ORIGIN + '/endpoints?connections_page=2&connections_page_size=10');
     await expect(
