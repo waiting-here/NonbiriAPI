@@ -30,13 +30,13 @@ export function DeliveryFailures({ campaign }: { campaign: string }) {
   if (query.isPending) return <LoadingState />;
   if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
   return (
-    <div className="reward-stack">
+    <div className="nb-stack nb-stack--sm">
       {query.data?.items.length === 0 ? (
         <EmptyState title={t('common.rewards.noFailures')} body={t('common.rewards.retryHelp')} />
       ) : (
         query.data?.items.map((f) => (
-          <p key={f.id}>
-            {t('common.rewards.recipient', { id: f.user_id })} ·{' '}
+          <p key={f.id} className="nb-small">
+            <span className="mono">{t('common.rewards.recipient', { id: f.user_id })}</span> ·{' '}
             {t(rejectionLabels[f.reason === 'capacity' ? 'capacity' : 'delivery'])} · {time(f.at)}
           </p>
         ))

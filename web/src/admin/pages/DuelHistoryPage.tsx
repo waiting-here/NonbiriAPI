@@ -1,13 +1,22 @@
 import { retainQueryScope } from '@shared/query/retain';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
-import { Field, FilterBar } from '@shared/components/ui';
+import {
+  Field,
+  FilterBar,
+  Panel,
+  PanelBody,
+  PanelHead,
+  StatusBadge,
+} from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { formatCredits } from '../../user/games/common/strict';
 import { useSiteTimeOffset } from '@shared/components/timeContextValue';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { resolveFixedLocalTime } from '@shared/time';
@@ -97,113 +106,121 @@ function HistoryResults({
   });
   return (
     <>
-      <Card>
-        <h2>
-          {gameLabel(game, t)} ·{' '}
-          {dataset === 'recent'
-            ? t('近30天完整历史', 'Recent complete history')
-            : t('长期匿名资料', 'Anonymous archive')}
-        </h2>
-        <QueryFeedback query={query} />
-        {query.isPending ? (
-          <LoadingState />
-        ) : query.error ? (
-          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-        ) : (
-          query.data && (
-            <>
-              {query.data.items.length === 0 ? (
-                <EmptyState
-                  title={t('没有符合条件的对局', 'No matching matches')}
-                  body={t(
-                    '只有已经结束的对局会出现在这里。',
-                    'Only completed matches appear here.',
-                  )}
-                />
-              ) : (
-                <div className="admin-duel-history-list">
-                  {query.data.items.map((item) => (
-                    <article className="ops-subcard" key={item.match_ref}>
-                      <div>
-                        <h3>
-                          {modeLabel(item.mode, t)} ·{' '}
-                          {item.outcome === 'normal'
-                            ? t('分出胜负', 'Decided')
+      <QueryFeedback query={query} />
+      {query.isPending ? (
+        <LoadingState />
+      ) : query.error ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      ) : (
+        query.data && (
+          <>
+            {query.data.items.length === 0 ? (
+              <EmptyState
+                title={t('没有符合条件的对局', 'No matching matches')}
+                body={t(
+                  '只有已经结束的对局会出现在这里。',
+                  'Only completed matches appear here.',
+                )}
+              />
+            ) : (
+              <div className="admin-duel-history-list">
+                {query.data.items.map((item) => (
+                  <article className="ops-subcard" key={item.match_ref}>
+                    <div className="ops-toolbar">
+                      <h3>{modeLabel(item.mode, t)}</h3>
+                      <StatusBadge
+                        tone={
+                          item.outcome === 'normal'
+                            ? 'ok'
                             : item.outcome === 'draw'
-                              ? t('平局', 'Draw')
-                              : t('系统取消', 'System cancelled')}
-                        </h3>
-                        <strong>
-                          {item.scores[0]} : {item.scores[1]}
-                        </strong>
-                        {item.winner !== null && (
-                          <span>
-                            {' '}
-                            ·{' '}
-                            {text('admin.gameHistory.winner', {
-                              seat: text(
-                                item.winner === 0
-                                  ? 'admin.gameHistory.firstPlayer'
-                                  : 'admin.gameHistory.secondPlayer',
-                              ),
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      <p>
-                        {t('规则版本', 'Rules version')} {item.rules_version} · {t('票价', 'Entry')}{' '}
-                        {item.ticket} · {t('奖金', 'Prize')} {item.prize}
-                      </p>
-                      {item.recent && (
-                        <>
-                          <p>{formatDateTime(item.recent.terminal_at)}</p>
-                          <p>
-                            {item.recent.participants.map((p, index) => (
-                              <span key={index}>
-                                {index > 0 ? ' / ' : ''}
-                                {p.kind === 'bot' ? (
-                                  `${p.display_name} · AI`
-                                ) : p.user_id === null ? (
-                                  t('账号已删除', 'Deleted account')
-                                ) : (
-                                  <>
-                                    {p.display_name}{' '}
-                                    <span title={text('common.userId')}>({p.user_id})</span>
-                                  </>
-                                )}
-                              </span>
-                            ))}
-                          </p>
-                        </>
+                              ? 'info'
+                              : 'warn'
+                        }
+                      >
+                        {item.outcome === 'normal'
+                          ? t('分出胜负', 'Decided')
+                          : item.outcome === 'draw'
+                            ? t('平局', 'Draw')
+                            : t('系统取消', 'System cancelled')}
+                      </StatusBadge>
+                    </div>
+                    <div>
+                      <strong>
+                        {item.scores[0]} : {item.scores[1]}
+                      </strong>
+                      {item.winner !== null && (
+                        <span>
+                          {' '}
+                          ·{' '}
+                          {text('admin.gameHistory.winner', {
+                            seat: text(
+                              item.winner === 0
+                                ? 'admin.gameHistory.firstPlayer'
+                                : 'admin.gameHistory.secondPlayer',
+                            ),
+                          })}
+                        </span>
                       )}
-                      {dataset === 'anonymous' ? (
-                        <p className="admin-duel-id">
-                          {t('匿名资料编号', 'Anonymous record ID')}: {item.match_ref}
+                    </div>
+                    <p className="nb-small nb-muted">
+                      {t('规则版本', 'Rules version')} {item.rules_version} · {t('票价', 'Entry')}{' '}
+                      <CreditNumber value={formatCredits(item.ticket)} /> {t('积分', 'credits')} ·{' '}
+                      {t('奖金', 'Prize')} <CreditNumber value={formatCredits(item.prize)} />{' '}
+                      {t('积分', 'credits')}
+                    </p>
+                    {item.recent && (
+                      <>
+                        <p className="nb-small nb-muted">
+                          {formatDateTime(item.recent.terminal_at)}
                         </p>
-                      ) : null}
+                        <p>
+                          {item.recent.participants.map((p, index) => (
+                            <span key={index}>
+                              {index > 0 ? ' / ' : ''}
+                              {p.kind === 'bot' ? (
+                                `${p.display_name} · AI`
+                              ) : p.user_id === null ? (
+                                t('账号已删除', 'Deleted account')
+                              ) : (
+                                <>
+                                  {p.display_name}{' '}
+                                  <span title={text('common.userId')}>({p.user_id})</span>
+                                </>
+                              )}
+                            </span>
+                          ))}
+                        </p>
+                      </>
+                    )}
+                    {dataset === 'anonymous' ? (
+                      <p className="admin-duel-id">
+                        {t('匿名资料编号', 'Anonymous record ID')}: {item.match_ref}
+                      </p>
+                    ) : null}
+                    <div className="nb-actions">
                       <button
-                        className="nb-btn nb-btn--secondary"
+                        className="nb-btn nb-btn--secondary nb-btn--sm"
                         type="button"
                         onClick={() => setSelected(item.match_ref)}
                       >
                         {t('查看完整过程', 'View complete record')}
                       </button>
-                    </article>
-                  ))}
-                </div>
-              )}
-              <SimplePager
-                disabled={query.isFetching}
-                page={cursors.length}
-                hasMore={Boolean(query.data.next_cursor)}
-                onPrev={() => setCursors(cursors.slice(0, -1))}
-                onNext={() => setCursors([...cursors, query.data.next_cursor])}
-                labels={{ previous: t('上一页', 'Previous page'), next: t('下一页', 'Next page') }}
-              />
-            </>
-          )
-        )}
-      </Card>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+            <SimplePager
+              disabled={query.isFetching}
+              page={cursors.length}
+              hasMore={Boolean(query.data.next_cursor)}
+              onPrev={() => setCursors(cursors.slice(0, -1))}
+              onNext={() => setCursors([...cursors, query.data.next_cursor])}
+              labels={{ previous: t('上一页', 'Previous page'), next: t('下一页', 'Next page') }}
+            />
+          </>
+        )
+      )}
       {selected && (
         <HistoryDetails
           game={game}
@@ -269,134 +286,142 @@ export function DuelHistoryPage() {
           'Complete records remain available for 30 days, then become anonymous archives without identities or original timestamps.',
         )}
       />
-      <Card>
-        <FilterBar
-          activeCount={
-            Object.values(applied.selection).filter((value) => value !== undefined).length
-          }
-          onSubmit={submit}
-          onReset={() => {
-            setDraft(initialFilter);
-            setApplied({ game: initialFilter.game, dataset: initialFilter.dataset, selection: {} });
-            setError(false);
-          }}
-          search={
-            <Field
-              size="short"
-              label={t('规则版本（留空为全部）', 'Rules version (blank for all)')}
-            >
-              {(props) => (
-                <input
-                  {...props}
-                  type="text"
-                  inputMode="numeric"
-                  value={draft.version}
-                  placeholder={t('规则版本（留空为全部）', 'Rules version (blank for all)')}
-                  maxLength={10}
-                  onChange={(e) => edit({ version: e.target.value })}
-                />
-              )}
-            </Field>
-          }
-          secondaryAlwaysVisible
-          secondary={
-            <>
-              <Field label={t('游戏', 'Game')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={draft.game}
-                    onChange={(e) => edit({ game: e.target.value as GameID, mode: '' })}
-                  >
-                    {(['bidding', 'likes', 'gwent'] as const).map((game) => (
-                      <option key={game} value={game}>
-                        {gameLabel(game, t)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Field label={t('数据集', 'Dataset')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={draft.dataset}
-                    onChange={(e) => edit({ dataset: e.target.value as Dataset })}
-                  >
-                    <option value="recent">{t('近30天完整历史', 'Recent 30 days')}</option>
-                    <option value="anonymous">{t('长期匿名资料', 'Anonymous archive')}</option>
-                  </select>
-                )}
-              </Field>
-              <Field size="short" label={t('模式', 'Mode')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={draft.mode}
-                    onChange={(e) => edit({ mode: e.target.value })}
-                  >
-                    <option value="">{t('全部模式', 'All modes')}</option>
-                    {modesFor(draft.game).map((mode) => (
-                      <option key={mode} value={mode}>
-                        {modeLabel(mode, t)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Field size="short" label={t('结果', 'Outcome')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={draft.outcome}
-                    onChange={(e) => edit({ outcome: e.target.value })}
-                  >
-                    <option value="">{t('全部结果', 'All outcomes')}</option>
-                    <option value="normal">{t('分出胜负', 'Decided')}</option>
-                    <option value="draw">{t('平局', 'Draw')}</option>
-                    <option value="system_cancelled">{t('系统取消', 'System cancelled')}</option>
-                  </select>
-                )}
-              </Field>
-              <Field label={t('结束时间从', 'Ended from')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="datetime-local"
-                    disabled={siteOffset === null}
-                    value={draft.from}
-                    onChange={(e) => edit({ from: e.target.value })}
-                  />
-                )}
-              </Field>
-              <Field label={t('结束时间至', 'Ended through')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="datetime-local"
-                    disabled={siteOffset === null}
-                    value={draft.to}
-                    onChange={(e) => edit({ to: e.target.value })}
-                  />
-                )}
-              </Field>
-            </>
-          }
+      <Panel>
+        <PanelHead
+          title={`${gameLabel(applied.game, t)} · ${
+            applied.dataset === 'recent'
+              ? t('近30天完整历史', 'Recent complete history')
+              : t('长期匿名资料', 'Anonymous archive')
+          }`}
         />
-        <TimeContextNotice station="admin" />
-        {error && (
-          <p className="field-error" role="alert">
-            {t('请检查版本号和时间范围。', 'Check the version and time range.')}
-          </p>
-        )}
-      </Card>
-      {applied.dataset === 'anonymous' &&
-      (applied.selection.from !== undefined || applied.selection.to !== undefined) ? null : (
-        <HistoryResults key={JSON.stringify(applied)} {...applied} />
-      )}
-      <Card>
-        <ExportPanel {...applied} />
-      </Card>
+        <PanelBody>
+          <FilterBar
+            activeCount={
+              Object.values(applied.selection).filter((value) => value !== undefined).length
+            }
+            onSubmit={submit}
+            onReset={() => {
+              setDraft(initialFilter);
+              setApplied({
+                game: initialFilter.game,
+                dataset: initialFilter.dataset,
+                selection: {},
+              });
+              setError(false);
+            }}
+            search={
+              <>
+                <Field size="short" label={t('游戏', 'Game')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={draft.game}
+                      onChange={(e) => edit({ game: e.target.value as GameID, mode: '' })}
+                    >
+                      {(['bidding', 'likes', 'gwent'] as const).map((game) => (
+                        <option key={game} value={game}>
+                          {gameLabel(game, t)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field size="short" label={t('数据集', 'Dataset')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={draft.dataset}
+                      onChange={(e) => edit({ dataset: e.target.value as Dataset })}
+                    >
+                      <option value="recent">{t('近30天完整历史', 'Recent 30 days')}</option>
+                      <option value="anonymous">{t('长期匿名资料', 'Anonymous archive')}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field size="short" label={t('模式', 'Mode')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={draft.mode}
+                      onChange={(e) => edit({ mode: e.target.value })}
+                    >
+                      <option value="">{t('全部模式', 'All modes')}</option>
+                      {modesFor(draft.game).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {modeLabel(mode, t)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field size="short" label={t('结果', 'Outcome')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={draft.outcome}
+                      onChange={(e) => edit({ outcome: e.target.value })}
+                    >
+                      <option value="">{t('全部结果', 'All outcomes')}</option>
+                      <option value="normal">{t('分出胜负', 'Decided')}</option>
+                      <option value="draw">{t('平局', 'Draw')}</option>
+                      <option value="system_cancelled">{t('系统取消', 'System cancelled')}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field
+                  size="short"
+                  label={t('规则版本（留空为全部）', 'Rules version (blank for all)')}
+                >
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="text"
+                      inputMode="numeric"
+                      value={draft.version}
+                      placeholder={t('全部版本', 'All versions')}
+                      maxLength={10}
+                      onChange={(e) => edit({ version: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('结束时间从', 'Ended from')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="datetime-local"
+                      disabled={siteOffset === null}
+                      value={draft.from}
+                      onChange={(e) => edit({ from: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('结束时间至', 'Ended through')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="datetime-local"
+                      disabled={siteOffset === null}
+                      value={draft.to}
+                      onChange={(e) => edit({ to: e.target.value })}
+                    />
+                  )}
+                </Field>
+              </>
+            }
+          />
+          <TimeContextNotice station="admin" />
+          {error && (
+            <p className="field-error" role="alert">
+              {t('请检查版本号和时间范围。', 'Check the version and time range.')}
+            </p>
+          )}
+          {applied.dataset === 'anonymous' &&
+          (applied.selection.from !== undefined || applied.selection.to !== undefined) ? null : (
+            <HistoryResults key={JSON.stringify(applied)} {...applied} />
+          )}
+        </PanelBody>
+      </Panel>
+      <ExportPanel {...applied} />
     </div>
   );
 }

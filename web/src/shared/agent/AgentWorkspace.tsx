@@ -42,7 +42,6 @@ export function AgentWorkspace({ role, account }: { role: AgentRole; account: st
   return (
     <div className="page agent-workspace">
       <PageHeader
-        icon={role === 'steward' ? 'steward' : undefined}
         title={t('common.agent.title')}
         description={t('common.agent.description')}
         back={

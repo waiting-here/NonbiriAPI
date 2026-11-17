@@ -1,8 +1,7 @@
 .ai-admin {
-  padding: var(--nb-space-5);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: var(--nb-space-4);
 }
 .ai-admin input,
 .ai-admin select {
@@ -15,11 +14,11 @@
   padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: var(--nb-space-4);
 }
 .ai-parameter-input {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--nb-space-2);
   align-items: center;
 }
 .ai-parameter-input input[type='range'] {
@@ -32,7 +31,7 @@
 .ai-toolbar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--nb-space-2);
   flex-wrap: wrap;
 }
 .ai-toolbar h3,
@@ -43,31 +42,53 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--nb-space-4);
   border-bottom: 1px solid var(--nb-color-border);
-  padding: 1rem 0;
+  padding: var(--nb-space-4) 0;
+}
+.ai-list-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 .ai-list-row p {
-  margin: 0.35rem 0;
+  margin: var(--nb-space-1) 0;
+}
+.ai-bot-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--nb-space-4);
+}
+.ai-bot-card {
+  background: var(--nb-color-surface-alt);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
+  display: grid;
+  align-content: start;
+  gap: var(--nb-space-3);
+}
+.ai-bot-card p {
+  margin: 0;
 }
 .ai-rule,
 .ai-preview {
-  padding: 1rem;
+  padding: var(--nb-space-4);
   border: 1px solid var(--nb-color-border);
-  border-radius: 0.75rem;
+  border-radius: var(--nb-radius-md);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: var(--nb-space-4);
 }
 .ai-preview table {
   width: 100%;
   min-width: 0;
   table-layout: fixed;
   border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
 }
 .ai-preview th,
 .ai-preview td {
-  padding: 0.45rem;
+  padding: var(--nb-space-2);
   text-align: left;
   overflow-wrap: anywhere;
 }
@@ -78,7 +99,7 @@
   max-width: 6rem;
   height: 0.65rem;
 }
-@media (width <= 40rem) {
+@media (width < 40rem) {
   .ai-list-row {
     align-items: flex-start;
     flex-direction: column;

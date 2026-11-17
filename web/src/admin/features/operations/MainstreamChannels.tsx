@@ -11,7 +11,16 @@ import {
   StationSessionChangedError,
   stationSessionMatches,
 } from '@shared/charityManagement';
-import { DataTable, Field, Fields, FilterBar, FormActions, Toggle } from '@shared/components/ui';
+import {
+  DataTable,
+  Field,
+  Fields,
+  FilterBar,
+  Fold,
+  FormActions,
+  StatusBadge,
+  Toggle,
+} from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './mainstream-channels.css';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -21,7 +30,6 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
-  StatusBadge,
 } from '@shared/components/States';
 import { conflictOrUnknown } from '@shared/operations/api';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -338,15 +346,14 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
           </>
         ) : null}
       </dl>
-      <details>
-        <summary>{t('admin.mainstreamChannels.detail.technicalDetails')}</summary>
+      <Fold plain title={t('admin.mainstreamChannels.detail.technicalDetails')}>
         <dl className="ops-kv">
           <dt>{t('admin.mainstreamChannels.detail.idRevision')}</dt>
           <dd>
             {channel.id} / {channel.revision}
           </dd>
         </dl>
-      </details>
+      </Fold>
     </>
   );
 }
@@ -691,6 +698,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.category'),
                       mobileLabel: t('admin.mainstreamChannels.table.category'),
                       cell: 'meta',
+                      align: 'nowrap',
                       render: (channel) => t(CATEGORY_LABEL_KEYS[channel.category]),
                     },
                     {
@@ -698,6 +706,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.connector'),
                       mobileLabel: t('admin.mainstreamChannels.table.connector'),
                       cell: 'meta',
+                      align: 'nowrap',
                       render: (channel) =>
                         [
                           ...new Set(
@@ -739,15 +748,22 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       cell: 'status',
                       render: (channel) => (
                         <StatusBadge
-                          active={channel.state === 'active' && channel.enabled}
-                          label={t(
+                          tone={
+                            channel.state === 'retired'
+                              ? 'neutral'
+                              : channel.enabled
+                                ? 'ok'
+                                : 'neutral'
+                          }
+                        >
+                          {t(
                             channel.state === 'retired'
                               ? STATE_LABEL_KEYS.retired
                               : channel.enabled
                                 ? 'admin.mainstreamChannels.available'
                                 : 'common.disabled',
                           )}
-                        />
+                        </StatusBadge>
                       ),
                     },
                     {
@@ -755,6 +771,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.updated'),
                       mobileLabel: t('admin.mainstreamChannels.table.updated'),
                       cell: 'meta',
+                      align: 'nowrap',
                       render: (channel) => formatDateTime(channel.updated_at),
                     },
                     {

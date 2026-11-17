@@ -11,6 +11,18 @@
   max-width: 18rem;
   overflow-wrap: anywhere;
 }
+@media (width > 48rem) {
+  .log-table .nb-table td.is-action > .ops-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--nb-space-1);
+    white-space: normal;
+  }
+  .log-table .nb-table td.is-action > .ops-actions > small {
+    text-align: right;
+    color: var(--nb-color-text-muted);
+  }
+}
 .log-origin-compact,
 .log-usage,
 .log-result {
@@ -23,21 +35,39 @@
   display: grid;
   gap: var(--nb-space-3);
 }
+.log-filters__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-3);
+}
 .log-filters .quick-ranges {
   display: flex;
   flex-wrap: wrap;
   gap: var(--nb-space-2);
 }
 .log-filters .quick-ranges button {
-  min-height: 2.5rem;
+  min-height: 2rem;
+  padding-inline: var(--nb-space-3);
+  border-radius: var(--nb-radius-pill);
+  font-size: var(--nb-font-size-xs);
 }
 .log-filters .quick-ranges [aria-pressed='true'] {
+  background: var(--nb-color-accent-soft);
   border-color: var(--nb-color-accent);
   color: var(--nb-color-accent);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.log-filters .nb-filter__search > .nb-field {
+  flex: 1 1 11rem;
 }
 .log-filters .time-context-notice {
-  margin: var(--nb-space-2) 0 0;
+  margin: var(--nb-space-1) 0 0;
   font-size: var(--nb-font-size-xs);
+}
+.log-attempt-facts {
+  margin: var(--nb-space-3) 0 0;
 }
 .log-filters .nb-chip button {
   min-width: 2.5rem;

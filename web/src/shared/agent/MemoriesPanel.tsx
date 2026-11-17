@@ -98,7 +98,7 @@ function MemoryEditor({
         · <AgentTime value={query.data.updated_at} />
       </p>
       <div className="agent-before-after">
-        <Field label={t('common.agent.memoryContent')}>
+        <Field span label={t('common.agent.memoryContent')}>
           {(props) => (
             <textarea
               {...props}
@@ -113,7 +113,7 @@ function MemoryEditor({
             />
           )}
         </Field>
-        <section>
+        <section className="agent-memory-preview">
           <h3>{t('common.agent.preview')}</h3>
           <AgentMarkdown>{content}</AgentMarkdown>
         </section>

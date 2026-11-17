@@ -1,5 +1,5 @@
 import { SimplePager } from '@shared/operations/SimplePager';
-import { Field, Fields, FormActions, Toggle } from '@shared/components/ui';
+import { Field, Fields, FormActions, StatusBadge, Toggle } from '@shared/components/ui';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -216,7 +216,13 @@ function PeriodDraftEditor({
       const result = await transition.mutateAsync({ id: period.id, action, revision });
       setRevision(result.revision);
       setState(result.state);
-      setNotice(`${text('period_state')}: ${result.state}`);
+      const stateLabel =
+        result.state === 'open'
+          ? text('state_open')
+          : result.state === 'closed'
+            ? text('state_closed')
+            : text('state_draft');
+      setNotice(`${text('period_state')}: ${stateLabel}`);
       client.setQueryData(['fatfish', 'period', period.id], { ...result, nodes: period.nodes });
       onSaved(result);
     } catch (cause) {
@@ -262,12 +268,19 @@ function PeriodDraftEditor({
       {changingNode.dialog}
       <h2>{initial ? text('edit_period') : text('new_period')}</h2>
       {period ? (
-        <p role="status">
-          {text('current_state')}: {state}
-        </p>
+        <div role="status" className="fatfish-actions">
+          <span>{text('current_state')}:</span>
+          <StatusBadge tone={state === 'open' ? 'ok' : state === 'closed' ? 'neutral' : 'info'}>
+            {state === 'open'
+              ? text('state_open')
+              : state === 'closed'
+                ? text('state_closed')
+                : text('state_draft')}
+          </StatusBadge>
+        </div>
       ) : null}
       <div inert={editingLocked} onChange={() => setNotice('')}>
-        <Fields>
+        <Fields columns={1}>
           <Field label={text('title')}>
             {(props) => (
               <input
@@ -282,12 +295,15 @@ function PeriodDraftEditor({
             {(props) => (
               <textarea
                 {...props}
+                rows={3}
                 value={description}
                 maxLength={8192}
                 onChange={(event) => setDescription(event.target.value)}
               />
             )}
           </Field>
+        </Fields>
+        <div className="nb-stack nb-stack--sm">
           <Toggle label={text('visible_in_directory')} checked={visible} onChange={setVisible} />
           <Toggle label={text('pause_challenges')} checked={paused} onChange={setPaused} />
           <Toggle
@@ -295,7 +311,7 @@ function PeriodDraftEditor({
             checked={pastPublic}
             onChange={setPastPublic}
           />
-        </Fields>
+        </div>
       </div>
       <TimeContextNotice station="admin" />
       <div inert={editingLocked}>
@@ -530,8 +546,17 @@ export function PeriodManager() {
             <ul>
               {list.data?.items.map((item) => (
                 <li key={item.id}>
-                  <button type="button" onClick={() => switchTo(item.id)}>
-                    {item.title} · {item.state}
+                  <button
+                    type="button"
+                    aria-current={selectedID === item.id ? 'page' : undefined}
+                    onClick={() => switchTo(item.id)}
+                  >
+                    {item.title} ·{' '}
+                    {item.state === 'open'
+                      ? text('state_open')
+                      : item.state === 'closed'
+                        ? text('state_closed')
+                        : text('state_draft')}
                   </button>
                 </li>
               ))}

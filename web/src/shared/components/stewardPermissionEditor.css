@@ -1,7 +1,13 @@
 .permission-categories {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--nb-space-2);
+}
+.permission-categories button {
+  min-height: 2.25rem;
+  padding: var(--nb-space-1) var(--nb-space-3);
+  border-radius: var(--nb-radius-pill);
+  font-size: var(--nb-font-size-sm);
 }
 .permission-categories [aria-pressed='true'] {
   background: var(--nb-color-accent-soft);
@@ -9,30 +15,31 @@
   color: var(--nb-color-accent);
 }
 .permission-group {
-  padding: clamp(1rem, 3vw, 1.5rem);
+  padding: clamp(var(--nb-space-4), 3vw, var(--nb-space-6));
   border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-lg);
+  border-radius: var(--nb-radius-card);
   background: var(--nb-color-surface);
   display: grid;
-  gap: 1rem;
+  gap: var(--nb-space-4);
   min-width: 0;
 }
 .permission-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: 1rem;
+  gap: var(--nb-space-3);
   align-items: start;
 }
 .permission-grid > .nb-toggle,
 .permission-pair {
-  padding: 1rem;
+  padding: var(--nb-space-3) var(--nb-space-4);
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
   min-width: 0;
 }
 .permission-pair {
   display: grid;
-  gap: 0.75rem;
+  gap: var(--nb-space-3);
 }
 .permission-pair .nb-seg {
   flex-wrap: wrap;
@@ -41,16 +48,27 @@
   cursor: pointer;
 }
 .permission-pair details > div {
-  margin-top: 0.75rem;
+  margin-top: var(--nb-space-3);
+}
+.permission-limit-inputs {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) 8.5rem;
+  gap: var(--nb-space-3);
+  align-items: center;
+}
+@media (width < 40rem) {
+  .permission-limit-inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .permission-scope {
-  padding-bottom: 1rem;
+  padding-bottom: var(--nb-space-4);
   border-bottom: 1px solid var(--nb-color-border);
 }
 .permission-scope dl {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-  gap: 1rem;
+  gap: var(--nb-space-4);
 }
 .permission-scope dd {
   margin-inline-start: 0;

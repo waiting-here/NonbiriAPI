@@ -65,7 +65,8 @@ export function LogDetailPanel({
                 <pre>{diagnostics.text || t('common.notAvailable')}</pre>
                 <Button
                   type="button"
-
+                  variant="secondary"
+                  size="sm"
                   onClick={() => void copyText(diagnostics.text).then((ok) => setCopied(ok))}
                 >
                   {copied

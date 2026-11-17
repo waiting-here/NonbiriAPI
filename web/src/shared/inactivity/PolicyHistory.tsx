@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ErrorState } from '@shared/components/States';
+import { EmptyState, ErrorState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
@@ -57,30 +57,41 @@ export function PolicyHistory<T>({
         </span>
       </summary>
       <div className="nb-fold__body">
-        <button
-          type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={query.isFetching}
-          onClick={() => void query.refetch()}
-        >
-          {zh ? '刷新记录' : 'Refresh records'}
-        </button>
-        {enabled && query.isFetching && <p role="status">{zh ? '正在读取…' : 'Loading…'}</p>}
-        {query.isError && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
-        {query.isError && !metadata && pager.page !== '1' && (
+        <div className="nb-actions">
           <button
             type="button"
             className="nb-btn nb-btn--secondary"
-            onClick={() => pager.setPage('1')}
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
           >
-            {zh ? '返回第一页' : 'Return to first page'}
+            {zh ? '刷新记录' : 'Refresh records'}
           </button>
+        </div>
+        {enabled && query.isFetching && <p role="status">{zh ? '正在读取…' : 'Loading…'}</p>}
+        {query.isError && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
+        {query.isError && !metadata && pager.page !== '1' && (
+          <div className="nb-actions">
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() => pager.setPage('1')}
+            >
+              {zh ? '返回第一页' : 'Return to first page'}
+            </button>
+          </div>
         )}
         {ready &&
           (query.data.data.length ? (
             children(query.data.data)
           ) : (
-            <p>{zh ? '暂无记录。' : 'No records yet.'}</p>
+            <EmptyState
+              title={zh ? '暂无记录' : 'No records yet'}
+              body={
+                zh
+                  ? '新的自动执行结果会显示在这里。'
+                  : 'Scheduled execution records will appear here after the policy runs.'
+              }
+            />
           ))}
         {metadata && (
           <PagePagination

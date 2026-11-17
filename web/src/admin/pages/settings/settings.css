@@ -1,6 +1,6 @@
 .settings-search-bar {
   width: 100%;
-  max-width: 48rem;
+  max-width: 34rem;
 }
 .settings-mobile-selector {
   display: none;
@@ -23,11 +23,11 @@
   color: inherit;
 }
 .settings-search {
-  width: min(100%, 22rem);
+  width: 100%;
 }
 .nb-settings {
   display: grid;
-  grid-template-columns: 13.5rem minmax(0, 1fr);
+  grid-template-columns: 14.5rem minmax(0, 1fr);
   gap: var(--nb-space-5);
   align-items: start;
 }
@@ -53,12 +53,26 @@
   background: transparent;
   text-align: left;
   color: var(--nb-color-text);
-  padding: var(--nb-space-3);
+  font-size: var(--nb-font-size-sm);
+  padding: var(--nb-space-2) var(--nb-space-3);
   border-radius: var(--nb-radius-sm);
-  min-height: 40px;
+  min-height: 2.25rem;
   display: flex;
   align-items: center;
   gap: var(--nb-space-2);
+  text-decoration: none;
+}
+@media (pointer: coarse) {
+  .nb-settings__nav button,
+  .settings-other a {
+    min-height: 2.5rem;
+  }
+}
+.settings-other a::after {
+  content: '↗';
+  margin-inline-start: auto;
+  color: var(--nb-color-text-subtle);
+  font-size: var(--nb-font-size-xs);
 }
 .nb-settings__nav .is-dirty::after {
   content: none;
@@ -87,7 +101,11 @@
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   min-width: 0;
-  padding-block: var(--nb-space-1);
+  border-top: 0;
+  padding-block: 0;
+}
+.settings-content .nb-setting .nb-toggle__text strong {
+  font-size: var(--nb-font-size-sm);
 }
 .settings-content .nb-setting.is-dirty {
   border-inline-start: 3px solid var(--nb-color-accent);
@@ -157,7 +175,7 @@
 .settings-feedback:empty {
   display: none;
 }
-@media (width <= 64rem) {
+@media (width < 64rem) {
   .nb-settings {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1,6 +1,6 @@
 import { SuggestInput } from '@shared/components/ui/SuggestInput';
 import { Button, Field, FilterBar } from '@shared/components/ui';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
@@ -32,9 +32,16 @@ interface LogFiltersProps {
   fields: readonly LogFilterField[];
   state: FilterState;
   onApply: (next: FilterState) => void;
+  toolbarActions?: ReactNode;
 }
 
-export function LogFilters({ station, fields, state, onApply }: LogFiltersProps) {
+export function LogFilters({
+  station,
+  fields,
+  state,
+  onApply,
+  toolbarActions,
+}: LogFiltersProps) {
   const { t } = useTranslation();
   const [drafts, setDrafts] = useState<Record<string, string>>(() => ({ ...state.filters }));
   const [draftFrom, setDraftFrom] = useState<TimeDraft>(() =>
@@ -176,27 +183,31 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
         submit();
       }}
     >
-      <div className="quick-ranges" role="group" aria-label={t('logs.quickRanges')}>
-        {QUICK_RANGES.map((range) => (
-          <Button
-            key={range.key}
-            type="button"
-            variant="secondary"
-            aria-pressed={
-              state.fromUnix !== undefined &&
-              state.toUnix !== undefined &&
-              state.toUnix - state.fromUnix === range.seconds
-            }
-            onClick={() => {
-              const now = Math.floor(Date.now() / 1000);
-              setDraftFrom(createTimeDraft(now - range.seconds));
-              setDraftTo(createTimeDraft(now));
-              apply({ filters: state.filters, fromUnix: now - range.seconds, toUnix: now });
-            }}
-          >
-            {t(range.key)}
-          </Button>
-        ))}
+      <div className="log-filters__toolbar">
+        <div className="quick-ranges" role="group" aria-label={t('logs.quickRanges')}>
+          {QUICK_RANGES.map((range) => (
+            <Button
+              key={range.key}
+              type="button"
+              variant="secondary"
+              size="sm"
+              aria-pressed={
+                state.fromUnix !== undefined &&
+                state.toUnix !== undefined &&
+                state.toUnix - state.fromUnix === range.seconds
+              }
+              onClick={() => {
+                const now = Math.floor(Date.now() / 1000);
+                setDraftFrom(createTimeDraft(now - range.seconds));
+                setDraftTo(createTimeDraft(now));
+                apply({ filters: state.filters, fromUnix: now - range.seconds, toUnix: now });
+              }}
+            >
+              {t(range.key)}
+            </Button>
+          ))}
+        </div>
+        {toolbarActions}
       </div>
       <FilterBar
         as="div"

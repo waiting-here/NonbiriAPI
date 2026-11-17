@@ -1,5 +1,5 @@
 import { MoreMenu } from '@shared/components/ui/MoreMenu';
-import { Field, Fields } from '@shared/components/ui';
+import { Field, Fields, Fold } from '@shared/components/ui';
 import { NumberField } from './NumberField';
 import { HeadingInput } from './HeadingInput';
 import {
@@ -222,10 +222,9 @@ function VersionShelf({
           ) : version.error ? (
             <ErrorState error={version.error} />
           ) : (
-            <details>
-              <summary>{text('version_details')}</summary>
+            <Fold plain title={text('version_details')}>
               <code>{version.data?.content_hash}</code>
-            </details>
+            </Fold>
           )}
           {version.data ? (
             <button type="button" onClick={() => onPlay(version.data!)}>
@@ -255,6 +254,53 @@ function VersionShelf({
           )}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function LevelSettingsSection({
+  level,
+  showHeading = true,
+  onCommit,
+}: {
+  level: Level;
+  showHeading?: boolean;
+  onCommit(next: Level): void;
+}) {
+  const text = useFatFishText();
+  return (
+    <section id="fatfish-level-settings" className="fatfish-inspector">
+      {showHeading ? <h3>{text('level_settings')}</h3> : null}
+      <Fields>
+        <NumberField
+          label={text('duration_seconds')}
+          min={10}
+          max={600}
+          value={level.duration_seconds}
+          onChange={(duration_seconds) => onCommit({ ...level, duration_seconds })}
+        />
+        <NumberField
+          label={text('speed_pixels_second')}
+          min={16}
+          max={160}
+          value={level.speed_pixels_per_second}
+          onChange={(speed_pixels_per_second) => onCommit({ ...level, speed_pixels_per_second })}
+        />
+        {level.thresholds.map((value, index) => (
+          <NumberField
+            key={index}
+            label={index + 1 + '★ ' + text('fish_required')}
+            min={1}
+            max={level.fish.length}
+            value={value}
+            onChange={(value) => {
+              const next = cloneLevel(level);
+              next.thresholds[index] = value;
+              onCommit(next);
+            }}
+          />
+        ))}
+      </Fields>
     </section>
   );
 }
@@ -640,41 +686,6 @@ function LevelDraftEditor({
         ]
       : []),
   ];
-  const levelSettings = (
-    <section id="fatfish-level-settings" className="fatfish-inspector">
-      <h3>{text('level_settings')}</h3>
-      <Fields>
-        <NumberField
-          label={text('duration_seconds')}
-          min={10}
-          max={600}
-          value={level.duration_seconds}
-          onChange={(duration_seconds) => commit({ ...level, duration_seconds })}
-        />
-        <NumberField
-          label={text('speed_pixels_second')}
-          min={16}
-          max={160}
-          value={level.speed_pixels_per_second}
-          onChange={(speed_pixels_per_second) => commit({ ...level, speed_pixels_per_second })}
-        />
-        {level.thresholds.map((value, index) => (
-          <NumberField
-            key={index}
-            label={index + 1 + '★ ' + text('fish_required')}
-            min={1}
-            max={level.fish.length}
-            value={value}
-            onChange={(value) => {
-              const next = cloneLevel(level);
-              next.thresholds[index] = value;
-              commit(next);
-            }}
-          />
-        ))}
-      </Fields>
-    </section>
-  );
 
   return (
     <div className="fatfish-editor">
@@ -701,7 +712,7 @@ function LevelDraftEditor({
           </div>
         )}
         <div inert={editingLocked}>
-          <Fields>
+          <Fields columns={1}>
             <Field label={text('title')}>
               {(props) => (
                 <input
@@ -720,6 +731,7 @@ function LevelDraftEditor({
               {(props) => (
                 <textarea
                   {...props}
+                  rows={3}
                   value={description}
                   maxLength={4096}
                   onChange={(event) => {
@@ -764,10 +776,9 @@ function LevelDraftEditor({
           </div>
         )}
         {serverValidation && (
-          <details>
-            <summary>{text('server_validation_passed_content_hash')}</summary>
+          <Fold plain title={text('server_validation_passed_content_hash')}>
             <code>{serverValidation.content_hash}</code>
-          </details>
+          </Fold>
         )}
         {notice && <p role="status">{notice}</p>}
         {error ? <ErrorState error={error} /> : null}
@@ -867,13 +878,14 @@ function LevelDraftEditor({
                 onDelete={removeSelected}
                 onPendingChange={setInspectorPending}
               />
-              <details className="fatfish-settings-fold">
-                <summary>{text('level_settings')}</summary>
-                {levelSettings}
-              </details>
+              <div className="fatfish-settings-fold">
+                <Fold plain title={text('level_settings')}>
+                  <LevelSettingsSection level={level} showHeading={false} onCommit={commit} />
+                </Fold>
+              </div>
             </>
           ) : (
-            levelSettings
+            <LevelSettingsSection level={level} showHeading onCommit={commit} />
           )}
         </div>
       </div>

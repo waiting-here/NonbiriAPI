@@ -967,7 +967,7 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     const adminPage = await admin.newPage();
     await adminPage.goto(state.admin_url + '/settings?group=maintenance');
     const panel = adminPage
-      .locator('section.card')
+      .locator('section.nb-panel')
       .filter({ has: adminPage.getByRole('heading', { name: copy.adminTitle, exact: true }) });
     await panel.getByLabel(copy.reasonLabel).fill('Synthetic service restored');
     await panel.getByRole('button', { name: copy.disableAction, exact: true }).click();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Field, Fields, Toggle } from '@shared/components/ui';
+import { Field, Fields, Fold, Toggle } from '@shared/components/ui';
 import { polygonError } from './polygonEdit';
 import type { Level, Point, Shape, Switch, Gate, Direction } from '@shared/fatfish/engine/types';
 import { toolNames } from '@shared/fatfish/art';
@@ -187,10 +187,9 @@ export function ShapeInspector({
       {temporary ? (
         <div role="alert" className="fatfish-error">
           <p>{describeIssue(temporary.error, text)}</p>
-          <details>
-            <summary>{text('technical_details')}</summary>
+          <Fold plain title={text('technical_details')}>
             {temporary.error}
-          </details>
+          </Fold>
         </div>
       ) : null}
       <Fields>
@@ -385,8 +384,7 @@ export function ShapeInspector({
         ) : null}
       </Fields>
       {item ? (
-        <details>
-          <summary>{text('advanced_contours_and_holes')}</summary>
+        <Fold plain title={text('advanced_contours_and_holes')}>
           <p>
             {selected.kind === 'tools'
               ? text('contour_coordinates_are_relative_to_the_tool_center')
@@ -411,7 +409,7 @@ export function ShapeInspector({
           >
             {text('add_hole')}
           </button>
-        </details>
+        </Fold>
       ) : null}
       <button type="button" className="fatfish-danger" onClick={onDelete}>
         {text('delete_object')}

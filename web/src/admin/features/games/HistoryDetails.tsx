@@ -1,7 +1,10 @@
 import { SimplePager } from '@shared/operations/SimplePager';
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
+import { Fold } from '@shared/components/ui';
+import { formatCredits } from '../../../user/games/common/strict';
 import { DuelDialog } from '../../../user/games/common/duel/Dialog';
 import { getMatch, getRounds, type Dataset, type JSONValue } from './history';
 import { useGameAdminText, type GameID } from './copy';
@@ -90,17 +93,28 @@ export function HistoryDetails({
           <>
             <p>
               {t('规则版本', 'Rules version')}: {detail.data.facts.rules_version} ·{' '}
-              {t('票价', 'Entry')}: {detail.data.facts.ticket} · {t('奖金', 'Prize')}:{' '}
-              {detail.data.facts.prize}
+              {t('票价', 'Entry')}:{' '}
+              <CreditNumber value={formatCredits(detail.data.facts.ticket)} />{' '}
+              {t('积分', 'credits')} · {t('奖金', 'Prize')}:{' '}
+              <CreditNumber value={formatCredits(detail.data.facts.prize)} />{' '}
+              {t('积分', 'credits')}
             </p>
             {detail.data.recent && (
               <p>
-                {detail.data.recent.participants
-                  .map(
-                    (p, i) =>
-                      `${t('席位', 'Seat')} ${i}: ${p.kind === 'bot' ? `${p.display_name} · AI` : p.user_id === null ? t('账号已删除', 'Deleted account') : `${p.display_name} (${p.user_id})`} · ${t('通用／游戏投入', 'General/game paid')} ${p.general_paid}/${p.game_paid}`,
-                  )
-                  .join(' · ')}
+                {detail.data.recent.participants.map((p, i) => (
+                  <span key={i}>
+                    {i > 0 ? ' · ' : ''}
+                    {t('席位', 'Seat')} {i}:{' '}
+                    {p.kind === 'bot'
+                      ? `${p.display_name} · AI`
+                      : p.user_id === null
+                        ? t('账号已删除', 'Deleted account')
+                        : `${p.display_name} (${p.user_id})`}{' '}
+                    · {t('通用／游戏投入', 'General/game paid')}{' '}
+                    <CreditNumber value={formatCredits(p.general_paid)} />/
+                    <CreditNumber value={formatCredits(p.game_paid)} /> {t('积分', 'credits')}
+                  </span>
+                ))}
               </p>
             )}
             <FactDisclosure
@@ -133,16 +147,16 @@ export function HistoryDetails({
                     <p>{t('本局未完成任何轮次。', 'No rounds were completed.')}</p>
                   )}
                   {rounds.data.items.map((round) => (
-                    <details key={round.round} className="admin-duel-round">
-                      <summary>
-                        {t('第', 'Round')} {round.round} {t('轮', '')} ·{' '}
-                        {round.timeouts
-                          .map(
-                            (timeout, i) =>
-                              `${t('席位', 'Seat')} ${i}: ${timeout ? t('超时', 'Timeout') : t('已确认', 'Confirmed')}`,
-                          )
-                          .join(' · ')}
-                      </summary>
+                    <Fold
+                      plain
+                      key={round.round}
+                      title={`${t('第', 'Round')} ${round.round} ${t('轮', '')} · ${round.timeouts
+                        .map(
+                          (timeout, i) =>
+                            `${t('席位', 'Seat')} ${i}: ${timeout ? t('超时', 'Timeout') : t('已确认', 'Confirmed')}`,
+                        )
+                        .join(' · ')}`}
+                    >
                       <FactDisclosure
                         label={t('轮初变化', 'Round-start changes')}
                         value={round.start_events}
@@ -168,7 +182,7 @@ export function HistoryDetails({
                         label={t('结算后状态', 'After settlement')}
                         value={round.after}
                       />
-                    </details>
+                    </Fold>
                   ))}
                   <SimplePager
                     page={cursors.length}

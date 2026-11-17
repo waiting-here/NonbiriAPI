@@ -190,6 +190,23 @@
 .agent-composer {
   margin-top: var(--nb-space-6);
 }
+.agent-composer > .nb-field {
+  max-inline-size: none;
+}
+.agent-memory-preview {
+  display: grid;
+  align-content: start;
+  gap: var(--nb-space-2);
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-control);
+  background: var(--nb-color-surface-alt);
+}
+.agent-memory-preview > h3 {
+  margin: 0;
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
 .agent-plan {
   padding: var(--nb-space-4);
   border: 1px solid var(--nb-color-border-strong);

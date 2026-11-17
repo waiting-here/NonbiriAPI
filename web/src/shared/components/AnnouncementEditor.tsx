@@ -87,7 +87,7 @@ export function AnnouncementEditor({
   embedded?: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const root = managementRoot(role);
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -241,10 +241,12 @@ export function AnnouncementEditor({
   };
 
   const awaitingAuthority = authority.isPending || !draft || !authority.data;
+  const preferZh = Boolean(i18n.resolvedLanguage?.startsWith('zh'));
   const title =
     denied || awaitingAuthority
       ? t('management.announcements.detail.loadingTitle')
-      : draft.title_en || draft.title_zh || t('management.announcements.detail.untitled');
+      : (preferZh ? draft.title_zh || draft.title_en : draft.title_en || draft.title_zh) ||
+        t('management.announcements.detail.untitled');
   const description = t(
     awaitingAuthority
       ? 'management.announcements.detail.loadingDescription'
@@ -323,19 +325,24 @@ export function AnnouncementEditor({
       {header}
       <Card>
         <div className="ops-toolbar">
-          <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
-          <Fold plain title={t('common.operations.management.details')}>
-            <span>
-              {t('management.announcements.detail.authorityRevision', { revision: item.revision })}
-            </span>
-            {item.published ? (
+          <h2>{t('management.announcements.detail.editorTitle')}</h2>
+          <div className="nb-actions">
+            <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
+            <Fold plain title={t('common.operations.management.details')}>
               <span>
-                {t('management.announcements.detail.publishedRevision', {
-                  revision: item.published.revision,
+                {t('management.announcements.detail.authorityRevision', {
+                  revision: item.revision,
                 })}
               </span>
-            ) : null}
-          </Fold>
+              {item.published ? (
+                <span>
+                  {t('management.announcements.detail.publishedRevision', {
+                    revision: item.published.revision,
+                  })}
+                </span>
+              ) : null}
+            </Fold>
+          </div>
         </div>
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
@@ -345,9 +352,6 @@ export function AnnouncementEditor({
             {t('management.announcements.detail.conflict', { revision: item.revision })}
           </p>
         ) : null}
-      </Card>
-      <Card>
-        <h2>{t('management.announcements.detail.editorTitle')}</h2>
         <fieldset disabled={save.isPending || lifecycle.isPending}>
           <Fields>
             <Field label={t('management.announcements.chineseTitle')} size="medium">
@@ -381,6 +385,7 @@ export function AnnouncementEditor({
               {(field) => (
                 <textarea
                   {...field}
+                  rows={6}
                   value={draft.body_zh}
                   onChange={(event) => update('body_zh', event.target.value)}
                 />
@@ -393,6 +398,7 @@ export function AnnouncementEditor({
               {(field) => (
                 <textarea
                   {...field}
+                  rows={6}
                   value={draft.body_en}
                   onChange={(event) => update('body_en', event.target.value)}
                 />
@@ -484,9 +490,9 @@ export function AnnouncementEditor({
             {t('management.announcements.detail.preview')}
           </Button>
           <Button
-            variant="link"
+            variant="ghost"
             type="button"
-            disabled={save.isPending || lifecycle.isPending}
+            disabled={!draftDirty || save.isPending || lifecycle.isPending}
             onClick={() => {
               setDraft(fromAuthority(item));
               setLoadedRevision(item.revision);
@@ -548,19 +554,9 @@ export function AnnouncementEditor({
           </div>
         </Card>
       ) : null}
-      <Card className="ops-danger">
+      <Card>
         <h2>{t('management.announcements.detail.lifecycleTitle')}</h2>
         {lifecycle.error ? <ErrorState error={lifecycle.error} /> : null}
-        <Field label={t('management.announcements.detail.reason')} size="long">
-          {(field) => (
-            <input
-              {...field}
-              value={reason}
-              maxLength={1024}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          )}
-        </Field>
         <FormActions>
           <Button
             variant="primary"
@@ -576,9 +572,23 @@ export function AnnouncementEditor({
                 ? t('management.announcements.detail.republish')
                 : t('management.announcements.detail.publish')}
           </Button>
+        </FormActions>
+      </Card>
+      <Card className="ops-danger">
+        <Field label={t('management.announcements.detail.reason')} size="long">
+          {(field) => (
+            <input
+              {...field}
+              value={reason}
+              maxLength={1024}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          )}
+        </Field>
+        <FormActions>
           {item.state === 'published' ? (
             <Button
-              variant="danger"
+              variant="danger-outline"
               type="button"
               disabled={authorityBlocked || !reason.trim() || lifecycle.isPending || save.isPending}
               onClick={() => setConfirmation('withdraw')}

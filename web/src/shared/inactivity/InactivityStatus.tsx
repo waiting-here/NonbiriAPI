@@ -1,5 +1,4 @@
-import { Fold } from '@shared/components/ui';
-import { StatusBadge } from '@shared/components/States';
+import { Fold, StatusBadge } from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { credits, getStatus, type Policy } from './api';
@@ -97,25 +96,30 @@ export function InactivityStatus({ accountId }: { readonly accountId: string }) 
       <div className="account-activity__heading">
         <h2>{zh ? '账号活跃与保护' : 'Account activity and protection'}</h2>
         <StatusBadge
-          active={value.configuration.enabled && !value.exempt_reason}
-          label={
-            value.exempt_reason
-              ? (reasons[value.exempt_reason] ?? value.exempt_reason)
-              : value.configuration.enabled
-                ? zh
-                  ? '政策已启用'
-                  : 'Policy enabled'
-                : reasons.disabled
-          }
-        />
+          tone={value.configuration.enabled && !value.exempt_reason ? 'ok' : 'neutral'}
+        >
+          {value.exempt_reason
+            ? (reasons[value.exempt_reason] ?? value.exempt_reason)
+            : value.configuration.enabled
+              ? zh
+                ? '政策已启用'
+                : 'Policy enabled'
+              : reasons.disabled}
+        </StatusBadge>
       </div>
       <dl className="nb-facts nb-facts--inline">
-        <dt>{zh ? '最近主动活跃' : 'Last active action'}</dt>
-        <dd>{date(value.activity.last_active_at)}</dd>
-        <dt>{zh ? '预计下次衰减' : 'Next projected decay'}</dt>
-        <dd>{date(value.decay_at)}</dd>
-        <dt>{zh ? '预计保护封禁' : 'Projected protective ban'}</dt>
-        <dd>{date(value.protection_at)}</dd>
+        <div>
+          <dt>{zh ? '最近主动活跃' : 'Last active action'}</dt>
+          <dd>{date(value.activity.last_active_at)}</dd>
+        </div>
+        <div>
+          <dt>{zh ? '预计下次衰减' : 'Next projected decay'}</dt>
+          <dd>{date(value.decay_at)}</dd>
+        </div>
+        <div>
+          <dt>{zh ? '预计保护封禁' : 'Projected protective ban'}</dt>
+          <dd>{date(value.protection_at)}</dd>
+        </div>
       </dl>
       <Fold plain title={t('common.inactivity.activityRules')}>
         <PolicySummary
@@ -124,8 +128,10 @@ export function InactivityStatus({ accountId }: { readonly accountId: string }) 
           siteOffset={value.configuration.site_timezone_offset_minutes}
         />
         <dl className="nb-facts nb-facts--inline">
-          <dt>{zh ? '观察开始' : 'Observation started'}</dt>
-          <dd>{date(value.activity.observation_started_at)}</dd>
+          <div>
+            <dt>{zh ? '观察开始' : 'Observation started'}</dt>
+            <dd>{date(value.activity.observation_started_at)}</dd>
+          </div>
         </dl>
         <p>
           {zh

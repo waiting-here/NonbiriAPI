@@ -1229,11 +1229,10 @@ describe('standalone Admin Games feature', () => {
     await rendered.user.click(await screen.findByRole('switch', { name: 'Enable Blackjack' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Fishing Game settings' }));
     const save = screen.getByRole('button', { name: 'Save all changes' });
-    expect(screen.getByText(/Phase: Unknown value \(casting\) · 9007199254740993/)).toBeVisible();
-    expect(
-      screen.getByText(/Specification: 10×10 · Phase: Unknown value \(playing\) · 2/),
-    ).toBeVisible();
-    expect(screen.getByText(/Mode: Deathmatch · Phase: Gesture selection · 3/)).toBeVisible();
+    const games = screen.getByRole('heading', { name: 'Games' }).closest('section');
+    expect(games).toHaveTextContent('Phase: Unknown value (casting) · 9,007,199,254,740,993');
+    expect(games).toHaveTextContent('Specification: 10×10 · Phase: Unknown value (playing) · 2');
+    expect(games).toHaveTextContent('Mode: Deathmatch · Phase: Gesture selection · 3');
     const queues = screen.getByRole('heading', { name: 'Matchmaking queues' }).closest('section');
     expect(queues).toHaveTextContent('Quick: 5');
     expect(queues).toHaveTextContent('Standard: 0');

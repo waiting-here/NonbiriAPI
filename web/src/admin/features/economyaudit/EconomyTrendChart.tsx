@@ -141,7 +141,12 @@ export function EconomyTrendChart({ series }: { readonly series: Series }) {
         plugins: {
           legend: {
             display: true,
-            labels: { color: colors.foreground, usePointStyle: true, pointStyle: 'line' },
+            labels: {
+              color: colors.foreground,
+              usePointStyle: true,
+              pointStyle: 'line',
+              boxWidth: 24,
+            },
           },
           tooltip: {
             backgroundColor: colors.surface,

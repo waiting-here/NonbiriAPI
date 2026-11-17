@@ -344,9 +344,9 @@ function SettingField({
       <input {...props} {...inputProps} />
     );
   const size =
-    entry.type === 'text' || /url|origin/.test(entry.key)
+    entry.type === 'text' || /url|origin|override|notice/.test(entry.key)
       ? 'long'
-      : entry.type === 'integer' || entry.type === 'amount' || entry.type === 'boolean'
+      : entry.type === 'integer' || entry.type === 'amount'
         ? 'short'
         : 'medium';
   return (
@@ -495,6 +495,11 @@ const REWARD_PAIRS = [
   ['checkin_award_min_milli', 'checkin_award_max_milli'],
   ['game_checkin_award_min_milli', 'game_checkin_award_max_milli'],
 ] as const;
+const LEVEL_THRESHOLDS = [
+  'level_threshold_2_milli',
+  'level_threshold_3_milli',
+  'level_threshold_4_milli',
+];
 const LEVEL_NAMES = Array.from({ length: 6 }, (_, index) => `level_display_name_${index + 1}`);
 const GROUP_ORDER = [
   'economy',
@@ -537,6 +542,9 @@ function Group({
   const byKey = new Map(entries.map((entry) => [entry.key, entry]));
   const used = new Set<string>();
   const pairs = REWARD_PAIRS.filter((pair) => pair.every((key) => byKey.has(key)));
+  const thresholds = LEVEL_THRESHOLDS.map((key) => byKey.get(key)).filter(
+    (entry): entry is SiteConfigCatalogEntry => Boolean(entry),
+  );
   const names = LEVEL_NAMES.map((key) => byKey.get(key)).filter(
     (entry): entry is SiteConfigCatalogEntry => Boolean(entry),
   );
@@ -565,6 +573,18 @@ function Group({
                   hint={t('admin.settings.rewardRangeHelp')}
                 >
                   {pair.map((key) => field(byKey.get(key)!))}
+                </Fields>
+              );
+            }
+            if (thresholds.length === 3 && LEVEL_THRESHOLDS.includes(entry.key)) {
+              thresholds.forEach((item) => used.add(item.key));
+              return (
+                <Fields
+                  className="settings-composite"
+                  key="level-thresholds"
+                  legend={t('admin.settings.levelThresholds')}
+                >
+                  {thresholds.map(field)}
                 </Fields>
               );
             }
@@ -813,7 +833,7 @@ export function SettingsPage() {
 
   return (
     <div className="page ops-page">
-      <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
+      <PageHeader title={t('admin.settings.title')} />
       <div className="settings-search-bar">
         <FilterBar
           role="search"

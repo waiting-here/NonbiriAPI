@@ -16,7 +16,7 @@ import { clearStationSession } from '@shared/charityManagement';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { formatCredits } from '../../../user/games/common/strict';
-import { Fold, Note } from '@shared/components/ui';
+import { Fold, Note, StatusBadge } from '@shared/components/ui';
 import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
 import { GlobalPressure } from '@shared/observability/GlobalPressure';
 import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
@@ -134,8 +134,8 @@ function UsageMismatchBadge({ visible }: { visible: boolean }) {
   const label = t('common.operations.logs.usageTotalMismatch');
   const explanation = t('common.operations.logs.usageTotalMismatchExplanation');
   return (
-    <span className="status-badge" title={explanation} aria-label={`${label}. ${explanation}`}>
-      {label}
+    <span title={explanation} aria-label={`${label}. ${explanation}`}>
+      <StatusBadge tone="warn">{label}</StatusBadge>
     </span>
   );
 }
@@ -225,14 +225,14 @@ function AttemptTable({
             <li className="log-attempt" key={attempt.attempt_seq}>
               <div className="log-attempt-heading">
                 {endpointKeyID && attempt.endpoint_key_id === endpointKeyID ? (
-                  <span className="status-badge">
+                  <StatusBadge tone="accent">
                     {t('common.operations.logs.matchedKeyAttempt')}
-                  </span>
+                  </StatusBadge>
                 ) : null}
                 <h3>
                   {t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}
                 </h3>
-                <span className="status-badge">
+                <StatusBadge tone={attempt.result_kind === 'synthetic' ? 'neutral' : 'info'}>
                   {t(
                     attempt.result_kind === 'synthetic'
                       ? isDiscovery
@@ -240,7 +240,7 @@ function AttemptTable({
                         : 'common.operations.logs.platformRecord'
                       : 'common.operations.logs.upstreamResponse',
                   )}
-                </span>
+                </StatusBadge>
                 {attempt.role !== 'user' ? (
                   <UsageMismatchBadge visible={attempt.usage_total_mismatch} />
                 ) : null}
@@ -254,7 +254,7 @@ function AttemptTable({
                   )}
                 </p>
               ) : null}
-              <dl>
+              <dl className="nb-facts nb-facts--inline log-attempt-facts">
                 <div>
                   <dt>{t('logs.endpointBaseUrl')}</dt>
                   <dd className="mono">{attempt.endpoint_base_url}</dd>
@@ -875,10 +875,14 @@ function ScopedRoleLogPanel({
       cell: 'meta',
       render: (row) =>
         row.route_kind.startsWith('charity_') ? (
-          <>
-            <span>{requestMode(row)}</span>
-            <span className="nb-sub">{actionText(row)}</span>
-          </>
+          row.requested_streaming == null && row.automatic_actions == null ? (
+            <span className="nb-muted">{requestMode(row)}</span>
+          ) : (
+            <>
+              <span>{requestMode(row)}</span>
+              <span className="nb-sub">{actionText(row)}</span>
+            </>
+          )
         ) : (
           '—'
         ),
@@ -1163,31 +1167,40 @@ function ScopedRoleLogPanel({
 
   const pageData = invalidFilter ? undefined : retainedLogData;
   const listBusy = logs.isFetching;
+  const exportMenu = !invalidFilter ? (
+    <details className="nb-more log-export">
+      <summary className="nb-btn nb-btn--secondary nb-btn--sm">
+        {t('common.operations.logs.presentation.export')} ▾
+      </summary>
+      <div className="nb-more__menu">
+        {(['csv', 'json'] as const).map((format) => (
+          <a key={format} href={roleLogExportPath(role, filter, format)} download>
+            {t(
+              format === 'csv'
+                ? 'common.operations.logs.presentation.exportCsv'
+                : 'common.operations.logs.presentation.exportJson',
+            )}
+          </a>
+        ))}
+      </div>
+    </details>
+  ) : null;
   return (
     <Card className={`ops-stack log-panel log-panel--${role}`}>
-      <div className="card-title-row">
-        {role !== 'user' && <h2>{title}</h2>}
-        {!invalidFilter && (
-          <details className="nb-more log-export">
-            <summary className="nb-btn nb-btn--secondary">
-              {t('common.operations.logs.presentation.export')} ▾
-            </summary>
-            <div className="nb-more__menu">
-              {(['csv', 'json'] as const).map((format) => (
-                <a key={format} href={roleLogExportPath(role, filter, format)} download>
-                  {t(
-                    format === 'csv'
-                      ? 'common.operations.logs.presentation.exportCsv'
-                      : 'common.operations.logs.presentation.exportJson',
-                  )}
-                </a>
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
+      {role === 'steward' ? (
+        <div className="card-title-row">
+          <h2>{title}</h2>
+          {exportMenu}
+        </div>
+      ) : null}
       {role !== 'user' ? <GlobalPressure role={role} accountID={accountID} /> : null}
-      <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
+      <LogFilters
+        station={station}
+        fields={fields}
+        state={urlState}
+        onApply={applyFilters}
+        toolbarActions={role !== 'steward' ? exportMenu : undefined}
+      />
       {invalidFilter ? (
         <p className="field-error" role="alert">
           {t(

@@ -104,13 +104,15 @@ export function LakeFields({
             }));
           return (
             <section className="lake-exchange-setting" key={d}>
-              <h3>{lakeText(d)}</h3>
-              <Toggle
-                disabled={disabled}
-                label={lakeText('enabled')}
-                checked={value.enabled}
-                onChange={(enabled) => change('enabled', enabled)}
-              />
+              <div className="lake-period-heading">
+                <h3>{lakeText(d)}</h3>
+                <Toggle
+                  disabled={disabled}
+                  label={lakeText('enabled')}
+                  checked={value.enabled}
+                  onChange={(enabled) => change('enabled', enabled)}
+                />
+              </div>
               <Fields>
                 {(['source_amount', 'target_amount'] as const).map((field, i) => (
                   <Field
@@ -158,9 +160,11 @@ export function LakeFields({
           );
         })}
       </div>
-      <Link to="/games/lake-notes/periods">
-        {text('查看历史活动期次', 'View past activity periods')}
-      </Link>
+      <div className="nb-actions">
+        <Link className="nb-btn nb-btn--secondary nb-btn--sm" to="/games/lake-notes/periods">
+          {text('查看历史活动期次', 'View past activity periods')}
+        </Link>
+      </div>
     </fieldset>
   );
 }

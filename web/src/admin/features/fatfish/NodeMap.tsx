@@ -59,24 +59,24 @@ export function NodeMap({ nodes, selectedID, selectedCondition, onSelect, onMove
       role="img" aria-label={text('draggable_node_layout')}
       onPointerMove={onPointerMove} onPointerUp={finish}
       onPointerCancel={() => { selectingPointer.current = null; drag.current = null; connection.current = null; setConnectionPoint(null); setPreview(null); }}>
-      <defs><marker id="fatfish-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#55848a" /></marker></defs>
-      <rect x={origin.x} y={origin.y} width={800 / zoom} height={500 / zoom} fill="#f7fafb" />
+      <defs><marker id="fatfish-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="var(--nb-color-text-muted)" /></marker></defs>
+      <rect x={origin.x} y={origin.y} width={800 / zoom} height={500 / zoom} fill="var(--nb-color-surface-alt)" />
       {references.map((edge) => {
         const source = nodes.find((node) => node.id === edge.source);
         if (!source) return null;
         const from = position(source), to = position(edge.target);
         const key = edge.target.id + JSON.stringify(edge.path);
-        if (source.id === edge.target.id) return <path key={key} d={`M ${from.x - 16 / zoom} ${from.y - 18 / zoom} C ${from.x - 80 / zoom} ${from.y - 90 / zoom}, ${from.x + 80 / zoom} ${from.y - 90 / zoom}, ${from.x + 16 / zoom} ${from.y - 18 / zoom}`} fill="none" stroke="#55848a" markerEnd="url(#fatfish-graph-arrow)" />;
+        if (source.id === edge.target.id) return <path key={key} d={`M ${from.x - 16 / zoom} ${from.y - 18 / zoom} C ${from.x - 80 / zoom} ${from.y - 90 / zoom}, ${from.x + 80 / zoom} ${from.y - 90 / zoom}, ${from.x + 16 / zoom} ${from.y - 18 / zoom}`} fill="none" stroke="var(--nb-color-text-muted)" markerEnd="url(#fatfish-graph-arrow)" />;
         const length = Math.hypot(to.x - from.x, to.y - from.y);
         if (length === 0) return null;
         const dx = (to.x - from.x) / length, dy = (to.y - from.y) / length;
         return <line key={key} x1={from.x + dx * 25 / zoom} y1={from.y + dy * 25 / zoom}
           x2={to.x - dx * 28 / zoom} y2={to.y - dy * 28 / zoom}
-          stroke="#55848a" strokeWidth={2 / zoom} markerEnd="url(#fatfish-graph-arrow)" />;
+          stroke="var(--nb-color-text-muted)" strokeWidth={2 / zoom} markerEnd="url(#fatfish-graph-arrow)" />;
       })}
       {connectionPoint ? (() => {
         const source = nodes.find((node) => node.id === connectionPoint.source)!;
-        return <line x1={source.map_x} y1={source.map_y} x2={connectionPoint.x} y2={connectionPoint.y} stroke="#db5d34" strokeDasharray="6 4" />;
+        return <line x1={source.map_x} y1={source.map_y} x2={connectionPoint.x} y2={connectionPoint.y} stroke="var(--nb-color-warning)" strokeDasharray="6 4" />;
       })() : null}
       {nodes.map((node) => {
         const positionValue = preview?.id === node.id ? preview : { x: node.map_x, y: node.map_y };
@@ -91,13 +91,13 @@ export function NodeMap({ nodes, selectedID, selectedCondition, onSelect, onMove
             drag.current = { id: node.id, x: node.map_x, y: node.map_y, pointerX: pointer.x, pointerY: pointer.y };
             stage.current?.setPointerCapture(event.pointerId);
           }}>
-          <circle r={24 / zoom} fill={node.id === selectedID ? '#145f85' : '#439b8f'} stroke="white" strokeWidth={3 / zoom} />
-          <circle cx={32 / zoom} r={7 / zoom} fill="#fff" stroke="#145f85" aria-label={text('connect_from_here') + ' ' + node.title}
+          <circle r={24 / zoom} fill={node.id === selectedID ? 'var(--nb-color-accent)' : 'var(--nb-color-info)'} stroke="var(--nb-color-surface-raised)" strokeWidth={3 / zoom} />
+          <circle cx={32 / zoom} r={7 / zoom} fill="var(--nb-color-surface-raised)" stroke="var(--nb-color-accent)" aria-label={text('connect_from_here') + ' ' + node.title}
             onPointerDown={(event) => {
               event.stopPropagation(); connection.current = node.id; setConnectionPoint({ source: node.id, x: node.map_x, y: node.map_y });
               stage.current?.setPointerCapture(event.pointerId);
             }} />
-          <text textAnchor="middle" dy={4 / zoom} fontSize={12 / zoom} fill="white" pointerEvents="none">{node.order + 1}</text>
+          <text textAnchor="middle" dy={4 / zoom} fontSize={12 / zoom} fill="var(--nb-color-accent-contrast)" pointerEvents="none">{node.order + 1}</text>
         </g>;
       })}
     </svg>

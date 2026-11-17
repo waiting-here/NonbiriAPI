@@ -3,7 +3,7 @@ import { FailureDetails } from './FailureDiagnostics';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CopyValue } from '@shared/components/CopyValue';
-import { ErrorState, LoadingState } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -271,8 +271,23 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
       />
       {busy && !page && <LoadingState />}
       {failure != null && <ErrorState error={failure} onRetry={retry} />}
+      {!applied && !busy && failure == null && (
+        <EmptyState
+          title={words('Search diagnostics', '查询独立诊断')}
+          body={words(
+            'Choose filters above and search to inspect retained diagnostics.',
+            '在上方选择条件并搜索，即可查看留存的上游错误与派发诊断。',
+          )}
+        />
+      )}
       {page?.data.length === 0 && (
-        <p>{words('No matching diagnostics.', '没有符合条件的诊断。')}</p>
+        <EmptyState
+          title={words('No matching diagnostics.', '没有符合条件的诊断。')}
+          body={words(
+            'Adjust the filters or time period and try again.',
+            '请调整筛选条件或时间范围后重试。',
+          )}
+        />
       )}
       <div key={readerGeneration} aria-busy={busy}>
         {page?.data.map((entry) => (
@@ -388,7 +403,7 @@ function Detail({
               <p>
                 {words('Client headers are self-reported clues.', '客户端请求头是客户端自报线索。')}
               </p>
-              <dl>
+              <dl className="nb-facts nb-facts--inline">
                 {Object.entries(detail.source).map(([key, value]) => (
                   <div key={key}>
                     <dt>{key}</dt>
@@ -427,7 +442,7 @@ export function DispatchDetails({
           )}
         </p>
       ) : (
-        <dl>
+        <dl className="nb-facts nb-facts--inline">
           <div>
             <dt>{words('Method', '方法')}</dt>
             <dd>

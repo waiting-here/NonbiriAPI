@@ -5,13 +5,14 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Card,
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
+import { DataTable, Field, FilterBar, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+import { formatCount } from '@shared/utils/formatNumber';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
@@ -60,7 +61,7 @@ export function ReportsPage() {
   const badgeVisual = badge.data
     ? BigInt(badge.data.total) > 99n
       ? '99+'
-      : badge.data.total
+      : formatCount(badge.data.total).display
     : '—';
   const statusLabels: Record<ReportStatus, string> = {
     pending_indexing: t('admin.reports.status.pendingIndexing'),
@@ -91,6 +92,18 @@ export function ReportsPage() {
     const query = params.toString();
     return query ? `${location.pathname}?${query}` : location.pathname;
   };
+  const updateStatus = (nextStatus: string) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('status');
+      if (nextStatus) next.set('status', nextStatus);
+      next.delete('page');
+      next.set('page', '1');
+      next.delete('page_size');
+      next.set('page_size', String(pager.pageSize));
+      return next;
+    });
+  };
   const authorityError = [session.error, badge.error, reports.error].find(
     (error) => isForbidden(error) || isUnauthorized(error),
   );
@@ -102,168 +115,221 @@ export function ReportsPage() {
   return (
     <div className="page ops-page">
       <PageHeader title={t('admin.reports.title')} description={t('admin.reports.description')} />
-      <div className="ops-grid">
-        <Card>
-          <h2>{t('admin.reports.badge.title')}</h2>
+      <Panel>
+        <PanelHead title={t('admin.reports.badge.title')} />
+        <PanelBody>
           {badge.isPending ? (
             <LoadingState />
           ) : badge.error ? (
             <ErrorState error={badge.error} onRetry={() => void badge.refetch()} />
           ) : (
-            <>
-              <strong
-                className="metric-value"
-                aria-label={t('admin.reports.badge.exactCount', { count: badge.data?.total })}
-              >
-                {badgeVisual}
-              </strong>
-              <dl className="ops-kv">
-                <dt>{t('admin.reports.badge.indexing')}</dt>
-                <dd>{badge.data?.by_status.pending_indexing}</dd>
-                <dt>{t('admin.reports.badge.review')}</dt>
-                <dd>{badge.data?.by_status.pending_review}</dd>
-                <dt>{t('admin.reports.badge.processing')}</dt>
-                <dd>{badge.data?.by_status.approved_processing}</dd>
-              </dl>
-            </>
+            <div className="nb-stats reports-stats">
+              <div className="nb-stat">
+                <span>{t('admin.reports.badge.title')}</span>
+                <strong
+                  className="nb-amount"
+                  aria-label={t('admin.reports.badge.exactCount', { count: badge.data?.total })}
+                >
+                  {badgeVisual}
+                </strong>
+              </div>
+              <div className="nb-stat">
+                <span>{t('admin.reports.badge.indexing')}</span>
+                <strong className="nb-amount">
+                  {formatCount(badge.data?.by_status.pending_indexing ?? 0).display}
+                </strong>
+              </div>
+              <div className="nb-stat">
+                <span>{t('admin.reports.badge.review')}</span>
+                <strong className="nb-amount">
+                  {formatCount(badge.data?.by_status.pending_review ?? 0).display}
+                </strong>
+              </div>
+              <div className="nb-stat">
+                <span>{t('admin.reports.badge.processing')}</span>
+                <strong className="nb-amount">
+                  {formatCount(badge.data?.by_status.approved_processing ?? 0).display}
+                </strong>
+              </div>
+            </div>
           )}
-        </Card>
-        <Card>
-          <h2>{t('admin.reports.privacy.title')}</h2>
-          <p>{t('admin.reports.privacy.body')}</p>
-        </Card>
-      </div>
-      <Card>
-        <label className="ops-form-field reports-status-filter">
-          <span>{t('admin.reports.filter.status')}</span>
-          <select
-            value={status}
-            onChange={(event) => {
-              const nextStatus = event.target.value;
-              setSearchParams((previous) => {
-                const next = new URLSearchParams(previous);
-                next.delete('status');
-                if (nextStatus) next.set('status', nextStatus);
-                next.delete('page');
-                next.set('page', '1');
-                next.delete('page_size');
-                next.set('page_size', String(pager.pageSize));
-                return next;
-              });
-            }}
-          >
-            <option value="">{t('admin.reports.filter.all')}</option>
-            {REPORT_STATUSES.map((item) => (
-              <option key={item} value={item}>
-                {statusLabels[item]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {reports.error && !reports.data ? (
-          <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
-        ) : reports.data ? (
-          <div className="ops-stack" aria-busy={reports.isFetching}>
-            <QueryFeedback query={reports} />
-            {reports.error ? (
-              <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
-            ) : null}
-            {reports.data.data.length === 0 ? (
-              <EmptyState
-                title={t('admin.reports.empty.title')}
-                body={t('admin.reports.empty.body')}
-              />
-            ) : (
-              <div className="ops-table-scroll">
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>{t('admin.reports.table.status')}</th>
-                      <th>{t('admin.reports.table.connectorUrl')}</th>
-                      <th>{t('admin.reports.table.progress')}</th>
-                      <th>{t('admin.reports.table.counts')}</th>
-                      <th>{t('admin.reports.table.deadline')}</th>
-                      <th>{t('admin.reports.table.open')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reports.data.data.map((item) => (
-                      <tr key={item.id}>
-                        <td data-label={t('admin.reports.table.status')}>
-                          <StatusBadge
-                            active={item.status === 'pending_review'}
-                            danger={item.status === 'approved_processing'}
-                            label={statusLabels[item.status]}
-                          />
-                        </td>
-                        <td
-                          className="ops-cell-wide"
-                          data-label={t('admin.reports.table.connectorUrl')}
-                        >
-                          <GatewayConnectorLabel value={item.connector_type} />
-                          <br />
-                          <span className="ops-wrap">{item.canonical_base_url}</span>
-                        </td>
-                        <td data-label={t('admin.reports.table.progress')}>
-                          {progressLabels[item.progress_state]}
+          <Note tone="info" title={t('admin.reports.privacy.title')}>
+            {t('admin.reports.privacy.body')}
+          </Note>
+        </PanelBody>
+      </Panel>
+      <Panel>
+        <PanelBody>
+          <FilterBar
+            activeCount={status ? 1 : 0}
+            onSubmit={() => {}}
+            search={
+              <>
+                <Field size="short" label={t('admin.reports.filter.status')}>
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={status}
+                      onChange={(event) => updateStatus(event.target.value)}
+                    >
+                      <option value="">{t('admin.reports.filter.all')}</option>
+                      {REPORT_STATUSES.map((item) => (
+                        <option key={item} value={item}>
+                          {statusLabels[item]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                {status ? (
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--ghost"
+                    onClick={() => updateStatus('')}
+                  >
+                    {t('common.resetFilter')}
+                  </button>
+                ) : null}
+              </>
+            }
+          />
+          {reports.error && !reports.data ? (
+            <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
+          ) : reports.data ? (
+            <div className="ops-stack" aria-busy={reports.isFetching}>
+              <QueryFeedback query={reports} />
+              {reports.error ? (
+                <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
+              ) : null}
+              {reports.data.data.length === 0 ? (
+                <EmptyState
+                  title={t('admin.reports.empty.title')}
+                  body={t('admin.reports.empty.body')}
+                />
+              ) : (
+                <DataTable
+                  caption={t('admin.reports.title')}
+                  rows={reports.data.data}
+                  rowKey={(item) => item.id}
+                  columns={[
+                    {
+                      key: 'status',
+                      header: t('admin.reports.table.status'),
+                      cell: 'status',
+                      render: (item) => (
+                        <StatusBadge
+                          active={item.status === 'pending_review'}
+                          danger={item.status === 'approved_processing'}
+                          label={statusLabels[item.status]}
+                        />
+                      ),
+                    },
+                    {
+                      key: 'connectorUrl',
+                      header: t('admin.reports.table.connectorUrl'),
+                      cell: 'title',
+                      render: (item) => (
+                        <div className="nb-stack nb-stack--xs">
+                          <strong>
+                            <GatewayConnectorLabel value={item.connector_type} />
+                          </strong>
+                          <span className="mono nb-small nb-muted ops-wrap">
+                            {item.canonical_base_url}
+                          </span>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'progress',
+                      header: t('admin.reports.table.progress'),
+                      mobileLabel: t('admin.reports.table.progress'),
+                      cell: 'meta',
+                      render: (item) => (
+                        <div>
+                          <span>{progressLabels[item.progress_state]}</span>
                           {item.retry ? (
-                            <>
-                              <br />
+                            <div className="nb-small nb-muted">
                               {t('admin.reports.table.retry', {
                                 count: item.retry.attempt_count,
                               })}{' '}
                               · {retryClassLabels[item.retry.last_error_class]}
-                            </>
+                            </div>
                           ) : null}
-                        </td>
-                        <td data-label={t('admin.reports.table.counts')}>
-                          {t('admin.reports.table.materials', { count: item.counts.materials })}
-                          <br />
-                          {t('admin.reports.table.targets', { count: item.counts.targets })}
-                          <br />
-                          {t('admin.reports.table.processed', { count: item.counts.processed })}
-                        </td>
-                        <td data-label={t('admin.reports.table.deadline')}>
-                          {formatDateTime(item.deadline)}
-                        </td>
-                        <td data-label={t('admin.reports.table.open')}>
-                          <Link
-                            className="nb-btn nb-btn--secondary"
-                            aria-disabled={reports.isFetching || Boolean(reports.error)}
-                            onClick={(event) => {
-                              if (reports.isFetching || reports.error) event.preventDefault();
-                            }}
-                            to={`/reports/${encodeURIComponent(item.id)}`}
-                            state={{
-                              returnTo: listReturn(
-                                reports.data.pagination.page,
-                                reports.data.pagination.page_size,
-                              ),
-                            }}
-                          >
-                            {t('admin.reports.table.review')}
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <PagePagination
-              metadata={reports.data.pagination}
-              requestedPage={pager.page}
-              busy={reports.isFetching}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-            />
-          </div>
-        ) : reports.isPending ? (
-          <LoadingState />
-        ) : (
-          <LoadingState />
-        )}
-      </Card>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'counts',
+                      header: t('admin.reports.table.counts'),
+                      mobileLabel: t('admin.reports.table.counts'),
+                      cell: 'meta',
+                      render: (item) => (
+                        <div className="reports-counts nb-small">
+                          <span>
+                            {t('admin.reports.table.materials', {
+                              count: formatCount(item.counts.materials).display,
+                            })}
+                          </span>
+                          <span>
+                            {t('admin.reports.table.targets', {
+                              count: formatCount(item.counts.targets).display,
+                            })}
+                          </span>
+                          <span>
+                            {t('admin.reports.table.processed', {
+                              count: formatCount(item.counts.processed).display,
+                            })}
+                          </span>
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'deadline',
+                      header: t('admin.reports.table.deadline'),
+                      mobileLabel: t('admin.reports.table.deadline'),
+                      cell: 'meta',
+                      render: (item) => formatDateTime(item.deadline),
+                    },
+                    {
+                      key: 'open',
+                      header: t('admin.reports.table.open'),
+                      cell: 'action',
+                      align: 'action',
+                      render: (item) => (
+                        <Link
+                          className="nb-btn nb-btn--secondary nb-btn--sm"
+                          aria-disabled={reports.isFetching || Boolean(reports.error)}
+                          onClick={(event) => {
+                            if (reports.isFetching || reports.error) event.preventDefault();
+                          }}
+                          to={`/reports/${encodeURIComponent(item.id)}`}
+                          state={{
+                            returnTo: listReturn(
+                              reports.data.pagination.page,
+                              reports.data.pagination.page_size,
+                            ),
+                          }}
+                        >
+                          {t('admin.reports.table.review')}
+                        </Link>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+              <PagePagination
+                metadata={reports.data.pagination}
+                requestedPage={pager.page}
+                busy={reports.isFetching}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+              />
+            </div>
+          ) : (
+            <LoadingState />
+          )}
+        </PanelBody>
+      </Panel>
     </div>
   );
 }

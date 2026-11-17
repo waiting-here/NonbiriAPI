@@ -1,7 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Field, Fields, FormActions, Note, Toggle } from '@shared/components/ui';
+import { CreditNumber } from '@shared/components/CreditNumber';
+import {
+  Affix,
+  Field,
+  Fields,
+  FormActions,
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+  StatusBadge,
+  Toggle,
+} from '@shared/components/ui';
 import { ErrorState, LoadingState } from '@shared/components/States';
+import { formatCredits } from '../../../user/games/common/strict';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import {
   useAIText,
@@ -348,226 +361,262 @@ export function AIPlayersAdmin() {
       },
     });
   return (
-    <section
-      className="nb-panel"
+    <div
+      role="region"
+      className="nb-stack"
       aria-label={t('AI 玩家与策略', 'AI players and strategies')}
       aria-busy={busy}
     >
-      <div className="ai-admin">
-        {query.isPending ? (
-          <LoadingState />
-        ) : query.error ? (
-          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-        ) : (
-          query.data && (
-            <>
-              {editor ? (
-                <>
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--secondary"
-                    disabled={busy}
-                    onClick={() => {
-                      setEditor(null);
-                      save.reset();
-                    }}
-                  >
-                    ← {t('返回列表', 'Back to list')}
-                  </button>
-                  {editor.kind === 'policy' ? (
-                    <PolicyEditor
-                      key={editor.value.id || 'new-policy'}
-                      value={editor.value}
-                      data={query.data}
-                      disabled={busy}
-                      onChange={(value) => setEditor({ kind: 'policy', value })}
-                      onSave={() => {
-                        const p = editor.value;
-                        submit({
-                          kind: 'policies',
-                          body: {
-                            id: p.id,
-                            expected_revision: p.revision,
-                            name: p.name,
-                            description: p.description,
-                            enabled: p.enabled,
-                            definition: p.definition,
-                          },
-                        });
-                      }}
-                    />
-                  ) : (
-                    <BotEditor
-                      key={editor.value.id || 'new-bot'}
-                      draft={editor}
-                      data={query.data}
-                      disabled={busy}
-                      onChange={setEditor}
-                      onSave={() => {
-                        const b = editor.value;
-                        submit({
-                          kind: 'bots',
-                          body: {
-                            id: b.id,
-                            expected_revision: b.revision,
-                            name: b.name,
-                            description: b.description,
-                            enabled: b.enabled,
-                            policy_id: b.policy_id,
-                            policy_version: b.policy_version,
-                            ticket: b.ticket,
-                            first_reward: b.first_reward,
-                            memory_days: b.memory_days,
-                            memory_games: b.memory_games,
-                            new_challenge: editor.newChallenge,
-                          },
-                        });
-                      }}
-                    />
-                  )}
-                </>
-              ) : (
-                <>
-                  <Toggle
-                    label={t('开放人机挑战', 'Open AI challenges')}
-                    description={t(
-                      '同时受小游戏总开关与竞标对决开关控制。',
-                      'Also requires the games master switch and Bidding Duel to be enabled.',
+      {query.isPending ? (
+        <LoadingState />
+      ) : query.error ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      ) : (
+        query.data && (
+          <>
+            {editor ? (
+              <Panel>
+                <PanelBody>
+                  <div className="ai-admin">
+                    <div className="nb-actions">
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          setEditor(null);
+                          save.reset();
+                        }}
+                      >
+                        ← {t('返回列表', 'Back to list')}
+                      </button>
+                    </div>
+                    {editor.kind === 'policy' ? (
+                      <PolicyEditor
+                        key={editor.value.id || 'new-policy'}
+                        value={editor.value}
+                        data={query.data}
+                        disabled={busy}
+                        onChange={(value) => setEditor({ kind: 'policy', value })}
+                        onSave={() => {
+                          const p = editor.value;
+                          submit({
+                            kind: 'policies',
+                            body: {
+                              id: p.id,
+                              expected_revision: p.revision,
+                              name: p.name,
+                              description: p.description,
+                              enabled: p.enabled,
+                              definition: p.definition,
+                            },
+                          });
+                        }}
+                      />
+                    ) : (
+                      <BotEditor
+                        key={editor.value.id || 'new-bot'}
+                        draft={editor}
+                        data={query.data}
+                        disabled={busy}
+                        onChange={setEditor}
+                        onSave={() => {
+                          const b = editor.value;
+                          submit({
+                            kind: 'bots',
+                            body: {
+                              id: b.id,
+                              expected_revision: b.revision,
+                              name: b.name,
+                              description: b.description,
+                              enabled: b.enabled,
+                              policy_id: b.policy_id,
+                              policy_version: b.policy_version,
+                              ticket: b.ticket,
+                              first_reward: b.first_reward,
+                              memory_days: b.memory_days,
+                              memory_games: b.memory_games,
+                              new_challenge: editor.newChallenge,
+                            },
+                          });
+                        }}
+                      />
                     )}
-                    checked={query.data.settings.enabled}
-                    disabled={busy}
-                    onChange={(enabled) =>
-                      submit({
-                        kind: 'settings',
-                        body: { enabled, revision: query.data!.settings.revision },
-                      })
+                  </div>
+                </PanelBody>
+              </Panel>
+            ) : (
+              <>
+                <Panel>
+                  <PanelHead
+                    title={t('AI 玩家', 'AI players')}
+                    actions={
+                      <button
+                        className="nb-btn nb-btn--primary"
+                        type="button"
+                        disabled={busy || !query.data.policies.length}
+                        onClick={() => createBot(query.data!)}
+                      >
+                        {t('新增玩家', 'Add player')}
+                      </button>
                     }
                   />
-                  <div className="ai-toolbar">
-                    <h3>{t('AI 玩家', 'AI players')}</h3>
-                    <button
-                      className="nb-btn nb-btn--primary"
-                      type="button"
-                      disabled={busy || !query.data.policies.length}
-                      onClick={() => createBot(query.data!)}
-                    >
-                      {t('新增玩家', 'Add player')}
-                    </button>
-                  </div>
-                  {query.data.bots.map((b) => (
-                    <article className="ai-list-row" key={b.id}>
+                  <PanelBody>
+                    <div className="ai-admin">
+                      <Toggle
+                        label={t('开放人机挑战', 'Open AI challenges')}
+                        description={t(
+                          '同时受小游戏总开关与竞标对决开关控制。',
+                          'Also requires the games master switch and Bidding Duel to be enabled.',
+                        )}
+                        checked={query.data.settings.enabled}
+                        disabled={busy}
+                        onChange={(enabled) =>
+                          submit({
+                            kind: 'settings',
+                            body: { enabled, revision: query.data!.settings.revision },
+                          })
+                        }
+                      />
                       <div>
-                        <strong>{b.name}</strong>
-                        <p>{b.description}</p>
-                        <small>
-                          {b.enabled ? t('已启用', 'Enabled') : t('已停用', 'Disabled')} ·{' '}
-                          {t('门票', 'Ticket')} {b.ticket} · {t('首通', 'First clear')}{' '}
-                          {b.first_reward} ·{' '}
-                          {query.data!.policies.find((p) => p.id === b.policy_id)?.name} v
-                          {b.policy_version}
-                        </small>
+                        {query.data.bots.map((b) => (
+                          <article className="ai-list-row" key={b.id}>
+                            <div>
+                              <div className="ai-toolbar">
+                                <strong>{b.name}</strong>
+                                <StatusBadge tone={b.enabled ? 'ok' : 'neutral'}>
+                                  {b.enabled ? t('已启用', 'Enabled') : t('已停用', 'Disabled')}
+                                </StatusBadge>
+                              </div>
+                              <p>{b.description}</p>
+                              <small className="nb-muted">
+                                {t('门票', 'Ticket')}{' '}
+                                <CreditNumber value={formatCredits(b.ticket)} />{' '}
+                                {t('积分', 'credits')} · {t('首通', 'First clear')}{' '}
+                                <CreditNumber value={formatCredits(b.first_reward)} />{' '}
+                                {t('游戏积分', 'game credits')} ·{' '}
+                                {query.data!.policies.find((p) => p.id === b.policy_id)?.name} v
+                                {b.policy_version}
+                              </small>
+                            </div>
+                            <button
+                              className="nb-btn nb-btn--secondary"
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                setEditor({ kind: 'bot', value: b, newChallenge: false })
+                              }
+                            >
+                              {t('编辑', 'Edit')}
+                            </button>
+                          </article>
+                        ))}
                       </div>
+                    </div>
+                  </PanelBody>
+                </Panel>
+                <Panel>
+                  <PanelHead
+                    title={t('策略', 'Strategies')}
+                    actions={
                       <button
-                        className="nb-btn nb-btn--secondary"
+                        className="nb-btn nb-btn--primary"
                         type="button"
                         disabled={busy}
-                        onClick={() => setEditor({ kind: 'bot', value: b, newChallenge: false })}
+                        onClick={() =>
+                          setEditor({
+                            kind: 'policy',
+                            value: newPolicy(query.data!.presets[0]!.policy),
+                          })
+                        }
                       >
-                        {t('编辑', 'Edit')}
+                        {t('新增策略', 'Add strategy')}
                       </button>
-                    </article>
-                  ))}
-                  <div className="ai-toolbar">
-                    <h3>{t('策略', 'Strategies')}</h3>
-                    <button
-                      className="nb-btn nb-btn--primary"
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        setEditor({
-                          kind: 'policy',
-                          value: newPolicy(query.data!.presets[0]!.policy),
-                        })
-                      }
-                    >
-                      {t('新增策略', 'Add strategy')}
-                    </button>
-                  </div>
-                  <Note>
-                    {t(
-                      '保存会发布一个新版本。AI 玩家需明确绑定该版本，已入场对局保持原策略。',
-                      'Saving publishes a new version. Assign it explicitly to an AI player; active matches keep their original strategy.',
-                    )}
-                  </Note>
-                  {query.data.policies.map((p) => (
-                    <article className="ai-list-row" key={p.id}>
+                    }
+                  />
+                  <PanelBody>
+                    <div className="ai-admin">
+                      <Note>
+                        {t(
+                          '保存会发布一个新版本。AI 玩家需明确绑定该版本，已入场对局保持原策略。',
+                          'Saving publishes a new version. Assign it explicitly to an AI player; active matches keep their original strategy.',
+                        )}
+                      </Note>
                       <div>
-                        <strong>
-                          {p.name} · v{p.version}
-                        </strong>
-                        <p>{p.description}</p>
-                        <small>
-                          {p.enabled ? t('可用', 'Available') : t('已停用', 'Disabled')}
-                        </small>
+                        {query.data.policies.map((p) => (
+                          <article className="ai-list-row" key={p.id}>
+                            <div>
+                              <div className="ai-toolbar">
+                                <strong>
+                                  {p.name} · v{p.version}
+                                </strong>
+                                <StatusBadge tone={p.enabled ? 'ok' : 'neutral'}>
+                                  {p.enabled ? t('可用', 'Available') : t('已停用', 'Disabled')}
+                                </StatusBadge>
+                              </div>
+                              <p>{p.description}</p>
+                            </div>
+                            <div className="ai-toolbar">
+                              <button
+                                className="nb-btn nb-btn--secondary"
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setEditor({ kind: 'policy', value: p })}
+                              >
+                                {t('编辑', 'Edit')}
+                              </button>
+                              <button
+                                className="nb-btn nb-btn--secondary"
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  setEditor({
+                                    kind: 'policy',
+                                    value: {
+                                      ...newPolicy(p.definition),
+                                      name: p.name + t('副本', ' copy'),
+                                      description: p.description,
+                                    },
+                                  })
+                                }
+                              >
+                                {t('复制', 'Duplicate')}
+                              </button>
+                            </div>
+                          </article>
+                        ))}
                       </div>
-                      <div className="ai-toolbar">
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setEditor({ kind: 'policy', value: p })}
-                        >
-                          {t('编辑', 'Edit')}
-                        </button>
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            setEditor({
-                              kind: 'policy',
-                              value: {
-                                ...newPolicy(p.definition),
-                                name: p.name + t('副本', ' copy'),
-                                description: p.description,
-                              },
-                            })
-                          }
-                        >
-                          {t('复制', 'Duplicate')}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </>
-              )}
-            </>
-          )
-        )}
-        {save.error && (
-          <ErrorState
-            error={save.error}
-            onRetry={
-              save.outcome === 'unknown'
-                ? () => {
-                    if (save.variables)
-                      save.mutate(save.variables, { onSuccess: () => setEditor(null) });
-                  }
-                : undefined
-            }
-          />
-        )}
-        {save.outcome === 'unknown' && (
-          <Note>
-            {t(
-              '保存结果尚未确认。重试会复用原请求。',
-              'The save result is unconfirmed. Retrying reuses the original request.',
+                    </div>
+                  </PanelBody>
+                </Panel>
+              </>
             )}
-          </Note>
-        )}
-        {save.isSuccess && !editor && <p role="status">{t('已保存', 'Saved')}</p>}
-      </div>
-    </section>
+          </>
+        )
+      )}
+      {save.error && (
+        <ErrorState
+          error={save.error}
+          onRetry={
+            save.outcome === 'unknown'
+              ? () => {
+                  if (save.variables)
+                    save.mutate(save.variables, { onSuccess: () => setEditor(null) });
+                }
+              : undefined
+          }
+        />
+      )}
+      {save.outcome === 'unknown' && (
+        <Note>
+          {t(
+            '保存结果尚未确认。重试会复用原请求。',
+            'The save result is unconfirmed. Retrying reuses the original request.',
+          )}
+        </Note>
+      )}
+      {save.isSuccess && !editor && <p role="status">{t('已保存', 'Saved')}</p>}
+    </div>
   );
 }
 function newPolicy(definition: AIPolicyDefinition): AIPolicy {
@@ -897,6 +946,7 @@ function BotEditor({
       <Fields>
         {(['ticket', 'first_reward'] as const).map((key) => (
           <Field
+            size="short"
             key={key}
             label={
               key === 'ticket'
@@ -905,8 +955,9 @@ function BotEditor({
             }
           >
             {(props) => (
-              <input
+              <Affix
                 {...props}
+                unit={key === 'ticket' ? t('积分', 'credits') : t('游戏积分', 'game credits')}
                 inputMode="decimal"
                 value={b[key]}
                 onChange={(e) => edit({ [key]: e.target.value })}
@@ -914,10 +965,11 @@ function BotEditor({
             )}
           </Field>
         ))}
-        <Field label={t('记忆天数', 'Memory days')}>
+        <Field size="short" label={t('记忆天数', 'Memory days')}>
           {(props) => (
-            <input
+            <Affix
               {...props}
+              unit={t('天', 'days')}
               type="number"
               min={1}
               max={30}
@@ -926,10 +978,11 @@ function BotEditor({
             />
           )}
         </Field>
-        <Field label={t('记忆局数上限', 'Maximum remembered matches')}>
+        <Field size="short" label={t('记忆局数上限', 'Maximum remembered matches')}>
           {(props) => (
-            <input
+            <Affix
               {...props}
+              unit={t('局', 'matches')}
               type="number"
               min={1}
               max={100}

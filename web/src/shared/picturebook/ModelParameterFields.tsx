@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Fold } from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
 import { useId } from 'react';
 import { parameterLabel, usePictureBookText } from './copy';
@@ -187,17 +188,18 @@ export function ModelParameterFields({
         ))
       )}
       {advanced.length ? (
-        <details>
-          <summary>{t('高级参数', 'Advanced parameters')}</summary>
-          {advanced.map((rule) => (
-            <ParameterField
-              key={rule.key}
-              rule={rule}
-              value={values[rule.key] ?? ''}
-              onChange={(value) => onChange({ [rule.key]: value })}
-            />
-          ))}
-        </details>
+        <Fold plain title={t('高级参数', 'Advanced parameters')}>
+          <div className="picturebook-stack">
+            {advanced.map((rule) => (
+              <ParameterField
+                key={rule.key}
+                rule={rule}
+                value={values[rule.key] ?? ''}
+                onChange={(value) => onChange({ [rule.key]: value })}
+              />
+            ))}
+          </div>
+        </Fold>
       ) : null}
     </>
   );

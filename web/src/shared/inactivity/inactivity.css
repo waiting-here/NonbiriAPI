@@ -52,10 +52,29 @@
   min-width: 0;
 }
 .inactivity-panel .nb-toggle {
-  width: 100%;
+  max-inline-size: 38rem;
 }
 .inactivity-panel .nb-page-header .nb-toggle {
   width: auto;
+}
+.inactivity-panel input[type='time'] {
+  max-inline-size: 11rem;
+}
+.inactivity-workspace,
+.inactivity-sidebar {
+  display: grid;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+@media (width >= 64rem) {
+  .inactivity-workspace {
+    grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 22rem);
+    align-items: start;
+  }
+  .inactivity-sidebar {
+    position: sticky;
+    top: var(--nb-space-5);
+  }
 }
 .inactivity-panel .nb-affix input {
   width: 100%;

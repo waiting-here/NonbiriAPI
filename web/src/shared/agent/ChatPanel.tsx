@@ -253,6 +253,7 @@ export function ChatPanel({
     <Panel>
       <PanelHead
         title={t('common.agent.chat')}
+        description={t('common.agent.chatHelp')}
         actions={
           <Button
             variant="secondary"
@@ -270,8 +271,7 @@ export function ChatPanel({
           <AgentError error={query.error} onRetry={() => void query.refetch()} />
         ) : (
           <>
-            <Note>{t('common.agent.chatHelp')}</Note>
-            {!query.data.enabled ? <Note>{t('common.agent.chatUnavailable')}</Note> : null}
+            {!query.data.enabled ? <Note tone="warn">{t('common.agent.chatUnavailable')}</Note> : null}
             {query.data.summary ? (
               <Fold title={t('common.agent.compactedContext')}>
                 <AgentMarkdown>{query.data.summary}</AgentMarkdown>
@@ -398,7 +398,7 @@ export function ChatPanel({
                 });
               }}
             >
-              <Field label={t('common.agent.message')} help={t('common.agent.compactHelp')}>
+              <Field span label={t('common.agent.message')} help={t('common.agent.compactHelp')}>
                 {(props) => (
                   <textarea
                     {...props}

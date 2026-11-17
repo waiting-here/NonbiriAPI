@@ -99,7 +99,7 @@ export function RecurringDiscountFields({
       {registry.error ? (
         <ErrorState error={registry.error} onRetry={() => void registry.refetch()} />
       ) : null}
-      <p className="muted">{t('common.recurringDiscount.percentHelp')}</p>
+      <p className="nb-sub">{t('common.recurringDiscount.percentHelp')}</p>
       {value.periods.map((row, index) => {
         const allDay = row.start_time === '00:00' && row.end_time === '24:00';
         return (
@@ -202,7 +202,7 @@ export function RecurringDiscountFields({
               </Field>
             </Fields>
             {row.end_time < row.start_time ? (
-              <p className="muted">{t('common.recurringDiscount.overnight')}</p>
+              <p className="nb-sub">{t('common.recurringDiscount.overnight')}</p>
             ) : null}
             <FormActions>
               <Button

@@ -469,26 +469,22 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                       {
                         key: 'selection',
                         header: t('common.agent.select'),
-                        cell: 'meta',
+                        cell: 'select',
                         render: (row) => (
-                          <Field label={t('common.agent.selectRequest', { id: row.id })}>
-                            {(props) => (
-                              <input
-                                {...props}
-                                type="checkbox"
-                                checked={selected.has(row.id)}
-                                disabled={locked}
-                                onChange={(event) =>
-                                  setSelected((previous) => {
-                                    const next = new Set(previous);
-                                    if (event.target.checked) next.add(row.id);
-                                    else next.delete(row.id);
-                                    return next;
-                                  })
-                                }
-                              />
-                            )}
-                          </Field>
+                          <input
+                            type="checkbox"
+                            aria-label={t('common.agent.selectRequest', { id: row.id })}
+                            checked={selected.has(row.id)}
+                            disabled={locked}
+                            onChange={(event) =>
+                              setSelected((previous) => {
+                                const next = new Set(previous);
+                                if (event.target.checked) next.add(row.id);
+                                else next.delete(row.id);
+                                return next;
+                              })
+                            }
+                          />
                         ),
                       },
                       {
@@ -520,6 +516,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                         key: 'actions',
                         header: t('common.agent.actions'),
                         cell: 'action',
+                        align: 'action',
                         render: (row) => (
                           <Button variant="secondary" onClick={() => select(row.id)}>
                             {t('common.agent.open')}

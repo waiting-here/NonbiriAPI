@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ErrorState } from '@shared/components/States';
+import { Field } from '@shared/components/ui';
 import { elevateAdmin } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ApiError } from '@shared/query/http';
@@ -16,7 +17,6 @@ export function UserDeletion({
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
-  const passwordHintId = useId();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [elevating, setElevating] = useState(false);
@@ -68,39 +68,40 @@ export function UserDeletion({
         {t('management.users.delete')}
       </button>
       {open ? (
-        <>
-          <ConfirmDialog
-            open
-            title={t('management.users.deleteTitle')}
-            description={t('management.users.deleteRefreshOnlyBody', { user: user.username })}
-            confirmLabel={t('management.users.deleteConfirm')}
-            confirmDisabled={!password}
-            danger
-            busy={elevating || deletion.isPending}
-            onCancel={() => {
-              setOpen(false);
-              setPassword('');
-              setElevationError(null);
-            }}
-            onConfirm={() => void submit()}
+        <ConfirmDialog
+          open
+          title={t('management.users.deleteTitle')}
+          description={t('management.users.deleteRefreshOnlyBody', { user: user.username })}
+          confirmLabel={t('management.users.deleteConfirm')}
+          confirmDisabled={!password}
+          danger
+          busy={elevating || deletion.isPending}
+          onCancel={() => {
+            setOpen(false);
+            setPassword('');
+            setElevationError(null);
+          }}
+          onConfirm={() => void submit()}
+        >
+          <Field
+            label={t('management.users.elevatedPassword')}
+            help={t('management.users.elevatedPasswordHint')}
           >
-            <label className="ops-form-field">
-              <span>{t('management.users.elevatedPassword')}</span>
+            {(props) => (
               <input
+                {...props}
                 type="password"
                 autoComplete="current-password"
-                aria-describedby={passwordHintId}
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setElevationError(null);
                 }}
               />
-            </label>
-            <small id={passwordHintId}>{t('management.users.elevatedPasswordHint')}</small>
-            {elevationError ? <ErrorState error={elevationError} /> : null}
-          </ConfirmDialog>
-        </>
+            )}
+          </Field>
+          {elevationError ? <ErrorState error={elevationError} /> : null}
+        </ConfirmDialog>
       ) : null}
       {deletion.error ? <ErrorState error={deletion.error} /> : null}
     </>

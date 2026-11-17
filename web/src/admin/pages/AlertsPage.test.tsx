@@ -89,7 +89,7 @@ describe('administrator alerts page', () => {
         body: page([returned]),
       },
     ]);
-    const rendered = await renderWithProviders(<AlertsPage />, {
+    await renderWithProviders(<AlertsPage />, {
       station: 'admin',
       role: 'admin',
       locale: 'en',
@@ -100,8 +100,7 @@ describe('administrator alerts page', () => {
     expect(
       screen.queryByText('Upstream call did not complete. Open details for failure information.'),
     ).toBeNull();
-    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Resolve' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled();
   });
 
   it('rejects off-site and ambiguous return destinations', () => {
@@ -364,8 +363,7 @@ describe('administrator alerts page', () => {
     });
 
     expect(await screen.findByRole('checkbox', { name: 'Select alert 41' })).toBeVisible();
-    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
     await waitFor(() => expect(resolvedOnServer).toBe(true));
     await waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(2));
 
@@ -433,8 +431,7 @@ describe('administrator alerts page', () => {
       });
 
       expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
-      await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-      await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+      await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
       await waitFor(() =>
         expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument(),
       );
@@ -479,8 +476,7 @@ describe('administrator alerts page', () => {
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
     await screen.findByRole('checkbox', { name: 'Select alert 1' });
-    await view.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    await view.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    await view.user.click(screen.getByRole('button', { name: 'Resolve' }));
     await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(reads).toBe(2);
@@ -541,13 +537,11 @@ describe('administrator alerts page', () => {
     );
     expect(screen.getByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Alert actions' })[0]);
-    const resolve = screen.getByRole('menuitem', { name: 'Resolve' });
-    expect(resolve).toHaveAttribute('aria-disabled', 'true');
+    const resolve = screen.getAllByRole('button', { name: 'Resolve' })[0];
+    expect(resolve).toBeDisabled();
     const reads = fetchMock.mock.calls.length;
     await rendered.user.click(resolve);
     expect(fetchMock).toHaveBeenCalledTimes(reads);
-    await rendered.user.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeDisabled();
 
@@ -561,9 +555,9 @@ describe('administrator alerts page', () => {
     });
     expect(await screen.findByRole('checkbox', { name: 'Select alert 21' })).toBeVisible();
     expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
-    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
-    await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    const resolveAfter = screen.getByRole('button', { name: 'Resolve' });
+    expect(resolveAfter).toBeEnabled();
+    await rendered.user.click(resolveAfter);
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) => String(input).endsWith('/alerts/21/resolve')),

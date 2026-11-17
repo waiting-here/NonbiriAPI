@@ -5,8 +5,10 @@ import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useOptionalToast } from '@shared/components/Toast';
+import { formatCount } from '@shared/utils/formatNumber';
+import { formatCredits } from '../../user/games/common/strict';
 import {
   adminEconomyKeys,
   gamesConfigPatch,
@@ -24,7 +26,7 @@ import {
   RPSFields,
 } from '../features/games/GameFields';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { Note, Panel, PanelBody, SaveBar, Toggle } from '@shared/components/ui';
+import { Note, Panel, PanelBody, PanelHead, SaveBar, StatusBadge, Toggle } from '@shared/components/ui';
 import '../features/games/configuration.css';
 import {
   BlackjackConfiguration,
@@ -455,7 +457,9 @@ function GamesEditor({
         '90-second catch challenge · first-clear reward only',
       );
     if (game === 'fishing')
-      return `${Object.values(draft.fishing.bait_prices).join(' / ')} ${text('积分', 'credits')} · ${text('抽成', 'fees')} ${Object.values(draft.fishing.rake_bp).reduce((a, b) => a + b, 0) / 100}%`;
+      return `${Object.values(draft.fishing.bait_prices)
+        .map((price) => formatCredits(price))
+        .join(' / ')} ${text('积分', 'credits')} · ${text('抽成', 'fees')} ${Object.values(draft.fishing.rake_bp).reduce((a, b) => a + b, 0) / 100}%`;
     if (game === 'linklink') return enabledSummary(Object.values(draft.linklink.specs));
     if (game === 'rps') return enabledSummary(Object.values(draft.rps.modes));
     if (game === 'blackjack')
@@ -475,7 +479,6 @@ function GamesEditor({
         <PanelBody>
           <Toggle
             label={t('admin.games.masterEnabled')}
-            description={t('admin.games.controls.revisionTerms')}
             checked={draft.master_enabled}
             disabled={save.isPending}
             onChange={(master_enabled) => edit((current) => ({ ...current, master_enabled }))}
@@ -634,123 +637,126 @@ export function GamesPage() {
           '开关和规则保存后对新对局生效；进行中的对局按开始时的规则结束。',
           'Saved settings apply to new matches; active matches finish with their starting rules.',
         )}
-        actions={
-          <>
-            <Link className="nb-btn nb-btn--secondary" to="/games/ai">
-              {t('admin.games.aiPlayersTitle')}
-            </Link>
-            {config.data?.bidding && config.data.likes ? (
-              <Link className="nb-btn nb-btn--secondary" to="/games/history">
-                {duelText('对战历史与导出', 'Match history and exports')}
-              </Link>
-            ) : null}
-            <Link className="nb-btn nb-btn--secondary" to="/games/blackjack/history">
-              {duelText('二十一点历史', 'Blackjack history')}
-            </Link>
-          </>
-        }
       />
+      <div className="admin-games-toolbar">
+        <div className="nb-actions">
+          <Link className="nb-btn nb-btn--secondary" to="/games/ai">
+            {t('admin.games.aiPlayersTitle')}
+          </Link>
+          {config.data?.bidding && config.data.likes ? (
+            <Link className="nb-btn nb-btn--secondary" to="/games/history">
+              {duelText('对战历史与导出', 'Match history and exports')}
+            </Link>
+          ) : null}
+          <Link className="nb-btn nb-btn--secondary" to="/games/blackjack/history">
+            {duelText('二十一点历史', 'Blackjack history')}
+          </Link>
+        </div>
+        {counts.data &&
+        !counts.error &&
+        counts.data.games.length === 0 &&
+        counts.data.queues.length === 0 ? (
+          <span className="nb-small nb-muted" role="status">
+            {t('admin.games.counts.empty')}
+          </span>
+        ) : null}
+      </div>
       {counts.data &&
       !counts.error &&
       counts.data.games.length === 0 &&
-      counts.data.queues.length === 0 ? (
-        <Note>{t('admin.games.counts.empty')}</Note>
-      ) : (
-        <Card>
-          <h2>{t('admin.games.counts.title')}</h2>
-          {counts.isPending ? (
-            <LoadingState />
-          ) : counts.error ? (
-            <ErrorState error={counts.error} onRetry={() => void counts.refetch()} />
-          ) : counts.data.games.length === 0 && counts.data.queues.length === 0 ? (
-            <Note>{t('admin.games.counts.empty')}</Note>
-          ) : (
-            <div className="ops-grid">
-              <section>
-                <h3>{t('admin.games.counts.games')}</h3>
-                {counts.data.games.map((row, index) => {
-                  const dimensions =
-                    [
-                      row.mode
-                        ? t('admin.games.counts.mode', {
-                            value:
-                              row.game === 'bidding' ||
-                              row.game === 'likes' ||
-                              row.game === 'blackjack' ||
-                              row.game === 'gwent' ||
-                              row.game === 'steadycatch' ||
-                              row.game === 'lakenotes'
-                                ? modeLabel(row.mode, duelText)
-                                : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
-                          })
-                        : null,
-                      row.spec
-                        ? t('admin.games.counts.spec', {
-                            value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec),
-                          })
-                        : null,
-                      row.phase
-                        ? t('admin.games.counts.phase', {
-                            value:
-                              row.game === 'bidding' ||
-                              row.game === 'likes' ||
-                              row.game === 'blackjack' ||
-                              row.game === 'gwent' ||
-                              row.game === 'steadycatch' ||
-                              row.game === 'lakenotes'
-                                ? ({
-                                    plan: duelText('选招', 'Choosing skills'),
-                                    settlement: duelText('结算展示', 'Settlement presentation'),
-                                    joker: duelText('王的决定', 'Joker choice'),
-                                    bid: duelText('竞标', 'Bidding'),
-                                    seating: duelText('落座', 'Seating'),
-                                    decision: duelText('决策', 'Decisions'),
-                                    mulligan: duelText('换牌', 'Mulligan'),
-                                    turn: duelText('出牌', 'Playing cards'),
-                                    choice: duelText('选择目标', 'Choosing a target'),
-                                    playing: duelText('游玩中', 'Playing'),
-                                    paused: duelText('已暂停', 'Paused'),
-                                  }[row.phase] ?? row.phase)
-                                : enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
-                          })
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || t('admin.games.counts.active');
-                  return (
-                    <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
-                      <StatusBadge
-                        active
-                        label={
-                          row.game === 'bidding' ||
+      counts.data.queues.length === 0 ? null : (
+        <Panel>
+          <PanelHead title={t('admin.games.counts.title')} />
+          <PanelBody>
+            {counts.isPending ? (
+              <LoadingState />
+            ) : counts.error ? (
+              <ErrorState error={counts.error} onRetry={() => void counts.refetch()} />
+            ) : (
+              <div className="ops-grid">
+                <section>
+                  <h3>{t('admin.games.counts.games')}</h3>
+                  {counts.data.games.map((row, index) => {
+                    const dimensions =
+                      [
+                        row.mode
+                          ? t('admin.games.counts.mode', {
+                              value:
+                                row.game === 'bidding' ||
+                                row.game === 'likes' ||
+                                row.game === 'blackjack' ||
+                                row.game === 'gwent' ||
+                                row.game === 'steadycatch' ||
+                                row.game === 'lakenotes'
+                                  ? modeLabel(row.mode, duelText)
+                                  : enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
+                            })
+                          : null,
+                        row.spec
+                          ? t('admin.games.counts.spec', {
+                              value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec),
+                            })
+                          : null,
+                        row.phase
+                          ? t('admin.games.counts.phase', {
+                              value:
+                                row.game === 'bidding' ||
+                                row.game === 'likes' ||
+                                row.game === 'blackjack' ||
+                                row.game === 'gwent' ||
+                                row.game === 'steadycatch' ||
+                                row.game === 'lakenotes'
+                                  ? ({
+                                      plan: duelText('选招', 'Choosing skills'),
+                                      settlement: duelText('结算展示', 'Settlement presentation'),
+                                      joker: duelText('王的决定', 'Joker choice'),
+                                      bid: duelText('竞标', 'Bidding'),
+                                      seating: duelText('落座', 'Seating'),
+                                      decision: duelText('决策', 'Decisions'),
+                                      mulligan: duelText('换牌', 'Mulligan'),
+                                      turn: duelText('出牌', 'Playing cards'),
+                                      choice: duelText('选择目标', 'Choosing a target'),
+                                      playing: duelText('游玩中', 'Playing'),
+                                      paused: duelText('已暂停', 'Paused'),
+                                    }[row.phase] ?? row.phase)
+                                  : enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
+                            })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || t('admin.games.counts.active');
+                    return (
+                      <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
+                        <StatusBadge tone="ok">
+                          {row.game === 'bidding' ||
                           row.game === 'likes' ||
                           row.game === 'blackjack' ||
                           row.game === 'gwent' ||
                           row.game === 'steadycatch' ||
                           row.game === 'lakenotes'
                             ? gameLabel(row.game, duelText)
-                            : enumLabel(t, GAME_LABEL_KEYS, row.game)
-                        }
-                      />{' '}
-                      {dimensions} · {row.count}
+                            : enumLabel(t, GAME_LABEL_KEYS, row.game)}
+                        </StatusBadge>{' '}
+                        {dimensions} · {formatCount(row.count).display}
+                      </p>
+                    );
+                  })}
+                </section>
+                <section>
+                  <h3>{duelText('匹配队列', 'Matchmaking queues')}</h3>
+                  {counts.data.queues.map((row) => (
+                    <p key={`${row.game}:${row.mode}`}>
+                      {row.game === 'rps'
+                        ? `${t('admin.games.sections.rps')} · ${enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode)}`
+                        : `${gameLabel(row.game, duelText)} · ${modeLabel(row.mode, duelText)}`}
+                      : {formatCount(row.count).display}
                     </p>
-                  );
-                })}
-              </section>
-              <section>
-                <h3>{duelText('匹配队列', 'Matchmaking queues')}</h3>
-                {counts.data.queues.map((row) => (
-                  <p key={`${row.game}:${row.mode}`}>
-                    {row.game === 'rps'
-                      ? `${t('admin.games.sections.rps')} · ${enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode)}`
-                      : `${gameLabel(row.game, duelText)} · ${modeLabel(row.mode, duelText)}`}
-                    : {row.count}
-                  </p>
-                ))}
-              </section>
-            </div>
-          )}
-        </Card>
+                  ))}
+                </section>
+              </div>
+            )}
+          </PanelBody>
+        </Panel>
       )}
       {config.isPending ? (
         <LoadingState />

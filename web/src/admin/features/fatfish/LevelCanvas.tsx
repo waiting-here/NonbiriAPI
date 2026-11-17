@@ -9,7 +9,7 @@ import {
   type PointerEvent,
   type Ref,
 } from 'react';
-import { Toggle } from '@shared/components/ui';
+import { Fold, Toggle } from '@shared/components/ui';
 import {
   containsPolygon,
   polygonsInteriorOverlap,
@@ -916,16 +916,16 @@ export function LevelCanvas({
       {geometryError && (
         <div className="fatfish-error" role="alert">
           <p>{describeIssue(geometryError, text)}</p>
-          <details>
-            <summary>{text('technical_details')}</summary>
+          <Fold plain title={text('technical_details')}>
             {geometryError}
-          </details>
+          </Fold>
         </div>
       )}
-      <details className="fatfish-shortcuts">
-        <summary>{text('shortcuts')}</summary>
-        <p>{text('editor_shortcuts')}</p>
-      </details>
+      <div className="fatfish-shortcuts">
+        <Fold plain title={text('shortcuts')}>
+          <p>{text('editor_shortcuts')}</p>
+        </Fold>
+      </div>
     </div>
   );
 }

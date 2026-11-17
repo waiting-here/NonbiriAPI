@@ -10,8 +10,30 @@
 }
 .alerts-page .alert-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--nb-space-2);
   align-items: center;
+}
+.alerts-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+}
+.alerts-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+  min-height: 2.25rem;
+  font-size: var(--nb-font-size-sm);
+  cursor: pointer;
+}
+.alerts-select-all input {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  margin: 0;
+  accent-color: var(--nb-color-accent);
 }
 .alerts-page .alert-actions button,
 .alerts-page summary,

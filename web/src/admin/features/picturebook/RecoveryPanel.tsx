@@ -1,9 +1,18 @@
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
-import { Field, Fields, FormActions } from '@shared/components/ui';
+import {
+  Field,
+  Fields,
+  FormActions,
+  Panel,
+  PanelBody,
+  PanelHead,
+  StatusBadge,
+} from '@shared/components/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
-import { Card, ErrorState, LoadingState } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
+import { formatCount } from '@shared/utils/formatNumber';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { getControls, resumeUpstream, type ControlRow } from './adminApi';
@@ -105,56 +114,77 @@ export function RecoveryPanel({ account }: { readonly account: string }) {
     retry: false,
   });
   return (
-    <Card>
-      <h2>{t('服务保护与恢复', 'Service protection and recovery')}</h2>
-      <p>
-        {t(
+    <Panel>
+      <PanelHead
+        title={t('服务保护与恢复', 'Service protection and recovery')}
+        description={t(
           '当前及旧服务配置均列在这里。未知结果会暂停对应服务的新派发，直到管理员核实后恢复。',
           'Current and previous service configurations are listed here. Unknown results pause new dispatch for that service until an administrator checks and resumes it.',
         )}
-      </p>
-      {query.isPending ? (
-        <LoadingState />
-      ) : query.error ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : null}
-      {query.data?.data.map((control) => (
-        <article className="picturebook-card" key={control.id + ':' + control.revision}>
-          <h3>
-            {control.current ? t('当前服务', 'Current service') : t('旧服务', 'Previous service')}
-          </h3>
-          <p className="picturebook-prewrap">{control.id}</p>
-          <dl className="picturebook-facts">
-            <dt>{t('保护状态', 'Protection')}</dt>
-            <dd>{control.paused ? t('已暂停派发', 'Dispatch paused') : t('正常', 'Normal')}</dd>
-            <dt>{t('等待／执行中', 'Queued / running')}</dt>
-            <dd>
-              {control.queued} / {control.running}
-            </dd>
-            <dt>{t('未确认占位', 'Uncertain slots')}</dt>
-            <dd>{control.uncertain_slots}</dd>
-          </dl>
-          {control.paused ? (
-            <RecoveryAction control={control} onRecovered={() => void query.refetch()} />
-          ) : null}
-        </article>
-      ))}
-      {query.data?.data.length === 0 ? (
-        <p>{t('尚未配置服务。', 'No service configured yet.')}</p>
-      ) : null}
-      <SimplePager
-        page={page + 1}
-        hasMore={Boolean(query.data?.next_cursor)}
-        disabled={query.isFetching}
-        onPrev={() => setPage((value) => value - 1)}
-        onNext={() => {
-          if (query.data?.next_cursor) {
-            setCursors((old) => [...old.slice(0, page + 1), query.data.next_cursor ?? undefined]);
-            setPage((value) => value + 1);
-          }
-        }}
-        labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
       />
-    </Card>
+      <PanelBody>
+        {query.isPending ? (
+          <LoadingState />
+        ) : query.error ? (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        ) : null}
+        {query.data?.data.map((control) => (
+          <article
+            className="picturebook-card picturebook-card--surface picturebook-stack"
+            key={control.id + ':' + control.revision}
+          >
+            <div className="picturebook-actions">
+              <h3>
+                {control.current
+                  ? t('当前服务', 'Current service')
+                  : t('旧服务', 'Previous service')}
+              </h3>
+              <StatusBadge tone={control.paused ? 'warn' : 'ok'}>
+                {control.paused ? t('已暂停派发', 'Dispatch paused') : t('正常', 'Normal')}
+              </StatusBadge>
+            </div>
+            <p className="picturebook-prewrap mono">{control.id}</p>
+            <dl className="picturebook-facts">
+              <dt>{t('等待／执行中', 'Queued / running')}</dt>
+              <dd>
+                {formatCount(control.queued).display} / {formatCount(control.running).display}
+              </dd>
+              <dt>{t('未确认占位', 'Uncertain slots')}</dt>
+              <dd>{formatCount(control.uncertain_slots).display}</dd>
+            </dl>
+            {control.paused ? (
+              <RecoveryAction control={control} onRecovered={() => void query.refetch()} />
+            ) : null}
+          </article>
+        ))}
+        {query.data?.data.length === 0 ? (
+          <EmptyState
+            title={t('尚未配置服务', 'No service configured yet')}
+            body={t(
+              '保存图片生成服务后，这里会显示派发保护状态。',
+              'Protection status appears here once an image generation service is saved.',
+            )}
+          />
+        ) : null}
+        {(query.data?.data.length ?? 0) > 0 || page > 0 ? (
+          <SimplePager
+            page={page + 1}
+            hasMore={Boolean(query.data?.next_cursor)}
+            disabled={query.isFetching}
+            onPrev={() => setPage((value) => value - 1)}
+            onNext={() => {
+              if (query.data?.next_cursor) {
+                setCursors((old) => [
+                  ...old.slice(0, page + 1),
+                  query.data.next_cursor ?? undefined,
+                ]);
+                setPage((value) => value + 1);
+              }
+            }}
+            labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+          />
+        ) : null}
+      </PanelBody>
+    </Panel>
   );
 }

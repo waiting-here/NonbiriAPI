@@ -151,24 +151,26 @@ export function SizeSelector({
         </div>
       ) : null}
       {!auto && capability.mode !== 'width_height' ? (
-        <>
-          <label htmlFor={id + 'ratio'}>{t('宽高比', 'Aspect ratio')}</label>
-          <select
-            id={id + 'ratio'}
-            value={selectedRatio}
-            onChange={(event) => {
-              const row = rows.find((item) => item.ratio === event.target.value);
-              if (row) choose(row);
-            }}
-          >
-            {ratios.map((ratio) => (
-              <option key={ratio} value={ratio}>
-                {ratio}
-              </option>
-            ))}
-          </select>
+        <div className="picturebook-dimensions">
+          <div className="picturebook-field">
+            <label htmlFor={id + 'ratio'}>{t('宽高比', 'Aspect ratio')}</label>
+            <select
+              id={id + 'ratio'}
+              value={selectedRatio}
+              onChange={(event) => {
+                const row = rows.find((item) => item.ratio === event.target.value);
+                if (row) choose(row);
+              }}
+            >
+              {ratios.map((ratio) => (
+                <option key={ratio} value={ratio}>
+                  {ratio}
+                </option>
+              ))}
+            </select>
+          </div>
           {resolutions.length > 0 ? (
-            <>
+            <div className="picturebook-field">
               <label htmlFor={id + 'resolution'}>{t('分辨率', 'Resolution')}</label>
               <select
                 id={id + 'resolution'}
@@ -187,10 +189,10 @@ export function SizeSelector({
                   </option>
                 ))}
               </select>
-            </>
+            </div>
           ) : null}
           {values.size ? <output>{values.size}</output> : null}
-        </>
+        </div>
       ) : null}
     </fieldset>
   );

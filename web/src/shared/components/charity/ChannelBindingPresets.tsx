@@ -24,7 +24,7 @@ import { usePagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../States';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '../States';
 import {
   Button,
   DataTable,
@@ -35,6 +35,7 @@ import {
   Panel,
   PanelBody,
   SaveBar,
+  StatusBadge,
 } from '../ui';
 import { DraftLeaveGuard, DraftLeaveScope } from './DraftLeaveScope';
 import './workflow.css';
@@ -114,164 +115,165 @@ export function ChannelBindingPresets({
           </div>
         ))}
         {!channel ? (
-          <>
-            <FilterBar
-              query={list}
-              activeCount={q ? 1 : 0}
-              onReset={() => {
-                setSearch('');
-                setParams((previous) => {
-                  const next = new URLSearchParams(previous);
-                  next.delete('q');
-                  next.delete('state');
-                  next.set('page', '1');
-                  return next;
-                });
-              }}
-              onSubmit={() => {
-                if (validManagementSearch(search))
+          <Panel>
+            <PanelBody>
+              <FilterBar
+                query={list}
+                activeCount={q ? 1 : 0}
+                onReset={() => {
+                  setSearch('');
                   setParams((previous) => {
                     const next = new URLSearchParams(previous);
-                    next.set('q', search.trim());
+                    next.delete('q');
+                    next.delete('state');
                     next.set('page', '1');
                     return next;
                   });
-              }}
-              search={
+                }}
+                onSubmit={() => {
+                  if (validManagementSearch(search))
+                    setParams((previous) => {
+                      const next = new URLSearchParams(previous);
+                      next.set('q', search.trim());
+                      next.set('page', '1');
+                      return next;
+                    });
+                }}
+                search={
+                  <>
+                    <Field label={t('common.bindingPresets.searchChannels')}>
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="search"
+                          placeholder={t('common.bindingPresets.searchPlaceholder')}
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                        />
+                      )}
+                    </Field>
+                    <Field label={t('common.status')} size="short">
+                      {(props) => (
+                        <select
+                          {...props}
+                          value={state}
+                          onChange={(event) =>
+                            setParams((previous) => {
+                              const next = new URLSearchParams(previous);
+                              next.set('state', event.target.value);
+                              next.set('page', '1');
+                              return next;
+                            })
+                          }
+                        >
+                          <option value="active">{t('common.bindingPresets.active')}</option>
+                          <option value="retired">{t('common.bindingPresets.retired')}</option>
+                          <option value="all">{t('common.all')}</option>
+                        </select>
+                      )}
+                    </Field>
+                  </>
+                }
+              />
+              {list.isPending ? (
+                <LoadingState />
+              ) : list.error ? (
+                <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+              ) : (
                 <>
-                  <Field label={t('common.bindingPresets.searchChannels')}>
-                    {(props) => (
-                      <input
-                        {...props}
-                        type="search"
-                        placeholder={t('common.bindingPresets.searchPlaceholder')}
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                      />
-                    )}
-                  </Field>
-                </>
-              }
-              secondaryAlwaysVisible
-              secondary={
-                <Field label={t('common.status')}>
-                  {(props) => (
-                    <select
-                      {...props}
-                      value={state}
-                      onChange={(event) =>
-                        setParams((previous) => {
-                          const next = new URLSearchParams(previous);
-                          next.set('state', event.target.value);
-                          next.set('page', '1');
-                          return next;
-                        })
-                      }
-                    >
-                      <option value="active">{t('common.bindingPresets.active')}</option>
-                      <option value="retired">{t('common.bindingPresets.retired')}</option>
-                      <option value="all">{t('common.all')}</option>
-                    </select>
+                  {list.data.data.length ? (
+                    <DataTable
+                      caption={t('common.bindingPresets.channels')}
+                      rows={list.data.data}
+                      rowKey={(row) => row.channel_id}
+                      columns={[
+                        {
+                          key: 'name',
+                          header: t('common.bindingPresets.channel'),
+                          mobileLabel: t('common.bindingPresets.channel'),
+                          cell: 'title',
+                          render: (row) => (
+                            <span className="nb-stack nb-stack--sm">
+                              <strong>{row.name}</strong>
+                              <small className="nb-workflow-id mono">{row.base_url}</small>
+                            </span>
+                          ),
+                        },
+                        {
+                          key: 'state',
+                          header: t('common.status'),
+                          mobileLabel: t('common.status'),
+                          cell: 'status',
+                          render: (row) => (
+                            <StatusBadge
+                              tone={row.state === 'retired' ? 'neutral' : row.enabled ? 'ok' : 'neutral'}
+                            >
+                              {t(
+                                row.state === 'retired'
+                                  ? 'common.bindingPresets.retired'
+                                  : row.enabled
+                                    ? 'common.enabled'
+                                    : 'common.disabled',
+                              )}
+                            </StatusBadge>
+                          ),
+                        },
+                        {
+                          key: 'count',
+                          header: t('common.bindingPresets.mappings'),
+                          mobileLabel: t('common.bindingPresets.mappings'),
+                          cell: 'meta',
+                          align: 'num',
+                          render: (row) => formatCount(row.mapping_count).display,
+                        },
+                        {
+                          key: 'action',
+                          header: t('common.workflow.actions'),
+                          mobileLabel: t('common.workflow.actions'),
+                          cell: 'action',
+                          align: 'action',
+                          render: (row) => (
+                            <Button
+                              type="button"
+                              disabled={list.isFetching}
+                              onClick={() => {
+                                setVisited((previous) =>
+                                  previous.some((entry) => entry.channel_id === row.channel_id)
+                                    ? previous.map((entry) =>
+                                        entry.channel_id === row.channel_id ? row : entry,
+                                      )
+                                    : [...previous, row],
+                                );
+                                setChannel(row);
+                              }}
+                            >
+                              {t(
+                                row.state === 'retired'
+                                  ? 'common.bindingPresets.view'
+                                  : 'common.bindingPresets.configure',
+                              )}
+                            </Button>
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <EmptyState
+                      title={t('common.bindingPresets.noChannels')}
+                      body={t('common.bindingPresets.noChannelsHelp')}
+                    />
                   )}
-                </Field>
-              }
-            />
-            {list.isPending ? (
-              <LoadingState />
-            ) : list.error ? (
-              <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-            ) : (
-              <>
-                {list.data.data.length ? (
-                  <DataTable
-                    caption={t('common.bindingPresets.channels')}
-                    rows={list.data.data}
-                    rowKey={(row) => row.channel_id}
-                    columns={[
-                      {
-                        key: 'name',
-                        header: t('common.bindingPresets.channel'),
-                        mobileLabel: t('common.bindingPresets.channel'),
-                        cell: 'title',
-                        render: (row) => (
-                          <span className="nb-stack nb-stack--sm">
-                            <strong>{row.name}</strong>
-                            <small className="nb-workflow-id mono">{row.base_url}</small>
-                          </span>
-                        ),
-                      },
-                      {
-                        key: 'state',
-                        header: t('common.status'),
-                        mobileLabel: t('common.status'),
-                        cell: 'status',
-                        render: (row) => (
-                          <StatusBadge
-                            active={row.enabled && row.state === 'active'}
-                            label={t(
-                              row.state === 'retired'
-                                ? 'common.bindingPresets.retired'
-                                : row.enabled
-                                  ? 'common.enabled'
-                                  : 'common.disabled',
-                            )}
-                          />
-                        ),
-                      },
-                      {
-                        key: 'count',
-                        header: t('common.bindingPresets.mappings'),
-                        mobileLabel: t('common.bindingPresets.mappings'),
-                        cell: 'meta',
-                        align: 'num',
-                        render: (row) => formatCount(row.mapping_count).display,
-                      },
-                      {
-                        key: 'action',
-                        header: t('common.workflow.actions'),
-                        mobileLabel: t('common.workflow.actions'),
-                        cell: 'action',
-                        render: (row) => (
-                          <Button
-                            type="button"
-                            disabled={list.isFetching}
-                            onClick={() => {
-                              setVisited((previous) =>
-                                previous.some((entry) => entry.channel_id === row.channel_id)
-                                  ? previous.map((entry) =>
-                                      entry.channel_id === row.channel_id ? row : entry,
-                                    )
-                                  : [...previous, row],
-                              );
-                              setChannel(row);
-                            }}
-                          >
-                            {t(
-                              row.state === 'retired'
-                                ? 'common.bindingPresets.view'
-                                : 'common.bindingPresets.configure',
-                            )}
-                          </Button>
-                        ),
-                      },
-                    ]}
+                  <PagePagination
+                    metadata={list.data.pagination}
+                    requestedPage={pager.page}
+                    onPageChange={pager.setPage}
+                    onPageSizeChange={pager.setPageSize}
+                    busy={list.isFetching}
                   />
-                ) : (
-                  <EmptyState
-                    title={t('common.bindingPresets.noChannels')}
-                    body={t('common.bindingPresets.noChannelsHelp')}
-                  />
-                )}
-                <PagePagination
-                  metadata={list.data.pagination}
-                  requestedPage={pager.page}
-                  onPageChange={pager.setPage}
-                  onPageSizeChange={pager.setPageSize}
-                  busy={list.isFetching}
-                />
-              </>
-            )}
-          </>
+                </>
+              )}
+            </PanelBody>
+          </Panel>
         ) : null}
       </div>
     </DraftLeaveScope>

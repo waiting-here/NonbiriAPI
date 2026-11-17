@@ -1,4 +1,4 @@
-import { StatusBadge } from './States';
+import { StatusBadge } from './ui';
 import { useTranslation } from 'react-i18next';
 import { donationDisplayStatus, type UseSummary as Summary } from '@shared/operations/donationUses';
 
@@ -11,11 +11,16 @@ export function DonationStatusBadge({
 }) {
   const { t } = useTranslation();
   const display = donationDisplayStatus(status, summary);
-  return (
-    <StatusBadge
-      active={display === 'approved' || display === 'partially_approved'}
-      danger={display === 'rejected' || display === 'deleted' || display === 'expired'}
-      label={t(`common.connections.donationStates.${display}`)}
-    />
-  );
+  const tone =
+    display === 'approved'
+      ? 'ok'
+      : display === 'pending' ||
+          display === 'approved_pending' ||
+          display === 'partially_approved' ||
+          display === 'mixed'
+        ? 'warn'
+        : display === 'rejected'
+          ? 'bad'
+          : 'neutral';
+  return <StatusBadge tone={tone}>{t(`common.connections.donationStates.${display}`)}</StatusBadge>;
 }

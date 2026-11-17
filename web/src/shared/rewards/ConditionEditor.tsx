@@ -8,10 +8,19 @@ import type { Asset, Condition } from './api';
 const fields = ['level', 'donation', 'registered_at', 'registered_days', 'banned', 'asset'];
 const comparisons = ['gte', 'gt', 'eq', 'ne', 'lte', 'lt'];
 const leaf = (): Condition => ({ op: 'compare', field: 'level', compare: 'gte', value: '1' });
-function ConditionDate({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function ConditionDate({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const [draft, setDraft] = useState(() => createTimeDraft(value ? Number(value) : null));
   return (
     <TimeInput
+      label={label}
       station="admin"
       draft={draft}
       onChange={(next) => {
@@ -128,6 +137,7 @@ export function ConditionEditor({
           </Field>
           {value.field === 'registered_at' ? (
             <ConditionDate
+              label={t('common.rewards.threshold')}
               value={value.value ?? ''}
               onChange={(v) => onChange({ ...value, value: v })}
             />

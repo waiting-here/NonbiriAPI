@@ -148,7 +148,7 @@ function GatewayCapabilitiesEditor() {
       <div className="card-title-row ops-toolbar">
         <h2>{t('gatewayCapabilities.title')}</h2>
         <button
-          className="nb-btn nb-btn--secondary"
+          className={`nb-btn ${editor === undefined ? 'nb-btn--primary' : 'nb-btn--secondary'}`}
           type="button"
           disabled={operation.isPending || list.isPending || Boolean(list.error)}
           onClick={() => open(null)}
@@ -181,7 +181,7 @@ function GatewayCapabilitiesEditor() {
                     {t('common.edit')}
                   </button>
                   <button
-                    className="nb-btn nb-btn--danger"
+                    className="nb-btn nb-btn--danger-outline"
                     type="button"
                     disabled={operation.isPending}
                     onClick={() => {

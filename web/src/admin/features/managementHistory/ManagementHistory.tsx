@@ -81,11 +81,21 @@ const domains = [
   'maintenance',
   'alerts',
   'abuse-audit',
+  'activities',
+  'attendance',
+  'limited-activities',
+  'inactivity-policy',
+  'pools',
   'rewards',
   'gacha',
   'games',
   'legal-holds',
   'ai',
+  'agent-requests',
+  'branding',
+  'egress',
+  'endpoint-backoff-policy',
+  'donation-key-failure-policy',
   'management-operations',
 ];
 function readFilter(params: URLSearchParams): Filter {
@@ -297,10 +307,7 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
         }}
         search={
           <>
-            <Field
-              label={t('admin.managementHistory.fields.search')}
-              help={t('admin.managementHistory.searchHelp')}
-            >
+            <Field label={t('admin.managementHistory.fields.search')}>
               {(props) => (
                 <input
                   {...props}
@@ -421,18 +428,21 @@ export function ManagementHistory({ account }: { account: string }) {
     {
       key: 'time',
       header: t('admin.managementHistory.hour'),
+      mobileLabel: t('admin.managementHistory.hour'),
       cell: 'meta' as const,
       render: (row: Group) => <AgentTime value={row.bucket} />,
     },
     {
       key: 'actor',
       header: t('admin.managementHistory.executor'),
+      mobileLabel: t('admin.managementHistory.executor'),
       cell: 'meta' as const,
       render: (row: Group) => <Executor {...row} />,
     },
     {
       key: 'source',
       header: t('admin.managementHistory.fields.source'),
+      mobileLabel: t('admin.managementHistory.fields.source'),
       cell: 'meta' as const,
       render: (row: Group) => (
         <span>
@@ -449,6 +459,7 @@ export function ManagementHistory({ account }: { account: string }) {
     {
       key: 'counts',
       header: t('admin.managementHistory.targetResults'),
+      mobileLabel: t('admin.managementHistory.targetResults'),
       cell: 'meta' as const,
       render: (row: Group) => <CountDetails value={row} />,
     },
@@ -493,31 +504,36 @@ export function ManagementHistory({ account }: { account: string }) {
         <PanelHead
           title={t('admin.managementHistory.records')}
           description={t('admin.managementHistory.groupHelp')}
-        />
-        <PanelBody>
-          <div className="nb-actions">
-            <Tabs
-              label={t('admin.managementHistory.view')}
-              value={query.data?.view ?? view}
-              onChange={changeView}
-              tabs={[
-                {
-                  value: 'groups',
-                  id: 'management-history-tab-groups',
-                  label: t('admin.managementHistory.groups'),
-                },
-                {
-                  value: 'operations',
-                  id: 'management-history-tab-operations',
-                  label: t('admin.managementHistory.individual'),
-                },
-              ]}
-              panelId="management-history-results"
-            />
-            <Button variant="secondary" onClick={() => void refresh()} disabled={query.isFetching}>
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void refresh()}
+              disabled={query.isFetching}
+            >
               {t('common.refresh')}
             </Button>
-          </div>
+          }
+        />
+        <PanelBody>
+          <Tabs
+            label={t('admin.managementHistory.view')}
+            value={query.data?.view ?? view}
+            onChange={changeView}
+            tabs={[
+              {
+                value: 'groups',
+                id: 'management-history-tab-groups',
+                label: t('admin.managementHistory.groups'),
+              },
+              {
+                value: 'operations',
+                id: 'management-history-tab-operations',
+                label: t('admin.managementHistory.individual'),
+              },
+            ]}
+            panelId="management-history-results"
+          />
           <div
             className="nb-tab-content"
             role="tabpanel"
@@ -568,12 +584,14 @@ export function ManagementHistory({ account }: { account: string }) {
                       {
                         key: 'time',
                         header: t('admin.managementHistory.time'),
+                        mobileLabel: t('admin.managementHistory.time'),
                         cell: 'meta',
                         render: (row) => <AgentTime value={row.created_at} />,
                       },
                       {
                         key: 'actor',
                         header: t('admin.managementHistory.executor'),
+                        mobileLabel: t('admin.managementHistory.executor'),
                         cell: 'meta',
                         render: (row) => <Executor {...row} />,
                       },
@@ -586,6 +604,7 @@ export function ManagementHistory({ account }: { account: string }) {
                       {
                         key: 'counts',
                         header: t('admin.managementHistory.targetResults'),
+                        mobileLabel: t('admin.managementHistory.targetResults'),
                         cell: 'meta',
                         render: (row) => <CountDetails value={row} />,
                       },
@@ -597,9 +616,10 @@ export function ManagementHistory({ account }: { account: string }) {
                           <Button
                             variant="secondary"
                             size="sm"
+                            aria-label={`${t('admin.managementHistory.details')} · ${row.id}`}
                             onClick={() => update('mh_detail', row.id)}
                           >
-                            {t('admin.managementHistory.details')} · {row.id}
+                            {t('admin.managementHistory.details')}
                           </Button>
                         ),
                       },
@@ -845,18 +865,20 @@ function CleanupPanel({
         description={t('admin.managementHistory.cleanupHelp')}
       />
       <PanelBody>
-        <Button
-          variant="secondary"
-          disabled={prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'}
-          onClick={() => {
-            cleanup.reset();
-            prepare.mutate(filter);
-          }}
-        >
-          {Object.keys(filter).length
-            ? t('admin.managementHistory.cleanupFiltered')
-            : t('admin.managementHistory.cleanupAll')}
-        </Button>
+        <div className="nb-actions">
+          <Button
+            variant="danger-outline"
+            disabled={prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'}
+            onClick={() => {
+              cleanup.reset();
+              prepare.mutate(filter);
+            }}
+          >
+            {Object.keys(filter).length
+              ? t('admin.managementHistory.cleanupFiltered')
+              : t('admin.managementHistory.cleanupAll')}
+          </Button>
+        </div>
         {prepare.error ? <ErrorState error={prepare.error} /> : null}
         {cleanup.error && !preview ? <ErrorState error={cleanup.error} /> : null}
         {cleanup.outcome === 'unknown' && !preview ? (

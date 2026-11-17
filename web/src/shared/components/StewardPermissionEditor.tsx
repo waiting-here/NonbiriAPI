@@ -209,7 +209,9 @@ function PermissionForm({
         title={t('management.permissions.title')}
         description={t('management.permissions.description')}
       />
-      <Note>{t('management.permissions.hardLimit')}</Note>
+      <Note>
+        {t('management.permissions.hardLimit')} {t('management.permissions.fixedExemptions')}
+      </Note>
       <p className="nb-muted">{t('management.permissions.combinedActions')}</p>
       <div className="nb-actions">
         <Button type="button" disabled={locked} onClick={() => apply(5)}>
@@ -257,7 +259,6 @@ function PermissionForm({
           </Button>
         ))}
       </nav>
-      <Note>{t('management.permissions.fixedExemptions')}</Note>
       {groups.length === 0 && !showLimits ? (
         <EmptyState
           title={t('management.permissions.noMatches')}
@@ -281,8 +282,7 @@ function PermissionForm({
                 help={t('management.permissions.scope.help')}
               >
                 {(field) => (
-                  <>
-                    <strong>{t(`management.permissions.scope.${donationScope}.label`)}</strong>
+                  <div className="permission-limit-inputs">
                     <input
                       {...field}
                       type="range"
@@ -297,7 +297,8 @@ function PermissionForm({
                         setDonationScope(DONATION_SCOPES[Number(event.target.value)]);
                       }}
                     />
-                  </>
+                    <strong>{t(`management.permissions.scope.${donationScope}.label`)}</strong>
+                  </div>
                 )}
               </Field>
               <dl className="nb-stack">
@@ -382,7 +383,7 @@ function PermissionForm({
                 })}
               >
                 {(field) => (
-                  <>
+                  <div className="permission-limit-inputs">
                     <input
                       {...field}
                       type="number"
@@ -411,7 +412,7 @@ function PermissionForm({
                         }}
                       />
                     ) : null}
-                  </>
+                  </div>
                 )}
               </Field>
             ))}

@@ -399,6 +399,7 @@ export function BlacklistManagement({
                   <input
                     {...field}
                     value={discordDraft}
+                    placeholder="Discord ID"
                     onChange={(event) => setDiscordDraft(event.target.value)}
                     inputMode="numeric"
                     maxLength={20}
@@ -434,6 +435,7 @@ export function BlacklistManagement({
                   <input
                     {...field}
                     value={actorDraft}
+                    placeholder="#ID"
                     onChange={(event) => setActorDraft(event.target.value)}
                     inputMode="numeric"
                     maxLength={19}
@@ -452,7 +454,18 @@ export function BlacklistManagement({
         ) : (
           <>
             {result.data.data.length === 0 ? (
-              <EmptyState title={label.empty} body={label.emptyBody} />
+              <EmptyState
+                title={
+                  params.get('q') || actorKind || actorUserID || filterDiscordID
+                    ? label.empty
+                    : t('common.blacklist.emptyInitial')
+                }
+                body={
+                  params.get('q') || actorKind || actorUserID || filterDiscordID
+                    ? label.emptyBody
+                    : t('common.blacklist.emptyInitialBody')
+                }
+              />
             ) : (
               <DataTable
                 caption={label.title}
@@ -601,6 +614,9 @@ export function BlacklistManagement({
             >
               {label.previous}
             </button>
+            <span className="nb-small nb-muted nb-amount">
+              {eventsPage} / {events.data?.pagination.total_pages ?? '1'}
+            </span>
             <button
               type="button"
               className="nb-btn nb-btn--secondary"

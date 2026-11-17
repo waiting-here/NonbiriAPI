@@ -135,13 +135,17 @@ export function CharityPriceTable({
             </div>
           ))}
         </dl>
-        {rows.length > 4 && <p className="nb-sub">{t('common.modalityPricing.available')}</p>}
-        {longContext && (
-          <p className="nb-sub">{t('common.operations.charity.context.longAvailable')}</p>
-        )}
-        {scheduleNote}
-        {deadline ? <p className="nb-sub">{deadline}</p> : null}
-        {penaltyNote}
+        {(rows.length > 4 || longContext || scheduleNote || deadline || penaltyNote) ? (
+          <div className="charity-price-notes">
+            {rows.length > 4 && <p className="nb-sub">{t('common.modalityPricing.available')}</p>}
+            {longContext && (
+              <p className="nb-sub">{t('common.operations.charity.context.longAvailable')}</p>
+            )}
+            {scheduleNote}
+            {deadline ? <p className="nb-sub">{deadline}</p> : null}
+            {penaltyNote}
+          </div>
+        ) : null}
       </div>
     );
 
@@ -242,7 +246,7 @@ export function CharityPriceTable({
       {(longContext || contextPenalty) && (
         <p className="nb-sub">{t('common.operations.charity.context.usageHelp')}</p>
       )}
-      <p className="muted charity-price-note">
+      <p className="nb-muted charity-price-note">
         {t(
           mode === 'per_search_unit'
             ? 'common.modalityPricing.searchUnit'

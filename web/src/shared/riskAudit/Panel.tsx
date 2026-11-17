@@ -16,7 +16,14 @@ import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { sourceFlagLabel, sourceQualityLabel } from '@shared/observability/sourceLabels';
-import { Card, ErrorState, LoadingState, PageHeader, SectionHead } from '@shared/components/States';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  SectionHead,
+} from '@shared/components/States';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Tabs, Fold, Note, DataTable } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -266,7 +273,8 @@ function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
                     <td>{stamp(m.minute)}</td>
                     <td>{m.call_kind}</td>
                     <td>
-                      {m.rpm_committed} ({m.rpm_pending} pending)
+                      {m.rpm_committed} ({m.rpm_pending}{' '}
+                      {t('common.operations.logs.resultValue.pending')})
                     </td>
                     <td>{(m.occupancy_millis / 60000).toFixed(3)}</td>
                     <td>{m.peak}</td>
@@ -476,38 +484,12 @@ function UserDetail({ userID, back, ...scope }: Scope & { userID: string; back: 
 }
 function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void }) {
   const { c, filters } = scope;
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const rawSignal = params.get('audit_signal') ?? '';
   const signalFilter = rawSignal === 'rpm' || rawSignal === 'concurrency' ? rawSignal : '';
   return (
     <div className="ops-stack">
-      <Card>
-        <p>{c.configHelp}</p>
-        <Fields>
-          <Field label={c.signal} size="short">
-            {(field) => (
-              <select
-                {...field}
-                value={signalFilter}
-                onChange={(e) =>
-                  setParams((previous) => {
-                    const next = new URLSearchParams(previous);
-                    if (e.target.value) next.set('audit_signal', e.target.value);
-                    else next.delete('audit_signal');
-                    next.delete('audit_users_scan');
-                    next.set('audit_users_page', '1');
-                    return next;
-                  })
-                }
-              >
-                <option value="">{c.all}</option>
-                <option value="rpm">{c.rpm}</option>
-                <option value="concurrency">{c.concurrency}</option>
-              </select>
-            )}
-          </Field>
-        </Fields>
-      </Card>
+      <p className="nb-small nb-muted">{c.configHelp}</p>
       <TaskScans<Summary>
         role={scope.role}
         scopeKey={scope.scopeKey}
@@ -516,11 +498,14 @@ function Users({ inspect, ...scope }: Scope & { inspect: (id: string) => void })
         signal={signalFilter}
         renderItem={(value) => (
           <Card key={value.user_id}>
-            <div className="ops-actions">
+            <div className="ops-toolbar">
               <strong>
                 {c.user}: {value.user_id}
               </strong>
-              <button className="nb-btn nb-btn--secondary" onClick={() => inspect(value.user_id)}>
+              <button
+                className="nb-btn nb-btn--secondary nb-btn--sm"
+                onClick={() => inspect(value.user_id)}
+              >
                 {c.inspect}
               </button>
             </div>
@@ -1108,16 +1093,18 @@ function RuleEditor({
           </button>
         </Fields>
       ))}
-      <button
-        className="nb-btn nb-btn--secondary"
-        type="button"
-        disabled={value.conditions.length >= 8}
-        onClick={() =>
-          setValue((v) => ({ ...v, conditions: [...v.conditions, emptyRule().conditions[0]] }))
-        }
-      >
-        {c.add}
-      </button>
+      <div className="nb-actions">
+        <button
+          className="nb-btn nb-btn--secondary"
+          type="button"
+          disabled={value.conditions.length >= 8}
+          onClick={() =>
+            setValue((v) => ({ ...v, conditions: [...v.conditions, emptyRule().conditions[0]] }))
+          }
+        >
+          {c.add}
+        </button>
+      </div>
       <Fold title={c.advanced}>
         <Fields>
           <Field label={c.status} size="short">
@@ -1273,70 +1260,80 @@ function Rules({ role, scopeKey, c }: Scope) {
         />
       ) : (
         <>
-          <button
-            className="nb-btn nb-btn--secondary"
-            onClick={() => {
-              mutation.reset();
-              setEditing('new');
-            }}
-          >
-            {c.create}
-          </button>
+          <div className="nb-actions">
+            <button
+              className="nb-btn nb-btn--primary"
+              onClick={() => {
+                mutation.reset();
+                setEditing('new');
+              }}
+            >
+              {c.create}
+            </button>
+          </div>
           {query.error ? (
             <ErrorState error={query.error} onRetry={() => void query.refetch()} />
           ) : query.data ? (
             <>
-              <p>
-                {c.count}: {query.data.total_items}
-              </p>
-              {query.data.items.map((rule) => (
-                <Card key={rule.id}>
-                  <h3>{rule.name}</h3>
-                  <p>
-                    {rule.status === 'confirmed' ? c.confirmed : c.suspected} · {c.revision}{' '}
-                    {rule.revision} · {rule.enabled ? c.enabled : c.no}
+              {query.data.items.length === 0 ? (
+                <EmptyState title={c.empty} body={c.ruleSteps} />
+              ) : (
+                <>
+                  <p className="nb-small nb-muted">
+                    {c.count}: {formatCount(query.data.total_items).display}
                   </p>
-                  {rule.auto_ban && (
-                    <p>
-                      {rule.auto_ban.enabled ? c.autoBanEnabled : c.autoBanDisabled} ·{' '}
-                      {rule.auto_ban.duration_seconds === null
-                        ? c.autoBanPermanent
-                        : `${rule.auto_ban.duration_seconds} ${c.autoBanSeconds}`}
-                    </p>
-                  )}
-                  <p>
-                    {rule.conditions
-                      .map(
-                        (v) =>
-                          `${fieldLabel(v.field, c)} ${c[v.operator]} ${v.operator === 'ip_in' ? (v.values ?? []).join(', ') : v.value}`,
-                      )
-                      .join(' · ')}
-                  </p>
-                  <p>{rule.evidence_note}</p>
-                  <p>{rule.evidence_url}</p>
-                  <p>
-                    {stamp(rule.updated_at)} · {rule.updated_by_role}{' '}
-                    {rule.updated_by_user_id ?? ''}
-                  </p>
-                  <button
-                    className="nb-btn nb-btn--secondary"
-                    disabled={mutation.isPending}
-                    onClick={() => {
-                      mutation.reset();
-                      setEditing(rule);
-                    }}
-                  >
-                    {c.edit}
-                  </button>
-                  <button
-                    className="nb-btn nb-btn--secondary"
-                    disabled={mutation.isPending}
-                    onClick={() => mutation.mutate({ rule })}
-                  >
-                    {c.remove}
-                  </button>
-                </Card>
-              ))}
+                  {query.data.items.map((rule) => (
+                    <div key={rule.id} className="ops-subcard ops-stack">
+                      <h3>{rule.name}</h3>
+                      <p>
+                        {rule.status === 'confirmed' ? c.confirmed : c.suspected} · {c.revision}{' '}
+                        {rule.revision} · {rule.enabled ? c.enabled : c.no}
+                      </p>
+                      {rule.auto_ban && (
+                        <p>
+                          {rule.auto_ban.enabled ? c.autoBanEnabled : c.autoBanDisabled} ·{' '}
+                          {rule.auto_ban.duration_seconds === null
+                            ? c.autoBanPermanent
+                            : `${rule.auto_ban.duration_seconds} ${c.autoBanSeconds}`}
+                        </p>
+                      )}
+                      <p>
+                        {rule.conditions
+                          .map(
+                            (v) =>
+                              `${fieldLabel(v.field, c)} ${c[v.operator]} ${v.operator === 'ip_in' ? (v.values ?? []).join(', ') : v.value}`,
+                          )
+                          .join(' · ')}
+                      </p>
+                      {rule.evidence_note ? <p>{rule.evidence_note}</p> : null}
+                      {rule.evidence_url ? <p className="ops-wrap">{rule.evidence_url}</p> : null}
+                      <p className="nb-small nb-muted">
+                        {stamp(rule.updated_at)} · {rule.updated_by_role}{' '}
+                        {rule.updated_by_user_id ?? ''}
+                      </p>
+                      <div className="nb-actions">
+                        <button
+                          className="nb-btn nb-btn--secondary nb-btn--sm"
+                          disabled={mutation.isPending}
+                          onClick={() => {
+                            mutation.reset();
+                            setEditing(rule);
+                          }}
+                        >
+                          {c.edit}
+                        </button>
+                        <button
+                          className="nb-btn nb-btn--danger-outline nb-btn--sm"
+                          disabled={mutation.isPending}
+                          onClick={() => mutation.mutate({ rule })}
+                        >
+                          {c.remove}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
               {query.data.changed && (
                 <p role="status">
                   {c.partial}: {c.ruleHelp}
@@ -1583,99 +1580,101 @@ function Access({ role, scopeKey, c, filters }: Scope) {
   };
   return (
     <div className="ops-stack">
-      <p>{c.accessHelp}</p>
-      <FilterBar
-        activeCount={Object.values(selected).filter(Boolean).length}
-        onSubmit={() =>
-          applyAccess({
-            ...draft,
-            path_kind: selected.path_kind,
-            status_class: selected.status_class,
-          })
-        }
-        onReset={() => {
-          const empty = { user_id: '', key_generation: '', path_kind: '', status_class: '' };
-          setDraft(() => empty);
-          applyAccess(empty);
-        }}
-        search={
-          <>
-            <Field label={c.user} size="medium">
-              {(field) => (
-                <input
-                  {...field}
-                  pattern="[1-9][0-9]*"
-                  placeholder={c.accessUserPlaceholder}
-                  value={draft.user_id}
-                  onChange={(e) =>
-                    setDraft((v) => ({ ...v, user_id: e.target.value, key_generation: '' }))
-                  }
-                />
-              )}
-            </Field>
-            <Field label={c.key} size="medium">
-              {(field) => (
-                <input
-                  {...field}
-                  maxLength={32}
-                  pattern="[0-9]+"
-                  placeholder={c.accessKeyPlaceholder}
-                  disabled={!draft.user_id}
-                  value={draft.key_generation}
-                  onChange={(e) => setDraft((v) => ({ ...v, key_generation: e.target.value }))}
-                />
-              )}
-            </Field>
-            <Field label={c.path} size="short">
-              {(field) => (
-                <select
-                  {...field}
-                  value={selected.path_kind}
-                  onChange={(e) => applyAccess({ ...selected, path_kind: e.target.value })}
-                >
-                  <option value="">{c.all}</option>
-                  {accessPaths.map((v) => (
-                    <option key={v} value={v}>
-                      {pathLabel(v)}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <Field label={c.http} size="short">
-              {(field) => (
-                <select
-                  {...field}
-                  value={selected.status_class}
-                  onChange={(e) => applyAccess({ ...selected, status_class: e.target.value })}
-                >
-                  <option value="">{c.all}</option>
-                  {[1, 2, 3, 4, 5].map((v) => (
-                    <option key={v} value={v}>
-                      {v}xx
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-          </>
-        }
-      />
+      <Card>
+        <p className="nb-small nb-muted">{c.accessHelp}</p>
+        <FilterBar
+          activeCount={Object.values(selected).filter(Boolean).length}
+          onSubmit={() =>
+            applyAccess({
+              ...draft,
+              path_kind: selected.path_kind,
+              status_class: selected.status_class,
+            })
+          }
+          onReset={() => {
+            const empty = { user_id: '', key_generation: '', path_kind: '', status_class: '' };
+            setDraft(() => empty);
+            applyAccess(empty);
+          }}
+          search={
+            <>
+              <Field label={c.user} size="medium">
+                {(field) => (
+                  <input
+                    {...field}
+                    pattern="[1-9][0-9]*"
+                    placeholder={c.accessUserPlaceholder}
+                    value={draft.user_id}
+                    onChange={(e) =>
+                      setDraft((v) => ({ ...v, user_id: e.target.value, key_generation: '' }))
+                    }
+                  />
+                )}
+              </Field>
+              <Field label={c.key} size="medium">
+                {(field) => (
+                  <input
+                    {...field}
+                    maxLength={32}
+                    pattern="[0-9]+"
+                    placeholder={c.accessKeyPlaceholder}
+                    disabled={!draft.user_id}
+                    value={draft.key_generation}
+                    onChange={(e) => setDraft((v) => ({ ...v, key_generation: e.target.value }))}
+                  />
+                )}
+              </Field>
+              <Field label={c.path} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={selected.path_kind}
+                    onChange={(e) => applyAccess({ ...selected, path_kind: e.target.value })}
+                  >
+                    <option value="">{c.all}</option>
+                    {accessPaths.map((v) => (
+                      <option key={v} value={v}>
+                        {pathLabel(v)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={c.http} size="short">
+                {(field) => (
+                  <select
+                    {...field}
+                    value={selected.status_class}
+                    onChange={(e) => applyAccess({ ...selected, status_class: e.target.value })}
+                  >
+                    <option value="">{c.all}</option>
+                    {[1, 2, 3, 4, 5].map((v) => (
+                      <option key={v} value={v}>
+                        {v}xx
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+            </>
+          }
+        />
+      </Card>
       <QueryFeedback query={summary} />
       {summary.error && !summary.isFetching ? (
         <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
       ) : summary.data ? (
         <Card>
-          <dl className="ops-kv">
+          <dl className="nb-facts nb-facts--inline">
             {(
               [
-                [c.authenticated, summary.data.authenticated_events],
-                [c.anonymous, summary.data.anonymous_events],
-                [c.models, summary.data.model_list_events],
-                [c.generations, summary.data.generation_requests],
+                [c.authenticated, formatCount(summary.data.authenticated_events).display],
+                [c.anonymous, formatCount(summary.data.anonymous_events).display],
+                [c.models, formatCount(summary.data.model_list_events).display],
+                [c.generations, formatCount(summary.data.generation_requests).display],
                 [c.ratio, summary.data.model_generation_ratio ?? c.unknown],
                 [c.capture, stamp(summary.data.coverage.capture_started_at)],
-                [c.dropped, summary.data.coverage.dropped],
+                [c.dropped, formatCount(summary.data.coverage.dropped).display],
                 [
                   c.gap,
                   summary.data.coverage.last_gap_at === null
@@ -1691,9 +1690,10 @@ function Access({ role, scopeKey, c, filters }: Scope) {
             ))}
           </dl>
           {summary.data.paths.map((p) => (
-            <p key={p.path_kind + p.response_kind}>
-              {p.path_kind} · {p.response_kind} · {c.authenticated}: {p.authenticated} ·{' '}
-              {c.anonymous}: {p.anonymous}
+            <p key={p.path_kind + p.response_kind} className="nb-small">
+              {pathLabel(p.path_kind)} · {p.response_kind} · {c.authenticated}:{' '}
+              {formatCount(p.authenticated).display} · {c.anonymous}:{' '}
+              {formatCount(p.anonymous).display}
             </p>
           ))}
         </Card>
@@ -1705,18 +1705,22 @@ function Access({ role, scopeKey, c, filters }: Scope) {
         <ErrorState error={events.error} onRetry={() => void events.refetch()} />
       ) : events.data ? (
         <>
-          {events.data.items.map((e) => (
-            <Card key={e.id}>
-              <p>
-                {stamp(e.occurred_at)} · {c.user}: {e.user_id} · {c.key}:{' '}
-                {e.caller_key_generation ?? c.unknown}
-              </p>
-              <p>
-                {e.method} · {e.path_kind} · {e.http_status} · {e.response_kind}
-              </p>
-              <SourceView source={e.source} c={c} />
-            </Card>
-          ))}
+          {events.data.items.length === 0 ? (
+            <EmptyState title={c.empty} body={c.accessHelp} />
+          ) : (
+            events.data.items.map((e) => (
+              <Card key={e.id}>
+                <p>
+                  {stamp(e.occurred_at)} · {c.user}: {e.user_id} · {c.key}:{' '}
+                  {e.caller_key_generation ?? c.unknown}
+                </p>
+                <p>
+                  {e.method} · {e.path_kind} · {e.http_status} · {e.response_kind}
+                </p>
+                <SourceView source={e.source} c={c} />
+              </Card>
+            ))
+          )}
           {events.data.changed && (
             <p role="status">
               {c.partial}: {c.sourcePage}
@@ -1971,130 +1975,175 @@ function RiskBody({
           }
         />
       )}
-      <Card>
+      <div className="ops-stack">
         <Note>{t('common.audit.presentation.note')}</Note>
         <Fold plain title={t('common.audit.presentation.basis')}>
           <p>{c.caveat}</p>
           <p>{c.autoBanHelp}</p>
         </Fold>
-        <Tabs<PrimaryTab>
-          label={c.title}
-          value={associationTab ? 'associations' : (tab as PrimaryTab)}
-          tabs={(
-            (canRead
-              ? ['users', 'associations', 'clients', 'rules', 'config', 'access']
-              : ['config']) as PrimaryTab[]
-          ).map((value) => ({
-            value,
-            id: 'risk-audit-tab-' + value,
-            label: value === 'associations' ? t('common.audit.associations') : c[value],
-          }))}
-          onChange={(value) => selectTab(value === 'associations' ? 'browsers' : value)}
+      </div>
+      <Tabs<PrimaryTab>
+        label={c.title}
+        value={associationTab ? 'associations' : (tab as PrimaryTab)}
+        tabs={(
+          (canRead
+            ? ['users', 'associations', 'clients', 'rules', 'config', 'access']
+            : ['config']) as PrimaryTab[]
+        ).map((value) => ({
+          value,
+          id: 'risk-audit-tab-' + value,
+          label: value === 'associations' ? t('common.audit.associations') : c[value],
+        }))}
+        onChange={(value) => selectTab(value === 'associations' ? 'browsers' : value)}
+        panelId="risk-audit-results"
+      />
+      {associationTab ? (
+        <Tabs<Tab>
+          label={t('common.audit.associations')}
+          value={tab}
+          tabs={[
+            {
+              value: 'browsers',
+              id: 'risk-audit-tab-browsers',
+              label: t('common.audit.browsers.tab'),
+            },
+            { value: 'ips', id: 'risk-audit-tab-ips', label: c.ips },
+            {
+              value: 'user_ips',
+              id: 'risk-audit-tab-user_ips',
+              label: t('common.audit.userIPsTab'),
+            },
+          ]}
+          onChange={selectTab}
           panelId="risk-audit-results"
         />
-        {associationTab ? (
-          <Tabs<Tab>
-            label={t('common.audit.associations')}
-            value={tab}
-            tabs={[
-              {
-                value: 'browsers',
-                id: 'risk-audit-tab-browsers',
-                label: t('common.audit.browsers.tab'),
-              },
-              { value: 'ips', id: 'risk-audit-tab-ips', label: c.ips },
-              {
-                value: 'user_ips',
-                id: 'risk-audit-tab-user_ips',
-                label: t('common.audit.userIPsTab'),
-              },
-            ]}
-            onChange={selectTab}
-            panelId="risk-audit-results"
-          />
-        ) : null}
-        <div className="nb-tab-content">
-          {tab !== 'rules' && tab !== 'config' && tab !== 'browsers' ? (
-            <>
-              <FilterBar
-                activeCount={Number(customRange) + Number(filters.kind !== 'total')}
-                onSubmit={() => handleApply(range, draft.kind, Date.now())}
-                onReset={() => {
-                  setRange('default');
-                  setDraft((v) => ({ ...v, kind: 'total' }));
-                  handleApply('default', 'total', Date.now());
-                }}
-                search={
+      ) : null}
+      {tab !== 'rules' && tab !== 'config' && tab !== 'browsers' ? (
+        <Card>
+          <FilterBar
+            activeCount={
+              Number(customRange) +
+              Number(filters.kind !== 'total') +
+              Number(
+                tab === 'users' &&
+                  !selectedUser &&
+                  (params.get('audit_signal') === 'rpm' ||
+                    params.get('audit_signal') === 'concurrency'),
+              )
+            }
+            onSubmit={() => handleApply(range, draft.kind, Date.now())}
+            onReset={() => {
+              setRange('default');
+              setDraft((v) => ({ ...v, kind: 'total' }));
+              handleApply('default', 'total', Date.now());
+              if (tab === 'users') {
+                setParams((previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.delete('audit_signal');
+                  next.delete('audit_users_scan');
+                  next.set('audit_users_page', '1');
+                  return next;
+                });
+              }
+            }}
+            search={
+              <>
+                <Field label={c.range} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={range}
+                      onChange={(e) => {
+                        setRange(e.target.value);
+                        setRangeError(false);
+                        handleApply(e.target.value, draft.kind, Date.now());
+                      }}
+                    >
+                      <option value="default">{c.defaultRange}</option>
+                      <option value="1">{c.lastHour}</option>
+                      <option value="24">{c.lastDay}</option>
+                      <option value="168">{c.lastWeek}</option>
+                      <option value="custom">{c.custom}</option>
+                    </select>
+                  )}
+                </Field>
+                {range === 'custom' && (
                   <>
-                    <Field label={c.range} size="short">
-                      {(field) => (
+                    <TimeInput
+                      label={c.from}
+                      station={role}
+                      showZoneHint={false}
+                      required
+                      draft={draft.from}
+                      onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
+                    />
+                    <TimeInput
+                      label={c.to}
+                      station={role}
+                      showZoneHint={false}
+                      required
+                      draft={draft.to}
+                      onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
+                    />
+                  </>
+                )}
+                {tab !== 'access' && (
+                  <Field label={c.kind} size="short">
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={draft.kind}
+                        onChange={(e) => {
+                          setDraft((v) => ({ ...v, kind: e.target.value }));
+                          handleApply(range, e.target.value, Date.now());
+                        }}
+                      >
+                        {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
+                          <option key={v} value={v}>
+                            {c[v]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                )}
+                {tab === 'users' && !selectedUser ? (
+                  <Field label={c.signal} size="short">
+                    {(field) => {
+                      const rawSignal = params.get('audit_signal') ?? '';
+                      const signalValue =
+                        rawSignal === 'rpm' || rawSignal === 'concurrency' ? rawSignal : '';
+                      return (
                         <select
                           {...field}
-                          value={range}
-                          onChange={(e) => {
-                            setRange(e.target.value);
-                            setRangeError(false);
-                            handleApply(e.target.value, draft.kind, Date.now());
-                          }}
+                          value={signalValue}
+                          onChange={(e) =>
+                            setParams((previous) => {
+                              const next = new URLSearchParams(previous);
+                              if (e.target.value) next.set('audit_signal', e.target.value);
+                              else next.delete('audit_signal');
+                              next.delete('audit_users_scan');
+                              next.set('audit_users_page', '1');
+                              return next;
+                            })
+                          }
                         >
-                          <option value="default">{c.defaultRange}</option>
-                          <option value="1">{c.lastHour}</option>
-                          <option value="24">{c.lastDay}</option>
-                          <option value="168">{c.lastWeek}</option>
-                          <option value="custom">{c.custom}</option>
+                          <option value="">{c.all}</option>
+                          <option value="rpm">{c.rpm}</option>
+                          <option value="concurrency">{c.concurrency}</option>
                         </select>
-                      )}
-                    </Field>
-                    {range === 'custom' && (
-                      <>
-                        <TimeInput
-                          label={c.from}
-                          station={role}
-                          showZoneHint={false}
-                          required
-                          draft={draft.from}
-                          onChange={(update) => setDraft((v) => ({ ...v, from: update(v.from) }))}
-                        />
-                        <TimeInput
-                          label={c.to}
-                          station={role}
-                          showZoneHint={false}
-                          required
-                          draft={draft.to}
-                          onChange={(update) => setDraft((v) => ({ ...v, to: update(v.to) }))}
-                        />
-                      </>
-                    )}
-                    {tab !== 'access' && (
-                      <Field label={c.kind} size="short">
-                        {(field) => (
-                          <select
-                            {...field}
-                            value={draft.kind}
-                            onChange={(e) => {
-                              setDraft((v) => ({ ...v, kind: e.target.value }));
-                              handleApply(range, e.target.value, Date.now());
-                            }}
-                          >
-                            {(['total', 'self', 'charity', 'unclassified'] as const).map((v) => (
-                              <option key={v} value={v}>
-                                {c[v]}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </Field>
-                    )}
-                  </>
-                }
-              />
-              {range === 'custom' && <TimeContextNotice station={role} />}
-              {rangeError && <p role="alert">{c.invalidRange}</p>}
-              <small className="audit-muted">{c.rangeHelp}</small>
-            </>
-          ) : null}
-        </div>
-      </Card>
+                      );
+                    }}
+                  </Field>
+                ) : null}
+              </>
+            }
+          />
+          {range === 'custom' && <TimeContextNotice station={role} />}
+          {rangeError && <p role="alert">{c.invalidRange}</p>}
+          <small className="audit-muted">{c.rangeHelp}</small>
+        </Card>
+      ) : null}
       <div
         role="tabpanel"
         id="risk-audit-results"

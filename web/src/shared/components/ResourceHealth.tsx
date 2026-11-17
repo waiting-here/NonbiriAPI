@@ -2,8 +2,17 @@ import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
 import type { BindingAvailability, ServiceStatus } from '@shared/operations/resourceHealth';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { StatusBadge } from './States';
+import { StatusBadge } from './ui';
 import './ResourceHealth.css';
+
+function healthTone(state: string, manualRecovery = false) {
+  if (manualRecovery || state === 'failure_disabled' || state === 'suspended' || state === 'exhausted')
+    return 'bad' as const;
+  if (state === 'available') return 'ok' as const;
+  if (state === 'rate_limited' || state === 'pending' || state === 'review_required')
+    return 'warn' as const;
+  return 'neutral' as const;
+}
 
 const stateKeys: Record<string, string> = {
   available: 'common.resourceHealth.states.available',
@@ -31,7 +40,7 @@ export function ServiceHealth({ statuses }: { statuses?: ServiceStatus[] }) {
     <section className="resource-health" aria-label={t('common.resourceHealth.title')}>
       <p className="resource-health__summary">
         <strong>{t('common.resourceHealth.title')}</strong>
-        <span className="muted">
+        <span className="nb-muted">
           {attention.length
             ? t('common.resourceHealth.summary', {
                 ready: statuses.filter((status) => status.state === 'available').length,
@@ -64,11 +73,9 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
     <li className="resource-health__item">
       <div className="resource-health__heading">
         <strong>{t(NATIVE_SERVICE_LABEL_KEYS[status.native_service])}</strong>
-        <StatusBadge
-          active={status.state === 'available'}
-          danger={manualRecovery}
-          label={t(stateKeys[status.state] ?? 'common.resourceHealth.states.unavailable')}
-        />
+        <StatusBadge tone={healthTone(status.state, manualRecovery)}>
+          {t(stateKeys[status.state] ?? 'common.resourceHealth.states.unavailable')}
+        </StatusBadge>
       </div>
       {status.failure_streak !== '0' ? (
         <p>{t('common.resourceHealth.failures', { count: status.failure_streak })}</p>
@@ -107,19 +114,18 @@ export function BindingHealth({ value }: { value?: BindingAvailability }) {
   if (!value) return null;
   return (
     <div className="resource-health__binding">
-      <StatusBadge
-        active={value.state === 'available'}
-        label={t(
+      <StatusBadge tone={healthTone(value.state)}>
+        {t(
           value.state === 'available'
             ? 'common.resourceHealth.bindingAvailable'
             : (stateKeys[value.state] ?? 'common.resourceHealth.states.unavailable'),
         )}
-      />
+      </StatusBadge>
       <ServiceHealth statuses={value.service_statuses} />
       {value.state === 'unavailable' &&
       (!value.service_statuses.length ||
         value.service_statuses.some((service) => service.state === 'available')) ? (
-        <p className="muted">{t('common.resourceHealth.checkDonation')}</p>
+        <p className="nb-muted">{t('common.resourceHealth.checkDonation')}</p>
       ) : null}
     </div>
   );

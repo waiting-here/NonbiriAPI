@@ -6,7 +6,7 @@ import { type AutomaticRestriction } from '@shared/operations/restrictions';
 import { getAccessDenial } from '@shared/operations/accessDenial';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { ErrorState, LoadingState } from './States';
+import { Card, ErrorState, LoadingState } from './States';
 import { ReasonText } from './ReasonText';
 
 export function AutomaticRestrictions({ restrictions }: { restrictions: AutomaticRestriction[] }) {
@@ -21,7 +21,7 @@ export function AutomaticRestrictions({ restrictions }: { restrictions: Automati
   const current = restrictions.filter((r) => r.ends_at === null || r.ends_at > now);
   if (!current.length) return null;
   return (
-    <section className="nb-card" aria-label={t('common.reasons.automaticTitle')}>
+    <Card className="ops-stack" aria-label={t('common.reasons.automaticTitle')}>
       <h2>{t('common.reasons.automaticTitle')}</h2>
       {current.map((r) => (
         <div key={r.kind}>
@@ -35,7 +35,7 @@ export function AutomaticRestrictions({ restrictions }: { restrictions: Automati
           </p>
         </div>
       ))}
-    </section>
+    </Card>
   );
 }
 
@@ -76,7 +76,7 @@ export function LoginRestrictions() {
     blacklist_note: 'common.reasons.additionalNote',
   } as const;
   return (
-    <section className="nb-card ops-stack" aria-label={t('common.reasons.accessTitle')}>
+    <Card className="ops-stack" aria-label={t('common.reasons.accessTitle')}>
       <h2>{t('common.reasons.accessTitle')}</h2>
       {query.data?.pages
         .flatMap((page) => page.items)
@@ -99,15 +99,16 @@ export function LoginRestrictions() {
           </article>
         ))}
       {query.hasNextPage ? (
-        <Button
-          type="button"
-
-          disabled={query.isFetchingNextPage}
-          onClick={() => void query.fetchNextPage()}
-        >
-          {t('common.reasons.more')}
-        </Button>
+        <div className="nb-actions">
+          <Button
+            type="button"
+            disabled={query.isFetchingNextPage}
+            onClick={() => void query.fetchNextPage()}
+          >
+            {t('common.reasons.more')}
+          </Button>
+        </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

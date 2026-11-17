@@ -23,14 +23,14 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  PageHeader,
-  StatusBadge,
+  SectionHead,
 } from '@shared/components/States';
 import {
   DataTable,
   FilterBar,
   Fold,
   MoreMenu,
+  StatusBadge,
   Tabs,
   Note,
   Button,
@@ -557,20 +557,30 @@ function DonationKeySettings({
             </Link>
           </div>
         ) : (
-          <p className="muted">{t('common.operations.logs.keyLogsUnavailable')}</p>
+          <p className="nb-muted">{t('common.operations.logs.keyLogsUnavailable')}</p>
         )
       ) : null}
-      <p className="muted">
+      <p className="nb-muted">
         <GatewayConnectorLabel value={item.safe_source.connector_type} /> ·{' '}
         {item.safe_source.base_url}
       </p>
       <h5>{copy.keyUsage}</h5>
       <div className="ops-toolbar">
         <StatusBadge
-          active={item.charity_state === 'available'}
-          danger={item.streak.failure_disabled}
-          label={t(charityStateKey(item.charity_state))}
-        />
+          tone={
+            item.streak.failure_disabled ||
+            item.charity_state === 'suspended' ||
+            item.charity_state === 'exhausted'
+              ? 'bad'
+              : item.charity_state === 'available'
+                ? 'ok'
+                : item.charity_state === 'pending' || item.charity_state === 'rate_limited'
+                  ? 'warn'
+                  : 'neutral'
+          }
+        >
+          {t(charityStateKey(item.charity_state))}
+        </StatusBadge>
         <span>
           {t('common.operations.charity.physicalState', {
             state: t(item.physical_enabled ? 'common.enabled' : 'common.disabled'),
@@ -1783,7 +1793,6 @@ function DonationsPanel({
                   <>
                     <Field
                       label={t('common.donationHistory.userId')}
-                      help={t('common.donationHistory.exactId')}
                       error={
                         validDonorFilters(userDraft, '')
                           ? undefined
@@ -1809,7 +1818,6 @@ function DonationsPanel({
                     </Field>
                     <Field
                       label="Discord ID"
-                      help={t('common.donationHistory.exactId')}
                       error={
                         validDonorFilters('', discordDraft)
                           ? undefined
@@ -1935,13 +1943,14 @@ function DonationsPanel({
                 }}
               />
               <div className="charity-batch-menu">
-                <span>
-                  {t('common.operations.charity.batchActions', { defaultValue: 'Batch actions' })}
-                </span>
                 <MoreMenu
                   label={t('common.operations.charity.batchActions', {
                     defaultValue: 'Batch actions',
                   })}
+                  trigger={t('common.operations.charity.batchActions', {
+                    defaultValue: 'Batch actions',
+                  })}
+                  triggerClassName=""
                   items={[
                     {
                       label: t('common.operations.charity.batchDiscovery', {
@@ -2083,6 +2092,7 @@ function DonationsPanel({
                       header: t('common.operations.charity.keys'),
                       mobileLabel: t('common.operations.charity.keys'),
                       cell: 'meta',
+                      align: 'num',
                       render: (item) => (
                         <>
                           {item.key_count}
@@ -2096,6 +2106,7 @@ function DonationsPanel({
                       key: 'actions',
                       header: t('common.operations.charity.open'),
                       cell: 'action',
+                      align: 'action',
                       render: (item) => (
                         <button
                           type="button"
@@ -2364,15 +2375,20 @@ function CharityManagementAccount({
   return (
     <DraftLeaveScope onStay={() => requestAnimationFrame(revealSelectedTab)}>
       <div className="ops-stack charity-management" ref={workspace}>
-        <div className="nb-actions">
-          <Link
-            className="nb-btn nb-btn--secondary"
-            to="/charity/channel-presets"
-            state={{ returnTo: location.pathname + location.search }}
-          >
-            {t('common.bindingPresets.title')}
-          </Link>
-        </div>
+        {frame === 'steward' ? (
+          <SectionHead
+            title={t('user.steward.charityTab')}
+            actions={
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to="/charity/channel-presets"
+                state={{ returnTo: location.pathname + location.search }}
+              >
+                {t('common.bindingPresets.title')}
+              </Link>
+            }
+          />
+        ) : null}
         <Tabs
           label={t('common.operations.charity.sectionsLabel')}
           value={section}
@@ -2706,7 +2722,7 @@ function PickerKeyManager({
   );
   return (
     <div className="ops-stack">
-      <PageHeader
+      <SectionHead
         title={t('common.operations.charity.sourceBrowser.manageKey', { id: keyID })}
         back={
           <Button type="button" variant="ghost" onClick={onBack}>

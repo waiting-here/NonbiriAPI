@@ -18,7 +18,7 @@ import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../States';
+import { EmptyState, ErrorState, LoadingState, SectionHead } from '../States';
 import {
   Button,
   DataTable,
@@ -29,6 +29,7 @@ import {
   Panel,
   PanelBody,
   SaveBar,
+  StatusBadge,
   Toggle,
 } from '../ui';
 import { PriceConfigFields } from './PriceConfigFields';
@@ -150,7 +151,7 @@ export function PriceTemplateManagement({
     );
   return (
     <div className="nb-form nb-template-list" ref={listNode} tabIndex={-1}>
-      <PageHeader
+      <SectionHead
         title={t('common.workflow.templates')}
         description={t('common.templateManagement.help')}
         back={
@@ -174,124 +175,131 @@ export function PriceTemplateManagement({
           </Button>
         }
       />
-      <FilterBar
-        query={list}
-        activeCount={state === 'all' ? 0 : 1}
-        onReset={() => {
-          setSearch({ q: '', text: '' });
-          filter('', 'all');
-        }}
-        onSubmit={() => {
-          if (validManagementSearch(searchText)) filter(searchText.trim());
-        }}
-        search={
-          <>
-            <Field label={t('common.search')}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="search"
-                  placeholder={t('common.workflow.templateSearch')}
-                  value={searchText}
-                  onChange={(e) => setSearch({ q, text: e.target.value })}
+      <Panel>
+        <PanelBody>
+          <FilterBar
+            query={list}
+            activeCount={state === 'all' ? 0 : 1}
+            onReset={() => {
+              setSearch({ q: '', text: '' });
+              filter('', 'all');
+            }}
+            onSubmit={() => {
+              if (validManagementSearch(searchText)) filter(searchText.trim());
+            }}
+            search={
+              <>
+                <Field label={t('common.search')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="search"
+                      placeholder={t('common.workflow.templateSearch')}
+                      value={searchText}
+                      onChange={(e) => setSearch({ q, text: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('common.workflow.templateState')} size="short">
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={state}
+                      onChange={(e) => filter(q, e.target.value as typeof state)}
+                    >
+                      <option value="all">{t('common.all')}</option>
+                      <option value="enabled">{t('common.enabled')}</option>
+                      <option value="disabled">{t('common.disabled')}</option>
+                    </select>
+                  )}
+                </Field>
+              </>
+            }
+          />
+          {list.isPending ? (
+            <LoadingState />
+          ) : list.error ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+          ) : (
+            <>
+              {list.data.data.length ? (
+                <DataTable
+                  caption={t('common.workflow.templates')}
+                  rows={list.data.data}
+                  rowKey={(row) => row.id}
+                  columns={[
+                    {
+                      key: 'name',
+                      header: t('common.workflow.templateName'),
+                      cell: 'title',
+                      render: (row) => (
+                        <>
+                          <strong className="nb-template-name" title={row.name}>
+                            {row.name}
+                          </strong>
+                          <span className="nb-sub nb-template-description" title={row.description}>
+                            {row.description}
+                          </span>
+                        </>
+                      ),
+                    },
+                    {
+                      key: 'state',
+                      header: t('common.workflow.templateState'),
+                      cell: 'status',
+                      render: (row) => (
+                        <StatusBadge tone={row.enabled ? 'ok' : 'neutral'}>
+                          {t(row.enabled ? 'common.enabled' : 'common.disabled')}
+                        </StatusBadge>
+                      ),
+                    },
+                    {
+                      key: 'price',
+                      header: t('common.operations.charity.pricing'),
+                      cell: 'meta',
+                      render: (row) => <PriceConfigBrief config={row} role={role} />,
+                    },
+                    {
+                      key: 'updated',
+                      header: t('common.templateManagement.updated'),
+                      cell: 'meta',
+                      render: (row) => formatTime(row.updated_at),
+                    },
+                    {
+                      key: 'actions',
+                      header: t('common.workflow.actions'),
+                      cell: 'action',
+                      align: 'action',
+                      render: (row) => (
+                        <Button
+                          id={`edit-price-template-${row.id}`}
+                          disabled={list.isFetching}
+                          onClick={() => select(row.id)}
+                        >
+                          {t('common.edit')}
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  title={t('common.workflow.noTemplates')}
+                  body={t('common.templateManagement.empty')}
                 />
               )}
-            </Field>
-          </>
-        }
-        secondary={
-          <Field label={t('common.workflow.templateState')}>
-            {(props) => (
-              <select
-                {...props}
-                value={state}
-                onChange={(e) => filter(q, e.target.value as typeof state)}
-              >
-                <option value="all">{t('common.all')}</option>
-                <option value="enabled">{t('common.enabled')}</option>
-                <option value="disabled">{t('common.disabled')}</option>
-              </select>
-            )}
-          </Field>
-        }
-      />
-      {list.isPending ? (
-        <LoadingState />
-      ) : list.error ? (
-        <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-      ) : (
-        <>
-          {list.data.data.length ? (
-            <DataTable
-              caption={t('common.workflow.templates')}
-              rows={list.data.data}
-              rowKey={(row) => row.id}
-              columns={[
-                {
-                  key: 'name',
-                  header: t('common.workflow.templateName'),
-                  cell: 'title',
-                  render: (row) => (
-                    <>
-                      <strong className="nb-template-name" title={row.name}>
-                        {row.name}
-                      </strong>
-                      <span className="nb-sub nb-template-description" title={row.description}>
-                        {row.description}
-                      </span>
-                    </>
-                  ),
-                },
-                {
-                  key: 'state',
-                  header: t('common.workflow.templateState'),
-                  cell: 'status',
-                  render: (row) => <StatusBadge active={row.enabled} />,
-                },
-                {
-                  key: 'price',
-                  header: t('common.operations.charity.pricing'),
-                  cell: 'meta',
-                  render: (row) => <PriceConfigBrief config={row} role={role} />,
-                },
-                {
-                  key: 'updated',
-                  header: t('common.templateManagement.updated'),
-                  cell: 'meta',
-                  render: (row) => formatTime(row.updated_at),
-                },
-                {
-                  key: 'actions',
-                  header: t('common.workflow.actions'),
-                  cell: 'action',
-                  render: (row) => (
-                    <Button
-                      id={`edit-price-template-${row.id}`}
-                      disabled={list.isFetching}
-                      onClick={() => select(row.id)}
-                    >
-                      {t('common.edit')}
-                    </Button>
-                  ),
-                },
-              ]}
-            />
-          ) : (
-            <EmptyState
-              title={t('common.workflow.noTemplates')}
-              body={t('common.templateManagement.empty')}
-            />
+              <PagePagination
+                alwaysShowJump
+                metadata={list.data.pagination}
+                requestedPage={pager.page}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+                busy={list.isFetching}
+              />
+            </>
           )}
-          <PagePagination
-            alwaysShowJump
-            metadata={list.data.pagination}
-            requestedPage={pager.page}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-            busy={list.isFetching}
-          />
-        </>
-      )}
+        </PanelBody>
+      </Panel>
     </div>
   );
 }
@@ -419,7 +427,7 @@ function PriceTemplateEditor({
   return (
     <div className="nb-form nb-template-editor" ref={heading} tabIndex={-1}>
       <DraftLeaveGuard dirty={dirty && !remove.isSuccess} />
-      <PageHeader
+      <SectionHead
         title={base ? t('common.templateManagement.edit') : t('common.workflow.createTemplate')}
         description={
           base

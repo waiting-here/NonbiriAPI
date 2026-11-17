@@ -10,7 +10,7 @@ import {
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Field, Fields, FilterBar, FormActions } from '@shared/components/ui';
+import { DataTable, Field, Fields, FilterBar, FormActions } from '@shared/components/ui';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { elevateAdmin } from '@shared/operations/api';
@@ -634,56 +634,60 @@ function LegalHoldSessionPanel({
                 body={t('admin.legalHolds.empty.body')}
               />
             ) : (
-              <div className="ops-table-scroll">
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>{t('admin.legalHolds.table.object')}</th>
-                      <th>{t('admin.legalHolds.create.objectReference')}</th>
-                      <th>{t('admin.legalHolds.table.state')}</th>
-                      <th>{t('admin.legalHolds.table.window')}</th>
-                      <th>{t('admin.legalHolds.table.detail')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageData.data.map((hold) => (
-                      <tr key={hold.id}>
-                        <td data-label={t('admin.legalHolds.table.object')}>
-                          {t(KIND_LABEL_KEYS[hold.object_kind])}
-                        </td>
-                        <td
-                          className="ops-id ops-cell-wide"
-                          data-label={t('admin.legalHolds.create.objectReference')}
-                        >
-                          {hold.object_ref}
-                        </td>
-                        <td data-label={t('admin.legalHolds.table.state')}>
-                          <StatusBadge
-                            active={hold.state === 'active'}
-                            label={t(STATE_LABEL_KEYS[hold.state])}
-                          />
-                        </td>
-                        <td data-label={t('admin.legalHolds.table.window')}>
-                          {formatDateTime(hold.created_at)} — {formatDateTime(hold.expires_at)}
-                        </td>
-                        <td
-                          className="ops-cell-wide"
-                          data-label={t('admin.legalHolds.table.detail')}
-                        >
-                          <button
-                            className="nb-btn nb-btn--secondary"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setSelected(hold.id)}
-                          >
-                            {t('admin.legalHolds.actions.metadata')}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                caption={t('admin.legalHolds.table.object')}
+                rows={pageData.data}
+                rowKey={(hold) => hold.id}
+                columns={[
+                  {
+                    key: 'object',
+                    header: t('admin.legalHolds.table.object'),
+                    cell: 'title',
+                    render: (hold) => t(KIND_LABEL_KEYS[hold.object_kind]),
+                  },
+                  {
+                    key: 'ref',
+                    header: t('admin.legalHolds.create.objectReference'),
+                    mobileLabel: t('admin.legalHolds.create.objectReference'),
+                    cell: 'meta',
+                    render: (hold) => <span className="mono ops-wrap">{hold.object_ref}</span>,
+                  },
+                  {
+                    key: 'state',
+                    header: t('admin.legalHolds.table.state'),
+                    cell: 'status',
+                    render: (hold) => (
+                      <StatusBadge
+                        active={hold.state === 'active'}
+                        label={t(STATE_LABEL_KEYS[hold.state])}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'window',
+                    header: t('admin.legalHolds.table.window'),
+                    mobileLabel: t('admin.legalHolds.table.window'),
+                    cell: 'meta',
+                    render: (hold) =>
+                      `${formatDateTime(hold.created_at)} — ${formatDateTime(hold.expires_at)}`,
+                  },
+                  {
+                    key: 'detail',
+                    header: t('admin.legalHolds.table.detail'),
+                    cell: 'action',
+                    render: (hold) => (
+                      <button
+                        className="nb-btn nb-btn--secondary nb-btn--sm"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setSelected(hold.id)}
+                      >
+                        {t('admin.legalHolds.actions.metadata')}
+                      </button>
+                    ),
+                  },
+                ]}
+              />
             )}
             <PagePagination
               metadata={pageData.pagination}

@@ -4,15 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
-import { DataTable, Field, FilterBar, Fold, MoreMenu } from '@shared/components/ui';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { DataTable, Field, FilterBar, Fold, StatusBadge } from '@shared/components/ui';
 import './alerts.css';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -391,21 +384,26 @@ export function AlertsPage() {
   return (
     <div className="page ops-page alerts-page">
       <PageHeader title={t('admin.alerts.title')} description={t('admin.alerts.description')} />
-      <p className="field-help time-context-notice" role="status">
-        {timeContext.mode === 'site' && timeContext.offset_minutes !== null
-          ? t('common.time.zone', { zone: fixedOffsetZone(timeContext.offset_minutes) })
-          : t('common.time.siteUnavailable')}
-      </p>
       {focusedID ? (
         <Card>
-          <div className="ops-actions">
+          <div className="ops-toolbar">
             <h2>
               {copy.details} #{focusedID}
             </h2>
-            <button className="nb-btn nb-btn--ghost" type="button" onClick={() => focusAlert(null)}>
-              {copy.close}
-            </button>
-            {returnTo ? <Link to={returnTo}>{copy.back}</Link> : null}
+            <div className="nb-actions">
+              {returnTo ? (
+                <Link className="nb-btn nb-btn--secondary nb-btn--sm" to={returnTo}>
+                  {copy.back}
+                </Link>
+              ) : null}
+              <button
+                className="nb-btn nb-btn--ghost nb-btn--sm"
+                type="button"
+                onClick={() => focusAlert(null)}
+              >
+                {copy.close}
+              </button>
+            </div>
           </div>
           {detail.isPending ? (
             <LoadingState />
@@ -419,25 +417,31 @@ export function AlertsPage() {
                   : `${kindLabels[detail.data.alert.kind]} · ${kindDescriptions[detail.data.alert.kind]}`}
               </p>
               <p className="alert-original-message">{detail.data.alert.message}</p>
-              <dl className="ops-kv">
-                <dt>{copy.occurred}</dt>
-                <dd>{formatDateTime(detail.data.alert.created_at)}</dd>
-                <dt>{copy.resolution}</dt>
-                <dd>
-                  {detail.data.alert.resolved
-                    ? `${t('admin.alerts.resolvedValue')} ${detail.data.alert.resolved_at !== null ? formatDateTime(detail.data.alert.resolved_at) : ''} ${detail.data.resolution_kind}`
-                    : copy.unresolved}
-                </dd>
-                <dt>{copy.technicalReference}</dt>
-                <dd>
-                  <code>{detail.data.alert.ref ?? '—'}</code>
-                </dd>
+              <dl className="nb-facts nb-facts--inline">
+                <div>
+                  <dt>{copy.occurred}</dt>
+                  <dd>{formatDateTime(detail.data.alert.created_at)}</dd>
+                </div>
+                <div>
+                  <dt>{copy.resolution}</dt>
+                  <dd>
+                    {detail.data.alert.resolved
+                      ? `${t('admin.alerts.resolvedValue')} ${detail.data.alert.resolved_at !== null ? formatDateTime(detail.data.alert.resolved_at) : ''} ${detail.data.resolution_kind}`
+                      : copy.unresolved}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{copy.technicalReference}</dt>
+                  <dd>
+                    <code>{detail.data.alert.ref ?? '—'}</code>
+                  </dd>
+                </div>
               </dl>
               <h3>{copy.facts}</h3>
               {detail.data.occurred_facts.length === 0 ? (
-                <p>{copy.noFacts}</p>
+                <p className="nb-muted">{copy.noFacts}</p>
               ) : (
-                <dl className="ops-kv">
+                <dl className="nb-facts nb-facts--inline">
                   {detail.data.occurred_facts.map((fact, index) => (
                     <div key={`${fact.key}:${index}`}>
                       <dt>
@@ -461,9 +465,9 @@ export function AlertsPage() {
               )}
               <h3>{copy.targets}</h3>
               {detail.data.targets.length === 0 ? (
-                <p>{copy.noTarget}</p>
+                <p className="nb-muted">{copy.noTarget}</p>
               ) : (
-                <ul>
+                <ul className="ops-stack">
                   {detail.data.targets.map((target) => {
                     const path = targetPath(target, detail.data.targets);
                     const issueUser =
@@ -478,7 +482,7 @@ export function AlertsPage() {
                         {path ? <Link to={path}>{copy.open}</Link> : null}{' '}
                         {target.available && isDiagnosticTarget(target.kind, target.id) ? (
                           <button
-                            className="nb-btn nb-btn--secondary"
+                            className="nb-btn nb-btn--secondary nb-btn--sm"
                             type="button"
                             onClick={() => focusTarget(target)}
                           >
@@ -487,7 +491,7 @@ export function AlertsPage() {
                         ) : null}{' '}
                         {issueUser ? (
                           <button
-                            className="nb-btn nb-btn--secondary"
+                            className="nb-btn nb-btn--secondary nb-btn--sm"
                             type="button"
                             onClick={() => focusTarget(target, 'issue_user')}
                           >
@@ -501,13 +505,13 @@ export function AlertsPage() {
               )}
               {selectedTarget ? (
                 <Card>
-                  <div className="ops-actions">
+                  <div className="ops-toolbar">
                     <h3>
                       {copy.diagnostic}: {copy.targetNames[selectedTarget.kind]} #
                       {selectedTarget.id}
                     </h3>
                     <button
-                      className="nb-btn nb-btn--ghost"
+                      className="nb-btn nb-btn--ghost nb-btn--sm"
                       type="button"
                       onClick={() => focusTarget(null)}
                     >
@@ -523,7 +527,7 @@ export function AlertsPage() {
                     />
                   ) : diagnostic.data ? (
                     <>
-                      <dl className="ops-kv">
+                      <dl className="nb-facts nb-facts--inline">
                         {diagnostic.data.facts.map((fact) => (
                           <div key={fact.key}>
                             <dt>
@@ -545,7 +549,7 @@ export function AlertsPage() {
                         <>
                           <h4>{copy.relatedIssues}</h4>
                           {diagnostic.data.related_issue_ids.length === 0 ? (
-                            <p>{copy.noRelatedIssues}</p>
+                            <p className="nb-muted">{copy.noRelatedIssues}</p>
                           ) : (
                             <ul>
                               {diagnostic.data.related_issue_ids.map((id) => (
@@ -564,7 +568,7 @@ export function AlertsPage() {
               {detail.data.current_state.length > 0 ? (
                 <>
                   <h3>{copy.current}</h3>
-                  <dl className="ops-kv">
+                  <dl className="nb-facts nb-facts--inline">
                     {detail.data.current_state.map((fact, index) => (
                       <div key={`${fact.key}:${index}`}>
                         <dt>
@@ -594,7 +598,7 @@ export function AlertsPage() {
                       </Link>
                     </p>
                   ) : (
-                    <p>{copy.noLogs}</p>
+                    <p className="nb-muted">{copy.noLogs}</p>
                   )}
                 </>
               ) : null}
@@ -647,11 +651,10 @@ export function AlertsPage() {
             </>
           }
         />
-        <div className="ops-actions">
-          <Field size="short" label={t('admin.alerts.selectPage')}>
-            {(props) => (
+        <div className="alerts-bulk-bar">
+          <div className="nb-actions">
+            <label className="alerts-select-all">
               <input
-                {...props}
                 type="checkbox"
                 aria-label={t('admin.alerts.selectPage')}
                 disabled={actionDisabled || selectable.length === 0}
@@ -663,18 +666,24 @@ export function AlertsPage() {
                   })
                 }
               />
-            )}
-          </Field>
-          {selected.length > 0 ? (
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              disabled={actionDisabled}
-              onClick={() => bulk.mutate(selected)}
-            >
-              {t('admin.alerts.resolveSelected', { count: selected.length })}
-            </button>
-          ) : null}
+              <span>{t('admin.alerts.selectPage')}</span>
+            </label>
+            {selected.length > 0 ? (
+              <button
+                className="nb-btn nb-btn--secondary nb-btn--sm"
+                type="button"
+                disabled={actionDisabled}
+                onClick={() => bulk.mutate(selected)}
+              >
+                {t('admin.alerts.resolveSelected', { count: selected.length })}
+              </button>
+            ) : null}
+          </div>
+          <p className="field-help time-context-notice" role="status">
+            {timeContext.mode === 'site' && timeContext.offset_minutes !== null
+              ? t('common.time.zone', { zone: fixedOffsetZone(timeContext.offset_minutes) })
+              : t('common.time.siteUnavailable')}
+          </p>
         </div>
         {bulk.error && !isAuthorityError(bulk.error) ? <ErrorState error={bulk.error} /> : null}
         {mutation.error && !isAuthorityError(mutation.error) ? (
@@ -737,22 +746,34 @@ export function AlertsPage() {
                         {alert.account_deletion ? (
                           <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
                             <p>{t('admin.alerts.deletionSnapshot')}</p>
-                            <dl className="ops-kv alert-deletion-facts">
-                              <dt>Discord ID</dt>
-                              <dd>{alert.account_deletion.discord_id || '—'}</dd>
-                              <dt>{t('admin.alerts.deletedUser')}</dt>
-                              <dd>{alert.account_deletion.user_id}</dd>
-                              <dt>{t('admin.alerts.generalBalance')}</dt>
-                              <dd>{alert.account_deletion.general_balance}</dd>
-                              <dt>{t('admin.alerts.gameBalance')}</dt>
-                              <dd>{alert.account_deletion.game_balance}</dd>
-                              <dt>{t('admin.alerts.donationCredit')}</dt>
-                              <dd>{alert.account_deletion.donation_credit}</dd>
-                              <dt>{t('admin.alerts.sketchAssets')}</dt>
-                              <dd>
-                                {alert.account_deletion.sketch_paper} /{' '}
-                                {alert.account_deletion.sketch_brush}
-                              </dd>
+                            <dl className="nb-facts nb-facts--inline alert-deletion-facts">
+                              <div>
+                                <dt>Discord ID</dt>
+                                <dd>{alert.account_deletion.discord_id || '—'}</dd>
+                              </div>
+                              <div>
+                                <dt>{t('admin.alerts.deletedUser')}</dt>
+                                <dd>{alert.account_deletion.user_id}</dd>
+                              </div>
+                              <div>
+                                <dt>{t('admin.alerts.generalBalance')}</dt>
+                                <dd>{alert.account_deletion.general_balance}</dd>
+                              </div>
+                              <div>
+                                <dt>{t('admin.alerts.gameBalance')}</dt>
+                                <dd>{alert.account_deletion.game_balance}</dd>
+                              </div>
+                              <div>
+                                <dt>{t('admin.alerts.donationCredit')}</dt>
+                                <dd>{alert.account_deletion.donation_credit}</dd>
+                              </div>
+                              <div>
+                                <dt>{t('admin.alerts.sketchAssets')}</dt>
+                                <dd>
+                                  {alert.account_deletion.sketch_paper} /{' '}
+                                  {alert.account_deletion.sketch_brush}
+                                </dd>
+                              </div>
                             </dl>
                           </Fold>
                         ) : null}
@@ -781,14 +802,11 @@ export function AlertsPage() {
                     header: t('admin.alerts.resolved'),
                     cell: 'status',
                     render: (alert) => (
-                      <StatusBadge
-                        active={alert.resolved}
-                        label={
-                          alert.resolved
-                            ? `${t('admin.alerts.resolvedValue')} ${alert.resolved_at !== null ? formatDateTime(alert.resolved_at) : ''}`
-                            : t('admin.alerts.open')
-                        }
-                      />
+                      <StatusBadge tone={alert.resolved ? 'neutral' : 'warn'}>
+                        {alert.resolved
+                          ? `${t('admin.alerts.resolvedValue')}${alert.resolved_at !== null ? ` · ${formatDateTime(alert.resolved_at)}` : ''}`
+                          : t('admin.alerts.open')}
+                      </StatusBadge>
                     ),
                   },
                   {
@@ -799,25 +817,22 @@ export function AlertsPage() {
                     render: (alert) => (
                       <div className="alert-actions">
                         <button
-                          className="nb-btn nb-btn--secondary"
+                          className="nb-btn nb-btn--secondary nb-btn--sm"
                           type="button"
                           onClick={() => focusAlert(alert.id)}
                         >
                           {copy.open}
                         </button>
-                        <MoreMenu
-                          label={t('admin.alerts.presentation.actions')}
-                          items={[
-                            {
-                              label: alert.resolved
-                                ? t('admin.alerts.reopen')
-                                : t('admin.alerts.resolve'),
-                              disabled: actionDisabled,
-                              onSelect: () =>
-                                mutation.mutate({ id: alert.id, value: !alert.resolved }),
-                            },
-                          ]}
-                        />
+                        <button
+                          className="nb-btn nb-btn--secondary nb-btn--sm"
+                          type="button"
+                          disabled={actionDisabled}
+                          onClick={() =>
+                            mutation.mutate({ id: alert.id, value: !alert.resolved })
+                          }
+                        >
+                          {alert.resolved ? t('admin.alerts.reopen') : t('admin.alerts.resolve')}
+                        </button>
                       </div>
                     ),
                   },

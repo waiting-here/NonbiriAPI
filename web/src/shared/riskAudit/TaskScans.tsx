@@ -235,6 +235,12 @@ export function TaskScans<T>({
           </Field>
         )}
       </Card>
+      {!id && !visible.length && !recent.isPending && !recent.error ? (
+        <EmptyState
+          title={t('common.auditScans.chooseAScan')}
+          body={t('common.auditScans.theFiltersAboveStartANewScan')}
+        />
+      ) : null}
       {id &&
         (task.error ? (
           <ErrorState error={task.error} onRetry={() => void task.refetch()} />

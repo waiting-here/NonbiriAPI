@@ -120,11 +120,21 @@
         "maintenance": "Maintenance",
         "alerts": "Alerts",
         "abuse-audit": "Abuse review",
+        "activities": "Activities",
+        "attendance": "Sign-in activities",
+        "limited-activities": "Limited-time activities",
+        "inactivity-policy": "Inactivity policy",
+        "pools": "Shared pools",
         "rewards": "Rewards",
         "gacha": "Cards and shop",
         "games": "Games",
         "legal-holds": "Legal holds",
         "ai": "AI workspace",
+        "agent-requests": "AI request logs",
+        "branding": "Site branding",
+        "egress": "Outbound routes",
+        "endpoint-backoff-policy": "Endpoint backoff policy",
+        "donation-key-failure-policy": "Key failure policy",
         "management-operations": "Management history",
         "management_operations": "Management history"
       },
@@ -829,7 +839,6 @@
     "dashboard": {
       "nav": "Dashboard",
       "title": "Operations overview",
-      "description": "Review site health, requests, and usage.",
       "usageTitle": "Site usage",
       "endpointsTitle": "Endpoint overview",
       "requests": "Requests",
@@ -844,7 +853,6 @@
       "inactiveValue": "No activity",
       "noActivity": "No activity rows",
       "noActivityBody": "No activity has been recorded yet.",
-      "reportsTitle": "Credential reports",
       "nonTerminalReports": "Open reports",
       "pendingIndexing": "Indexing",
       "pendingReview": "Review",
@@ -881,8 +889,8 @@
       "filterResolved": "Resolution status",
       "resolve": "Resolve",
       "reopen": "Reopen",
-      "empty": "No alerts returned",
-      "emptyBody": "The administrator API returned no alert records.",
+      "empty": "No alerts",
+      "emptyBody": "No alert records match the current filters.",
       "action": "Action",
       "kindValue": {
         "returnDetected": "Request returned",
@@ -915,7 +923,6 @@
         "games": "Games",
         "accounts": "Accounts",
         "worker": "Background task checkpoint failed",
-        "actions": "Alert actions",
         "deletionSnapshot": "Balances before deletion"
       },
       "kindDescription": {
@@ -946,7 +953,6 @@
       "correctErrors": "Correct these settings before saving.",
       "nav": "Site settings",
       "title": "Site settings",
-      "description": "Edit multiple settings, review your changes, and save them together.",
       "booleanValue": "Boolean setting",
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
@@ -1037,6 +1043,7 @@
       "confirmationHint": "Settings requiring care will be confirmed before saving.",
       "confirmTitle": "Save settings requiring care?",
       "restoreDefault": "Restore default",
+      "levelThresholds": "Auto-promotion thresholds",
       "levelThreshold": "Level {{level}} auto-promotion threshold"
     },
     "games": {
@@ -1056,8 +1063,7 @@
       "save": "Save game configuration",
       "saveAllChanges": "Save all changes",
       "controls": {
-        "settings": "Game settings",
-        "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
+        "settings": "Game settings"
       },
       "counts": {
         "active": "Active",
@@ -1409,7 +1415,7 @@
         "title": "Report case"
       },
       "empty": {
-        "body": "The selected server-side status view is empty.",
+        "body": "No report cases match the current filters.",
         "title": "No report cases"
       },
       "filter": {
@@ -1442,7 +1448,7 @@
         "counts": "Counts",
         "deadline": "Deadline",
         "materials": "materials {{count}}",
-        "open": "Open",
+        "open": "Actions",
         "processed": "processed {{count}}",
         "progress": "Progress",
         "retry": "retry {{count}}",
@@ -1627,7 +1633,7 @@
       "title": "Lake notes periods",
       "description": "Set opening periods, entry fees and exchange rates.",
       "openEditor": "Manage lake periods",
-      "back": "Back to limited-time activities",
+      "back": "Back to game settings",
       "availability": "Visibility and pause",
       "availabilityHelp": "Hiding, pausing or closing stops gameplay and exchanges and saves active casts. Existing profiles remain.",
       "visible": "Show the activity and allow entry",
@@ -1952,7 +1958,13 @@
         "issue_contour": "The contour cannot form a valid shape. Adjust its vertices.",
         "issue_objects": "There are too many objects, or a bowl is missing.",
         "issue_version": "The file format or rules version is unsupported.",
-        "issue_unknown": "The level needs attention. Check its properties."
+        "issue_unknown": "The level needs attention. Check its properties.",
+        "state_draft": "draft",
+        "state_open": "open",
+        "state_closed": "closed",
+        "playtest_active": "active",
+        "playtest_prepared": "prepared",
+        "general_credits_unit": "general credits"
       }
     },
     "picturebook": {
@@ -2087,7 +2099,10 @@
       "siteDate": "Site date: {{date}} (UTC{{zone}})",
       "empty": "No sign-in activities",
       "emptyBody": "Create an activity to set its dates, counting method and rewards.",
-      "tierDays": "Day {{amount}}"
+      "tierDays": "Day {{amount}}",
+      "statusActive": "Active",
+      "statusUpcoming": "Upcoming",
+      "statusEnded": "Ended"
     }
   },
   "user": {

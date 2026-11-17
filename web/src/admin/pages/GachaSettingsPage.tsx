@@ -7,18 +7,23 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import {
+  Affix,
   Button,
   Field as SharedField,
   Fields,
   Fold,
+  FormActions,
   Note,
   Panel,
   PanelBody,
   PanelHead,
+  SaveBar,
+  StatusBadge,
   Tabs,
   Toggle,
 } from '@shared/components/ui';
-import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { formatCount } from '@shared/utils/formatNumber';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { TimeInput } from '@shared/components/TimeInput';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
@@ -99,7 +104,8 @@ function RulesFields({
       <div className="gacha-admin-grid">
         {rarities.map((rarity, i) => (
           <Field key={rarity} label={rarity + t(' 基础概率（%）', ' base rate (%)')}>
-            <input
+            <Affix
+              unit="%"
               type="number"
               min="0"
               max="100"
@@ -129,7 +135,8 @@ function RulesFields({
           label={t('SR 或以上硬保底（抽）', 'SR or better hard pity (pulls)')}
           help={t('1–100 抽', '1–100 pulls')}
         >
-          <input
+          <Affix
+            unit={t('抽', 'pulls')}
             type="number"
             min="1"
             max="100"
@@ -141,7 +148,8 @@ function RulesFields({
           label={t('SSR 硬保底（抽）', 'SSR hard pity (pulls)')}
           help={t('不小于 SR 保底，最多 1000 抽', 'At least the SR limit; up to 1000 pulls')}
         >
-          <input
+          <Affix
+            unit={t('抽', 'pulls')}
             type="number"
             min={value.sr_pity}
             max="1000"
@@ -153,9 +161,10 @@ function RulesFields({
       {limited && (
         <div className="gacha-admin-grid">
           {(['sr', 'ssr'] as const).map((tier) => (
-            <div key={tier}>
+            <div key={tier} className="nb-stack nb-stack--sm">
               <Field label={tier.toUpperCase() + t(' 档限定占比（%）', ' featured share (%)')}>
-                <input
+                <Affix
+                  unit="%"
                   type="number"
                   min="0"
                   max="100"
@@ -171,9 +180,24 @@ function RulesFields({
                   }
                 />
               </Field>
+              <Toggle
+                disabled={disabled}
+                label={
+                  tier.toUpperCase() +
+                  t(' 连续未中后的限定保证', ' featured guarantee after consecutive misses')
+                }
+                checked={value[tier === 'sr' ? 'sr_guarantee' : 'ssr_guarantee']}
+                onChange={(checked) =>
+                  onChange({
+                    ...value,
+                    [tier === 'sr' ? 'sr_guarantee' : 'ssr_guarantee']: checked,
+                  })
+                }
+              />
               {tier === 'ssr' && (
                 <Field label={t('触发保证前最多未中次数', 'Misses before guaranteed featured hit')}>
                   <select
+                    disabled={disabled || !value.ssr_guarantee}
                     value={Math.max(1, value.ssr_guarantee_misses ?? 1)}
                     onChange={(e) =>
                       onChange({
@@ -191,20 +215,6 @@ function RulesFields({
                   </select>
                 </Field>
               )}
-              <Toggle
-                disabled={disabled}
-                label={
-                  tier.toUpperCase() +
-                  t(' 连续未中后的限定保证', ' featured guarantee after consecutive misses')
-                }
-                checked={value[tier === 'sr' ? 'sr_guarantee' : 'ssr_guarantee']}
-                onChange={(checked) =>
-                  onChange({
-                    ...value,
-                    [tier === 'sr' ? 'sr_guarantee' : 'ssr_guarantee']: checked,
-                  })
-                }
-              />
             </div>
           ))}
         </div>
@@ -242,6 +252,23 @@ function SettingsForm({
   const [entryEnabled, setEntryEnabled] = useState(config.entry_enabled);
   const [rules, setRules] = useState(config.rules),
     [shop, setShop] = useState(config.shop);
+  const dirty =
+    entryEnabled !== config.entry_enabled ||
+    JSON.stringify(rules) !== JSON.stringify(config.rules) ||
+    JSON.stringify(shop) !== JSON.stringify(config.shop);
+  const commitSettings = () =>
+    save({
+      kind: 'settings',
+      expected_revision: config.revision,
+      rules,
+      shop,
+      entry_enabled: entryEnabled,
+    });
+  const discardSettings = () => {
+    setEntryEnabled(config.entry_enabled);
+    setRules(config.rules);
+    setShop(config.shop);
+  };
   const fields: [keyof ShopSettings, string, string][] = [
     ['n_ticket', 'N 碎片 → 1 常驻券', 'N shards → 1 standard ticket'],
     ['r_ticket', 'R 碎片 → 1 常驻券', 'R shards → 1 standard ticket'],
@@ -259,13 +286,7 @@ function SettingsForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        save({
-          kind: 'settings',
-          expected_revision: config.revision,
-          rules,
-          shop,
-          entry_enabled: entryEnabled,
-        });
+        commitSettings();
       }}
     >
       <Panel>
@@ -306,11 +327,12 @@ function SettingsForm({
                   key={ticket}
                   label={
                     ticket === 'permanent'
-                      ? t('每张常驻券所需积分', 'Credits per standard ticket')
+                      ? t('每张常驻券所需通用积分', 'General credits per standard ticket')
                       : t('每张限定券所需通用积分', 'General credits per limited ticket')
                   }
                 >
-                  <input
+                  <Affix
+                    unit={t('通用积分', 'general credits')}
                     required
                     type="number"
                     min="0.001"
@@ -364,17 +386,30 @@ function SettingsForm({
               </Fields>
             ))}
           </fieldset>
-          <p>
+          <p className="nb-small nb-muted">
             {t(
               'Q 版卡同时消耗 N、R 两种碎片。两种券的月额度分别按产出的票券张数累计。',
               'A chibi card costs both N and R shards. Monthly limits count the number of tickets received.',
             )}
           </p>
-          <Button variant="primary" type="submit" disabled={busy || !validRules(rules)}>
-            {t('保存规则与商店设置', 'Save rules and shop settings')}
-          </Button>
+          <FormActions>
+            <Button variant="primary" type="submit" disabled={busy || !validRules(rules)}>
+              {t('保存规则与商店设置', 'Save rules and shop settings')}
+            </Button>
+          </FormActions>
         </PanelBody>
       </Panel>
+      <SaveBar
+        dirtyCount={dirty ? 1 : 0}
+        scope={t('规则与商店', 'Rules and shop')}
+        busy={busy}
+        saveDisabled={!validRules(rules)}
+        onSave={commitSettings}
+        onDiscard={discardSettings}
+        saveLabel={t('保存规则与商店设置', 'Save rules and shop settings')}
+        discardLabel={t('放弃改动', 'Discard')}
+        dirtyLabel={() => t('规则与商店设置有未保存改动', 'Rules and shop have unsaved changes')}
+      />
     </form>
   );
 }
@@ -538,7 +573,7 @@ function PoolEditor({
               )}
             </Note>
           )}
-          <Fold title={t('概率与保底', 'Rates and guarantees')} defaultOpen>
+          <Fold plain title={t('概率与保底', 'Rates and guarantees')} defaultOpen>
             <RulesFields
               value={pool.rules}
               onChange={(rules) => setPool({ ...pool, rules })}
@@ -728,12 +763,7 @@ function GachaSettingsContent() {
       <PageHeader
         title={t('真·抽卡模拟器', 'The Gacha Simulator')}
         description={ui('admin.gachaStats.pageDescription')}
-        icon="spark"
-        back={
-          <Link className="nb-btn nb-btn--ghost" to="/activities">
-            {t('返回活动管理', 'Back to activities')}
-          </Link>
-        }
+        back={<Link to="/activities">{t('返回活动与共享池', 'Back to activities')}</Link>}
       />
       {session.error && <ErrorState error={session.error} />}
       {query.isPending && <LoadingState />}
@@ -741,7 +771,6 @@ function GachaSettingsContent() {
       {!draft && feedback}
       {query.data && (
         <>
-          <TimeContextNotice station="admin" />
           <Tabs
             label={t('抽卡管理', 'Gacha management')}
             value={section}
@@ -790,61 +819,94 @@ function GachaSettingsContent() {
                   }
                 />
                 <PanelBody>
-                  {!query.data.pools.some((p) => p.kind === 'limited') && (
-                    <p>
-                      {t(
+                  <TimeContextNotice station="admin" />
+                  {!query.data.pools.some((p) => p.kind === 'limited') ? (
+                    <EmptyState
+                      title={t('暂无限定奖池', 'No limited pools yet')}
+                      body={t(
                         '尚未发布限定奖池。可先从配置模板读取并微调。',
                         'No limited pool yet. Start by loading a template and adjusting it.',
                       )}
-                    </p>
+                      action={
+                        <Button type="button" onClick={() => setSection('presets')}>
+                          {t('查看配置模板', 'Browse templates')}
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <div className="gacha-admin-pools">
+                      {query.data.pools
+                        .filter((p) => p.kind === 'limited')
+                        .map((pool) => {
+                          const isOpen = poolOpen(pool, query.data!.server_time);
+                          const isEnded = Boolean(
+                            pool.ends_at && pool.ends_at <= query.data!.server_time,
+                          );
+                          return (
+                            <article key={pool.id}>
+                              <ArtworkImage
+                                artworkKey={'cover:' + pool.cover}
+                                src={'/assets/gacha/covers/' + pool.cover + '.webp'}
+                                alt={pool.name}
+                              />
+                              <div className="nb-stack nb-stack--sm">
+                                <div className="gacha-admin-actions">
+                                  <h3>{pool.name}</h3>
+                                  <StatusBadge
+                                    tone={
+                                      !pool.published
+                                        ? 'neutral'
+                                        : pool.paused
+                                          ? 'warn'
+                                          : isOpen
+                                            ? 'ok'
+                                            : isEnded
+                                              ? 'neutral'
+                                              : 'info'
+                                    }
+                                  >
+                                    {!pool.published
+                                      ? t('草稿', 'Draft')
+                                      : pool.paused
+                                        ? t('已暂停', 'Paused')
+                                        : isOpen
+                                          ? t('开放中', 'Open')
+                                          : isEnded
+                                            ? t('已结束', 'Ended')
+                                            : t('即将开放', 'Scheduled')}
+                                  </StatusBadge>
+                                </div>
+                                <ArtworkBadge artworkKey={'cover:' + pool.cover} />
+                                <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
+                                <p className="nb-small nb-muted">
+                                  {pool.starts_at ? formatDateTime(pool.starts_at) : '—'} →{' '}
+                                  {pool.ends_at ? formatDateTime(pool.ends_at) : '—'}
+                                </p>
+                                <div className="gacha-admin-actions">
+                                  <Button
+                                    size="sm"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      mutation.reset();
+                                      setDraft({ pool });
+                                    }}
+                                  >
+                                    {t('编辑', 'Edit')}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    disabled={busy}
+                                    onClick={() => copyPool(pool)}
+                                  >
+                                    {t('复制为新一期', 'Create similar period')}
+                                  </Button>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                    </div>
                   )}
-                  <div className="gacha-admin-pools">
-                    {query.data.pools
-                      .filter((p) => p.kind === 'limited')
-                      .map((pool) => (
-                        <article key={pool.id}>
-                          <ArtworkImage
-                            artworkKey={'cover:' + pool.cover}
-                            src={'/assets/gacha/covers/' + pool.cover + '.webp'}
-                            alt={pool.name}
-                          />
-                          <div>
-                            <h3>{pool.name}</h3>
-                            <ArtworkBadge artworkKey={'cover:' + pool.cover} />
-                            <ArtworkUnavailable artworkKey={'cover:' + pool.cover} />
-                            <p>
-                              {!pool.published
-                                ? t('草稿', 'Draft')
-                                : pool.paused
-                                  ? t('已暂停', 'Paused')
-                                  : poolOpen(pool, query.data!.server_time)
-                                    ? t('开放中', 'Open')
-                                    : pool.ends_at && pool.ends_at <= query.data!.server_time
-                                      ? t('已结束', 'Ended')
-                                      : t('即将开放', 'Scheduled')}
-                            </p>
-                            <p>
-                              {pool.starts_at ? formatDateTime(pool.starts_at) : '—'} →{' '}
-                              {pool.ends_at ? formatDateTime(pool.ends_at) : '—'}
-                            </p>
-                            <div className="gacha-admin-actions">
-                              <Button
-                                disabled={busy}
-                                onClick={() => {
-                                  mutation.reset();
-                                  setDraft({ pool });
-                                }}
-                              >
-                                {t('编辑', 'Edit')}
-                              </Button>
-                              <Button disabled={busy} onClick={() => copyPool(pool)}>
-                                {t('复制为新一期', 'Create similar period')}
-                              </Button>
-                            </div>
-                          </div>
-                        </article>
-                      ))}
-                  </div>
                 </PanelBody>
               </Panel>
             )}
@@ -866,12 +928,13 @@ function GachaSettingsContent() {
                           src={'/assets/gacha/covers/' + preset.pool.cover + '.webp'}
                           alt={preset.name}
                         />
-                        <div>
+                        <div className="nb-stack nb-stack--sm">
                           <h3>{preset.name}</h3>
                           <ArtworkBadge artworkKey={'cover:' + preset.pool.cover} />
                           <ArtworkUnavailable artworkKey={'cover:' + preset.pool.cover} />
-                          <p>
-                            {preset.pool.featured.length} {t('张限定卡', 'limited cards')}
+                          <p className="nb-small nb-muted">
+                            {formatCount(preset.pool.featured.length).display}{' '}
+                            {t('张限定卡', 'limited cards')}
                           </p>
                           <div className="gacha-admin-actions">
                             <Button disabled={busy} onClick={() => copyPool(preset.pool)}>
