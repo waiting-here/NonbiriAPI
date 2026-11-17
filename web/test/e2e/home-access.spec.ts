@@ -272,9 +272,15 @@ for (const locale of ['en', 'zh'] as const) {
       { exact: true },
     );
     const readCount = state.reads.length;
+    await copyModelNames.click();
+    const refreshNames = page.locator('.api-model-names').getByRole('button', {
+      name: locale === 'zh' ? '刷新' : 'Refresh',
+      exact: true,
+    });
+    await expect(refreshNames).toBeEnabled();
     state.models = true;
     state.charity = true;
-    await copyModelNames.click();
+    await refreshNames.click();
     const nameButton = page.getByRole('button', {
       name: locale === 'zh' ? '复制my/model' : 'Copy my/model',
     });

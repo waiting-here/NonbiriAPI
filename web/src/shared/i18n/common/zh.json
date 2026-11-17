@@ -2271,6 +2271,7 @@
       "entryURL": "端点地址",
       "existingCredential": "使用已有密钥",
       "existingModel": "已有模型",
+      "noExistingModel": "在下方填写提供方和模型名，即可创建第一个模型。",
       "impact": "使用范围",
       "impactCounts": "自用密钥 {{keys}} · 公益成员 {{donations}} · 发现来源 {{sources}}",
       "independentDiscovery": "填写获取模型列表的完整地址，例如 https://api.example.com/v1/models。",

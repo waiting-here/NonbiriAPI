@@ -94,6 +94,9 @@
   margin: 0;
   padding: 0;
 }
+.api-model-names__actions {
+  grid-column: 1 / -1;
+}
 .api-model-names li {
   display: grid;
   gap: var(--nb-space-1);

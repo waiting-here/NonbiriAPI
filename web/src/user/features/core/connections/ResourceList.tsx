@@ -160,12 +160,12 @@ export function ConnectionResourceList<T>({
                   isEmptyUnfiltered && emptyTitle ? emptyTitle : t('common.connections.emptyTitle')
                 }
                 body={
-                  q
+                  q || filterKey
                     ? t('common.connections.noMatches')
                     : (emptyDescription ?? t('common.connections.emptyBody'))
                 }
                 action={emptyAction}
-                illustration={q ? 'search' : 'empty'}
+                illustration={q || filterKey ? 'search' : 'empty'}
               />
             )}
             <PagePagination
@@ -183,6 +183,6 @@ export function ConnectionResourceList<T>({
   return embedded ? (
     <div className="nb-stack">{content}</div>
   ) : (
-    <Panel aria-busy={query.isFetching}>{content}</Panel>
+    <Panel aria-label={title} aria-busy={query.isFetching}>{content}</Panel>
   );
 }

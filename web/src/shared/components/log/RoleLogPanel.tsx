@@ -251,7 +251,7 @@ function AttemptTable({
                   )}
                 </p>
               ) : null}
-              <dl className="nb-facts nb-facts--inline log-attempt-facts">
+              <dl className="nb-facts log-attempt-facts">
                 <div>
                   <dt>{t('logs.endpointBaseUrl')}</dt>
                   <dd className="mono">{attempt.endpoint_base_url}</dd>

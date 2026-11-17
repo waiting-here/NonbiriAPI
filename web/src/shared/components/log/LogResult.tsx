@@ -44,7 +44,7 @@ const userResultKeys = {
   cancelled: 'user.logs.result.cancelled',
   credits: 'user.logs.result.credits',
   missingModel: 'user.logs.result.missingModel',
-  noUsableKey: 'user.logs.result.noUsableKey',
+  noUsableKey: 'common.operations.logs.presentation.result.noUsableKey',
   rejected: 'user.logs.result.rejected',
   keyRejected: 'user.logs.result.keyRejected',
   rateLimited: 'user.logs.result.rateLimited',

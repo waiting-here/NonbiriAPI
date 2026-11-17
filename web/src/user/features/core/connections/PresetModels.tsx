@@ -291,6 +291,7 @@ export function PresetModelRow({
               scope={identity}
               listType="mapping-existing-models"
               title={t('common.connections.existingModel')}
+              emptyDescription={t('common.connections.noExistingModel')}
               searchPlaceholder={t('common.connections.modelSearch')}
               load={(window, q, signal) => listModelsPage(window, signal, { q })}
               rowKey={(row) => row.id}
