@@ -210,6 +210,25 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
       page.getByText(batch.boundHere, { exact: true }).scrollIntoViewIfNeeded(),
     );
     await page.getByRole('checkbox', { name: /binding-up-1/ }).check();
+    const selection = page.getByRole('region', { name: batch.selected });
+    const serviceEditor = selection
+      .locator('details')
+      .filter({ hasText: common.common.bindingGuide.editServices });
+    await serviceEditor.locator('summary').click();
+    const chatService = serviceEditor.getByRole('checkbox', {
+      name: common.common.modelTypes.chat_completions,
+      exact: true,
+    });
+    await expect(chatService).toBeChecked();
+    await chatService.uncheck();
+    await expect(
+      serviceEditor.getByText(common.common.bindingGuide.uncovered, { exact: true }).first(),
+    ).toBeVisible();
+    await chatService.check();
+    await expect(serviceEditor.getByText('/v1/chat/completions', { exact: true })).toBeVisible();
+    await visuals(page, info, 'binding-service-choice', () =>
+      serviceEditor.scrollIntoViewIfNeeded(),
+    );
     await page.getByRole('button', { name: batch.backTargets }).click();
     await page
       .getByRole('row')

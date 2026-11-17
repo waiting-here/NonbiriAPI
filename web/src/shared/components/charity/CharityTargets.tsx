@@ -6,7 +6,9 @@ import { idempotentOptions, responseOutcomeUnknown } from '@shared/operations/ap
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import {
   charityKeys,
+  suggestedBindingServices,
   getManagedBindings,
+  type BindingGuide,
   type CharityBinding,
   type CharityBindingCandidate,
   type CharityModel,
@@ -16,7 +18,7 @@ import { getManagedBindingCandidatesPage } from '@shared/operations/charityPages
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import type { NativeService } from '@shared/nativeServices';
-import { NativeServicesField } from '../NativeServicesField';
+import { BindingRouteGuide, BindingServiceEditor } from './BindingRouteGuide';
 import { ServiceRoutesSummary } from '../ServiceRoutesSummary';
 import { DataTable, Field, Fold, Note } from '../ui';
 import { EmptyState, ErrorState, LoadingState } from '../States';
@@ -26,6 +28,7 @@ interface Target {
   upstream_model_id: string;
   native_services: NativeService[];
   options: NativeService[];
+  guide?: BindingGuide;
   label: string;
 }
 export function CharityTargets({
@@ -91,7 +94,9 @@ function TargetEditor({
         donation_key_id: row.donation_key_id,
         upstream_model_id: row.upstream_model_id,
         native_services: row.native_services,
-        options: row.native_services,
+        options:
+          row.binding_guide?.services.map((option) => option.native_service) ?? row.native_services,
+        guide: row.binding_guide,
         label: row.base_url ?? row.donation_key_id,
       })) ?? [],
   );
@@ -199,7 +204,8 @@ function TargetEditor({
       {
         donation_key_id: row.donation_key_id,
         upstream_model_id: row.upstream_model_id,
-        native_services: row.capabilities?.can_bind ? [...(row.native_services ?? [])] : [],
+        native_services: suggestedBindingServices(row) ?? [],
+        guide: row.binding_guide,
         options: row.native_services ?? [],
         label: row.source.canonical_base_url,
       },
@@ -212,7 +218,8 @@ function TargetEditor({
           <legend>
             {index + 1}. {row.label} · {row.upstream_model_id}
           </legend>
-          <NativeServicesField
+          <BindingServiceEditor
+            guide={row.guide}
             options={Array.from(
               new Set([
                 ...row.options,
@@ -307,7 +314,20 @@ function TargetEditor({
                 header: t('common.connections.availableServices'),
                 cell: 'meta',
                 render: (row) =>
-                  row.service_routes ? <ServiceRoutesSummary value={row.service_routes} /> : null,
+                  row.binding_guide ? (
+                    row.binding_guide.routes.length ? (
+                      <Fold plain lazy title={t('common.bindingGuide.preview')}>
+                        <BindingRouteGuide
+                          guide={row.binding_guide}
+                          selected={row.native_services ?? []}
+                        />
+                      </Fold>
+                    ) : (
+                      <p>{t('common.bindingGuide.noMatch')}</p>
+                    )
+                  ) : row.service_routes ? (
+                    <ServiceRoutesSummary value={row.service_routes} />
+                  ) : null,
               },
               {
                 key: 'add',

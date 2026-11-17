@@ -1,33 +1,27 @@
 import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
-import type { BindingAvailability, ServiceStatus } from '@shared/operations/resourceHealth';
+import {
+  serviceStateLabel,
+  type BindingAvailability,
+  type ServiceStatus,
+} from '@shared/operations/resourceHealth';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { StatusBadge } from './ui';
 import './ResourceHealth.css';
 
 function healthTone(state: string, manualRecovery = false) {
-  if (manualRecovery || state === 'failure_disabled' || state === 'suspended' || state === 'exhausted')
+  if (
+    manualRecovery ||
+    state === 'failure_disabled' ||
+    state === 'suspended' ||
+    state === 'exhausted'
+  )
     return 'bad' as const;
   if (state === 'available') return 'ok' as const;
   if (state === 'rate_limited' || state === 'pending' || state === 'review_required')
     return 'warn' as const;
   return 'neutral' as const;
 }
-
-const stateKeys: Record<string, string> = {
-  available: 'common.resourceHealth.states.available',
-  failure_disabled: 'common.resourceHealth.states.failure_disabled',
-  rate_limited: 'common.resourceHealth.states.rate_limited',
-  disabled: 'common.resourceHealth.states.disabled',
-  review_required: 'common.resourceHealth.states.review_required',
-  pending: 'common.resourceHealth.states.pending',
-  suspended: 'common.resourceHealth.states.suspended',
-  exhausted: 'common.resourceHealth.states.exhausted',
-  expired: 'common.resourceHealth.states.expired',
-  ended: 'common.resourceHealth.states.ended',
-  model_disabled: 'common.resourceHealth.states.model_disabled',
-  feature_disabled: 'common.resourceHealth.states.feature_disabled',
-};
 
 export function ServiceHealth({ statuses }: { statuses?: ServiceStatus[] }) {
   const { t } = useTranslation();
@@ -74,7 +68,7 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
       <div className="resource-health__heading">
         <strong>{t(NATIVE_SERVICE_LABEL_KEYS[status.native_service])}</strong>
         <StatusBadge tone={healthTone(status.state, manualRecovery)}>
-          {t(stateKeys[status.state] ?? 'common.resourceHealth.states.unavailable')}
+          {t(serviceStateLabel(status.state))}
         </StatusBadge>
       </div>
       {status.failure_streak !== '0' ? (
@@ -118,7 +112,7 @@ export function BindingHealth({ value }: { value?: BindingAvailability }) {
         {t(
           value.state === 'available'
             ? 'common.resourceHealth.bindingAvailable'
-            : (stateKeys[value.state] ?? 'common.resourceHealth.states.unavailable'),
+            : serviceStateLabel(value.state),
         )}
       </StatusBadge>
       <ServiceHealth statuses={value.service_statuses} />

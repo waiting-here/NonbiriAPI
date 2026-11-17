@@ -326,13 +326,16 @@ type StewardBinding struct {
 }
 
 type AdminBindings struct {
-	Bindings        []AdminBinding `json:"bindings"`
-	BindingRevision string         `json:"binding_revision"`
+	Coverage        []InterfaceCoverage `json:"coverage,omitempty"`
+	Bindings        []AdminBinding      `json:"bindings"`
+	BindingRevision string              `json:"binding_revision"`
 }
 
 type StewardBindings struct {
-	Bindings        []StewardBinding `json:"bindings"`
-	BindingRevision string           `json:"binding_revision"`
+	CanReorder      *bool               `json:"can_reorder,omitempty"`
+	Coverage        []InterfaceCoverage `json:"coverage,omitempty"`
+	Bindings        []StewardBinding    `json:"bindings"`
+	BindingRevision string              `json:"binding_revision"`
 }
 
 type TokenPricesInput struct {

@@ -686,7 +686,7 @@ describe('charity model wire', () => {
     ).toThrow(/candidate source types/i);
   });
 
-  it('keeps binding order continuity strict when an empty-source binding is present', async () => {
+  it('renders authorized bindings when another position is outside the steward scope', async () => {
     const binding = bindingDTO([]);
     vi.stubGlobal(
       'fetch',
@@ -702,6 +702,8 @@ describe('charity model wire', () => {
       ),
     );
 
-    await expect(getManagedBindings('admin', '1')).rejects.toThrow(/binding order/i);
+    expect((await getManagedBindings('steward', '1')).bindings.map((row) => row.ord)).toEqual([
+      0, 2,
+    ]);
   });
 });

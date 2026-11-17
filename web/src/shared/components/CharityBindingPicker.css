@@ -46,7 +46,8 @@
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
 }
-.charity-binding-selection__list > li > .model-types-field {
+.charity-binding-selection__list > li > .model-types-field,
+.charity-binding-selection__list > li > .nb-fold {
   grid-column: 1 / -1;
   min-width: 0;
 }

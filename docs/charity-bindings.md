@@ -16,6 +16,18 @@ upstream model skips only that pair for that key.
 Existing bindings keep their order; applying or editing a preset never enables a
 key, approves a donation, refreshes discovery or changes saved model pricing.
 
+In the model binding view, **Source health by interface** counts visible targets
+whose selected service and target were both available at the time of the read.
+A target that offers both direct and converted access contributes to both counts.
+If only conversion is available, the model view shows the conversion limits.
+These counts precede the checks for a particular request and its caller.
+
+When choosing an upstream model, expand **Interfaces and conversion limits**.
+New selections include approved services that cover a configured interface, including
+temporarily paused services. Use **Adjust upstream services** to change each selection,
+including individual entries in a cross-model batch. The ordered-target editor
+also offers approved services outside the currently displayed candidate page.
+
 ## Session API
 
 Use the administrator prefix `/admin/api` or steward prefix `/api/steward`.
@@ -38,6 +50,14 @@ describe configuration compatibility, so temporary health failures do not preven
 editing a connection. Key-to-model binding pages expose the same information in
 `targets:[{target_id,upstream_model_id,availability}]`. Write receipts omit the
 live snapshot; refresh the read endpoint after a mutation.
+
+Browser-session candidate and saved-target reads also include a `binding_guide`
+with the model's `interfaces`, compatible `routes` and approved `services`.
+Each service supplies `native_service` and its observed `state` when known.
+The bindings response supplies `coverage` for the visible targets, grouped by
+`operation` with numeric `native_targets`, `converted_targets` and a list of
+`conversion_services`. Steward binding reads set `can_reorder` to false when
+some connections are outside the current management scope.
 
 | Method and suffix | Request or response |
 | --- | --- |

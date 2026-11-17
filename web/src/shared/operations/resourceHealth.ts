@@ -2,6 +2,24 @@ import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { normalizeSmartBackoff, type SmartBackoff } from './smartBackoff';
 import { array, boolean, decimal, nullableUnixSecond, oneOf, record, string } from './wire';
 
+const stateKeys: Record<string, string> = {
+  available: 'common.resourceHealth.states.available',
+  failure_disabled: 'common.resourceHealth.states.failure_disabled',
+  rate_limited: 'common.resourceHealth.states.rate_limited',
+  disabled: 'common.resourceHealth.states.disabled',
+  review_required: 'common.resourceHealth.states.review_required',
+  pending: 'common.resourceHealth.states.pending',
+  suspended: 'common.resourceHealth.states.suspended',
+  exhausted: 'common.resourceHealth.states.exhausted',
+  expired: 'common.resourceHealth.states.expired',
+  ended: 'common.resourceHealth.states.ended',
+  model_disabled: 'common.resourceHealth.states.model_disabled',
+  feature_disabled: 'common.resourceHealth.states.feature_disabled',
+};
+
+export const serviceStateLabel = (state: string) =>
+  stateKeys[state] ?? 'common.resourceHealth.states.unavailable';
+
 export interface ServiceStatus {
   use_id: string;
   native_service: NativeService;

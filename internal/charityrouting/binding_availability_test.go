@@ -62,11 +62,51 @@ FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donat
 		t.Fatalf("admin bindings: %+v %v", admin, err)
 	}
 	check(admin.Bindings[0].Targets)
+	assertCoverage := func(rows []InterfaceCoverage, operation contract.Operation, native, converted int) {
+		t.Helper()
+		for _, row := range rows {
+			if row.Operation == operation && row.NativeTargets == native && row.ConvertedTargets == converted {
+				return
+			}
+		}
+		t.Fatalf("unexpected coverage for %s: %+v", operation, rows)
+	}
+	assertCoverage(admin.Coverage, contract.OperationChatCompletions, 0, 0)
+	assertCoverage(admin.Coverage, contract.OperationEmbeddings, 1, 0)
+	// The saved Chat-only target can be expanded to embeddings even when the
+	// candidate picker is on a different page. The pause only affects health.
+	checkGuide := func(guide *BindingGuide) {
+		t.Helper()
+		if guide == nil {
+			t.Fatal("missing management guide")
+		}
+		states := map[contract.NativeService]string{}
+		for _, option := range guide.Services {
+			states[option.NativeService] = option.State
+		}
+		if states[contract.NativeServiceChatCompletions] != "failure_disabled" || states[contract.NativeServiceEmbeddings] != "available" {
+			t.Fatalf("service choices %+v", guide)
+		}
+		if len(guide.Routes) != 2 {
+			t.Fatalf("guide covers unrelated interfaces: %+v", guide.Routes)
+		}
+	}
+	checkGuide(admin.Bindings[0].Targets[0].Guide)
+	page, err := e.service.candidatesPage(t.Context(), roleAdmin, 0, mid, CandidateQuery{IncludeBound: true, KeyState: "all", DonationKeyID: key}, pagination.Default())
+	if err != nil || len(page.Data) != 1 {
+		t.Fatalf("candidates: %+v %v", page, err)
+	}
+	checkGuide(page.Data[0].Guide)
 	managed, err := e.service.GetBindingsSteward(t.Context(), steward, mid)
 	if err != nil || len(managed.Bindings) != 1 {
 		t.Fatalf("steward bindings: %+v %v", managed, err)
 	}
 	check(managed.Bindings[0].Targets)
+	if managed.CanReorder == nil || !*managed.CanReorder {
+		t.Fatal("fully scoped steward cannot reorder visible bindings")
+	}
+	assertCoverage(managed.Coverage, contract.OperationChatCompletions, 0, 0)
+	checkGuide(managed.Bindings[0].Targets[0].Guide)
 	// Health inspection must not wait for the database's sole write connection.
 	writer, err := e.store.DB().BeginTx(t.Context(), nil)
 	if err != nil {
@@ -158,5 +198,40 @@ FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donat
 	admin, err = e.service.GetBindingsAdmin(t.Context(), mid)
 	if err != nil || admin.Bindings[0].Targets[0].Availability.State != "unavailable" || admin.Bindings[0].Targets[0].Availability.ServiceStatuses[0].State != "disabled" {
 		t.Fatalf("unrelated embeddings cooldown mislabeled paused chat: %+v %v", admin, err)
+	}
+}
+
+func TestBindingGuideSeparatesResponsesConversionFromCompact(t *testing.T) {
+	e := newRoutingTestEnv(t)
+	e.seedUser(t, true, nil)
+	owner := e.seedUser(t, false, nil)
+	model := e.createModel(t, 'a')
+	mid, _ := parsePositiveID(model.ID)
+	_, key, _ := e.seedCandidateWithConnector(t, owner, "choice", "model", contract.TypeOpenAIChatCompletions)
+	interfaces := modeltype.Set{contract.OperationResponses, contract.OperationResponsesCompact}
+	if _, err := e.store.DB().Exec(`UPDATE charity_models SET model_types=? WHERE id=?`, interfaces, mid); err != nil {
+		t.Fatal(err)
+	}
+	e.seedBinding(t, mid, key, "model", 0)
+	value, err := e.service.GetBindingsAdmin(t.Context(), mid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(value.Coverage) != 2 {
+		t.Fatalf("coverage %+v", value.Coverage)
+	}
+	for _, row := range value.Coverage {
+		switch row.Operation {
+		case contract.OperationResponses:
+			if row.NativeTargets != 0 || row.ConvertedTargets != 1 || len(row.ConversionServices) != 1 || row.ConversionServices[0] != contract.NativeServiceChatCompletions {
+				t.Fatalf("Responses coverage: %+v", row)
+			}
+		case contract.OperationResponsesCompact:
+			if row.NativeTargets != 0 || row.ConvertedTargets != 0 || len(row.ConversionServices) != 0 {
+				t.Fatalf("compact coverage: %+v", row)
+			}
+		default:
+			t.Fatalf("unexpected interface %s", row.Operation)
+		}
 	}
 }
