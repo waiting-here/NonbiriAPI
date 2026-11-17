@@ -43,6 +43,14 @@
   display: grid;
   gap: var(--nb-space-3);
 }
+.log-detail-id {
+  display: block;
+  margin-top: var(--nb-space-1);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  font-weight: normal;
+  user-select: all;
+}
 .log-filters__toolbar {
   display: flex;
   flex-wrap: wrap;

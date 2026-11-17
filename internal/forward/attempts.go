@@ -132,6 +132,7 @@ func (service *Service) runAttempts(
 						break
 					}
 					if errors.Is(err, claim.ErrDependencyUnavailable) {
+						observeClaimError(parent, RouteCandidate{}, "claim", err)
 						if !run.dispatched {
 							value := failureForError(err, plan.charity)
 							run.failure = &value
@@ -228,6 +229,7 @@ func (service *Service) runAttempts(
 			break
 		}
 		if dispatch == nil {
+			observeClaimError(parent, candidate, "dispatch", claim.ErrCredentialUnavailable)
 			run.handleDispatchFailure(parent, service, handle, claim.ErrCredentialUnavailable)
 			break
 		}
@@ -416,8 +418,20 @@ func (service *Service) runAttempts(
 func observeClaimError(ctx context.Context, candidate RouteCandidate, stage string, err error) {
 	var reason string
 	switch {
-	case errors.Is(err, claim.ErrKeyRateLimited), errors.Is(err, donationquota.ErrLimited), errors.Is(err, donationquota.ErrCapacity):
-		reason = "capacity"
+	case errors.Is(err, claim.ErrKeyRateLimited):
+		reason = "key_rate_limit"
+	case errors.Is(err, donationquota.ErrLimited):
+		reason = "quota"
+	case errors.Is(err, donationquota.ErrCapacity):
+		reason = "quota_storage_full"
+	case errors.Is(err, claim.ErrRoutingBusy):
+		reason = "routing_busy"
+	case errors.Is(err, claim.ErrForbidden):
+		reason = "caller_level"
+	case errors.Is(err, claim.ErrCredentialUnavailable):
+		reason = "credential_unavailable"
+	case errors.Is(err, claim.ErrDependencyUnavailable):
+		reason = "dependency_unavailable"
 	case errors.Is(err, claim.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
 		reason = "unavailable"
 	default:

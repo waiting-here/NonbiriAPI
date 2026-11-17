@@ -522,15 +522,9 @@ function ScopedRoleLogPanel({
   const [revoked, setRevoked] = useState(false);
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
-  const observerEnabled = enabled && scopeReady && !revoked && !invalidFilter;
-  const logs = useRoleLogsPage(
-    role,
-    accountID,
-    pager.page,
-    pager.pageSize,
-    filter,
-    observerEnabled,
-  );
+  const observerEnabled = enabled && scopeReady && !revoked;
+  const listEnabled = observerEnabled && !invalidFilter;
+  const logs = useRoleLogsPage(role, accountID, pager.page, pager.pageSize, filter, listEnabled);
   const detail = useRoleLogDetailPage(
     role,
     accountID,
@@ -549,7 +543,7 @@ function ScopedRoleLogPanel({
   const retainedLogData = useRetainedQueryData(
     { data: logs.data, error: authorityError ?? logs.error },
     [role, accountID],
-    observerEnabled,
+    listEnabled,
   );
   const authorityClosed = revoked || authorityError !== null;
 
@@ -720,8 +714,6 @@ function ScopedRoleLogPanel({
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set('request_id', id);
-      if (invalidDiscordFilter) next.delete('discord_id');
-      if (invalidKeyFilter) next.delete('endpoint_key_id');
       const actualPage = logs.data?.pagination.page;
       if (actualPage !== undefined) next.set('page', actualPage);
       next.set('page_size', String(pager.pageSize));
@@ -932,7 +924,9 @@ function ScopedRoleLogPanel({
   else if (selectedID && detail.error)
     detailBody =
       isApiError(detail.error) && detail.error.code === 'not_found' ? (
-        <p role="status">{t('common.operations.logs.requestUnavailable')}</p>
+        <p role="status">
+          {t(role === 'user' ? 'common.operations.logs.requestUnavailable' : 'logs.lookupMissing')}
+        </p>
       ) : (
         <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
       );
@@ -1253,9 +1247,14 @@ function ScopedRoleLogPanel({
       )}
       {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       <LogDetailPanel
-        open={Boolean(selectedID) && !invalidFilter}
+        open={Boolean(selectedID)}
         onClose={closeDetail}
-        title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
+        title={
+          <>
+            {t('logs.drawerTitle')}{' '}
+            {selectedID && <span className="mono log-detail-id">{selectedID}</span>}
+          </>
+        }
         fields={detailFields}
         headers={
           role !== 'user' && detailRequest ? (
@@ -1321,7 +1320,9 @@ function ScopedRoleLogPanel({
               {detailData && 'route_decision' in detailData && detailData.route_decision && (
                 <RequestRouteDecision decision={detailData.route_decision} />
               )}
-              {modelManagement(detailRequest)}
+              {(detailRequest.phase !== 'pre_handler' ||
+                (detailRequest.role !== 'user' && detailRequest.charity_model_id)) &&
+                modelManagement(detailRequest)}
               <Fold
                 plain
                 title={t('common.failure.deliveryTitle')}

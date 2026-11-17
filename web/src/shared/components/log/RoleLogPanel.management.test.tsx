@@ -161,11 +161,11 @@ it('explains missing historic targets and keeps ordinary charity logs free of ma
   });
   const panel = await screen.findByRole('region', { name: /Log details/ });
   expect(
-    await within(panel).findByText('The linked charity model is no longer available.'),
+    await within(panel).findByText('This record has no link to a current charity model.'),
   ).toBeVisible();
   await view.user.click(within(panel).getByText('Service call attempts', { selector: 'strong' }));
   expect(
-    await within(panel).findAllByText('The linked charity key is no longer available.'),
+    await within(panel).findAllByText('This attempt has no link to a current donation key.'),
   ).toHaveLength(2);
   expect(screen.queryByRole('link', { name: /Manage charity/ })).not.toBeInTheDocument();
   view.unmount();
