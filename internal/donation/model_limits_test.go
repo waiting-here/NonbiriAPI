@@ -29,11 +29,11 @@ func TestModelLimitsOwnershipRevisionReplayAndExport(t *testing.T) {
 	limit := "17"
 	limits := donationquota.ModelLimits{Tokens: &limit}
 	mutation := donationMutation(t, 'M', http.MethodPut, routeStewardModelLimits, []int64{id, key}, map[string]any{"expected_revision": "1", "upstream_model_id": "model-a", "tokens": "17", "input_tokens": nil, "output_tokens": nil})
-	receipt, err := e.service.replaceModelLimits(t.Context(), reviewerSteward, steward, id, key, mutation, 1, "model-a", limits)
+	receipt, err := e.service.replaceModelLimits(t.Context(), reviewerSteward, steward, id, key, mutation, 1, "model-a", modelLimitUpdate{ModelLimits: limits})
 	if err != nil || receipt.Value.DonationRevision != "2" {
 		t.Fatal(receipt, err)
 	}
-	replayed, err := e.service.replaceModelLimits(t.Context(), reviewerSteward, steward, id, key, mutation, 1, "model-a", limits)
+	replayed, err := e.service.replaceModelLimits(t.Context(), reviewerSteward, steward, id, key, mutation, 1, "model-a", modelLimitUpdate{ModelLimits: limits})
 	if err != nil || !replayed.Replayed || !bytes.Equal(receipt.Body, replayed.Body) {
 		t.Fatal(replayed, err)
 	}
@@ -64,7 +64,7 @@ func TestModelLimitsOwnershipRevisionReplayAndExport(t *testing.T) {
 		t.Fatal(export, err)
 	}
 	e.auth.denySteward.Store(true)
-	if _, err = e.service.replaceModelLimits(t.Context(), reviewerSteward, steward, id, key, mutation, 1, "model-a", limits); !errors.Is(err, ErrForbidden) {
+	if _, err = e.service.replaceModelLimits(t.Context(), reviewerSteward, steward, id, key, mutation, 1, "model-a", modelLimitUpdate{ModelLimits: limits}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("revoked replay", err)
 	}
 	tx, err = e.store.DB().BeginTx(t.Context(), nil)
@@ -136,7 +136,9 @@ func TestModelLimitsL5PermissionAndReplayRecheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := "/api/steward/donations/" + d.ID + "/keys/" + d.Keys[0].ID + "/model-limits"
-	body := `{"expected_revision":"1","upstream_model_id":"model-a","tokens":"17","input_tokens":null,"output_tokens":null}`
+	body := `{"expected_revision":"1","upstream_model_id":"model-a","tokens":"17","input_tokens":null,"output_tokens":null,"calls":"340282366920938463463374607431768211455","credits":"12.345"}`
+	originalBody := body
+	nonce := "P"
 	request := func(method string) *httptest.ResponseRecorder {
 		t.Helper()
 		input := ""
@@ -144,7 +146,7 @@ func TestModelLimitsL5PermissionAndReplayRecheck(t *testing.T) {
 			input = body
 		}
 		r := httptest.NewRequest(method, path, strings.NewReader(input))
-		r.Header.Set("Idempotency-Key", strings.Repeat("P", 22))
+		r.Header.Set("Idempotency-Key", strings.Repeat(nonce, 22))
 		// The service also declares its operation, so an accidentally broad
 		// enclosing route context cannot widen this transaction's authority.
 		r = r.WithContext(authz.WithStewardPermission(r.Context(), "donations.manage_keys"))
@@ -157,6 +159,30 @@ func TestModelLimitsL5PermissionAndReplayRecheck(t *testing.T) {
 			t.Fatal("recurring-only L5", method, response.Code, response.Body.String())
 		}
 	}
+	const maxU128 = "340282366920938463463374607431768211455"
+	checkLimits := func(wantCalls bool) {
+		t.Helper()
+		values, err := e.service.modelLimits(t.Context(), recurringOwner, owner, id, key, pagination.Default(), "", "model-a")
+		if err != nil || len(values.Data) != 1 {
+			t.Fatal(values, err)
+		}
+		record := values.Data[0]
+		if record.Used.Calls != "0" || record.Used.Credits != "0" || record.Remaining.Credits == nil || *record.Remaining.Credits != "12.345" || (record.Remaining.Calls != nil) != wantCalls || (wantCalls && *record.Remaining.Calls != maxU128) {
+			t.Fatal(record)
+		}
+	}
+	checkLimits(true)
+	nonce, body = "T", `{"expected_revision":"2","upstream_model_id":"model-a","tokens":"18","input_tokens":null,"output_tokens":null}`
+	if response := request(http.MethodPut); response.Code != 200 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	checkLimits(true)
+	nonce, body = "U", `{"expected_revision":"3","upstream_model_id":"model-a","tokens":"19","input_tokens":null,"output_tokens":null,"calls":null}`
+	if response := request(http.MethodPut); response.Code != 200 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	checkLimits(false)
+	nonce, body = "P", originalBody
 	policy.Permissions["donations.recurring"] = false
 	policy.Permissions["donations.manage_keys"] = true
 	writeDonationPolicy(t, e, actor, policy)
@@ -168,11 +194,11 @@ func TestModelLimitsL5PermissionAndReplayRecheck(t *testing.T) {
 	limit := "17"
 	mutation := donationMutation(t, 'P', http.MethodPut, routeStewardModelLimits, []int64{id, key}, map[string]any{"expected_revision": "1", "upstream_model_id": "model-a", "tokens": "17", "input_tokens": nil, "output_tokens": nil})
 	ctx := authz.WithStewardPermission(t.Context(), "donations.recurring")
-	if _, err := e.service.replaceModelLimits(ctx, reviewerSteward, actor, id, key, mutation, 1, "model-a", donationquota.ModelLimits{Tokens: &limit}); !errors.Is(err, authz.ErrPermissionDenied) {
+	if _, err := e.service.replaceModelLimits(ctx, reviewerSteward, actor, id, key, mutation, 1, "model-a", modelLimitUpdate{ModelLimits: donationquota.ModelLimits{Tokens: &limit}}); !errors.Is(err, authz.ErrPermissionDenied) {
 		t.Fatal("final transaction accepted revoked permission", err)
 	}
 	var revision int64
-	if err := e.store.DB().QueryRow("SELECT revision FROM donations WHERE id=?", id).Scan(&revision); err != nil || revision != 2 {
+	if err := e.store.DB().QueryRow("SELECT revision FROM donations WHERE id=?", id).Scan(&revision); err != nil || revision != 4 {
 		t.Fatal("replay or revoked command changed revision", revision, err)
 	}
 }

@@ -73,7 +73,7 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
  AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(COALESCE(dk.input_token_reserve+dk.output_token_reserve,dk.token_reserve))
  AND ` + quota + `
- AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", "cx.decision_now", "dk.token_reserve") + `
+ AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", "cx.decision_now", price, "dk.token_reserve") + `
 	` + scope + `)
 	 LIMIT ` + strconv.Itoa(MaxRuntimeCandidates+1) + `)) ELSE 0 END)`
 }

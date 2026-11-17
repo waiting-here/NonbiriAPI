@@ -144,22 +144,23 @@ func (s *Service) beginSourceReadTx(ctx context.Context, role reviewerRole, acto
 // is independent of the model. Caller balances and personal guards are absent.
 func sourceUsableSQL() string {
 	clock := `(SELECT decision_now FROM decision_clock)`
+	price := `CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price
+ WHEN 'per_search_unit' THEN COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),
+ CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER))
+ WHEN 'per_token' THEN COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),
+ CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER)) END`
 	return `WITH decision_clock AS (SELECT ? AS decision_now),key_cost AS (
  SELECT dk.*,d.status AS donation_status,d.terminal_at AS donation_terminal_at,d.user_id,
  COALESCE(e.enabled,0) AS endpoint_enabled,COALESCE(k.enabled,0) AS physical_enabled,
  EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.endpoint_key_id=k.id) AS member,
  EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) AS suspended,
- (SELECT MIN(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price
- WHEN 'per_search_unit' THEN COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),
- CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER))
- WHEN 'per_token' THEN COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),
- CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER)) END)
+ (SELECT MIN(` + price + `)
  FROM charity_model_bindings b JOIN charity_binding_targets target ON target.binding_id=b.id JOIN charity_models cm ON cm.id=b.charity_model_id
 JOIN charity_model_access a ON a.model_id=cm.id
 
  WHERE target.donation_key_id=dk.id AND cm.enabled=1 AND a.allowed_level_mask<>0
  AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", clock) + `
- AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", clock, "dk.token_reserve") + `) AS price_reserve
+ AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", clock, price, "dk.token_reserve") + `) AS price_reserve
  FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
  LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id
  WHERE dk.id=?

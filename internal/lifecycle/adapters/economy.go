@@ -296,15 +296,15 @@ func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKe
 
 func mapModelLimits(values []donationquota.ModelExport) []lifecycle.DonationModelLimitExport {
 	out := make([]lifecycle.DonationModelLimitExport, len(values))
-	limits := func(value donationquota.ModelLimits) lifecycle.ModelTokenLimitsExport {
-		return lifecycle.ModelTokenLimitsExport{Tokens: cloneString(value.Tokens), InputTokens: cloneString(value.InputTokens), OutputTokens: cloneString(value.OutputTokens)}
+	limits := func(value donationquota.ModelLimits) lifecycle.ModelQuotaLimitsExport {
+		return lifecycle.ModelQuotaLimitsExport{Calls: cloneString(value.Calls), Credits: cloneString(value.Credits), Tokens: cloneString(value.Tokens), InputTokens: cloneString(value.InputTokens), OutputTokens: cloneString(value.OutputTokens)}
 	}
-	amounts := func(value donationquota.ModelAmounts) lifecycle.ModelTokenAmountsExport {
-		return lifecycle.ModelTokenAmountsExport{Tokens: value.Tokens, InputTokens: value.InputTokens, OutputTokens: value.OutputTokens}
+	amounts := func(value donationquota.ModelAmounts) lifecycle.ModelQuotaAmountsExport {
+		return lifecycle.ModelQuotaAmountsExport{Calls: value.Calls, Credits: value.Credits, Tokens: value.Tokens, InputTokens: value.InputTokens, OutputTokens: value.OutputTokens}
 	}
 	for index, value := range values {
 		out[index] = lifecycle.DonationModelLimitExport{
-			UpstreamModelID: value.UpstreamModelID, Limits: limits(value.Limits), Used: amounts(value.Used), Reserved: amounts(value.Reserved), Remaining: limits(value.Remaining),
+			HistoricalCostsPartial: value.HistoricalCostsPartial, UpstreamModelID: value.UpstreamModelID, Limits: limits(value.Limits), Used: amounts(value.Used), Reserved: amounts(value.Reserved), Remaining: limits(value.Remaining),
 			UnattributedTotalTokens: value.UnattributedTotalTokens, TrackingStartedAt: cloneInt64(value.TrackingStartedAt), RecurringLimits: mapRecurringLimits(value.RecurringLimits),
 		}
 	}

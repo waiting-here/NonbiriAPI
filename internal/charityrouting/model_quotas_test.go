@@ -14,7 +14,7 @@ func TestModelQuotasCatalogAndRuntimeFilterOnlyExactUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = donationquota.SetModelLimits(t.Context(), tx, keys[0], routingTestNow, "quota-0", donationquota.ModelLimits{Tokens: &zero}); err != nil {
+	if err = donationquota.SetModelLimits(t.Context(), tx, keys[0], routingTestNow, "quota-0", donationquota.ModelLimits{Calls: &zero}); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
@@ -33,9 +33,9 @@ func TestModelQuotasCatalogAndRuntimeFilterOnlyExactUpstream(t *testing.T) {
 		if want == 1 && candidates[0].UpstreamModelID != "quota-1" {
 			t.Fatal(candidates)
 		}
-		var available bool
-		query := `WITH cx AS (SELECT ? AS decision_now,5 AS token_reserve,1 AS charity_enabled) SELECT ` + catalogAvailableSQL() + ` FROM charity_models cm CROSS JOIN cx WHERE cm.id=?`
-		if err = e.store.DB().QueryRow(query, routingTestNow, modelID).Scan(&available); err != nil || !available {
+		var available int
+		query := `WITH cx AS (SELECT ? AS decision_now,5 AS token_reserve,1 AS charity_enabled) SELECT ` + availableCandidateCountSQL("", false) + ` FROM charity_models cm CROSS JOIN cx WHERE cm.id=?`
+		if err = e.store.DB().QueryRow(query, routingTestNow, modelID).Scan(&available); err != nil || available != want {
 			t.Fatal(available, err)
 		}
 	}
@@ -48,7 +48,7 @@ func TestModelQuotasCatalogAndRuntimeFilterOnlyExactUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 	alignment := "first_success"
-	if err = donationquota.ReplaceModel(t.Context(), tx, keys[0], routingTestNow, "quota-0", []donationquota.RuleInput{{Mode: "reset", Interval: "5h", Alignment: &alignment, TimeZone: "UTC", Metric: "tokens", Limit: "0"}}); err != nil {
+	if err = donationquota.ReplaceModel(t.Context(), tx, keys[0], routingTestNow, "quota-0", []donationquota.RuleInput{{Mode: "reset", Interval: "5h", Alignment: &alignment, TimeZone: "UTC", Metric: "credits", Limit: "0"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
