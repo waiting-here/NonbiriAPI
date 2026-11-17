@@ -1,3 +1,4 @@
+import { chatProjection } from '../../../test/fixtures/resourceScopes';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
@@ -131,6 +132,7 @@ function candidate({
   sourceTypes = ['automatic'],
 } = {}) {
   return {
+    ...chatProjection,
     donation_key_id: keyID,
     donation_id: donationID,
     source: {
@@ -283,7 +285,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     const candidatePager = () => screen.getAllByRole('navigation', { name: 'Pagination' })[0];
     await view.user.selectOptions(within(candidatePager()).getByRole('combobox'), '100');
     await screen.findByRole('button', { name: 'Select this page (100)' });
-    expect(screen.getAllByRole('checkbox')).toHaveLength(100);
+    expect(screen.getAllByRole('checkbox', { name: /provider\/model-/ })).toHaveLength(100);
     await view.user.click(screen.getByRole('button', { name: 'Select this page (100)' }));
     await view.user.click(within(candidatePager()).getByRole('button', { name: 'Next' }));
     await screen.findByRole('button', { name: 'Select this page (44)' });
@@ -291,7 +293,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     expect(
       screen.getByRole('heading', { name: '144 service connection(s) selected' }),
     ).toBeVisible();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(44);
+    expect(screen.getAllByRole('checkbox', { name: /provider\/model-/ })).toHaveLength(44);
     await view.user.click(within(candidatePager()).getByRole('button', { name: 'Previous' }));
     expect(await screen.findByRole('checkbox', { name: /provider\/model-000/ })).toBeChecked();
     await view.user.click(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' }));

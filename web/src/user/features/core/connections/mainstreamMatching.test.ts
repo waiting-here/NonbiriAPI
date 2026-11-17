@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../../test/fixtures/resourceScopes';
 import { describe, expect, it } from 'vitest';
 import { normalizeEndpointCreateOptions } from '../normalizers';
 import en from './matching-copy/en.json';
@@ -7,9 +8,11 @@ describe('mainstream matching projection', () => {
   const channelID = `mch_${'A'.repeat(22)}`;
   const match = { channel_id: channelID, entry_id: '2' };
   const wire = {
+    native_service_options: [],
     base_connector_types: ['openai-compatible'],
     mainstream_channels: [
       {
+        ...channelPreset,
         id: channelID,
         name: 'Channel',
         connector_type: 'openai-compatible',

@@ -12,23 +12,9 @@ import type { RolePolicy } from '@shared/rolePolicy';
 import type { TransportRule } from '@shared/transportRule';
 export type { RoleAction, RolePolicy } from '@shared/rolePolicy';
 
-export const CONNECTOR_TYPES = [
-  'openai-compatible',
-  'anthropic-compatible',
-  'ai-sdk-gateway-v3',
-  'ai-sdk-gateway-v4',
-  'google-gemini',
-  'openai-responses',
-  'openai-decisions',
-  'cohere-rerank',
-  'jina-rerank',
-  'siliconflow-rerank',
-  'voyage-rerank',
-  'typesafe-systemone',
-  'openai-chat-completions',
-] as const;
+import type { ConnectorType } from '@shared/connections';
+export { CONNECTOR_TYPES, type ConnectorType } from '@shared/connections';
 
-export type ConnectorType = (typeof CONNECTOR_TYPES)[number];
 export type CreditAsset = 'general' | 'game';
 export type AccountLanguage = '' | 'zh' | 'en';
 export type ExplicitLanguage = Exclude<AccountLanguage, ''>;
@@ -99,10 +85,10 @@ export type EndpointOrigin =
   { kind: 'custom' } | { kind: 'mainstream'; channel_id: string; name: string };
 
 export interface MainstreamChannelOption {
-  revision?: string;
-  entries?: MainstreamEntry[];
-  discovery_source?: DiscoveryPreset | null;
-  model_mappings?: ModelMapping[];
+  revision: string;
+  entries: MainstreamEntry[];
+  discovery_source: DiscoveryPreset | null;
+  model_mappings: ModelMapping[];
   id: string;
   name: string;
   connector_type: ConnectorType;
@@ -110,7 +96,7 @@ export interface MainstreamChannelOption {
 }
 
 export interface EndpointCreateOptions {
-  native_service_options?: NativeServiceOption[];
+  native_service_options: NativeServiceOption[];
   base_connector_types: ConnectorType[];
   mainstream_channels: MainstreamChannelOption[];
   matching_mainstream_entries?: { channel_id: string; entry_id: string }[];
@@ -163,14 +149,14 @@ export interface KeyBindingView extends Partial<KeyQueueConfig> {
 }
 
 export interface Endpoint {
-  connection_id?: string | null;
-  connection_name?: string;
-  configuration_type?: ConnectorType;
-  native_services?: NativeService[];
-  rerank_format?: RerankFormat | '';
-  rerank_path?: string;
+  connection_id: string | null;
+  connection_name: string;
+  configuration_type: ConnectorType;
+  native_services: NativeService[];
+  rerank_format: RerankFormat | '';
+  rerank_path: string;
   rerank_url?: string;
-  rerank_path_configurable?: boolean;
+  rerank_path_configurable: boolean;
 
   id: string;
   connector_type: ConnectorType;
@@ -186,13 +172,13 @@ export interface Endpoint {
 }
 
 export interface EndpointKey extends Partial<KeyQueueConfig> {
-  credential_available?: boolean;
-  discovery_source_id?: string | null;
-  credential_id?: string;
+  credential_available: boolean;
+  discovery_source_id: string | null;
+  credential_id: string;
   credential_note?: string;
-  credential_version?: string;
-  grant_revision?: string;
-  native_services?: NativeService[];
+  credential_version: string;
+  grant_revision: string;
+  native_services: NativeService[];
   id: string;
   endpoint_id: string;
   display_head: string;
@@ -291,7 +277,7 @@ export interface Model {
   role_policy?: RolePolicy;
 }
 
-export interface BindingCandidate extends Partial<ServiceProjection> {
+interface BindingIdentity {
   endpoint_key_id: string;
   endpoint_base_url: string;
   connector_type: ConnectorType;
@@ -300,20 +286,15 @@ export interface BindingCandidate extends Partial<ServiceProjection> {
   endpoint_key_display_tail: string;
   endpoint_key_note: string;
   upstream_model_id: string;
+}
+
+export interface BindingCandidate extends BindingIdentity, ServiceProjection {
   source_types: CatalogSourceType[];
 }
 
-export interface Binding extends Partial<ServiceProjection> {
-  targets?: BindingTarget[];
+export interface Binding extends BindingIdentity {
+  targets: BindingTarget[];
   id: string;
-  endpoint_key_id: string;
-  endpoint_base_url: string;
-  connector_type: ConnectorType;
-  endpoint_note: string;
-  endpoint_key_display_head: string;
-  endpoint_key_display_tail: string;
-  endpoint_key_note: string;
-  upstream_model_id: string;
   ord: number;
 }
 

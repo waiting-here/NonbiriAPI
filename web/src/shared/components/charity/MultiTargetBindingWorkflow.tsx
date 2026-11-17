@@ -257,9 +257,7 @@ export function MultiTargetBindingWorkflow({
           charity_model_id: row.target.charity_model_id,
           expected_binding_revision: row.target.binding_revision,
           upstream_model_id: row.upstream_model_id,
-          ...(row.candidate.native_services === undefined
-            ? {}
-            : { native_services: row.candidate.selected_native_services ?? [] }),
+          native_services: row.candidate.selected_native_services ?? [],
         })),
       },
       labels: entries.map(([, row]) => ({
@@ -272,11 +270,7 @@ export function MultiTargetBindingWorkflow({
     locked ||
     add.outcome === 'conflict' ||
     entries.length === 0 ||
-    entries.some(
-      ([, entry]) =>
-        entry.candidate.native_services !== undefined &&
-        !entry.candidate.selected_native_services?.length,
-    ) ||
+    entries.some(([, entry]) => !entry.candidate.selected_native_services?.length) ||
     entries.some(([, entry]) => entry.unavailable) ||
     (Boolean(target) && pickerBlocked);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
@@ -523,27 +517,25 @@ export function MultiTargetBindingWorkflow({
                     render: ([id, row]) => (
                       <div className="nb-stack nb-stack--sm">
                         <span className="mono nb-workflow-id">{row.upstream_model_id}</span>
-                        {row.candidate.native_services ? (
-                          <BindingServiceEditor
-                            guide={row.candidate.binding_guide}
-                            options={row.candidate.native_services}
-                            value={row.candidate.selected_native_services ?? []}
-                            disabled={locked || add.outcome === 'conflict'}
-                            onChange={(services) => {
-                              setBasket((previous) => ({
-                                ...previous,
-                                [id]: {
-                                  ...row,
-                                  candidate: {
-                                    ...row.candidate,
-                                    selected_native_services: services,
-                                  },
+                        <BindingServiceEditor
+                          guide={row.candidate.binding_guide}
+                          options={row.candidate.native_services}
+                          value={row.candidate.selected_native_services ?? []}
+                          disabled={locked || add.outcome === 'conflict'}
+                          onChange={(services) => {
+                            setBasket((previous) => ({
+                              ...previous,
+                              [id]: {
+                                ...row,
+                                candidate: {
+                                  ...row.candidate,
+                                  selected_native_services: services,
                                 },
-                              }));
-                              add.reset();
-                            }}
-                          />
-                        ) : null}
+                              },
+                            }));
+                            add.reset();
+                          }}
+                        />
                       </div>
                     ),
                   },

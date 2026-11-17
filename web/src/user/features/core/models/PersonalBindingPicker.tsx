@@ -533,7 +533,7 @@ export function PersonalBindingPicker({
                                 locked ||
                                 candidates.isFetching ||
                                 alreadyBound ||
-                                row.capabilities?.can_bind === false
+                                !row.capabilities.can_bind
                               }
                               onChange={() =>
                                 onToggle({
@@ -548,8 +548,7 @@ export function PersonalBindingPicker({
                             />
                           )}
                         </Field>
-                        {row.capabilities?.can_bind === false &&
-                        row.capabilities.unavailable_reason ? (
+                        {!row.capabilities.can_bind && row.capabilities.unavailable_reason ? (
                           <ConnectionUnavailable reason={row.capabilities.unavailable_reason} />
                         ) : null}
                       </li>

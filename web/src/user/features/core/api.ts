@@ -431,48 +431,6 @@ export async function getEndpointCreateOptions(
   return normalizeEndpointCreateOptions(response.payload);
 }
 
-function legacyEndpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
-  const root = exactInput(
-    input,
-    ['source'],
-    ['channel_id', 'connector_type', 'base_url', 'note', 'enabled'],
-    'endpoint creation input',
-  );
-  if (root.source === 'mainstream') {
-    const record = exactInput(
-      input,
-      ['source', 'channel_id', 'note', 'enabled'],
-      [],
-      'mainstream endpoint creation input',
-    );
-    if (typeof record.channel_id !== 'string') {
-      throw new ApiError('invalid_request', 'Invalid mainstream channel id.', 400);
-    }
-    return {
-      source: 'mainstream',
-      channel_id: validateMainstreamChannelID(record.channel_id),
-      note: validateScalarInput(record.note, 1_024, 'endpoint note'),
-      enabled: exactBooleanInput(record.enabled, 'endpoint enabled state'),
-    };
-  }
-  if (root.source === 'custom') {
-    const record = exactInput(
-      input,
-      ['source', 'connector_type', 'base_url', 'note', 'enabled'],
-      [],
-      'custom endpoint creation input',
-    );
-    return {
-      source: 'custom',
-      connector_type: connectorInput(record.connector_type),
-      base_url: canonicalEndpointURLInput(record.base_url),
-      note: validateScalarInput(record.note, 1_024, 'endpoint note'),
-      enabled: exactBooleanInput(record.enabled, 'endpoint enabled state'),
-    };
-  }
-  throw new ApiError('invalid_request', 'Invalid endpoint creation source.', 400);
-}
-
 function endpointScopeInput(source: Record<string, unknown>) {
   return {
     ...(source.connection_id === undefined
@@ -490,56 +448,45 @@ function endpointScopeInput(source: Record<string, unknown>) {
   };
 }
 function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
-  const source = exactInput(
-    input,
-    ['source'],
-    [
-      'channel_id',
-      'channel_entry_id',
-      'channel_revision',
-      'connector_type',
-      'base_url',
-      'note',
-      'enabled',
-      'connection_id',
-      'native_services',
-      'rerank_format',
-      'rerank_path',
-    ],
-    'endpoint creation input',
-  );
-  const legacy = { ...source };
-  for (const name of [
-    'connection_id',
-    'native_services',
-    'rerank_format',
-    'rerank_path',
-    'channel_entry_id',
-    'channel_revision',
-  ])
-    delete legacy[name];
-  const result = legacyEndpointCreatePayload(legacy as EndpointCreateInput);
-  return {
-    ...result,
-    ...endpointScopeInput(source),
-    ...(source.source === 'mainstream'
-      ? {
-          ...(source.channel_entry_id === undefined
-            ? {}
-            : {
-                channel_entry_id: validateResourceId(
-                  source.channel_entry_id as string,
-                  'channel entry id',
-                ),
-              }),
-          ...(source.channel_revision === undefined
-            ? {}
-            : {
-                channel_revision: revisionField(source.channel_revision, 'channel revision', true),
-              }),
-        }
-      : {}),
-  };
+  const common = ['connection_id', 'native_services', 'rerank_format', 'rerank_path'];
+  if (input?.source === 'mainstream') {
+    const source = exactInput(
+      input,
+      ['source', 'channel_id', 'note', 'enabled'],
+      [...common, 'channel_entry_id', 'channel_revision'],
+      'mainstream endpoint creation input',
+    );
+    return {
+      source: 'mainstream',
+      channel_id: validateMainstreamChannelID(input.channel_id),
+      ...(input.channel_entry_id === undefined
+        ? {}
+        : { channel_entry_id: validateResourceId(input.channel_entry_id, 'channel entry id') }),
+      ...(input.channel_revision === undefined
+        ? {}
+        : { channel_revision: revisionField(input.channel_revision, 'channel revision', true) }),
+      note: validateScalarInput(input.note, 1_024, 'endpoint note'),
+      enabled: exactBooleanInput(input.enabled, 'endpoint enabled state'),
+      ...endpointScopeInput(source),
+    };
+  }
+  if (input?.source === 'custom') {
+    const source = exactInput(
+      input,
+      ['source', 'connector_type', 'base_url', 'note', 'enabled'],
+      common,
+      'custom endpoint creation input',
+    );
+    return {
+      source: 'custom',
+      connector_type: connectorInput(input.connector_type),
+      base_url: canonicalEndpointURLInput(input.base_url),
+      note: validateScalarInput(input.note, 1_024, 'endpoint note'),
+      enabled: exactBooleanInput(input.enabled, 'endpoint enabled state'),
+      ...endpointScopeInput(source),
+    };
+  }
+  throw new ApiError('invalid_request', 'Invalid endpoint creation source.', 400);
 }
 
 export async function createEndpoint(

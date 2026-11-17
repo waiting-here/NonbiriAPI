@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../../../../test/fixtures/resourceScopes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -39,7 +40,8 @@ const DISCOVERY = {
   count: null,
 } as const;
 
-const OLD_ENDPOINT = {
+const ENDPOINT = {
+  ...endpointScope,
   id: '11',
   connector_type: 'openai-compatible',
   base_url: 'https://example.com/v1',
@@ -52,7 +54,8 @@ const OLD_ENDPOINT = {
   updated_at: 1_700_000_001,
 };
 
-const OLD_KEY = {
+const ENDPOINT_KEY = {
+  ...credentialGrant,
   id: '21',
   endpoint_id: '11',
   display_head: 'head',
@@ -68,7 +71,7 @@ const OLD_KEY = {
   updated_at: 1_700_000_001,
 };
 
-const OLD_MODEL = {
+const MODEL = {
   model_types: ['chat_completions', 'embeddings'],
   id: '41',
   provider: 'logical',
@@ -152,16 +155,16 @@ afterEach(() => {
 });
 
 describe('resource browse summary normalizers', () => {
-  it('keeps old endpoint, key, and model DTOs readable without a browse field', () => {
-    expect(normalizeEndpoint(OLD_ENDPOINT)).not.toHaveProperty('browse');
-    expect(normalizeEndpointKey(OLD_KEY)).not.toHaveProperty('browse');
-    expect(normalizeModel(OLD_MODEL)).not.toHaveProperty('browse');
+  it('accepts endpoint, key, and model detail responses without browse summaries', () => {
+    expect(normalizeEndpoint(ENDPOINT)).not.toHaveProperty('browse');
+    expect(normalizeEndpointKey(ENDPOINT_KEY)).not.toHaveProperty('browse');
+    expect(normalizeModel(MODEL)).not.toHaveProperty('browse');
   });
 
   it('decodes endpoint, key, and model browse projections with the shared binding view', () => {
-    const endpoint = normalizeEndpoint({ ...OLD_ENDPOINT, browse: endpointBrowse() });
-    const key = normalizeEndpointKey({ ...OLD_KEY, browse: keyBrowse() });
-    const model = normalizeModel({ ...OLD_MODEL, browse: modelBrowse() });
+    const endpoint = normalizeEndpoint({ ...ENDPOINT, browse: endpointBrowse() });
+    const key = normalizeEndpointKey({ ...ENDPOINT_KEY, browse: keyBrowse() });
+    const model = normalizeModel({ ...MODEL, browse: modelBrowse() });
     const binding = {
       ...BASE_BINDING,
       concurrency_overflow: 'reject',
@@ -177,15 +180,18 @@ describe('resource browse summary normalizers', () => {
 
   it('strips unused browse fields and rejects invalid binding view state', () => {
     expect(
-      normalizeEndpoint({ ...OLD_ENDPOINT, browse: { ...endpointBrowse(), private: true } }),
-    ).toEqual(normalizeEndpoint({ ...OLD_ENDPOINT, browse: endpointBrowse() }));
+      normalizeEndpoint({ ...ENDPOINT, browse: { ...endpointBrowse(), private: true } }),
+    ).toEqual(normalizeEndpoint({ ...ENDPOINT, browse: endpointBrowse() }));
     expect(
       normalizeEndpointKey({
-        ...OLD_KEY,
+        ...ENDPOINT_KEY,
         browse: { ...keyBrowse(), preview: [{ ...BASE_BINDING, secret: 'nope' }] },
       }),
     ).toEqual(
-      normalizeEndpointKey({ ...OLD_KEY, browse: { ...keyBrowse(), preview: [BASE_BINDING] } }),
+      normalizeEndpointKey({
+        ...ENDPOINT_KEY,
+        browse: { ...keyBrowse(), preview: [BASE_BINDING] },
+      }),
     );
     expect(() => normalizeKeyBindingView({ ...BASE_BINDING, state: 'other' })).toThrow(
       /key binding state/i,
@@ -198,7 +204,7 @@ describe('resource browse summary normalizers', () => {
       { ...BASE_BINDING, id: '52', model_id: '42', model_full_name: 'logical/second' },
     ];
     const result = normalizeEndpointKey({
-      ...OLD_KEY,
+      ...ENDPOINT_KEY,
       browse: {
         ...keyBrowse(preview),
         model_count: '2',
@@ -212,31 +218,31 @@ describe('resource browse summary normalizers', () => {
   it('rejects malformed browse structure, count values, states, and oversized previews', () => {
     expect(() =>
       normalizeEndpoint({
-        ...OLD_ENDPOINT,
+        ...ENDPOINT,
         browse: { ...endpointBrowse(), available_key_count: '9223372036854775808' },
       }),
     ).toThrow(/available key count/i);
     expect(() =>
       normalizeEndpoint({
-        ...OLD_ENDPOINT,
+        ...ENDPOINT,
         browse: { ...endpointBrowse(), state: 'other' },
       }),
     ).toThrow(/endpoint browse state/i);
     expect(() =>
       normalizeEndpointKey({
-        ...OLD_KEY,
+        ...ENDPOINT_KEY,
         browse: { ...keyBrowse(), model_count: '1.5' },
       }),
     ).toThrow(/endpoint key browse model count/i);
     expect(() =>
-      normalizeEndpointKey({ ...OLD_KEY, browse: { ...keyBrowse(), preview: null } }),
+      normalizeEndpointKey({ ...ENDPOINT_KEY, browse: { ...keyBrowse(), preview: null } }),
     ).toThrow(/binding preview/i);
-    expect(() =>
-      normalizeModel({ ...OLD_MODEL, browse: { available_binding_count: '1' } }),
-    ).toThrow(/model browse summary/i);
+    expect(() => normalizeModel({ ...MODEL, browse: { available_binding_count: '1' } })).toThrow(
+      /model browse summary/i,
+    );
     expect(() =>
       normalizeEndpointKey({
-        ...OLD_KEY,
+        ...ENDPOINT_KEY,
         browse: keyBrowse(Array.from({ length: 4 }, (_, i) => binding(i))),
       }),
     ).toThrow(/binding preview/i);
@@ -245,7 +251,7 @@ describe('resource browse summary normalizers', () => {
   it('rejects wrong preview parents and duplicate connections while preserving scalar limits', () => {
     expect(() =>
       normalizeEndpointKey({
-        ...OLD_KEY,
+        ...ENDPOINT_KEY,
         browse: {
           ...keyBrowse(),
           binding_count: '2',
@@ -255,26 +261,26 @@ describe('resource browse summary normalizers', () => {
     ).toThrow(/binding preview pairs/i);
     expect(() =>
       normalizeEndpointKey({
-        ...OLD_KEY,
+        ...ENDPOINT_KEY,
         browse: { ...keyBrowse(), preview: [{ ...BASE_BINDING, endpoint_key_id: '99' }] },
       }),
     ).toThrow(/endpoint key browse parent/i);
     expect(() =>
       normalizeEndpointKey({
-        ...OLD_KEY,
+        ...ENDPOINT_KEY,
         browse: { ...keyBrowse(), preview: [{ ...BASE_BINDING, endpoint_id: '99' }] },
       }),
     ).toThrow(/endpoint key browse parent/i);
     expect(() =>
       normalizeModel({
-        ...OLD_MODEL,
+        ...MODEL,
         binding_count: '257',
         browse: modelBrowse([]),
       }),
     ).toThrow(/model binding count/i);
     expect(() =>
       normalizeModel({
-        ...OLD_MODEL,
+        ...MODEL,
         browse: { ...modelBrowse(), preview: [{ ...BASE_BINDING, model_id: '99' }] },
       }),
     ).toThrow(/model browse parent/i);

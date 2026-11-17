@@ -1,3 +1,8 @@
+import {
+  chatProjection,
+  credentialGrant,
+  endpointScope,
+} from '../../../../../test/fixtures/resourceScopes';
 import { useState } from 'react';
 import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -17,6 +22,7 @@ vi.mock('../pageApi', () => ({
 }));
 
 const endpoints: Endpoint[] = ['11', '12'].map((id) => ({
+  ...endpointScope,
   id,
   connection_id: id === '11' ? '51' : '52',
   note: `Endpoint ${id}`,
@@ -30,6 +36,7 @@ const endpoints: Endpoint[] = ['11', '12'].map((id) => ({
   updated_at: 1,
 }));
 const keys: EndpointKey[] = ['111', '112', '121'].map((id) => ({
+  ...credentialGrant,
   id,
   endpoint_id: id === '121' ? '12' : '11',
   note: `Key ${id}`,
@@ -45,6 +52,7 @@ const keys: EndpointKey[] = ['111', '112', '121'].map((id) => ({
   updated_at: 1,
 }));
 const candidate = (key: string, name: string): BindingCandidate => ({
+  ...chatProjection,
   endpoint_key_id: key,
   upstream_model_id: name,
   endpoint_base_url: 'https://example.test/v1',

@@ -153,7 +153,7 @@ export function BindingTargets({ accountId, model }: { accountId: string; model:
       {query.data?.bindings.map((binding) => (
         <Fold lazy key={binding.id} title={`${copy.combination} ${binding.ord + 1}`}>
           <p className="nb-sub">{copy.combinationOrder}</p>
-          {binding.targets?.map((target) => (
+          {binding.targets.map((target) => (
             <div key={target.id}>
               <strong>
                 {target.base_url} · {target.upstream_model_id}

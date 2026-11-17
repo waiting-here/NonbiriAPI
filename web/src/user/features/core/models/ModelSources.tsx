@@ -80,7 +80,7 @@ function BindingSelector({
     [bindings.data?.bindings],
   );
   const toggleCandidate = (candidate: BindingCandidate) => {
-    if (candidate.capabilities?.can_bind === false) return;
+    if (!candidate.capabilities.can_bind) return;
     setSelectionDetails((current) => ({ ...current, [candidateIdentity(candidate)]: candidate }));
     dispatch({ type: 'toggle', accountId, modelId: model.id, candidate });
   };
@@ -197,7 +197,7 @@ function BindingSelector({
         revision: draft.bindingRevision,
         selections: draft.selections.map((candidate) => ({
           ...candidate,
-          ...(selectionDetails[candidateIdentity(candidate)]?.native_services === undefined
+          ...(!selectionDetails[candidateIdentity(candidate)]
             ? {}
             : { native_services: servicesFor(candidateIdentity(candidate)) }),
         })),
@@ -260,7 +260,7 @@ function BindingSelector({
                     </span>
                   ) : null}
                 </div>
-                {detail?.native_services ? (
+                {detail ? (
                   <Fold title={copy.calls}>
                     <NativeServicesField
                       options={detail.native_services}
@@ -341,7 +341,7 @@ function BindingSelector({
               (draft.selections.length === 0 ||
                 draft.selections.some(
                   (candidate) =>
-                    selectionDetails[candidateIdentity(candidate)]?.native_services !== undefined &&
+                    selectionDetails[candidateIdentity(candidate)] &&
                     !servicesFor(candidateIdentity(candidate)).length,
                 )))
           }

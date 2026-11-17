@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../test/fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -279,69 +280,41 @@ describe('core API wire contract', () => {
 
   it('normalizes endpoint creation options and strips extra option fields', async () => {
     const channelID = `mch_${'B'.repeat(21)}A`;
-    const fetchMock = vi.fn<typeof fetch>(async () =>
-      jsonResponse(
-        {
-          base_connector_types: ['openai-compatible', 'anthropic-compatible'],
-          mainstream_channels: [
-            {
-              id: channelID,
-              name: 'Main channel',
-              connector_type: 'openai-compatible',
-              base_url: 'https://example.com/v1',
-            },
-          ],
-        },
-        200,
-      ),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(getEndpointCreateOptions()).resolves.toEqual({
+    const channel = {
+      ...channelPreset,
+      revision: '7',
+      id: channelID,
+      name: 'Main channel',
+      connector_type: 'openai-compatible',
+      base_url: 'https://example.com/v1',
+    };
+    const options = {
+      native_service_options: [],
       base_connector_types: ['openai-compatible', 'anthropic-compatible'],
-      mainstream_channels: [
-        {
-          id: channelID,
-          name: 'Main channel',
-          connector_type: 'openai-compatible',
-          base_url: 'https://example.com/v1',
-        },
-      ],
-    });
-
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(
-        {
-          base_connector_types: ['openai-compatible'],
-          mainstream_channels: [
-            {
-              id: channelID,
-              name: 'Main channel',
-              connector_type: 'openai-compatible',
-              base_url: 'https://example.com/v1',
-              revision: '1',
-            },
-          ],
-        },
-        200,
+      mainstream_channels: [channel],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          {
+            ...options,
+            mainstream_channels: [
+              { ...channel, category: 'subscription', operator_note: 'private' },
+            ],
+          },
+          200,
+        ),
       ),
     );
-    const options = await getEndpointCreateOptions();
-    expect(options.mainstream_channels).toEqual([
-      {
-        id: channelID,
-        name: 'Main channel',
-        revision: '1',
-        connector_type: 'openai-compatible',
-        base_url: 'https://example.com/v1',
-      },
-    ]);
+    await expect(getEndpointCreateOptions()).resolves.toEqual(options);
   });
 
   it('encodes an optional mainstream matching address and preserves cancellation', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse(
         {
+          native_service_options: [],
           base_connector_types: ['openai-compatible'],
           mainstream_channels: [],
           matching_mainstream_entries: [],

@@ -905,12 +905,14 @@ function BindingsPanel({
     queryFn: ({ signal }) => getManagedBindings(role, model.id, signal),
     retry: false,
   });
+  const targetConnectors = bindings.data?.bindings.flatMap((entry) =>
+    entry.targets.map((target) => target.connector_type),
+  );
   useRateLimitRefresh(
-    bindings.data?.bindings.flatMap(
-      (binding) =>
-        binding.targets?.flatMap((target) =>
-          serviceHealthDeadlines(target.availability?.service_statuses),
-        ) ?? [],
+    bindings.data?.bindings.flatMap((binding) =>
+      binding.targets.flatMap((target) =>
+        serviceHealthDeadlines(target.availability?.service_statuses),
+      ),
     ) ?? [],
     () => bindings.refetch({ throwOnError: true }),
   );
@@ -985,15 +987,7 @@ function BindingsPanel({
             url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/request-adaptation`}
             scope="charity-model"
             gatewayCacheDefaults={Boolean(
-              bindings.data?.bindings.length &&
-              bindings.data.bindings
-                .flatMap(
-                  (entry) =>
-                    entry.targets?.map((target) => target.connector_type) ?? [
-                      entry.source.connector_type,
-                    ],
-                )
-                .every((type) => type !== undefined && isAISDKGateway(type)),
+              targetConnectors?.length && targetConnectors.every(isAISDKGateway),
             )}
             editable={canEditAdaptation}
           />
@@ -1029,7 +1023,7 @@ function BindingsPanel({
               <tbody>
                 {bindingPage.data.map((entry, pageIndex) => {
                   const index = bindingPage.offset + pageIndex;
-                  const sourceKeys = entry.targets?.length
+                  const sourceKeys = entry.targets.length
                     ? [
                         ...new Map(
                           entry.targets.map((target) => [target.donation_key_id, target]),
@@ -1067,7 +1061,7 @@ function BindingsPanel({
                         className="ops-cell-wide"
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
-                        {entry.targets?.length
+                        {entry.targets.length
                           ? entry.targets.map((target) => (
                               <div key={target.id} className="nb-stack nb-stack--sm">
                                 <strong>{target.upstream_model_id}</strong>
@@ -1086,9 +1080,9 @@ function BindingsPanel({
                               </div>
                             ))
                           : entry.upstream_model_id}
-                        {!entry.targets?.some((target) => target.binding_guide) &&
-                        (entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
-                          isAISDKGateway(entry.source.connector_type)) ? (
+                        {!entry.targets.some((target) => target.binding_guide) &&
+                        entry.targets.length > 0 &&
+                        entry.targets.every((target) => isAISDKGateway(target.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
                         ) : null}
                       </td>
@@ -1205,9 +1199,7 @@ function BindingsPanel({
                   (entry) => entry.id === adaptationBinding,
                 );
                 if (!entry) return undefined;
-                const connectors = entry.targets?.map((target) => target.connector_type) ?? [
-                  entry.source.connector_type,
-                ];
+                const connectors = entry.targets.map((target) => target.connector_type);
                 return connectors.every((connector) => connector === connectors[0])
                   ? connectors[0]
                   : undefined;

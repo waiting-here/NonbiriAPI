@@ -1,3 +1,4 @@
+import { chatProjection } from '../../../../test/fixtures/resourceScopes';
 import { describe, expect, it } from 'vitest';
 import {
   bindingDraftReducer,
@@ -22,6 +23,7 @@ const authority = (generation: string): CallerKeyAuthority => ({
 });
 
 const candidate = (keyId: string, model: string): BindingCandidate => ({
+  ...chatProjection,
   endpoint_key_id: keyId,
   endpoint_base_url: 'https://example.com/v1',
   connector_type: 'openai-compatible',

@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { numberedPage, numberedResponse } from './numbered-fixtures';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
@@ -249,6 +250,7 @@ function ownerDonationPageItem(donation: ReturnType<typeof userDonation>): Recor
 
 function endpointSummary(id: string, keyCount: string) {
   return {
+    ...endpointScope,
     id,
     connector_type: 'openai-compatible',
     base_url: 'https://donor.example.test/v1',
@@ -266,6 +268,7 @@ function endpointKeySummary(id: string, endpointID: string, displayHead = `key-$
   return {
     id,
     endpoint_id: endpointID,
+    credential_available: true,
     credential_id: id,
     credential_version: '1',
     grant_revision: '1',
@@ -502,6 +505,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   const guard = await prepare(context, page, 'user', 'user');
   const endpointID = '21';
   const endpoint = {
+    ...endpointScope,
     id: endpointID,
     connector_type: 'openai-compatible',
     base_url: 'https://channel.example.test/v1',

@@ -71,9 +71,7 @@ export function BindingAddForm({
   const chosen = Object.values(selected).map((entry) => ({
     donation_key_id: entry.donation_key_id,
     upstream_model_id: entry.upstream_model_id,
-    ...(entry.native_services === undefined
-      ? {}
-      : { native_services: entry.selected_native_services ?? [] }),
+    native_services: entry.selected_native_services ?? [],
   }));
   useEffect(() => {
     onSelectionCount?.(chosen.length);
@@ -85,8 +83,7 @@ export function BindingAddForm({
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
   const existing =
-    bindings.data?.bindings.reduce((count, binding) => count + (binding.targets?.length ?? 1), 0) ??
-    0;
+    bindings.data?.bindings.reduce((count, binding) => count + binding.targets.length, 0) ?? 0;
   const capacity = Math.max(0, 256 - existing);
   const identities = new Set(
     bindings.data?.bindings.map((entry) => `${entry.donation_key_id}:${entry.upstream_model_id}`),
@@ -199,9 +196,7 @@ export function BindingAddForm({
           pickerBlocked ||
           !revision ||
           chosen.length === 0 ||
-          chosen.some(
-            (entry) => entry.native_services !== undefined && !entry.native_services.length,
-          ) ||
+          chosen.some((entry) => !entry.native_services.length) ||
           chosen.length > capacity ||
           duplicates.length > 0 ||
           add.outcome === 'conflict'

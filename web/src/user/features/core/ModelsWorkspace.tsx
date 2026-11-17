@@ -86,9 +86,8 @@ function ModelDetail({
   const model = useModel(accountId, modelId);
   // ModelSources owns this complete query; observe its cache without another read.
   const bindings = useBindings(accountId, modelId, false);
-  const targetConnectors = bindings.data?.bindings.flatMap(
-    (binding) =>
-      binding.targets?.map((target) => target.connector_type) ?? [binding.connector_type],
+  const targetConnectors = bindings.data?.bindings.flatMap((binding) =>
+    binding.targets.map((target) => target.connector_type),
   );
   const connectorType = targetConnectors?.[0];
   const adaptationConnectorType =

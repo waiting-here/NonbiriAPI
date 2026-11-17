@@ -1,9 +1,11 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { expect, test } from './test';
 
 const endpoints = Array.from({ length: 23 }, (_, index) => ({
+  ...endpointScope,
   id: String(index + 1),
   connection_id: '19',
   connector_type: 'openai-compatible',
@@ -31,6 +33,7 @@ const connections = Array.from({ length: 23 }, (_, index) => ({
 }));
 
 const keys = Array.from({ length: 12 }, (_, index) => ({
+  ...credentialGrant,
   id: String(101 + index),
   endpoint_id: '19',
   display_head: 'sk-fixture',

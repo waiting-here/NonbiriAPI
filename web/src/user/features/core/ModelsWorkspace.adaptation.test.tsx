@@ -1,3 +1,4 @@
+import { adaptationTarget } from '../../../../test/fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { screen, waitFor } from '@testing-library/react';
@@ -61,6 +62,7 @@ describe('personal model request adaptation', () => {
           if (url.pathname.endsWith('/bindings'))
             return json({
               bindings: ['1', '2'].map((id) => ({
+                targets: [adaptationTarget(id, id === '1' ? firstConnector : secondConnector)],
                 id,
                 endpoint_key_id: id,
                 endpoint_base_url: 'https://example.test',

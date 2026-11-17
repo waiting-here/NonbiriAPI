@@ -48,6 +48,7 @@ describe('Optional resource setup recovery', () => {
           const path = String(input);
           if (path === '/api/endpoint-create-options')
             return json({
+              native_service_options: [],
               base_connector_types: [
                 'openai-compatible',
                 'openai-chat-completions',
@@ -128,7 +129,11 @@ describe('Optional resource setup recovery', () => {
         vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
           const path = String(input);
           if (path === '/api/endpoint-create-options')
-            return json({ base_connector_types: ['openai-compatible'], mainstream_channels: [] });
+            return json({
+              native_service_options: [],
+              base_connector_types: ['openai-compatible'],
+              mainstream_channels: [],
+            });
           if (path === '/api/endpoints' && init?.method === 'POST') return json(endpoint, 201);
           if (path === '/api/endpoints/11/keys' && init?.method === 'POST') {
             keyWrites++;
@@ -185,7 +190,11 @@ describe('Optional resource setup recovery', () => {
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const path = String(input);
         if (path === '/api/endpoint-create-options')
-          return json({ base_connector_types: ['openai-compatible'], mainstream_channels: [] });
+          return json({
+            native_service_options: [],
+            base_connector_types: ['openai-compatible'],
+            mainstream_channels: [],
+          });
         if (path === '/api/endpoints' && init?.method === 'POST') return json(endpoint, 201);
         if (path === '/api/endpoints/11/keys' && init?.method === 'POST') {
           writes.push({
@@ -258,7 +267,11 @@ describe('Optional resource setup recovery', () => {
         vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
           const path = String(input);
           if (path === '/api/endpoint-create-options')
-            return json({ base_connector_types: ['openai-compatible'], mainstream_channels: [] });
+            return json({
+              native_service_options: [],
+              base_connector_types: ['openai-compatible'],
+              mainstream_channels: [],
+            });
           if (path === '/api/endpoints' && init?.method === 'POST') return json(endpoint, 201);
           if (path === '/api/endpoints/11/keys' && init?.method === 'POST') {
             writes++;
@@ -330,7 +343,11 @@ describe('Optional resource setup recovery', () => {
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const path = String(input);
         if (path === '/api/endpoint-create-options')
-          return json({ base_connector_types: ['openai-compatible'], mainstream_channels: [] });
+          return json({
+            native_service_options: [],
+            base_connector_types: ['openai-compatible'],
+            mainstream_channels: [],
+          });
         if (path === '/api/endpoints' && init?.method === 'POST') {
           writes.push(String(init.body));
           return json({ error: { code: 'internal', message: 'Lost response' } }, 503);
@@ -370,7 +387,11 @@ it('does not resume a stopped connection when its earlier lookup returns late', 
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const path = String(input);
       if (path === '/api/endpoint-create-options')
-        return json({ base_connector_types: ['openai-compatible'], mainstream_channels: [] });
+        return json({
+          native_service_options: [],
+          base_connector_types: ['openai-compatible'],
+          mainstream_channels: [],
+        });
       if (path === '/api/endpoints' && init?.method === 'POST') return json(endpoint, 201);
       if (path === '/api/endpoints/11/keys' && init?.method === 'POST')
         return json(endpointKey, 201);
