@@ -624,6 +624,10 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect(page.getByText(c.mappingSaved, { exact: true })).toHaveCount(2);
     await shot('complete');
+    await entryPanel.getByRole('button', { name: c.close, exact: true }).click();
+    await page.getByRole('button', { name: workflow.addService, exact: true }).click();
+    await expect(entryPanel.getByLabel(serviceUI.serviceAddress, { exact: true })).toHaveValue('');
+    await expect(secret).toHaveValue('');
     expect(writes.filter((write) => write.path === '/api/endpoints')).toHaveLength(1);
     expect(writes.filter((write) => write.path === '/api/connections')).toHaveLength(1);
     expect(writes.find((write) => write.path === '/api/connections')?.body).toEqual({

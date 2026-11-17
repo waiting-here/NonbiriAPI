@@ -22,7 +22,7 @@ import type { TransportRule } from '@shared/transportRule';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createModel, getModel, patchModel } from '../api';
-import { CoreErrorPanel, SafeCopyValue } from '../components';
+import { CoreErrorPanel } from '../components';
 import { useCoreCopy } from '../copy';
 import { validateLogicalName, validatePersonalProviderName } from '../normalizers';
 import { coreKeys, invalidateResourceDependents } from '../queries';
@@ -280,6 +280,7 @@ export function ModelEditor({
       ].filter(Boolean).length
     : 0;
   const isDefault =
+    cloudflareProxy &&
     sessionHeaders.length === 0 &&
     !silentRetry &&
     !flattenTools &&
@@ -302,7 +303,7 @@ export function ModelEditor({
   };
   const basicFields = (
     <>
-      <Fields>
+      <Fields columns={2}>
         <Field label={t('models.provider')} help={textModel('prefixHelp')}>
           {(props) => (
             <input
@@ -336,19 +337,23 @@ export function ModelEditor({
         disabled={hasAttempt}
         showError={showTypeError}
       />
-      <div className="core-model-preview">
-        <span>{textModel('clientValue')}</span>
-        <SafeCopyValue
-          value={`${provider || t('models.provider')}/${modelName || t('models.model')}`}
-          label={textModel('callName')}
-        />
-      </div>
+      {provider.trim() && modelName.trim() ? (
+        <div className="core-model-preview">
+          <span>{textModel('clientValue')}</span>
+          <code>
+            {provider}/{modelName}
+          </code>
+        </div>
+      ) : null}
     </>
   );
   return (
     <form ref={formRef} className="model-editor core-form" onSubmit={(event) => void submit(event)}>
       {inSheet ? (
-        <div className="nb-stack">{basicFields}</div>
+        <div className="nb-stack">
+          <p className="nb-small nb-muted model-create-intro">{textModel('createHelp')}</p>
+          {basicFields}
+        </div>
       ) : (
         <Panel>
           <PanelHead

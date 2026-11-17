@@ -548,7 +548,7 @@ for (const scenario of cases) {
         const edit = page
           .locator('.nb-table tbody tr')
           .first()
-          .getByRole('button', { name: core('models.editModel'), exact: true });
+          .getByRole('button', { name: text.open, exact: true });
         await edit.focus();
         await page.keyboard.press('Enter');
       }

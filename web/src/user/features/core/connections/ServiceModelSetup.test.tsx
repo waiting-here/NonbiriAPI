@@ -63,3 +63,21 @@ it('keeps retained models and manual maintenance reachable after a failed fetch'
   await view.user.click(screen.getByText('Manual models', { selector: 'strong' }));
   expect(screen.getByText('Manual catalog editor')).toBeVisible();
 });
+
+it('opens manual entry for a new key without an automatic catalog', async () => {
+  await renderWithProviders(
+    <ServiceModelSetup
+      accountId="1"
+      entry={fixture('endpoint.json')}
+      entryKey={{ ...fixture('endpoint_key.json'), discovery_source_id: null }}
+      autoRefresh
+    />,
+    { station: 'user', role: 'user', locale: 'en' },
+  );
+  expect(screen.getByRole('tab', { name: 'Manual models' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  expect(screen.getByText('Manual catalog editor')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Fetch models' })).not.toBeInTheDocument();
+});

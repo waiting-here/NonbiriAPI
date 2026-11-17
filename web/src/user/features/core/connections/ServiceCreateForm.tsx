@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note, Segmented } from '@shared/components/ui';
@@ -39,10 +39,12 @@ export function ServiceCreateForm({
   accountId,
   connection,
   onManage,
+  onReady,
 }: {
   accountId: string;
   connection?: Connection;
   onManage?: () => void;
+  onReady?: (ready: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { t: coreText } = useCoreCopy();
@@ -51,7 +53,7 @@ export function ServiceCreateForm({
   const options = useEndpointCreateOptions(accountId);
   const [mode, setMode] = useState<'custom' | 'mainstream'>('custom');
   const [channelId, setChannelId] = useState('');
-  const [connector, setConnector] = useState('openai-compatible');
+  const [chosenConnector, setConnector] = useState<string>();
   const [address, setAddress] = useState('');
   const [name, setName] = useState<string | null>(null);
   const [format, setFormat] = useState<RerankFormat | null>(null);
@@ -69,7 +71,6 @@ export function ServiceCreateForm({
   const [rpm, setRPM] = useState('0');
   const [queue, setQueue] = useState(() => keyQueueDraft());
   const activeSecret = useRef(0);
-  const [owned] = useState(true);
   const [busy, setBusy] = useState(false);
   const batching = useRef(false);
   const [saved, setSaved] = useState(() => setupProgress(connection));
@@ -114,6 +115,11 @@ export function ServiceCreateForm({
   const channels = options.data?.mainstream_channels ?? [];
   const channel = channels.find((row) => row.id === channelId);
   const nativeOptions = options.data?.native_service_options ?? [];
+  const connector =
+    chosenConnector ??
+    (nativeOptions.find((row) => row.connector_type === 'openai-compatible') ?? nativeOptions[0])
+      ?.connector_type ??
+    '';
   const chosenProtocol = nativeOptions.find((row) => row.connector_type === connector);
   const services = chosenProtocol?.native_services ?? [];
   const protocolServices = (type: string) =>
@@ -180,6 +186,9 @@ export function ServiceCreateForm({
         Boolean(saved.grants[row]) &&
         extraSecrets.every((_, index) => Boolean(saved.grants[row + ':' + (index + 1)])),
     );
+  useEffect(() => {
+    onReady?.(complete);
+  }, [complete, onReady]);
   const locked =
     busy ||
     operation.isPending ||
@@ -197,7 +206,6 @@ export function ServiceCreateForm({
     (mode === 'mainstream' || (chosenProtocol && address.trim() && services.length)) &&
     inputs.every(({ input }) => input.native_services?.length) &&
     (saved.credential || (credentialMode === 'existing' ? chosenCredential : secret)) &&
-    (saved.credential || owned) &&
     extraSecrets.every((value, index) => saved.extraCredentials[String(index + 1)] || value.trim()),
   );
   const run = async (row: string, intent: ConnectionIntent, requestSecret?: string) => {
@@ -337,30 +345,32 @@ export function ServiceCreateForm({
     return <CoreErrorPanel error={options.error} onRetry={() => void options.refetch()} />;
   if (complete)
     return (
-      <div className="nb-stack">
-        <Note tone="ok">{t('user.workflows.serviceReady')}</Note>
-        <div className="nb-actions">
-          <Link
-            className="nb-btn nb-btn--secondary"
-            to={
-              '/charity?tab=donate&endpoint_id=' +
-              encodeURIComponent(Object.values(saved.entries)[0]!.id)
-            }
-          >
-            {t('user.workflows.donateService')}
-          </Link>
-          <Link
-            className="nb-btn nb-btn--ghost"
-            to={
-              '/endpoints?connection_id=' +
-              saved.connection!.id +
-              '&connection_view=entries&endpoint_id=' +
-              Object.values(saved.entries)[0]!.id
-            }
-            onClick={onManage}
-          >
-            {t('common.connections.manage')}
-          </Link>
+      <div className="nb-stack service-create-result">
+        <div className="nb-stack nb-stack--sm">
+          <Note tone="ok">{t('user.workflows.serviceReady')}</Note>
+          <div className="nb-actions">
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                '/charity?tab=donate&endpoint_id=' +
+                encodeURIComponent(Object.values(saved.entries)[0]!.id)
+              }
+            >
+              {t('user.workflows.donateService')}
+            </Link>
+            <Link
+              className="nb-btn nb-btn--ghost"
+              to={
+                '/endpoints?connection_id=' +
+                saved.connection!.id +
+                '&connection_view=entries&endpoint_id=' +
+                Object.values(saved.entries)[0]!.id
+              }
+              onClick={onManage}
+            >
+              {t('common.connections.manage')}
+            </Link>
+          </div>
         </div>
         {inputs.map(({ row }) => (
           <ServiceModelSetup
@@ -399,7 +409,7 @@ export function ServiceCreateForm({
     );
   return (
     <div className="nb-stack">
-      <div className="nb-form">
+      <div className="nb-form service-create">
         {channels.length ? (
           <OptionCards
             legend={t('common.connections.entrySource')}
@@ -618,7 +628,16 @@ export function ServiceCreateForm({
           />
         </Fold>
         {mode === 'custom' ? (
-          <Fold plain title={t('user.services.advancedSetup')} lazy>
+          <Fold
+            plain
+            title={t('user.services.advancedSetup')}
+            meta={
+              chosenProtocol
+                ? coreText(CONNECTOR_COPY_KEYS[chosenProtocol.configuration_type as ConnectorType])
+                : undefined
+            }
+            lazy
+          >
             <Field label={t('common.connections.protocol')}>
               {(props) => (
                 <select

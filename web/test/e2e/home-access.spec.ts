@@ -59,8 +59,8 @@ const charityModel = {
   enabled: true,
   allowed_levels: [1],
   level_allowed: true,
-  currently_available: false,
-  availability: 'no_usable_key',
+  currently_available: true,
+  availability: 'available',
 };
 const pagination = (total: number) => ({
   page: '1',
@@ -219,7 +219,7 @@ for (const locale of ['en', 'zh'] as const) {
     const progress = (count: number) =>
       locale === 'zh' ? `已完成 ${count} / 3` : `${count} of 3 complete`;
     const started = locale === 'zh' ? '开始使用' : 'Get started';
-    const completed = locale === 'zh' ? '已完成设置' : 'Setup complete';
+    const completed = locale === 'zh' ? '已走完接入指引' : 'Setup guide complete';
     await page.goto(USER_ORIGIN);
     await expect(page.getByRole('heading', { name: started })).toBeVisible();
     await expect(page.getByText(progress(0), { exact: true })).toBeVisible();
@@ -267,6 +267,35 @@ for (const locale of ['en', 'zh'] as const) {
       `${USER_ORIGIN}/v1`,
     );
     await capture(page, 'api-existing', locale, metrics);
+    const copyModelNames = page.getByText(
+      locale === 'zh' ? '复制可用模型名' : 'Copy an available model name',
+      { exact: true },
+    );
+    const readCount = state.reads.length;
+    state.models = true;
+    state.charity = true;
+    await copyModelNames.click();
+    const nameButton = page.getByRole('button', {
+      name: locale === 'zh' ? '复制my/model' : 'Copy my/model',
+    });
+    await expect(nameButton).toBeVisible();
+    await nameButton.click();
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { copied: string }).copied))
+      .toBe('my/model');
+    await expect(
+      page.getByRole('button', {
+        name: locale === 'zh' ? '复制[公益]provider/model' : 'Copy [公益]provider/model',
+      }),
+    ).toBeVisible();
+    expect(
+      state.reads.slice(readCount).some((path) => path.includes('connection_state=available')),
+    ).toBe(true);
+    expect(
+      state.reads.slice(readCount).some((path) => path.includes('currently_available=true')),
+    ).toBe(true);
+    await capture(page, 'api-model-names', locale, metrics);
+    await copyModelNames.click();
     await page
       .getByText(locale === 'zh' ? '命令行测试' : 'Command-line test', { exact: true })
       .click();
@@ -307,6 +336,14 @@ for (const locale of ['en', 'zh'] as const) {
     ).toBeVisible();
     await expect(page.locator('.home-start')).toHaveCount(0);
     await capture(page, 'home-hidden', locale, metrics);
+    await page
+      .getByRole('button', {
+        name: locale === 'zh' ? '显示接入指引' : 'Show setup guide',
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole('heading', { name: completed })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.hidden'))).toBeNull();
 
     state.key = false;
     await page.goto(`${USER_ORIGIN}/keys`);
