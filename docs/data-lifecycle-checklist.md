@@ -516,10 +516,8 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 54.
-Older, newer, unknown and incomplete databases are rejected before migration,
-repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
-33–53 sources require a deliberate standalone-converter invocation after the
+Normal startup initializes absent storage or opens only exact current schema 55.
+The v1.4.0 tool converts the precise v1.3.12 schema 54 database after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending

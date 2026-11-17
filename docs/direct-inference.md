@@ -75,8 +75,8 @@ Model `model_types` remains a nonempty array. `chat_completions` and `responses`
 are independent choices: an explicit single choice stays single on save and read,
 and only enabled platform operations may be called. Creation without
 `model_types` still defaults to both; PATCH omission preserves the saved selection.
-[Upgrading older databases](database-upgrades.md#schema-changes) preserves their
-effective dual-interface support once; new selections remain exact. Other operations
+The v1.3.12 bridge preserves its saved interface selections during upgrade.
+[Database upgrades](database-upgrades.md#schema-changes) Other operations
 may be selected together, for example `images_generations` and `images_edits`.
 Native-service selection and bounded protocol conversion remain separate: an
 enabled platform operation may use a supported conversion, but conversion does
