@@ -159,10 +159,10 @@ it('explains missing historic targets and keeps ordinary charity logs free of ma
     role: 'admin',
     route: `/logs?page=2&request_id=${requestID}`,
   });
-  expect(
-    await screen.findAllByText('The linked charity model is no longer available.'),
-  ).toHaveLength(2);
   const panel = await screen.findByRole('region', { name: /Log details/ });
+  expect(
+    await within(panel).findByText('The linked charity model is no longer available.'),
+  ).toBeVisible();
   await view.user.click(within(panel).getByText('Service call attempts', { selector: 'strong' }));
   expect(
     await within(panel).findAllByText('The linked charity key is no longer available.'),

@@ -40,6 +40,11 @@ projections. They contain no new request/response body store, authentication
 material or raw error/stack text. Personal account export 36 keeps its existing
 safe request summaries and excludes these snapshots.
 
+The delivery record can include bounded routing observations. They capture
+binding references, service types and selection reasons at request time.
+Only administrators and authorized stewards can read them in request details.
+Log list exports omit them.
+
 These rows cascade with their request/attempt, follow the same 30-day terminal
 retention and legal holds, and remain under the existing deidentified management
 access after account deletion. Late writes require a surviving parent and cannot

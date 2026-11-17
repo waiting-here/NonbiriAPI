@@ -1,12 +1,12 @@
 import { SuggestInput } from '@shared/components/ui/SuggestInput';
-import { Button, Field, FilterBar } from '@shared/components/ui';
+import { Button, Field, FilterBar, Tabs } from '@shared/components/ui';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import './logs.css';
-import { validLogDiscordID } from './data';
+import { logRequestID, validLogDiscordID } from './data';
 import type { LogUrlState } from './useLogUrlState';
 
 export interface LogFilterField {
@@ -35,13 +35,7 @@ interface LogFiltersProps {
   toolbarActions?: ReactNode;
 }
 
-export function LogFilters({
-  station,
-  fields,
-  state,
-  onApply,
-  toolbarActions,
-}: LogFiltersProps) {
+export function LogFilters({ station, fields, state, onApply, toolbarActions }: LogFiltersProps) {
   const { t } = useTranslation();
   const [drafts, setDrafts] = useState<Record<string, string>>(() => ({ ...state.filters }));
   const [draftFrom, setDraftFrom] = useState<TimeDraft>(() =>
@@ -102,10 +96,11 @@ export function LogFilters({
       from === undefined || to === undefined || (from !== null && to !== null && from >= to);
     setInvalidDiscord(badDiscord);
     setInvalidRange(badRange || invalidTime);
+    if (badDiscord || badRange || invalidTime) return;
     apply({
       filters,
-      fromUnix: invalidTime ? state.fromUnix : (from ?? undefined),
-      toUnix: invalidTime ? state.toUnix : (to ?? undefined),
+      fromUnix: from ?? undefined,
+      toUnix: to ?? undefined,
     });
   };
   const reset = () => {
@@ -116,7 +111,7 @@ export function LogFilters({
     setInvalidRange(false);
     apply({ filters: {}, fromUnix: undefined, toUnix: undefined });
   };
-  const primaryNames = ['operation', 'user_id', 'discord_id', 'model', 'charity_model'];
+  const primaryNames = ['operation', 'discord_id', 'model', 'charity_model'];
   const renderFields = (values: readonly LogFilterField[]) =>
     values.map((field) => (
       <Field
@@ -266,5 +261,64 @@ export function LogFilters({
         </p>
       ) : null}
     </form>
+  );
+}
+
+export function LogSearch({
+  onOpenRequest,
+  children,
+}: {
+  onOpenRequest: (id: string) => void;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [searchMode, setSearchMode] = useState<'filters' | 'request'>('filters');
+  const [lookup, setLookup] = useState('');
+  const [lookupInvalid, setLookupInvalid] = useState(false);
+  return (
+    <Tabs
+      label={t('logs.findRequests')}
+      tabs={[
+        { value: 'filters', label: t('logs.filterRecords') },
+        { value: 'request', label: t('logs.openByID') },
+      ]}
+      value={searchMode}
+      onChange={setSearchMode}
+    >
+      <div hidden={searchMode !== 'filters'}>{children}</div>
+      {searchMode === 'request' && (
+        <form
+          className="log-lookup"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const id = logRequestID(lookup.trim());
+            setLookupInvalid(!id);
+            if (id) onOpenRequest(id);
+          }}
+        >
+          <Field
+            label={t('logs.lookupLabel')}
+            error={lookupInvalid ? t('logs.invalidLookup') : undefined}
+          >
+            {(props) => (
+              <input
+                {...props}
+                className="mono"
+                value={lookup}
+                placeholder="req_…"
+                spellCheck={false}
+                onChange={(event) => {
+                  setLookup(event.target.value);
+                  setLookupInvalid(false);
+                }}
+              />
+            )}
+          </Field>
+          <Button type="submit" variant="primary">
+            {t('logs.openRequest')}
+          </Button>
+        </form>
+      )}
+    </Tabs>
   );
 }

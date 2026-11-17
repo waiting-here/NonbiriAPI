@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { apiFetch, isForbidden, isUnauthorized } from '@shared/query/http';
+import { Fold } from '@shared/components/ui/Fold';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import type { DiagnosticRole } from './api';
 import './globalPressure.css';
@@ -103,35 +104,42 @@ export function GlobalPressure({ role, accountID }: { role: DiagnosticRole; acco
   const value = pressure.data;
   return (
     <section className="global-pressure" aria-label={t('common.operations.logs.pressure.title')}>
-      <div className="global-pressure__title">
-        <h3>{t('common.operations.logs.pressure.title')}</h3>
+      <Fold
+        plain
+        title={t('common.operations.logs.pressure.title')}
+        persistKey={`request-logs-pressure-${role}`}
+        summary={
+          value?.observed_at
+            ? t('logs.loadSummary', {
+                rpm: value.rpm.current,
+                rpmLimit: value.rpm.limit,
+                active: value.concurrency.current,
+                activeLimit: value.concurrency.limit,
+              })
+            : t(pressure.error ? 'common.operations.logs.pressure.unavailable' : 'common.loading')
+        }
+      >
         {value?.observed_at ? (
-          <small>
-            {t('common.operations.logs.pressure.updated', { time: formatTime(value.observed_at) })}
-          </small>
+          <>
+            <div className="global-pressure__metrics">
+              <PressureBar label={t('common.operations.logs.pressure.rpm')} value={value.rpm} />
+              <PressureBar
+                label={t('common.operations.logs.pressure.concurrency')}
+                value={value.concurrency}
+              />
+            </div>
+            <small>
+              {t('common.operations.logs.pressure.updated', {
+                time: formatTime(value.observed_at),
+              })}{' '}
+              {t('common.operations.logs.pressure.help', {
+                seconds: value.sample_seconds,
+                time: formatTime(value.started_at),
+              })}
+            </small>
+          </>
         ) : null}
-      </div>
-      {value?.observed_at ? (
-        <>
-          <div className="global-pressure__metrics">
-            <PressureBar label={t('common.operations.logs.pressure.rpm')} value={value.rpm} />
-            <PressureBar
-              label={t('common.operations.logs.pressure.concurrency')}
-              value={value.concurrency}
-            />
-          </div>
-          <small>
-            {t('common.operations.logs.pressure.help', {
-              seconds: value.sample_seconds,
-              time: formatTime(value.started_at),
-            })}
-          </small>
-        </>
-      ) : (
-        <p role="status">
-          {t(pressure.error ? 'common.operations.logs.pressure.unavailable' : 'common.loading')}
-        </p>
-      )}
+      </Fold>
       {value && pressure.error ? (
         <small role="status">{t('common.operations.logs.pressure.stale')}</small>
       ) : null}

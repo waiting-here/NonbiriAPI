@@ -28,6 +28,14 @@
 .log-result {
   display: block;
 }
+.log-result__field {
+  display: block;
+  margin-top: var(--nb-space-1);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .log-origin-compact .nb-badge {
   margin-left: var(--nb-space-2);
 }
@@ -96,6 +104,55 @@
   display: grid;
   gap: var(--nb-space-4);
   min-width: 0;
+}
+.log-lookup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--nb-space-3);
+}
+.log-lookup .nb-field {
+  flex: 1 1 15rem;
+  max-width: 32rem;
+}
+.log-route {
+  min-width: 0;
+}
+.log-route h3 {
+  margin: 0 0 var(--nb-space-3);
+  font-size: var(--nb-font-size-lg);
+}
+.log-route__observations {
+  display: grid;
+  gap: var(--nb-space-2);
+  padding-inline-start: var(--nb-space-6);
+  margin: 0;
+}
+.log-route__observations li {
+  padding: var(--nb-space-2) var(--nb-space-3);
+  border-inline-start: 2px solid var(--nb-color-border-strong);
+  overflow-wrap: anywhere;
+}
+.log-route__observations li::marker {
+  color: var(--nb-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.log-route__resource {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--nb-space-1) var(--nb-space-3);
+}
+.log-route__resource > span {
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.log-route__observations p,
+.log-outcome__reason p {
+  margin: var(--nb-space-1) 0;
+}
+.log-outcome__reason {
+  margin-block: var(--nb-space-2);
 }
 .log-detail-facts {
   margin: 0;

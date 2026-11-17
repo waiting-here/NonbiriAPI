@@ -62,7 +62,7 @@ describe('shared log filters', () => {
     });
   });
 
-  it('preserves a reversed time draft, reports it, and ignores the invalid range', async () => {
+  it('preserves a reversed time draft and keeps the current search', async () => {
     const onApply = vi.fn();
     const view = await renderWithProviders(
       <LogFilters
@@ -74,7 +74,7 @@ describe('shared log filters', () => {
       { station: 'user' },
     );
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
-    expect(onApply).toHaveBeenCalledWith({ filters: {}, fromUnix: 75, toUnix: 0 });
+    expect(onApply).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toBeVisible();
     expect(screen.getByLabelText('Filter by start time')).toHaveValue('1970-01-01T00:01');
   });
@@ -93,7 +93,7 @@ describe('shared log filters', () => {
     const search = screen.getByRole('button', { name: 'Search' });
     expect(search).toBeEnabled();
     await view.user.click(search);
-    expect(onApply).toHaveBeenCalledWith({ filters: {}, fromUnix: undefined, toUnix: undefined });
+    expect(onApply).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toBeVisible();
   });
 

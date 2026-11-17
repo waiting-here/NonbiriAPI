@@ -1,4 +1,5 @@
 import { normalizeDelivery, type DeliveryDiagnostics } from '@shared/observability/failure';
+import { normalizeRouteDecision, type RouteDecision } from './routeDecision';
 import { useQuery, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
 import { decoded, queryPath } from '@shared/operations/api';
@@ -19,6 +20,7 @@ import {
   normalizeUserLogAttempt,
   normalizeUserLogRow,
   validLogDiscordID,
+  logRequestID,
   isLogOperation,
   type AdminLogAttempt,
   type AdminLogRow,
@@ -56,6 +58,7 @@ export type NumberedUserLogDetail = { delivery?: DeliveryDiagnostics | null } & 
 );
 
 export interface NumberedAdminLogDetail {
+  route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: AdminLogRow;
   attempts: CursorPage<AdminLogAttempt>;
@@ -63,6 +66,7 @@ export interface NumberedAdminLogDetail {
 }
 
 export interface NumberedStewardLogDetail {
+  route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: StewardLogRow;
   attempts: CursorPage<StewardLogAttempt>;
@@ -295,7 +299,7 @@ function normalizedDetail(
 
   const root = record(
     value,
-    ['request', 'attempts', 'attempt_pagination', 'delivery'],
+    ['request', 'attempts', 'attempt_pagination', 'delivery', 'route_decision'],
     `${role} log detail`,
     ['request', 'attempts', 'attempt_pagination'],
   );
@@ -309,6 +313,7 @@ function normalizedDetail(
     );
     validatePageResponse(attemptPagination, window.page, window.pageSize);
     return {
+      route_decision: normalizeRouteDecision(root.route_decision),
       delivery: normalizeDelivery(root.delivery),
       request: normalizeAdminLogRow(root.request),
       attempts,
@@ -323,6 +328,7 @@ function normalizedDetail(
   );
   validatePageResponse(attemptPagination, window.page, window.pageSize);
   return {
+    route_decision: normalizeRouteDecision(root.route_decision),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts,
@@ -331,7 +337,7 @@ function normalizedDetail(
 }
 
 function detailPath(role: LogRole, id: string, window: LogPageWindow): string {
-  if (typeof id !== 'string' || !/^req_[A-Za-z0-9_-]{22}$/.test(id) || !/[AQgw]$/.test(id)) {
+  if (!logRequestID(id)) {
     invalidRequest('log id');
   }
   return queryPath(`${ROLE_PATHS[role]}/${encodeURIComponent(id)}`, {

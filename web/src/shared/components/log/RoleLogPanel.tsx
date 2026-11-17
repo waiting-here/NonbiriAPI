@@ -42,6 +42,7 @@ import {
   roleLogExportPath,
   validateLogFilter,
   validLogDiscordID,
+  logRequestID,
   type LogFiltersValue,
   type LogResultClass,
   type LogRole,
@@ -49,7 +50,8 @@ import {
   type RoleLogRow,
 } from './data';
 import { LogDetailPanel } from './LogDetailPanel';
-import { LogFilters, type LogFilterField } from './LogFilters';
+import { RequestRouteDecision } from './RequestRouteDecision';
+import { LogFilters, LogSearch, type LogFilterField } from './LogFilters';
 import { LogOriginIdentity } from './LogOriginIdentity';
 import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
 import { LogTable, type LogColumn } from './LogTable';
@@ -107,12 +109,7 @@ const RESULT_LABEL_KEYS: Record<LogResultClass, string> = {
   cancelled: 'common.operations.logs.resultValue.cancelled',
 };
 
-const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9_-]{22}$/;
 const LOG_DEFAULT_PAGE_SIZE: PageSize = 20;
-
-function validRequestID(value: string | null): string | null {
-  return value !== null && REQUEST_ID_PATTERN.test(value) && /[AQgw]$/.test(value) ? value : null;
-}
 
 function requestFrom(detail: NumberedRoleLogDetail): RoleLogRow {
   return detail.request;
@@ -496,7 +493,7 @@ function ScopedRoleLogPanel({
     resetKey: `${role}:${filterKey}`,
   });
   const requestIDValues = searchParams.getAll('request_id');
-  const urlRequestID = validRequestID(requestIDValues.length === 1 ? requestIDValues[0] : null);
+  const urlRequestID = logRequestID(requestIDValues.length === 1 ? requestIDValues[0] : null);
   const [selectedID, setSelectedID] = useState<string | null>(requestID ?? urlRequestID);
   const previousURLID = useRef(urlRequestID);
   const previousPropID = useRef(requestID);
@@ -723,6 +720,8 @@ function ScopedRoleLogPanel({
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set('request_id', id);
+      if (invalidDiscordFilter) next.delete('discord_id');
+      if (invalidKeyFilter) next.delete('endpoint_key_id');
       const actualPage = logs.data?.pagination.page;
       if (actualPage !== undefined) next.set('page', actualPage);
       next.set('page_size', String(pager.pageSize));
@@ -1017,24 +1016,6 @@ function ScopedRoleLogPanel({
                 { label: t('logs.rejectionReason'), value: detailRequest.rejection_reason },
               ]
             : []),
-          ...(detailRequest.phase === 'pre_handler' || detailRequest.rejection_detail
-            ? [
-                {
-                  label: t('logs.rejectionDetail'),
-                  value: detailRequest.rejection_detail
-                    ? `${rejectionFieldDescription(detailRequest.rejection_detail.field)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
-                    : t('logs.rejectionDetailMissing'),
-                },
-                ...(detailRequest.rejection_detail?.suggestion
-                  ? [
-                      {
-                        label: t('logs.rejectionSuggestion'),
-                        value: rejectionDescription(detailRequest.rejection_detail.suggestion),
-                      },
-                    ]
-                  : []),
-              ]
-            : []),
           ...(detailRequest.phase === 'pre_handler'
             ? [
                 {
@@ -1194,13 +1175,15 @@ function ScopedRoleLogPanel({
         </div>
       ) : null}
       {role !== 'user' ? <GlobalPressure role={role} accountID={accountID} /> : null}
-      <LogFilters
-        station={station}
-        fields={fields}
-        state={urlState}
-        onApply={applyFilters}
-        toolbarActions={role !== 'steward' ? exportMenu : undefined}
-      />
+      <LogSearch onOpenRequest={openDetail}>
+        <LogFilters
+          station={station}
+          fields={fields}
+          state={urlState}
+          onApply={applyFilters}
+          toolbarActions={role !== 'steward' ? exportMenu : undefined}
+        />
+      </LogSearch>
       {invalidFilter ? (
         <p className="field-error" role="alert">
           {t(
@@ -1244,7 +1227,7 @@ function ScopedRoleLogPanel({
                   <Button type="button" onClick={() => openDetail(row.id)}>
                     {t('logs.details')}
                   </Button>
-                  {modelManagement(row)}
+                  {row.role !== 'user' && row.charity_model_id ? modelManagement(row) : null}
                 </div>
               )}
             />
@@ -1285,10 +1268,14 @@ function ScopedRoleLogPanel({
                 label: t('common.operations.logs.request'),
                 text: [
                   detailRequest.id,
+                  detailRequest.request_path,
                   detailRequest.caller_error_code,
                   detailRequest.caller_status,
+                  detailRequest.rejection_detail?.field,
+                  detailRequest.rejection_detail &&
+                    rejectionDescription(detailRequest.rejection_detail.reason),
                 ]
-                  .filter((value) => value !== null)
+                  .filter((value) => value != null)
                   .join(' · '),
               }
             : undefined
@@ -1296,19 +1283,56 @@ function ScopedRoleLogPanel({
         result={
           detailRequest ? (
             <>
-              {modelManagement(detailRequest)}
-              <RequestDelivery
-                delivery={detailData?.delivery}
-                result={resultLabel(detailRequest)}
-              />
               <Note
                 tone={logResult(detailRequest).tone}
-                title={t(logResultCopyKey(role, logResult(detailRequest).key), {
-                  status: detailRequest.caller_status ?? '—',
-                })}
+                title={t(
+                  logResultCopyKey(
+                    role,
+                    logResult(detailRequest).key,
+                    detailRequest.rejection_reason ?? detailRequest.caller_error_code,
+                  ),
+                  {
+                    status: detailRequest.caller_status ?? '—',
+                  },
+                )}
               >
-                {resultHint(detailRequest)}
+                {detailRequest.phase === 'pre_handler' && (
+                  <p>{t('logs.stoppedBeforeDispatch', { status: detailRequest.caller_status })}</p>
+                )}
+                {(detailRequest.phase === 'pre_handler' || detailRequest.rejection_detail) && (
+                  <div className="log-outcome__reason">
+                    <strong>{t('logs.rejectionDetail')}</strong>
+                    <p>
+                      {detailRequest.rejection_detail
+                        ? `${rejectionFieldDescription(detailRequest.rejection_detail.field)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
+                        : t('logs.rejectionDetailMissing')}
+                    </p>
+                  </div>
+                )}
+                {detailRequest.rejection_detail?.suggestion ? (
+                  <div className="log-outcome__reason">
+                    <strong>{t('logs.rejectionSuggestion')}</strong>
+                    <p>{rejectionDescription(detailRequest.rejection_detail.suggestion)}</p>
+                  </div>
+                ) : (
+                  resultHint(detailRequest)
+                )}
               </Note>
+              {detailData && 'route_decision' in detailData && detailData.route_decision && (
+                <RequestRouteDecision decision={detailData.route_decision} />
+              )}
+              {modelManagement(detailRequest)}
+              <Fold
+                plain
+                title={t('common.failure.deliveryTitle')}
+                defaultOpen={detailData?.delivery?.failed === true}
+                key={detailRequest.id}
+              >
+                <RequestDelivery
+                  delivery={detailData?.delivery}
+                  result={resultLabel(detailRequest)}
+                />
+              </Fold>
             </>
           ) : null
         }
