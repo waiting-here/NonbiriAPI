@@ -83,7 +83,7 @@ it.each(scenarios)(
       'href',
       `${root}/export.csv?user_id=7&discord_id=${discordID}&charity_model=Shared`,
     );
-    await view.user.click(within(form).getByText('More filters', { exact: true }));
+    await view.user.click(within(form).getByText('More filters · 1', { exact: true }));
     expect(upstream).toBeVisible();
     fireEvent.change(upstream, { target: { value: 'vendor/model' } });
     fireEvent.submit(form);

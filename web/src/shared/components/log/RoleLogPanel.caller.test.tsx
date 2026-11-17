@@ -343,6 +343,65 @@ for (const role of ['admin', 'steward'] as const) {
 }
 
 describe('preflight rejection details', () => {
+  it('opens the exact request by ID and explains the recorded path for the steward', async () => {
+    const row = {
+      ...stewardRow(null),
+      phase: 'pre_handler',
+      rejection_stage: 'preflight',
+      rejection_reason: 'invalid_request',
+      request_method: 'POST',
+      request_path: '/v1/chat/completions',
+      caller_result_class: 'failed',
+      caller_status: 400,
+      caller_error_code: 'invalid_request',
+      attempt_count: '0',
+      usage: { ...usage, total_tokens: '0', output_tokens: '0' },
+      rejection_detail: { field: 'presence_penalty', reason: 'unsupported top-level field' },
+    };
+    installFixtures('steward', row, {
+      request: row,
+      attempts: { data: [], next_cursor: null },
+      route_decision: {
+        observations: [
+          {
+            reason: 'failure_disabled',
+            binding_id: '12',
+            native_service: 'chat_completions',
+            match: 'native',
+          },
+          {
+            reason: 'protocol_rejected',
+            binding_id: '13',
+            native_service: 'responses',
+            match: 'conversion',
+            field: 'presence_penalty',
+          },
+        ],
+      },
+    });
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+      station: 'user',
+      role: 'level5',
+    });
+    await view.user.click(await screen.findByRole('tab', { name: 'Find by request ID' }));
+    await view.user.type(screen.getByLabelText('Request ID'), requestID);
+    await view.user.click(screen.getByRole('button', { name: 'Open request' }));
+    const panel = await screen.findByRole('region', { name: /Log details/ });
+    expect(
+      await within(panel).findByText(
+        'The platform returned HTTP 400 before sending an upstream request.',
+      ),
+    ).toBeVisible();
+    const routing = await within(panel).findByRole('region', {
+      name: 'Routing decisions for this request',
+    });
+    const rows = within(routing).getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Binding #12');
+    expect(rows[0]).toHaveTextContent('repeated failures');
+    expect(rows[1]).toHaveTextContent('Protocol conversion');
+    expect(rows[1]).toHaveTextContent('presence_penalty');
+  });
+
   it('explains an unknown top-level field by its safe position', async () => {
     const row = {
       ...stewardRow(null),

@@ -27,6 +27,8 @@ for (const role of ['admin', 'level5', 'level6'] as const) {
     await page.route(`**${root}/pressure`, (route) => route.fulfill({ json: pressure }));
     await page.goto(role === 'admin' ? `${ADMIN_ORIGIN}/logs` : `${USER_ORIGIN}/steward?tab=logs`);
     const section = page.getByRole('region', { name: 'Site load' });
+    await expect(section.getByText('60 / 600 RPM · 4 / 256 concurrent')).toBeVisible();
+    await section.locator('summary').click();
     const rpm = section.getByRole('meter', { name: 'Site RPM' });
     await expect(rpm).toHaveAttribute('aria-valuenow', '60');
     await expect(rpm).toHaveAttribute('aria-valuemax', '600');
@@ -98,6 +100,7 @@ test('pressure refresh keeps cached values on failure and stops after permission
   });
   await page.goto(`${ADMIN_ORIGIN}/logs`);
   const section = page.getByRole('region', { name: 'Site load' });
+  await section.locator('summary').click();
   await expect(section.getByRole('meter', { name: 'Site RPM' })).toBeVisible();
   const initialCalls = calls;
   await page.clock.fastForward(14_000);

@@ -1,4 +1,5 @@
 import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
+import { normalizeRouteDecision, type RouteDecision } from './routeDecision';
 import {
   normalizeFailure,
   normalizeDelivery,
@@ -224,11 +225,13 @@ export type UserLogDetail = { delivery?: DeliveryDiagnostics | null } & (
   | { kind: 'charity'; request: UserCharityLogRow; caller_safe_result: { class: LogResultClass } }
 );
 export interface AdminLogDetail {
+  route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: AdminLogRow;
   attempts: CursorPage<AdminLogAttempt>;
 }
 export interface StewardLogDetail {
+  route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: StewardLogRow;
   attempts: CursorPage<StewardLogAttempt>;
@@ -850,11 +853,14 @@ export function normalizeUserLogDetail(value: unknown): UserLogDetail {
 }
 
 export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
-  const root = record(value, ['request', 'attempts', 'delivery'], 'administrator log detail', [
-    'request',
-    'attempts',
-  ]);
+  const root = record(
+    value,
+    ['request', 'attempts', 'delivery', 'route_decision'],
+    'administrator log detail',
+    ['request', 'attempts'],
+  );
   return {
+    route_decision: normalizeRouteDecision(root.route_decision),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeAdminLogRow(root.request),
     attempts: page(root.attempts, 'administrator log attempts', normalizeAdminLogAttempt),
@@ -862,11 +868,14 @@ export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
 }
 
 export function normalizeStewardLogDetail(value: unknown): StewardLogDetail {
-  const root = record(value, ['request', 'attempts', 'delivery'], 'steward log detail', [
-    'request',
-    'attempts',
-  ]);
+  const root = record(
+    value,
+    ['request', 'attempts', 'delivery', 'route_decision'],
+    'steward log detail',
+    ['request', 'attempts'],
+  );
   return {
+    route_decision: normalizeRouteDecision(root.route_decision),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts: page(root.attempts, 'steward log attempts', normalizeStewardLogAttempt),
@@ -957,6 +966,10 @@ export function roleLogExportPath(
 
 export function adminLogExportPath(filter: LogFiltersValue, format: 'csv' | 'json'): string {
   return roleLogExportPath('admin', filter, format);
+}
+
+export function logRequestID(value: unknown): string | null {
+  return typeof value === 'string' && /^req_[A-Za-z0-9_-]{21}[AQgw]$/.test(value) ? value : null;
 }
 
 export function validLogDiscordID(value: string): boolean {

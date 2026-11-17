@@ -55,6 +55,7 @@ export function PrivacyPage() {
             <section>
               <h2>{t('user.legal.privacy.trafficTitle')}</h2>
               <p>{t('user.legal.privacy.trafficBody')}</p>
+              <p>{t('user.legal.privacy.routingBody')}</p>
             </section>
             <section>
               <h2>{t('user.legal.privacy.diagnosticsTitle')}</h2>
