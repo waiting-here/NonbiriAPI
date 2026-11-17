@@ -19,7 +19,7 @@ personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 36 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v36.json`; SQLite `user_version` remains 2 and the current storage schema is 53. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 37 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v36.json`; SQLite `user_version` remains 2 and the current storage schema is 53. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 Optional rerank paths belong to endpoints and submitted donation-use revisions;
 nullable management overrides belong to the donated use. Account export 36
@@ -323,9 +323,10 @@ Gemini, Responses and Decisions reuse existing endpoint, credential, request and
 `donation_handling` retains shared management state with its donation; processing actors are SET NULL on deletion and their identity is not copied. It is excluded from ordinary owner export. `charity_model_access` stores the current level mask and public plain-text description, cascades with its model and does not add caller records or export privileges.
 
 `donation_model_quotas` keeps one cumulative row per donated key and exact
-upstream model, including nullable limits, used/reserved totals, unassigned
-input/output usage and the capture start. It follows key/account deletion and
-the existing terminal-key retention. Export 35 includes these safe own records
+upstream model, including limits and used/reserved values for calls, credits and
+total/input/output tokens. The row retains the capture start, unattributed
+token usage, and whether migrated call and credit history is partial. It follows key/account deletion and
+the existing terminal-key retention. Export 37 includes these safe own records
 and each model's current recurring rules; consumers receive no donor/model
 quota internals. New reservation rows capture the model identity for exact-once
 settlement, while legacy rows retain their empty scope. The model record is
@@ -522,7 +523,7 @@ repair, WAL checkpoint or recovery writes. Exact registered schema 16–26 and
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
-catalog reads do not grant inference access. Current export format is 36.
+catalog reads do not grant inference access. Current export format is 37.
 Upgrades are one-way;
 there is no old-server startup on an upgraded database or reverse migration.
 Fresh creation requires the main database and sidecars to be absent. Conversion
