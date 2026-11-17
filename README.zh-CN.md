@@ -125,7 +125,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库默认开启维护并关闭公共功能，使用 schema 53。服务只打开精确当前结构的已有库；较旧、较新、未知或不完整数据库在迁移、修复和恢复写入之前拒绝启动。精确登记的 schema 16–26 与 33–52 来源需先保全完整恢复集，再由部署者主动调用同版本[独立升级器](cmd/nonbiri-upgrade-v1/README.md)的 `--check` 或 `--apply`；服务、启动脚本和部署助手不得隐式升级。账户导出使用格式 36；schema 按存储需要变化，不与每个软件补丁绑定。升级是单向的，不提供降级迁移；旧程序不能打开结构不同的升级后数据库，不以旧快照自动覆盖新接收的数据。源码契约不表示实例已发布或升级。
+新库使用 schema 55，默认开启维护并关闭公共功能。已有实例通过 v1.3.12 中转。停服并保全匹配的完整恢复集后，使用本版[独立升级器](cmd/nonbiri-upgrade-v1/README.md)将精确的 schema 54 数据库一次性转换为 55。更早的受支持结构先用 v1.3.12 的工具升级。服务只打开精确当前结构，升级由部署者显式执行。账号导出使用格式 37。升级后的数据库只向前使用，开放后的新增数据须保全。
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 

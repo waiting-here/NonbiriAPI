@@ -104,9 +104,7 @@ An OAuth scope override must retain both identity and guild-member access for re
 The master key is not a normal setting. Back it up securely, keep its Unix file mode owner-only (`0400` or `0600`), and never replace it for an existing database. Losing it makes encrypted upstream credentials unrecoverable. The environment file also contains the administrator password and OAuth client secret, so keep it readable only by root and the dedicated service account.
 
 `NONBIRI_GATEWAY_MODEL_CAPABILITIES` and `NONBIRI_SMTP_HOST/PORT/USER/PASS/FROM/TLS`
-are removed. The rc.7 converter imports eligible legacy Gateway settings before
-these keys are removed from an existing environment file; database settings take
-precedence. See [database upgrades](database-upgrades.md).
+were retired before v1.3.12. Use the database settings when preparing the v1.3.12 bridge. Historical import instructions are available with the corresponding release. [Database upgrades](database-upgrades.md)
 
 The database directory and file hold encrypted upstream credentials and private account metadata. On Unix, the application enforces owner-only access at startup: the database parent directory must be owned by the service account with mode `0700` (no group or other access), and an existing database file together with existing `-wal` and `-shm` sidecars must already be owner-owned regular files with mode `0600`. The parent directory is resolved to an absolute path, so the check also covers the current directory for a relative database path and root for a root-level path. A permissive, wrong-owner, symlink, non-regular, or otherwise anomalous existing file is rejected before the protected validation snapshot or writable open; the application does not chmod a rejected source as a side effect. Fresh files are created and verified as `0600`, and SQLite sidecars inherit that owner-only mode. On Windows, POSIX permission bits are not synthesized or checked; run the service under a dedicated account and configure an ACL that grants access only to that account and administrators, and verify the ACL in a supported test environment.
 

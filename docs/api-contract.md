@@ -178,9 +178,10 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2 (`application_id=0x4E425249`, `user_version=2`), with current schema 54. Normal startup initializes an absent database or opens the exact current structure. Older, newer, unknown or incomplete storage is rejected before migration, repair or recovery writes. A schema mismatch reports the required and readable actual version and the explicit upgrade entry point. The matching standalone `nonbiri-upgrade-v1` accepts 32 exact registered schema 16–26 and 33–53 sources; a deployer must preserve a matching recovery set before deliberately invoking `--apply`, including for 52-to-54. Services, startup scripts and deployment helpers must not apply it implicitly. Upgrades are one-way, without downgrade or reverse migration. Schema versions need not change with every software patch.
+The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 55.
+Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.0 offline tool converts one exact v1.3.12 schema 54 source. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
 
-`maintenance schema-info --json` reads compiled metadata without loading configuration or opening a database. Its version-1 descriptor reports `schema_version=54`, `minimum_schema_version=54`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`; `source_schema_versions`, `source_manifest_hashes` and `offline_conversions` are empty arrays. The standalone tool's `--schema-info --json` instead lists its 31 supported conversions. On an exact current database, startup still validates structure, configuration and the key-check singleton, then recovers unfinished work. Credentials are decrypted when used; full historical and credential audits use offline `maintenance verify`. See [database upgrades](database-upgrades.md) for accepted sources and backup/recovery boundaries.
+`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=55`, `minimum_schema_version=55`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists the single source fingerprint in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
 
 Current account export `schema_version=37` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v37.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
@@ -2037,7 +2038,7 @@ and `donation_id,key_id,donation_revision`. Each item contains
 `upstream_model_id,limits,used,reserved,remaining,unattributed_total_tokens,tracking_started_at,historical_costs_partial`.
 The four amount objects use `calls,credits,tokens,input_tokens,output_tokens`.
 Calls and tokens use canonical nonnegative U128 integer strings. Credits allow up
-to three fractional digits and use the same price as the donation key. A null
+to three fractional digits and use the same undiscounted price as the donation key, including conservative settlement. A null
 limit or remaining amount means unlimited. Remaining is clamped at zero.
 `tracking_started_at` is a nullable Unix second. When `historical_costs_partial`
 is true, migrated call and credit usage includes only surviving receipts

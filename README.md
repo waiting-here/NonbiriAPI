@@ -313,16 +313,13 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 53.
-The service opens only the exact current schema; older, newer, unknown or
-incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–52 sources, preserve a complete recovery
-set before deliberately running the matching standalone
-[upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
-The service, startup scripts and deployment helpers must not apply upgrades
-implicitly. Account export uses format 36. Schema versions change when
-storage requires it, independently of software patch releases.
-Use the matching binaries' schema descriptors to check accepted sources.
+Fresh databases start in maintenance with public features closed and use schema 55.
+This version accepts existing storage through the v1.3.12 bridge. Stop the old
+service, preserve its complete recovery set, and use the matching standalone
+[upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert the exact schema 54
+database to schema 55. Earlier registered sources first use the v1.3.12
+upgrader. The service and deployment hooks leave conversion to the operator.
+Account export uses format 37.
 Upgrades are one-way: a server expecting an older or different schema cannot
 open the upgraded database, and there is no schema downgrade migration. Do not overwrite newly accepted data with an
 old snapshot.
