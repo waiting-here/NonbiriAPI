@@ -1910,6 +1910,27 @@
       "saved": "已完成审核：{{status}}。",
       "noLongerPending": "此捐赠已完成审核，请返回待处理队列。"
     },
+    "bindingGuide": {
+      "coverage": "各接口的来源状态",
+      "counts": "直连 {{native}} 个 · 可转换 {{converted}} 个",
+      "noneReady": "请查看下方的服务状态，或添加支持此接口的来源。",
+      "convertedOnly": "当前状态正常的来源均需转换。调用方使用下列转换无法保留的参数时，请添加或恢复直连来源。",
+      "direct": "直连 · {{service}}",
+      "converted": "转换至 {{service}}",
+      "uncovered": "所选服务未覆盖此接口。",
+      "chooseService": "请选择上游服务",
+      "editServices": "调整上游服务",
+      "chooseHelp": "勾选要交给这个来源处理的服务。保存后，服务的可用状态仍可能变化。",
+      "preview": "接口与转换限制",
+      "noMatch": "这把密钥已获批的服务均不支持此模型的接口。",
+      "limited": "转换仅支持上游协议能够表达的请求内容。",
+      "chatToResponses": "可转换函数工具和输出上限。presence_penalty、frequency_penalty、stop 等参数需要其他路径。",
+      "responsesToChat": "可转换内联输入和函数工具。reasoning、include、metadata 等字段需要原生 Responses 来源。",
+      "anthropic": "可转换函数工具、停止序列和输出上限。presence_penalty、response_format 等聊天参数需要其他路径。",
+      "gemini": "图片须使用支持的 Base64 数据 URL。JSON Schema 输出、store 和工具调用文本化需要其他路径。",
+      "responsesToGateway": "采用 Responses 到聊天补全的有限转换。该 Gateway 模型还须配置接受 store:false 的存储策略。",
+      "chatToGateway": "采样、推理级别、存储和缓存参数取决于 Gateway 版本及该模型声明的能力。"
+    },
     "bindingBatch": {
       "boundHere": "已绑定当前公益模型",
       "boundElsewhere": "还已绑定：{{names}}",

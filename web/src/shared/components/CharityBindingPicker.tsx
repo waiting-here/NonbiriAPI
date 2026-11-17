@@ -1,4 +1,5 @@
-import { NativeServicesField } from './NativeServicesField';
+import { BindingRouteGuide, BindingServiceEditor } from './charity/BindingRouteGuide';
+import { Fold } from './ui';
 import type { NativeService } from '@shared/nativeServices';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
@@ -35,6 +36,7 @@ import { validManagementSearch } from '@shared/operations/charityModelPages';
 import { usePagePager } from '@shared/operations/usePagePager';
 import {
   charityKeys,
+  suggestedBindingServices,
   type CharityBindingCandidate,
   type CharityRole,
 } from '@shared/operations/charity';
@@ -540,6 +542,16 @@ function CharityBindingPickerBody({
   const sourcePage = sources.data;
   const keyPage = sourceKeys.data;
   const candidatePage = candidates.data;
+  const keyGuide = candidatePage?.data[0]?.binding_guide;
+  const selectable =
+    candidatePage?.data.filter(
+      (entry) => !entry.current_binding_id && entry.capabilities?.can_bind !== false,
+    ) ?? [];
+  const selectCandidate = (entry: CharityBindingCandidate): CharitySelection => ({
+    ...entry,
+    note: selectedKey?.safe_note ?? '',
+    selected_native_services: suggestedBindingServices(entry),
+  });
   const sourceBusy = interactionBlocked || sourceReadBlocked;
   const keyBusy = interactionBlocked || sourceKeyReadBlocked;
   const candidateBusy = interactionBlocked || candidateReadBlocked;
@@ -977,6 +989,17 @@ function CharityBindingPickerBody({
                 <ErrorState error={candidates.error} onRetry={() => void candidates.refetch()} />
               ) : candidatePage ? (
                 <div aria-busy={candidates.isFetching}>
+                  {keyGuide &&
+                    (keyGuide.routes.length ? (
+                      <Fold plain lazy title={t('common.bindingGuide.preview')}>
+                        <BindingRouteGuide
+                          guide={keyGuide}
+                          selected={keyGuide.services.map((item) => item.native_service)}
+                        />
+                      </Fold>
+                    ) : (
+                      <p>{t('common.bindingGuide.noMatch')}</p>
+                    ))}
                   {candidatePage.data.length === 0 ? (
                     <EmptyState
                       title={t('common.operations.charity.noCandidates')}
@@ -1017,13 +1040,7 @@ function CharityBindingPickerBody({
                                           return;
                                         const next = { ...selected };
                                         if (event.target.checked) {
-                                          next[key] = {
-                                            ...entry,
-                                            note: selectedKey.safe_note,
-                                            selected_native_services: entry.capabilities?.can_bind
-                                              ? entry.native_services?.slice()
-                                              : undefined,
-                                          };
+                                          next[key] = selectCandidate(entry);
                                         } else {
                                           delete next[key];
                                         }
@@ -1102,32 +1119,19 @@ function CharityBindingPickerBody({
                       type="button"
                       disabled={
                         candidateBusy ||
-                        candidatePage.data.every((entry) => Boolean(entry.current_binding_id)) ||
-                        candidatePage.data.filter(
-                          (entry) =>
-                            !entry.current_binding_id && !selected[charitySelectionKey(entry)],
-                        ).length >
+                        !selectable.length ||
+                        selectable.filter((entry) => !selected[charitySelectionKey(entry)]).length >
                           capacity - allSelectedEntries.length
                       }
                       onClick={() => {
                         const next = { ...selected };
-                        for (const entry of candidatePage.data.filter(
-                          (entry) =>
-                            !entry.current_binding_id && entry.capabilities?.can_bind !== false,
-                        ))
-                          next[charitySelectionKey(entry)] ??= {
-                            ...entry,
-                            note: selectedKey.safe_note,
-                            selected_native_services: entry.capabilities?.can_bind
-                              ? entry.native_services?.slice()
-                              : undefined,
-                          };
+                        for (const entry of selectable)
+                          next[charitySelectionKey(entry)] ??= selectCandidate(entry);
                         onChange(next);
                       }}
                     >
                       {t('common.workflow.selectPage', {
-                        count: candidatePage.data.filter((entry) => !entry.current_binding_id)
-                          .length,
+                        count: selectable.length,
                       })}
                     </Button>
                     <Button
@@ -1220,7 +1224,8 @@ function CharityBindingPickerBody({
                   {t('common.operations.charity.remove')}
                 </Button>
                 {entry.native_services ? (
-                  <NativeServicesField
+                  <BindingServiceEditor
+                    guide={entry.binding_guide}
                     options={entry.native_services}
                     value={entry.selected_native_services ?? []}
                     onChange={(value) =>

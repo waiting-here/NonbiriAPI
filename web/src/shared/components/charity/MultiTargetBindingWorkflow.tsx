@@ -22,6 +22,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { CharityBindingPicker, type CharitySelection } from '../CharityBindingPicker';
+import { BindingServiceEditor } from './BindingRouteGuide';
 import { DonationKeyModels } from '../DonationKeyModels';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 import { CharityModelScope } from '../CharityModelScope';
@@ -519,8 +520,31 @@ export function MultiTargetBindingWorkflow({
                     header: t('common.bindingBatch.upstream'),
                     mobileLabel: t('common.bindingBatch.upstream'),
                     cell: 'meta',
-                    render: ([, row]) => (
-                      <span className="mono nb-workflow-id">{row.upstream_model_id}</span>
+                    render: ([id, row]) => (
+                      <div className="nb-stack nb-stack--sm">
+                        <span className="mono nb-workflow-id">{row.upstream_model_id}</span>
+                        {row.candidate.native_services ? (
+                          <BindingServiceEditor
+                            guide={row.candidate.binding_guide}
+                            options={row.candidate.native_services}
+                            value={row.candidate.selected_native_services ?? []}
+                            disabled={locked || add.outcome === 'conflict'}
+                            onChange={(services) => {
+                              setBasket((previous) => ({
+                                ...previous,
+                                [id]: {
+                                  ...row,
+                                  candidate: {
+                                    ...row.candidate,
+                                    selected_native_services: services,
+                                  },
+                                },
+                              }));
+                              add.reset();
+                            }}
+                          />
+                        ) : null}
+                      </div>
                     ),
                   },
                   {

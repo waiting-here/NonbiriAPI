@@ -1,3 +1,4 @@
+import { ModelBindingCoverage, BindingRouteGuide } from './BindingRouteGuide';
 import { CharityTargets } from './CharityTargets';
 import { BindingHealth } from '../ResourceHealth';
 import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
@@ -948,7 +949,9 @@ function BindingsPanel({
     setOrderDraft({ ids, revision: bindings.data.binding_revision });
   };
   const orderedBindings =
-    orderDraft && orderDraft.revision === bindings.data?.binding_revision
+    bindings.data?.can_reorder !== false &&
+    orderDraft &&
+    orderDraft.revision === bindings.data?.binding_revision
       ? orderDraft.ids.flatMap(
           (id) => bindings.data?.bindings.filter((entry) => entry.id === id) ?? [],
         )
@@ -1000,6 +1003,9 @@ function BindingsPanel({
         <h3 id={`charity-model-connections-${model.id}`}>
           {t('common.operations.charity.orderedBindings')}
         </h3>
+        {bindings.data?.coverage && !bindings.error ? (
+          <ModelBindingCoverage coverage={bindings.data.coverage} />
+        ) : null}
         {bindings.isPending ? (
           <LoadingState />
         ) : bindings.error ? (
@@ -1032,7 +1038,9 @@ function BindingsPanel({
                     : [entry];
                   return (
                     <tr key={entry.id}>
-                      <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
+                      <td data-label={t(charityCopyKey(role, 'order'))}>
+                        {bindings.data.can_reorder === false ? entry.ord + 1 : index + 1}
+                      </td>
                       <td
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.source')}
@@ -1064,11 +1072,23 @@ function BindingsPanel({
                               <div key={target.id} className="nb-stack nb-stack--sm">
                                 <strong>{target.upstream_model_id}</strong>
                                 <BindingHealth value={target.availability} />
+                                {target.binding_guide ? (
+                                  <Fold plain lazy title={t('common.bindingGuide.preview')}>
+                                    <BindingRouteGuide
+                                      guide={target.binding_guide}
+                                      selected={target.native_services}
+                                    />
+                                  </Fold>
+                                ) : null}
+                                {target.binding_guide && isAISDKGateway(target.connector_type) ? (
+                                  <GatewayCapabilitySummary entry={target.gateway_capabilities} />
+                                ) : null}
                               </div>
                             ))
                           : entry.upstream_model_id}
-                        {(entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
-                        isAISDKGateway(entry.source.connector_type)) ? (
+                        {!entry.targets?.some((target) => target.binding_guide) &&
+                        (entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
+                          isAISDKGateway(entry.source.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
                         ) : null}
                       </td>
@@ -1121,22 +1141,26 @@ function BindingsPanel({
                               {adaptationCopy('title')}
                             </button>
                           ) : null}
-                          <button
-                            className="nb-btn nb-btn--secondary nb-btn--sm"
-                            type="button"
-                            disabled={index === 0 || busy}
-                            onClick={() => move(index, -1)}
-                          >
-                            {t('common.operations.charity.moveUp')}
-                          </button>
-                          <button
-                            className="nb-btn nb-btn--secondary nb-btn--sm"
-                            type="button"
-                            disabled={index === orderedBindings.length - 1 || busy}
-                            onClick={() => move(index, 1)}
-                          >
-                            {t('common.operations.charity.moveDown')}
-                          </button>
+                          {bindings.data.can_reorder !== false ? (
+                            <>
+                              <button
+                                className="nb-btn nb-btn--secondary nb-btn--sm"
+                                type="button"
+                                disabled={index === 0 || busy}
+                                onClick={() => move(index, -1)}
+                              >
+                                {t('common.operations.charity.moveUp')}
+                              </button>
+                              <button
+                                className="nb-btn nb-btn--secondary nb-btn--sm"
+                                type="button"
+                                disabled={index === orderedBindings.length - 1 || busy}
+                                onClick={() => move(index, 1)}
+                              >
+                                {t('common.operations.charity.moveDown')}
+                              </button>
+                            </>
+                          ) : null}
                           <button
                             className="nb-btn nb-btn--danger nb-btn--sm"
                             type="button"

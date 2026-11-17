@@ -10,6 +10,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
+	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 )
 
@@ -37,7 +39,20 @@ type BindingCapabilities struct {
 	CanBind           bool    `json:"can_bind"`
 	UnavailableReason *string `json:"unavailable_reason"`
 }
+
+// BindingGuide describes configuration choices for one model and key. Service
+// health is a read-time snapshot and does not change which choices may be saved.
+type BindingGuide struct {
+	Interfaces modeltype.Set            `json:"interfaces"`
+	Routes     []ServiceRouteProjection `json:"routes"`
+	Services   []BindingServiceOption   `json:"services"`
+}
+type BindingServiceOption struct {
+	NativeService contract.NativeService `json:"native_service"`
+	State         string                 `json:"state,omitempty"`
+}
 type ServiceProjection struct {
+	Guide          *BindingGuide            `json:"binding_guide,omitempty"`
 	NativeServices []contract.NativeService `json:"native_services"`
 	ModelTypes     modeltype.Set            `json:"model_types"`
 	ServiceRoutes  []ServiceRouteProjection `json:"service_routes"`
@@ -46,17 +61,18 @@ type ServiceProjection struct {
 
 type BindingTarget struct {
 	ServiceProjection
-	Availability      *BindingAvailability `json:"availability,omitempty"`
-	ID                string               `json:"id"`
-	Revision          string               `json:"revision"`
-	DonationID        string               `json:"donation_id"`
-	DonationKeyID     string               `json:"donation_key_id"`
-	UpstreamModelID   string               `json:"upstream_model_id"`
-	EndpointID        string               `json:"endpoint_id"`
-	ConnectorType     contract.Type        `json:"connector_type"`
-	ConfigurationType contract.Type        `json:"configuration_type"`
-	BaseURL           string               `json:"base_url"`
-	Uses              []BindingTargetUse   `json:"uses"`
+	GatewayCapabilities *gatewaypolicy.Policy `json:"gateway_capabilities,omitempty"`
+	Availability        *BindingAvailability  `json:"availability,omitempty"`
+	ID                  string                `json:"id"`
+	Revision            string                `json:"revision"`
+	DonationID          string                `json:"donation_id"`
+	DonationKeyID       string                `json:"donation_key_id"`
+	UpstreamModelID     string                `json:"upstream_model_id"`
+	EndpointID          string                `json:"endpoint_id"`
+	ConnectorType       contract.Type         `json:"connector_type"`
+	ConfigurationType   contract.Type         `json:"configuration_type"`
+	BaseURL             string                `json:"base_url"`
+	Uses                []BindingTargetUse    `json:"uses"`
 }
 
 type BindingTargetsUpdate struct {
@@ -256,7 +272,46 @@ func readTargetProjection(uses []connectionstore.UseAuthorization, selected cont
 	return projection, refs, nil
 }
 
-func annotateCandidateServicesTx(ctx context.Context, tx *sql.Tx, items []AdminBindingCandidate, modelID int64) error {
+func approvedServiceProjection(uses []connectionstore.UseAuthorization) (ServiceProjection, error) {
+	services := make([]contract.NativeService, 0, len(uses))
+	for _, use := range uses {
+		services = append(services, use.NativeService)
+	}
+	selected, err := contract.ParseNativeServices(services)
+	if err != nil {
+		return ServiceProjection{}, ErrInvariant
+	}
+	projection, _, err := readTargetProjection(uses, selected)
+	return projection, err
+}
+
+func bindingGuide(types modeltype.Set, projection ServiceProjection) *BindingGuide {
+	guide := &BindingGuide{Interfaces: types, Routes: []ServiceRouteProjection{}, Services: []BindingServiceOption{}}
+	for _, service := range projection.NativeServices {
+		guide.Services = append(guide.Services, BindingServiceOption{NativeService: service})
+	}
+	for _, route := range projection.ServiceRoutes {
+		if types.Supports(route.Operation) {
+			guide.Routes = append(guide.Routes, route)
+		}
+	}
+	return guide
+}
+func (g *BindingGuide) attachHealth(statuses []donationstate.ServiceStatus) {
+	for i, option := range g.Services {
+		for _, status := range statuses {
+			if status.NativeService == option.NativeService {
+				g.Services[i].State = status.State
+				break
+			}
+		}
+	}
+}
+
+func annotateCandidateServicesTx(ctx context.Context, tx *sql.Tx, items []AdminBindingCandidate, modelID, now int64) error {
+	if len(items) == 0 {
+		return nil
+	}
 	keys := make([]int64, 0, len(items))
 	for _, item := range items {
 		id, err := parsePositiveID(item.DonationKeyID)
@@ -273,28 +328,29 @@ func annotateCandidateServicesTx(ctx context.Context, tx *sql.Tx, items []AdminB
 	if err := tx.QueryRowContext(ctx, `SELECT model_types FROM charity_models WHERE id=?`, modelID).Scan(&types); err != nil {
 		return err
 	}
+	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, keys, now)
+	if err != nil {
+		return err
+	}
+	byKey := make(map[int64]ServiceProjection, len(uses))
 	for index, keyID := range keys {
-		services := []contract.NativeService{}
-		for _, use := range uses[keyID] {
-			services = append(services, use.NativeService)
+		if existing, ok := byKey[keyID]; ok {
+			items[index].ServiceProjection = existing
+			continue
 		}
-		selected, err := contract.ParseNativeServices(services)
-		if err != nil {
-			return ErrInvariant
-		}
-		projection, _, err := readTargetProjection(uses[keyID], selected)
+		projection, err := approvedServiceProjection(uses[keyID])
 		if err != nil {
 			return err
 		}
-		compatible := false
-		for _, op := range projection.ModelTypes {
-			compatible = compatible || types.Supports(op)
-		}
-		projection.Capabilities.CanBind = compatible
-		if !compatible {
+		guide := bindingGuide(types, projection)
+		guide.attachHealth(statuses[keyID])
+		projection.Guide = guide
+		projection.Capabilities.CanBind = len(guide.Routes) > 0
+		if !projection.Capabilities.CanBind {
 			reason := "no_service_route"
 			projection.Capabilities.UnavailableReason = &reason
 		}
+		byKey[keyID] = projection
 		items[index].ServiceProjection = projection
 	}
 	return nil

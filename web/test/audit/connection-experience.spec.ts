@@ -1493,6 +1493,7 @@ async function addGroup(
   }
   const selected = targetRows(editor);
   await expect(selected).toHaveCount(1);
+  if (charity) await openFold(selected, common.common.bindingGuide.editServices);
   const chat = selected.getByLabel(native.chat_completions, { exact: true });
   await expect(chat).toBeChecked();
   const response = responseFor(page, 'POST', path + '/batch-receipt');

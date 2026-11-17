@@ -7,6 +7,8 @@ import {
 } from './keyQueue';
 import {
   normalizeNativeServices,
+  normalizeServiceRoutes,
+  type ServiceRoute,
   normalizeServiceProjection,
   type ServiceProjection,
 } from '@shared/connections';
@@ -34,7 +36,8 @@ import {
   normalizeGatewayCapabilityPolicy,
   type GatewayCapabilityPolicy,
 } from '@shared/gateway/capabilities';
-import { normalizeModelTypes } from '@shared/modelTypes';
+import { MODEL_TYPES, normalizeModelTypes, type ModelType } from '@shared/modelTypes';
+import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { apiFetch } from '@shared/query/http';
 import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
@@ -846,7 +849,32 @@ export interface TokenPrices {
   output: string;
 }
 
+export interface BindingGuide {
+  interfaces: ModelType[];
+  routes: ServiceRoute[];
+  services: { native_service: NativeService; state?: string }[];
+}
+function normalizeBindingGuide(value: unknown): BindingGuide | undefined {
+  if (!value) return undefined;
+  const guide = record(value, ['interfaces', 'routes', 'services'], 'binding guide');
+  return {
+    interfaces: array(guide.interfaces, 'model interfaces').map((op) =>
+      oneOf(op, MODEL_TYPES, 'model interface'),
+    ),
+    routes: normalizeServiceRoutes(guide.routes),
+    services: array(guide.services, 'service choices').map((item) => {
+      const service = record(item, ['native_service', 'state'], 'service choice', [
+        'native_service',
+      ]);
+      return {
+        native_service: oneOf(service.native_service, NATIVE_SERVICES, 'upstream service'),
+        state: typeof service.state === 'string' ? service.state : undefined,
+      };
+    }),
+  };
+}
 export interface CharityBinding extends Partial<ServiceProjection> {
+  binding_guide?: BindingGuide;
   targets?: CharityTarget[];
   gateway_capabilities?: GatewayCapabilityPolicy | null;
   id: string;
@@ -869,6 +897,15 @@ export type CharityBindingCandidate = Omit<CharityBinding, 'id' | 'ord'> & {
   other_binding_count?: string;
   other_bindings?: { charity_model_id: string; full_name: string; binding_id: string }[];
 };
+export function suggestedBindingServices(entry: CharityBindingCandidate) {
+  if (!entry.capabilities?.can_bind) return undefined;
+  if (!entry.binding_guide) return entry.native_services?.slice();
+  const routes = entry.binding_guide.routes;
+  return entry.native_services?.filter((service) =>
+    routes.some((route) => route.native_service === service),
+  );
+}
+
 export interface BindingDonation {
   id: string;
   description: string;
@@ -881,7 +918,15 @@ export interface BindingSourceKey {
   source: CharityBinding['source'];
   note: string;
 }
+export interface InterfaceCoverage {
+  operation: ModelType;
+  native_targets: number;
+  converted_targets: number;
+  conversion_services: NativeService[];
+}
 export interface CharityBindings {
+  can_reorder?: boolean;
+  coverage?: InterfaceCoverage[];
   bindings: CharityBinding[];
   binding_revision: string;
 }
@@ -1352,16 +1397,36 @@ function normalizeLegacyCharityBindingCandidate(
 const normalizeCandidate = normalizeCharityBindingCandidate;
 
 function normalizeBindings(value: unknown, label: string): CharityBindings {
-  const root = record(value, ['bindings', 'binding_revision'], label);
+  const root = record(value, ['bindings', 'binding_revision', 'coverage', 'can_reorder'], label, [
+    'bindings',
+    'binding_revision',
+  ]);
   const bindings = array(root.bindings, `${label} bindings`, 10_000).map((entry) =>
     normalizeBinding(entry, `${label} binding`),
   );
-  if (
-    new Set(bindings.map((entry) => entry.id)).size !== bindings.length ||
-    bindings.some((entry, index) => entry.ord !== index)
-  )
-    invalidResponse(`${label} binding order`);
-  return { bindings, binding_revision: decimal(root.binding_revision, `${label} revision`) };
+  if (new Set(bindings.map((entry) => entry.id)).size !== bindings.length) invalidResponse(label);
+  const coverage =
+    root.coverage === undefined
+      ? undefined
+      : array(root.coverage, 'interface coverage').map((value) => {
+          const row = record(
+            value,
+            ['operation', 'native_targets', 'converted_targets', 'conversion_services'],
+            'interface coverage',
+          );
+          return {
+            operation: oneOf(row.operation, MODEL_TYPES, 'covered interface'),
+            native_targets: integer(row.native_targets, 'direct targets', 0),
+            converted_targets: integer(row.converted_targets, 'conversion targets', 0),
+            conversion_services: normalizeNativeServices(row.conversion_services),
+          };
+        });
+  return {
+    bindings,
+    ...(coverage ? { coverage } : {}),
+    ...(typeof root.can_reorder === 'boolean' ? { can_reorder: root.can_reorder } : {}),
+    binding_revision: decimal(root.binding_revision, `${label} revision`),
+  };
 }
 
 const charityRoot = (role: CharityRole) =>
@@ -1750,6 +1815,8 @@ export const deleteManagedBinding = async (
 };
 
 export interface CharityTarget extends ServiceProjection {
+  gateway_capabilities?: GatewayCapabilityPolicy;
+  binding_guide?: BindingGuide;
   availability?: BindingAvailability;
   id: string;
   revision: string;
@@ -1788,6 +1855,8 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
       'configuration_type',
       'base_url',
       'availability',
+      'gateway_capabilities',
+      'binding_guide',
     ],
     'charity target',
     [
@@ -1835,6 +1904,10 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
     upstream_model_id: string(row.upstream_model_id, 'target model'),
     ...normalizeServiceProjection(value),
     availability: normalizeBindingAvailability(row.availability),
+    ...(row.gateway_capabilities
+      ? { gateway_capabilities: normalizeGatewayCapabilityPolicy(row.gateway_capabilities) }
+      : {}),
+    binding_guide: normalizeBindingGuide(row.binding_guide),
     uses: array(row.uses, 'approved uses').map((value) => {
       const use = record(
         value,
@@ -1879,6 +1952,7 @@ export function normalizeCharityBindingCandidate(
   const row = value as Record<string, unknown>;
   return {
     ...base,
+    binding_guide: normalizeBindingGuide(row.binding_guide),
     ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
   };
 }

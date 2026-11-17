@@ -27,10 +27,11 @@ type KeyModelTarget struct {
 
 type bindingAvailabilityRow struct {
 	KeyModelTarget
-	bindingID  string
-	keyID      int64
-	mask       int64
-	modelTypes modeltype.Set
+	bindingID   string
+	keyID       int64
+	mask        int64
+	modelTypes  modeltype.Set
+	allStatuses []donationstate.ServiceStatus
 }
 
 // The selected bindings have already passed the caller's management scope.
@@ -100,7 +101,8 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 		if err != nil {
 			return nil, ErrInvariant
 		}
-		for _, status := range statuses[row.keyID] {
+		row.allStatuses = statuses[row.keyID]
+		for _, status := range row.allStatuses {
 			if !selected.Has(status.NativeService) {
 				continue
 			}
@@ -137,17 +139,23 @@ func annotateBindingAvailabilityTx(ctx context.Context, tx *sql.Tx, modelID, now
 	if err != nil {
 		return err
 	}
-	byTarget := make(map[string]BindingAvailability, len(rows))
+	byTarget := make(map[string]bindingAvailabilityRow, len(rows))
 	for _, row := range rows {
-		byTarget[row.TargetID] = row.Availability
+		byTarget[row.TargetID] = row
 	}
 	for i := range value.Bindings {
 		for j := range value.Bindings[i].Targets {
 			target := &value.Bindings[i].Targets[j]
-			if availability, ok := byTarget[target.ID]; ok {
-				target.Availability = &availability
+			if row, ok := byTarget[target.ID]; ok {
+				target.Availability = &row.Availability
+				if target.Guide != nil {
+					target.Guide.attachHealth(row.allStatuses)
+				}
 			}
 		}
+	}
+	if len(rows) > 0 {
+		value.Coverage = visibleInterfaceCoverage(rows[0].modelTypes, value.Bindings)
 	}
 	return nil
 }

@@ -1910,6 +1910,27 @@
       "saved": "Review saved: {{status}}.",
       "noLongerPending": "This donation has already been reviewed. Return to the pending queue."
     },
+    "bindingGuide": {
+      "coverage": "Source health by interface",
+      "counts": "{{native}} direct · {{converted}} with conversion",
+      "noneReady": "Check service health or add a source for this interface.",
+      "convertedOnly": "The healthy sources shown here use conversion. Add or restore a direct source if callers need fields the conversion cannot carry.",
+      "direct": "Direct via {{service}}",
+      "converted": "Converted via {{service}}",
+      "uncovered": "The selected services do not cover this interface.",
+      "chooseService": "Choose an upstream service",
+      "editServices": "Adjust upstream services",
+      "chooseHelp": "Keep the services you want this source to handle. Availability can change after saving.",
+      "preview": "Interfaces and conversion limits",
+      "noMatch": "This key has no approved service for these interfaces.",
+      "limited": "Conversion accepts only request features the upstream protocol can represent.",
+      "chatToResponses": "Function tools and output-token limits can be converted. Fields such as presence_penalty, frequency_penalty and stop require another route.",
+      "responsesToChat": "Supports inline input and function tools. Fields such as reasoning, include and metadata require a native Responses source.",
+      "anthropic": "Function tools, stop sequences and output limits can be converted. Chat fields such as presence_penalty and response_format require another route.",
+      "gemini": "Images must use supported base64 data URLs. JSON Schema output, store and tool-call flattening require another route.",
+      "responsesToGateway": "Uses the limited Responses-to-Chat conversion. The exact Gateway model must have a storage policy that accepts store:false.",
+      "chatToGateway": "Sampling, reasoning levels, storage and cache controls depend on the Gateway version and the declared model capabilities."
+    },
     "bindingBatch": {
       "boundHere": "Already bound to this model",
       "boundElsewhere": "Also bound to: {{names}}",
