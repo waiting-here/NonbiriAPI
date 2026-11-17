@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -65,18 +66,11 @@ VALUES(?,?,?,?,?,?,?)`, fmt.Sprintf("%x", session[:]), users[0], at, at+3600, at
 	} {
 		exec(`UPDATE site_config SET value=? WHERE key=?`, value, key)
 	}
-	for mask := 0; mask < 32; mask++ {
-		name := fmt.Sprintf("model-%02d", mask)
-		model := exec(`INSERT INTO charity_models(provider,model,full_name,enabled,pricing_mode,request_user_price,request_donor_reward,created_by_user_id,created_at,updated_at)
-VALUES('synthetic',?,?,1,'per_request',120,13,?,?,?)`, name, "[公益]synthetic/"+name, admin, at, at)
-		exec(`INSERT INTO charity_model_access(model_id,allowed_level_mask,public_description) VALUES(?,?,'Preserved public description')`, model, mask)
+	service := exec("INSERT INTO service_connections(user_id,name,created_at,updated_at) VALUES(?,'Released service',?,?)", users[0], at, at)
+	endpoint, err := testseed.InsertEndpointTx(ctx, tx, testseed.EndpointInput{OwnerUserID: users[0], ConnectionID: service, Type: "openai-compatible", BaseURL: "https://upstream.example/v1", At: at})
+	if err != nil {
+		t.Fatal(err)
 	}
-	exec(`INSERT INTO policy_audits(actor_user_id,actor_role,resource_type,resource_id,policy,old_value,new_value,created_at)
-VALUES(?,'level5','charity_model',1,'force_store_false',0,1,?)`, users[0], at)
-	channel := mustLedgerID(t, "mch_")
-	exec(`INSERT INTO mainstream_channels(id,name,category,connector_type,canonical_base_url,enabled,state,revision,created_at,updated_at) VALUES(?,'Synthetic channel','api_platform','openai-compatible','https://upstream.example/v1',1,'active',1,?,?)`, channel, at, at)
-	endpoint := exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,created_at,updated_at,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category)
-VALUES(?,'openai-compatible','https://upstream.example/v1','Preserved endpoint',?,?,?,1,'Synthetic channel','api_platform')`, users[0], at, at, channel)
 	contextID := bytes.Repeat([]byte{0x47}, 16)
 	keyContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
 	if err != nil {
@@ -88,83 +82,20 @@ VALUES(?,'openai-compatible','https://upstream.example/v1','Preserved endpoint',
 	}
 	secretID := exec(`INSERT INTO endpoint_key_secrets(context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
 VALUES(?,'https://upstream.example/v1','openai-compatible',?,?)`, contextID, envelope, at)
-	key := exec(`INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,created_at,updated_at)
-VALUES(?, ?, ?,'test-head','test-tail','Preserved key note',?,?)`, endpoint, secretID, hash[:], at, at)
-	exec(`INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,max_rpm) VALUES(?,3,17)`, key)
-	exec(`INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,completed_at,fetched_count) VALUES(?,'succeeded',3,'none',?,1)`, key, at)
-	exec(`INSERT INTO model_pair_catalog(endpoint_key_id,normalized_model_id,automatic_supports,manual_supports,automatic_revision,pair_revision,updated_at) VALUES(?,'synthetic-model',1,1,3,4,?)`, key, at)
-	exec(`INSERT INTO model_catalog_entries(endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at)
-VALUES(?,'manual','synthetic-model','synthetic-model','synthetic',1,?,?)`, key, at, at)
-	model := exec(`INSERT INTO models(user_id,provider,model,full_name,route_strategy,created_at,updated_at) VALUES(?,'synthetic','self','synthetic/self','ordered',?,?)`, users[0], at, at)
-	exec(`INSERT INTO model_bindings(model_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) VALUES(?,?,'synthetic-model',0,?,?)`, model, key, at, at)
-	donation := exec(`INSERT INTO donations(user_id,status,revision,description,review_note,reviewed_by_user_id,reviewed_by_role,reviewed_at,created_at,updated_at)
-VALUES(?,'approved',3,'Preserved donor note','Preserved approval note',?,'level5',?,?,?)`, users[0], users[0], at, at, at)
-	donationKey := exec(`INSERT INTO donation_keys(donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,price_limit_mag,call_limit_mag,token_limit_mag,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,authorized_expires_at,expires_at,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,source_endpoint_key_id,report_fingerprint)
-VALUES(?,?,'test-head','test-tail','https://upstream.example/v1',?,?,?,?,?,?,?,?,?,19,?,?,?,?, 'Preserved donation key note',?,?,?,?,?,1,'Synthetic channel','api_platform',?,?)`,
-		donation, key, mag(10000), mag(1000), mag(100000), mag(30), mag(0), mag(3), mag(0), mag(41), mag(0), mag(0), mag(1), mag(1), mag(1), at, at, at+86400, at+86400, channel, key, hash[:])
-	exec(`INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`, key, donationKey, donation, at)
-	exec(`INSERT INTO charity_model_bindings(charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at) SELECT id,?,?,'synthetic-model',0,?,? FROM charity_models WHERE model='model-31'`, donationKey, key, at, at)
-	exec(`INSERT INTO charity_model_routing(model_id,strategy) SELECT id,'expiry_weighted' FROM charity_models WHERE model='model-31'`)
-	for i, mode := range []string{"reset", "sliding"} {
-		rule := mustLedgerID(t, "qlr_")
-		exec(`INSERT INTO donation_quota_rules(id,donation_key_id) VALUES(?,?)`, rule, donationKey)
-		if mode == "reset" {
-			exec(`INSERT INTO donation_quota_epochs(rule_id,epoch,mode,interval,alignment,time_zone,metric,limit_mag,effective_at,last_observed_at,current_period_start,pending_reserved)
-VALUES(?,1,'reset','1h','first_success','UTC','tokens',?,?,?,?,?)`, rule, mag(1000), at-100, at, at-100, mag(0))
-			exec(`INSERT INTO donation_quota_periods(rule_id,epoch,start_at,end_at,used_mag,reserved_mag) VALUES(?,1,?,?,?,?)`, rule, at-100, at+3500, mag(37), mag(0))
-		} else {
-			exec(`INSERT INTO donation_quota_epochs(rule_id,epoch,mode,interval,time_zone,metric,limit_mag,effective_at,last_observed_at,window_left,window_at,window_used,window_reserved,pending_reserved)
-VALUES(?,1,'sliding','day','UTC','tokens',?,?,?,?,?,?,?,?)`, rule, mag(1000), at-100, at, at-86400, at, mag(41), mag(0), mag(0))
-			exec(`INSERT INTO donation_quota_buckets(rule_id,epoch,success_at,used_mag,reserved_mag) VALUES(?,1,?,?,?)`, rule, at-50, mag(41), mag(0))
-		}
-		exec(`UPDATE donation_quota_rules SET current_epoch=1,display_order=? WHERE id=?`, i, rule)
+	identity, err := testseed.InsertEndpointKeyTx(ctx, tx, testseed.KeyInput{EndpointID: endpoint, SecretRefID: secretID, Fingerprint: hash[:], DisplayHead: "head", DisplayTail: "tail", At: at})
+	if err != nil {
+		t.Fatal(err)
 	}
-	exec(`UPDATE donation_quota_capacity SET rows_used=2 WHERE id=1`)
+	exec("UPDATE credentials SET connection_id=? WHERE id=?", service, identity.CredentialID)
+	donation := exec(`INSERT INTO donations(user_id,status,revision,description,review_note,created_at,updated_at) VALUES(?,'approved',1,'Preserved donor note','',?,?)`, users[0], at, at)
+	exec("INSERT INTO donation_handling(donation_id,state,revision,created_at,updated_at) VALUES(?,'pending',1,?,?)", donation, at, at)
+	key := exec(`INSERT INTO donation_keys(donation_id,endpoint_key_id,source_endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,report_fingerprint) VALUES(?,?,?,'head','tail','https://upstream.example/v1','openai-compatible',nbi_u128(1125),zeroblob(16),nbi_u128(1),zeroblob(16),nbi_u128(19),zeroblob(16),5,zeroblob(16),nbi_u128(1),nbi_u128(2),nbi_u128(1),'',?,?,?)`, donation, identity.KeyID, identity.KeyID, at, at, hash[:])
+	exec("INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)", identity.KeyID, key, donation, at)
+	if _, err := testseed.SeedDonationUsesTx(ctx, tx, key, true, at); err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO donation_model_quotas(donation_key_id,upstream_model_id,token_limit_mag,tokens_used,unattributed_total_tokens,created_at) VALUES(?,'source-model',nbi_u128(42),nbi_u128(19),nbi_u128(19),?)`, key, at)
+	exec(`INSERT INTO donation_usage_reservations(claim_id,donation_key_id,upstream_model_id,claim_seq,streak_generation,price_reserved_milli,calls_reserved,tokens_reserved,state,created_at,finalized_at,price_actual_milli,reward_actual_milli,calls_actual,tokens_actual,protocol_success,usage_unknown,streak_disposition,failure_origin) VALUES(?,?,'source-model',nbi_u128(1),nbi_u128(1),1125,1,5,'committed',?,?,1125,0,1,19,1,0,'success','none')`, mustLedgerID(t, "clm_"), key, at, at)
 	exec(`INSERT INTO legal_holds(id,object_kind,object_ref,state,revision,basis,created_by_user_id,created_at,expires_at)
 VALUES(?,'donation',?,'active',1,'Synthetic preservation requirement',?,?,?)`, mustLedgerID(t, "lgh_"), fmt.Sprint(donation), admin, at, at+86400)
-	seedReleasedAbuseFacts(t, tx, users[0], at)
-}
-
-func seedReleasedAbuseFacts(t *testing.T, tx *sql.Tx, user, at int64) {
-	t.Helper()
-	exec := func(query string, args ...any) int64 {
-		t.Helper()
-		r, e := tx.Exec(query, args...)
-		if e != nil {
-			t.Fatal(e)
-		}
-		id, e := r.LastInsertId()
-		if e != nil {
-			t.Fatal(e)
-		}
-		return id
-	}
-	var lastCase string
-	for _, kind := range []string{"rpm", "short_content"} {
-		req := mustLedgerID(t, "req_")
-		c := mustLedgerID(t, "abc_")
-		lastCase = c
-		var chars any
-		if kind == "short_content" {
-			chars = 7
-		}
-		exec("INSERT INTO abuse_windows VALUES(?,?,1,0,2,?)", user, kind, at)
-		exec("INSERT INTO abuse_window_events VALUES(?,?,1,?,?,?,?)", user, kind, at, req, chars, at+86400)
-		exec("INSERT INTO abuse_cases VALUES(?,?,'ban',?,?,?,?,'ended','expired')", c, user, "charity_"+kind, at-10, at, at)
-		action := exec("INSERT INTO abuse_actions(case_id,action,occurred_at,request_id,reason_code,rules_json,statistics_json,evidence_count,evidence_bytes) VALUES(?,'trigger',?,?,?,'{}','{}',1,128)", c, at-10, req, "charity_"+kind)
-		exec("INSERT INTO abuse_evidence VALUES(?,0,?,?,?,?)", action, at, req, kind, chars)
-	}
-	// Pruned terminal actions still reserve their sequence identities.
-	exec("INSERT INTO abuse_actions(seq,case_id,action,occurred_at,reason_code,rules_json,statistics_json,evidence_count,evidence_bytes) VALUES(9001,?,'expire',?,'expired','{}','{}',0,0)", lastCase, at)
-	exec("DELETE FROM abuse_actions WHERE seq=9001")
-	for _, kind := range []string{"user_rpm", "report_frequency", "game_start", "abuse_rpm", "abuse_short_content"} {
-		exec("INSERT INTO identity_window_events VALUES(zeroblob(32),?,'synthetic','event',?,?,1,NULL)", kind, at*1000, (at+86400)*1000)
-	}
-	for _, scope := range []string{"credential_report", "control_mutation", "openai_chat_completions", "charity_chat_completions", "model_discovery", "maintenance", "announcement", "activity", "game_fishing", "game_linklink", "game_rps", "game_bidding", "game_likes", "game_gwent", "game_catch", "game_blackjack", "activity_loan", "donation", "lake_notes", "personal_automation"} {
-		var fingerprint any
-		if scope == "credential_report" {
-			fingerprint = make([]byte, 32)
-		}
-		exec("INSERT INTO idempotency_records VALUES(?,zeroblob(32),zeroblob(32),zeroblob(32),?,'completed',200,X'7b7d',?,?)", scope, fingerprint, at, at+86400)
-	}
 }

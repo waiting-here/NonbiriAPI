@@ -27,6 +27,9 @@ func assertExactStartupRejection(t *testing.T, path string, vault *secret.Vault,
 		t.Fatal("wrong rejection", err)
 	}
 	guidance := "nonbiri-upgrade-v1 --check to inspect or --apply to upgrade explicitly"
+	if actual != nil && *actual < 54 {
+		guidance = "v1.3.12 nonbiri-upgrade-v1 --check"
+	}
 	if actual != nil && *actual == CurrentSchemaVersion {
 		guidance = "database structure does not match this server; a version upgrade cannot repair this mismatch"
 	}

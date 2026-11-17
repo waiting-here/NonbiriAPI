@@ -2,24 +2,9 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"reflect"
 	"testing"
 )
-
-func oldStewardPolicyForTest(t *testing.T) string {
-	t.Helper()
-	grants := map[string]bool{}
-	for i, key := range schema36StewardPermissionKeys {
-		grants[key] = i%2 == 0
-	}
-	body, err := json.Marshal(grants)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(body)
-}
 
 func TestLedgerCompactionCurrentAndHistoricalBoundaries(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")
@@ -95,28 +80,5 @@ func TestAgentWorkflowAssetsHaveIndependentLifetime(t *testing.T) {
 	defer rows.Close()
 	if rows.Next() || rows.Err() != nil {
 		t.Fatal("invalid references")
-	}
-}
-
-func TestSchema36PolicyNormalizerRejectsUnexpectedFormat(t *testing.T) {
-	original := oldStewardPolicyForTest(t)
-	normalized, changed, err := normalizeSchema36StewardPolicy(original)
-	if err != nil || !changed {
-		t.Fatal(err)
-	}
-	again, changed, err := normalizeSchema36StewardPolicy(normalized)
-	if err != nil || changed || again != normalized {
-		t.Fatal("current policy changed", err)
-	}
-	var bits map[string]json.RawMessage
-	json.Unmarshal([]byte(original), &bits)
-	delete(bits, "users.read")
-	bits["unexpected"] = json.RawMessage("false")
-	bad, _ := json.Marshal(bits)
-	if _, _, err := normalizeSchema36StewardPolicy(string(bad)); err == nil {
-		t.Fatal("unknown source key accepted")
-	}
-	if reflect.DeepEqual(original, normalized) {
-		t.Fatal("migration did not normalize")
 	}
 }

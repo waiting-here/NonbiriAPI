@@ -1,116 +1,22 @@
+// Package v1 upgrades stopped databases that match the v1.3.12 storage schema.
 package v1
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-const stableSchema17Manifest = "7289b13cd57bb2d6a50a31ffde33cae17ceac2e1e130e0cd759dd2f0c2a98d4b"
-const stableSchema18Manifest = "86c1689f93835a22c90c22234906433abe438b7883db41916b01f6553d6ded23"
-
-const stableSchema19Manifest = "a44f84d8610b1141c53015e92cddce874603c2b0512d75528e403b46ff1123a1"
-
-const stableSchema20Manifest = "bb61658c873f8f3a300330f44abed6509f6d0d146ab6588175c4004b9cb39c71"
-
-const stableSchema21Manifest = "56039de6b1c224d85eac5639b9e8d41bbac00136ccb0564514369a863160e7b9"
-
-const stableSchema22Manifest = "0b4eb3ccafe3ae94ff4eae1b45ad1c054d1a7a8037d8aad14ceec38872c0db3a"
-
-const stableSchema23Manifest = "0d4b8dfe2106df2d5688d3a13e6ef2f419825da711e5914fef712c1d93c9c6ea"
-
-const stableSchema24Manifest = "ee3bcf270ed884f80a1ddf2c0cc75a509c20aa3d06c0e46f993beaf1a6b24f46"
-
-const stableSchema25Manifest = "ef68dc29f32b24ac5b06caa8bb6563be24dfae13a1e752385331c9828317cdd9"
-
-const stableSchema26Manifest = "6bcc4ea8fa31bee46e25b5e33b96a3caca18c5c5ff1f257d26b2e2d7acc64b9e"
-
-var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion, versions: []schemaMigration{
-	{version: 17, manifest: stableSchema17Manifest},
-	{from: 17, version: 18, manifest: stableSchema18Manifest, apply: extendContentAndProtocols, impact: &migrationImpact{
-		rebuiltTables: []string{"mainstream_channels", "endpoints", "endpoint_key_secrets", "donation_keys", "request_attempts", "report_cases", "report_targets", "models", "charity_models", "logical_requests", "request_logs", "game_fishing_batches", "game_fishing_outcome_lengths", "game_fishing_best_lengths", "game_fishing_length_facts"},
-		controlTables: []string{"site_config"}, credentials: credentialsRebuilt}},
-	{from: 18, version: 19, manifest: stableSchema19Manifest, sql: accountMFASchema, impact: &migrationImpact{
-		addedTables:   []string{"account_mfa_credentials", "account_mfa_pending", "account_mfa_attempts", "account_mfa_proofs"},
-		controlTables: []string{"site_config"}, constraintTables: []string{"users"}, credentials: credentialsUnchanged}},
-	{from: 19, version: 20, manifest: stableSchema20Manifest, sql: logQueryIndexes, impact: &migrationImpact{
-		indexedTables: []string{"request_attempts", "request_logs"}, credentials: credentialsUnchanged}},
-	{from: 20, version: 21, manifest: stableSchema21Manifest, apply: extendServiceMetadata, impact: &migrationImpact{
-		rebuiltTables: []string{"admin_endpoint_tags", "model_discovery_evidence"}, credentials: credentialsUnchanged}},
-	{from: 21, version: 22, manifest: stableSchema22Manifest, sql: keyCooldownSchema, impact: &migrationImpact{
-		addedTables:      []string{"donation_key_cooldowns", "dispatch_retry_after_observations"},
-		constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
-	{from: 22, version: 23, manifest: stableSchema23Manifest, sql: headerDiagnosticsSchema, impact: &migrationImpact{
-		addedTables: []string{"request_header_facts"}, controlTables: []string{"observability_state", "site_config"}, credentials: credentialsUnchanged}},
-	{from: 23, version: 24, manifest: stableSchema24Manifest, sql: pricingHistorySchema, impact: &migrationImpact{
-		addedTables: []string{"charity_price_templates", "charity_price_template_audits", "donation_owner_preferences"}, credentials: credentialsUnchanged}},
-	{from: 24, version: 25, manifest: stableSchema25Manifest, sql: smartBackoffSchema, impact: &migrationImpact{
-		addedTables:      []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"},
-		constraintTables: []string{"donation_usage_reservations", "dispatch_claims"}, credentials: credentialsUnchanged}},
-	{from: 25, version: 26, manifest: stableSchema26Manifest, sql: channelBindingPresetsSchema + automaticBackoffSchema + recurringDiscountSchema, impact: &migrationImpact{
-		addedTables:   []string{"channel_charity_binding_presets", "channel_charity_binding_mappings"},
-		controlTables: []string{"charity_models", "charity_price_templates"},
-		rebuiltTables: []string{"donation_key_backoffs", "dispatch_smart_backoff_facts"}, credentials: credentialsUnchanged}},
-	{from: 26, version: 33, manifest: db.Schema33ManifestHash, apply: extendConnections, impact: connectionsMigrationImpact},
-	{from: 33, version: 34, manifest: db.Schema34ManifestHash, sql: db.EndpointKeyHistoryIndexesSQL, impact: &migrationImpact{
-		indexedTables: []string{"request_logs", "dispatch_claims", "report_targets", "donation_keys"}, credentials: credentialsUnchanged}},
-	{from: 34, version: 35, manifest: db.Schema35ManifestHash, sql: db.DonationDiscoveryAuthorizationSQL, impact: &migrationImpact{
-		constraintTables: []string{"discovery_runs", "charity_model_catalog"}, credentials: credentialsUnchanged}},
-	{from: 35, version: 36, manifest: db.Schema36ManifestHash, sql: db.StewardPermissionsSQL + db.StewardAuditRolesSQL + db.EndpointTagsSQL, impact: &migrationImpact{rebuiltTables: []string{"risk_client_rules", "client_rule_auto_bans", "discord_blacklist_origins", "discord_blacklist_events", "admin_endpoint_tags"}, addedTables: []string{"steward_permissions", "steward_permission_audits"}, credentials: credentialsUnchanged}},
-	{from: 36, version: 37, manifest: db.Schema37ManifestHash, sql: db.AgentRequestsSQL + db.AgentWorkflowSQL, apply: func(ctx context.Context, tx *sql.Tx) error {
-		if err := db.UpgradeModelTypes(ctx, tx); err != nil {
-			return err
-		}
-		return db.UpgradeStewardAIPermissions(ctx, tx)
-	}, impact: &migrationImpact{controlTables: []string{"steward_permissions", "models", "charity_models"}, addedTables: []string{"ai_agent_plans", "ai_agent_model_results", "ai_agent_review_events", "ai_agent_jobs", "ai_agent_messages", "ai_agent_conversations", "ai_agent_memory_history", "ai_agent_memories", "ai_agent_settings", "agent_request_response_chunks", "agent_request_settings", "agent_requests", "agent_request_usage", "agent_request_usage_totals", "agent_request_usage_hours"}, credentials: credentialsUnchanged}},
-	{from: 37, version: 38, manifest: db.Schema38ManifestHash, sql: db.CharityModelDeletionIndexesSQL, impact: &migrationImpact{
-		indexedTables: []string{"charity_reservations", "charity_dispatch_receipts", "charity_key_affinities", "charity_header_sessions", "charity_header_uses"}, credentials: credentialsUnchanged}},
-	{from: 38, version: 39, manifest: db.Schema39ManifestHash, sql: db.EndpointTagRulesSQL, impact: &migrationImpact{
-		rebuiltTables: []string{"admin_endpoint_tags"}, addedTables: []string{"endpoint_tag_rules", "endpoint_tag_rule_tags"}, controlTables: []string{"endpoint_tag_domains"}, indexedTables: []string{"donation_keys"}, constraintTables: []string{"endpoints", "donation_keys"}, credentials: credentialsUnchanged}},
-	{from: 39, version: 40, manifest: db.Schema40ManifestHash, apply: isolateServiceKeys, impact: serviceScopeImpact},
-	{from: 40, version: 41, manifest: db.Schema41ManifestHash, sql: db.AgentDriversSQL + db.AgentPersonalMemorySQL + db.ManagementOperationsSQL, impact: &migrationImpact{
-		addedTables: []string{"agent_driver_profiles", "agent_driver_bindings", "agent_request_drivers", "agent_chatgpt_session", "ai_agent_personal_memories", "ai_agent_personal_memory_history", "management_operations", "management_operation_items", "management_operation_rollups", "management_operation_cleanup_jobs"}, credentials: credentialsUnchanged}},
-	{from: 41, version: 42, manifest: db.Schema42ManifestHash, apply: migrateOperatorDiagnostics, impact: &migrationImpact{
-		addedTables:   []string{"agent_codex_session", "request_attempt_diagnostics", "request_delivery_facts", "agent_request_diagnostics", "request_error_diagnostics", "management_operation_terms", "management_capture_context", "management_capture_rows", "management_capture_totals"},
-		rebuiltTables: []string{"agent_request_drivers"}, controlTables: []string{"management_operations", "management_operation_items"}, credentials: credentialsUnchanged}},
-	{from: 42, version: 43, manifest: db.Schema43ManifestHash, sql: db.OperatorFollowupSQL, impact: &migrationImpact{
-		addedTables: []string{"agent_operation_diagnostics"}, indexedTables: []string{"charity_request_outcomes", "game_fishing_rank_facts"},
-		constraintTables: []string{"donation_service_health"}, credentials: credentialsUnchanged}},
-	{from: 43, version: 44, manifest: db.Schema44ManifestHash,
-		sql:    "DROP INDEX idx_request_logs_charity_model;" + db.CharityLogCoveringIndexSQL,
-		impact: &migrationImpact{indexedTables: []string{"request_logs"}, credentials: credentialsUnchanged}},
-	{from: 44, version: 45, manifest: db.Schema45ManifestHash, sql: db.FishingPondSQL + db.FishingRecentOrderSQL + db.LakeNotesLiveLeaseIndexSQL, impact: &migrationImpact{
-		addedTables:   []string{"game_fishing_pond_outcomes", "game_fishing_pond_queue", "game_fishing_pond_counts", "game_fishing_pond_daily", "game_fishing_pond_totals"},
-		controlTables: []string{"game_fishing_pond_queue_state"}, relationTables: []string{"game_fishing_recent_order"}, indexedTables: []string{"lake_notes_casts"}, credentials: credentialsUnchanged}},
-	{from: 45, version: 46, manifest: db.Schema46ManifestHash, sql: db.BrowserAssociationsSQL, impact: &migrationImpact{
-		addedTables: []string{"browser_associations"}, credentials: credentialsUnchanged}},
-	{from: 46, version: 47, manifest: db.Schema47ManifestHash, sql: db.FishingPondHeadsSQL, impact: &migrationImpact{
-		relationTables: []string{"game_fishing_pond_queue_heads"}, constraintTables: []string{"game_fishing_pond_queue"}, credentials: credentialsUnchanged}},
-	{from: 47, version: 48, manifest: db.Schema48ManifestHash, sql: db.RequestLogOperationIndexSQL, impact: &migrationImpact{indexedTables: []string{"request_logs"}, credentials: credentialsUnchanged}},
-	{from: 48, version: 49, manifest: db.Schema49ManifestHash, sql: db.AttendanceSQL, impact: &migrationImpact{addedTables: []string{"attendance_periods", "attendance_tiers", "attendance_progress", "attendance_sign_ins", "attendance_awards"}, credentials: credentialsUnchanged}},
-	{from: 49, version: 50, manifest: db.Schema50ManifestHash, sql: db.ModelQuotaSQL + db.LakeExchangeDailyIndexSQL, impact: &migrationImpact{
-		addedTables: []string{"donation_model_quotas"}, constraintTables: []string{"donation_quota_rules", "donation_usage_reservations"},
-		indexedTables: []string{"donation_quota_rules", "donation_usage_reservations", "lake_notes_exchange_receipts"}, credentials: credentialsUnchanged}},
-	{from: 50, version: 51, manifest: db.Schema51ManifestHash, sql: db.RerankPathSQL + db.CallerParameterLengthSQL + db.StewardCharityPermissionsSQL + db.CharityAdaptationAuditSQL + db.KeyQueueSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardCharityPermissions(ctx, tx) }, impact: &migrationImpact{
-		controlTables: []string{"endpoints", "donation_uses", "donation_use_revisions", "dispatch_claim_targets", "steward_permissions", "endpoint_key_limits"}, rebuiltTables: []string{"dispatch_caller_parameter_errors", "request_adaptation_audits"}, credentials: credentialsUnchanged}},
-	{from: 51, version: 52, manifest: db.Schema52ManifestHash, apply: completeDiscoveryURLs, impact: &migrationImpact{
-		controlTables: []string{"discovery_source_revisions", "mainstream_channel_discovery_presets"}, credentials: credentialsUnchanged}},
-	{from: 52, version: 53, manifest: db.Schema53ManifestHash, sql: db.CreditOperationAssetsSQL + db.RequestLogOwnerIndexSQL + db.ImageTaskQueryIndexesSQL, impact: &migrationImpact{
-		relationTables: []string{"credit_operation_assets"}, constraintTables: []string{"credit_entries"}, indexedTables: []string{"request_logs", "image_activity_tasks"}, credentials: credentialsUnchanged}},
-	{from: 53, version: 54, manifest: db.Schema54ManifestHash, sql: db.StewardResourcePermissionSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardResourcePermission(ctx, tx) }, impact: &migrationImpact{controlTables: []string{"steward_permissions"}, credentials: credentialsUnchanged}},
-	{from: 54, version: 55, manifest: db.PinnedGenerationTwoManifestHash, sql: db.ModelConsumptionSQL, apply: backfillModelConsumption, impact: &migrationImpact{constraintTables: []string{"donation_model_quotas"}, credentials: credentialsUnchanged}},
-}}
+const SourceCommit = "03456c51d7537e806fc1b4576fc7e9660dc3f696"
+const SourceSchemaVersion = 54
+const toolName = "nonbiri-upgrade-v1"
 
 type Options struct {
-	Apply               bool
-	LegacyGatewayModels string
-	Progress            func(Progress)
+	Apply    bool
+	Progress func(Progress)
 }
 
 type Result struct {
@@ -124,131 +30,31 @@ type Result struct {
 
 func SchemaDescriptor() db.StorageSchemaDescriptor {
 	descriptor := db.SchemaDescriptor()
-	for _, source := range []struct {
-		version      int
-		hash, commit string
-	}{
-		{16, SourceManifestHash, SourceCommit},
-		{17, stableSchema17Manifest, "117c0cb009ab285451a3e0238ab97b383faebde3"},
-		{18, stableSchema18Manifest, "0f02e60704934b589b51ca91eb34bac9c5e77c02"},
-		{19, stableSchema19Manifest, "c4145513b1ca5bd20f0236763c247b8bd5c66df2"},
-		{20, stableSchema20Manifest, "51a1e6156cb164802b22fdd881a4ac2040dd1904"},
-		{21, stableSchema21Manifest, "bd49471c3e4da5a94bd85292805b17b318f50ddd"},
-		{22, stableSchema22Manifest, "ffe31ab3918ec96151b62533fd1ead4c22c466bd"},
-		{23, stableSchema23Manifest, "75044b0e685e0f2c3a0d41b19be6e54fd54d7b5b"},
-		{24, stableSchema24Manifest, "6f4ee67206eb6fb3a3f345ba06b2d85aba5abc83"},
-		{25, stableSchema25Manifest, "2b4f4f62ed5b01c247fcc3f79005358ef0237933"},
-		{26, stableSchema26Manifest, "361cb204e888de51901eecc993d3d52b1d156d3a"},
-		{33, db.Schema33ManifestHash, "a7ea261babd424470ff67d1d1b9a119c29437d2e"},
-		{34, db.Schema34ManifestHash, "8576d726e49bd76db6d191914cb4f3637b25f493"},
-		{35, db.Schema35ManifestHash, "2df56fe8814e6a9968380fc8461942065eed3f12"},
-		{36, db.Schema36ManifestHash, "1fc9527f0c9023542dfc7decf59789733a6a834f"},
-		{37, db.Schema37ManifestHash, "4413e15527dff68e42386ca4841c38fc93911539"},
-		{38, db.Schema38ManifestHash, "de51645924a488d742baad5ff1a35f6569f22746"},
-		{39, db.Schema39ManifestHash, "31f18116afe12c50a48bca87fe48c1a7c01ba796"},
-		{40, db.Schema40ManifestHash, "753a64a8e375632759e452ad9f1a222c84417422"},
-		{41, db.Schema41ManifestHash, "5c721cd00b1ebcc402f0b85ce02aa9014498aa97"},
-		{42, db.Schema42ManifestHash, "cd07f2ccde4d98b130c3c6c71e905bd4a6fd06d3"},
-		{43, db.Schema43ManifestHash, "3462a3832de64d6066cb5db567987ea4ec6c10cf"},
-		{44, db.Schema44ManifestHash, "d7cd4f3a9204adba79c62b3f3cf32671cc2ed884"},
-		{45, db.Schema45ManifestHash, "34afb7524eb7e1d7583dcf88352b15a5b233dc5d"},
-		{46, db.Schema46ManifestHash, "7189abc4f574df069608b7be6c59e06c7cfd1cfb"},
-		{47, db.Schema47ManifestHash, "b3b0dbfda01d3d22140c0c0a74e28afc2f2baa58"},
-		{48, db.Schema48ManifestHash, "9be4a03b9054f70d8a44ac7389378e4fe93dce0a"},
-		{49, db.Schema49ManifestHash, "4fd81dd0fd48b82e0ee55c562a9ea4f92b18eeca"},
-		{50, db.Schema50ManifestHash, "23afcd9fc058721f649ff352b216578c447f332b"},
-		{51, db.Schema51ManifestHash, "b0f488b08153d8cca7fb54f4d095f7e4feeb3fa1"},
-		{52, db.Schema52ManifestHash, "d8a00f455c6e2bc42f0bb2c760a1ecf05f919221"},
-		{53, db.Schema53ManifestHash, "3a4e7a7631013304db24ab264e412beffdf5737b"},
-		{54, db.Schema54ManifestHash, "03456c51d7537e806fc1b4576fc7e9660dc3f696"},
-	} {
-		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
-			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,
-			SourceManifestHash: source.hash, TargetSchemaVersion: db.CurrentSchemaVersion})
-	}
+	descriptor.OfflineConversions = []db.OfflineConversionDescriptor{{
+		Tool: toolName, SourceCommit: SourceCommit, SourceSchemaVersion: SourceSchemaVersion,
+		SourceManifestHash: db.Schema54ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion,
+	}}
 	return descriptor
 }
 
 func Run(ctx context.Context, path string, vault *secret.Vault, options Options) (Result, error) {
-	return run(ctx, path, vault, options, false)
-}
-
-func RunRC7(ctx context.Context, path string, vault *secret.Vault, options Options) (Result, error) {
-	return run(ctx, path, vault, options, true)
-}
-
-func run(ctx context.Context, path string, vault *secret.Vault, options Options, rc7Only bool) (Result, error) {
-	if ctx == nil {
-		return Result{}, errors.New("offline conversion context is required")
+	if ctx == nil || vault == nil {
+		return Result{}, errors.New("offline conversion context and encryption key are required")
 	}
-	ctx, stopProgress := withProgress(ctx, db.CurrentSchemaVersion, options.Progress, 5*time.Second)
-	defer stopProgress()
-	sources := []OfflineSchema{{Version: 16, ManifestHash: SourceManifestHash}}
-	if !rc7Only {
-		for _, schema := range storageSchema.versions {
-			if schema.version < storageSchema.target {
-				sources = append(sources, OfflineSchema{Version: schema.version, ManifestHash: schema.manifest})
-			}
-		}
-	}
-	sourceVersion := db.CurrentSchemaVersion
-	invalidLegacyConfiguration := false
-	var discoveryURLProblem error
-	needed, err := convertOffline(ctx, path, vault, sources, options.Apply, true, func(ctx context.Context, database *sql.DB) error {
-		if err := database.QueryRowContext(ctx, "SELECT version FROM schema_state WHERE id=1").Scan(&sourceVersion); err != nil {
-			return err
-		}
-		if sourceVersion != 16 {
-			if sourceVersion >= 33 {
-				discoveryURLProblem = checkCompleteDiscoveryURLs(ctx, database)
-				return discoveryURLProblem
-			}
-			return nil
-		}
-		var initialized int
-		if err := database.QueryRowContext(ctx, "SELECT count(*) FROM gateway_model_capabilities_state WHERE singleton=1").Scan(&initialized); err != nil {
-			return err
-		}
-		if initialized == 0 && strings.TrimSpace(options.LegacyGatewayModels) != "" {
-			_, err := gatewaypolicy.Parse(options.LegacyGatewayModels)
-			invalidLegacyConfiguration = err != nil
-			return err
-		}
-		return nil
-	}, func(ctx context.Context, database *sql.DB, tx *sql.Tx) error {
-		version, err := readSchemaVersion(ctx, tx)
-		if err != nil {
-			return err
-		}
-		if version == 16 {
-			return convert(ctx, database, tx, vault, options.LegacyGatewayModels)
-		}
-		return nil
-	})
+	ctx, stop := withProgress(ctx, db.CurrentSchemaVersion, options.Progress, 5*time.Second)
+	defer stop()
+	version, err := convertOffline(ctx, path, vault, options.Apply)
 	if err != nil {
-		if errors.Is(discoveryURLProblem, errDiscoveryURLTooLong) {
-			return Result{}, discoveryURLProblem
-		}
-		if invalidLegacyConfiguration {
-			return Result{}, errors.New("legacy Gateway model configuration is invalid")
-		}
 		return Result{}, err
 	}
 	status := "current"
-	if needed {
+	if version == SourceSchemaVersion {
 		status = "ready"
 		if options.Apply {
 			status = "converted"
 		}
 	}
-	supported := make([]int, 0, len(sources))
-	for _, source := range sources {
-		supported = append(supported, source.Version)
-	}
-	tool := "nonbiri-upgrade-v1"
-	if rc7Only {
-		tool = "nonbiri-upgrade-rc7"
-	}
-	return Result{Tool: tool, Status: status, SourceSchemaVersion: sourceVersion, TargetSchemaVersion: db.CurrentSchemaVersion,
-		TargetManifestHash: db.PinnedGenerationTwoManifestHash, SupportedSourceSchemaVersions: supported}, nil
+	return Result{Tool: toolName, TargetManifestHash: db.PinnedGenerationTwoManifestHash,
+		SupportedSourceSchemaVersions: []int{SourceSchemaVersion}, Status: status,
+		SourceSchemaVersion: version, TargetSchemaVersion: db.CurrentSchemaVersion}, nil
 }

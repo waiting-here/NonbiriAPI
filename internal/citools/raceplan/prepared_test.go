@@ -59,10 +59,9 @@ func TestReviewedPolicyRetainsDatabaseLifecycleAndEngineCancellation(t *testing.
 		{"fatfish/engine", []string{"TestSharedLevelReplayLeavesCallerDataUnchanged", "TestReplayCancellationAtBoundedTick"}},
 		{"upgrade/v1", []string{
 			"TestConversionWaitsForExclusiveDatabaseAccess",
-			"TestSchema37OfflineIndexesPreserveFactsAndReenter",
-			"TestSchema37OfflineIndexesRollBackAndRetryPartialDDL",
-			"TestSchema37OfflineIndexesRollBackAndRetryTargetMismatch",
-			"TestSchema37OfflineIndexesRollBackAndRetryCancelBeforeCommit",
+			"TestModelConsumptionUpgradePreservesHistoryAndLiveHolds",
+			"TestUnsupportedUpgradeSourcesRemainUnchanged",
+			"TestProgressSerializesHeartbeatStagesAndStopsBeforeReturn",
 		}},
 	} {
 		for _, test := range item.tests {

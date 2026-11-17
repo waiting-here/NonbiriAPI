@@ -252,7 +252,7 @@ func TestEndpointBackoffSharedByNewKeysWithExactEndpointIsolation(t *testing.T) 
 	}
 }
 
-func TestEndpointBackoffUpgradePreservesWaitingAndInFlight(t *testing.T) {
+func TestEndpointBackoffRecoveryPreservesWaitingAndInFlight(t *testing.T) {
 	for _, state := range []string{"waiting", "trial", "accepted"} {
 		t.Run(state, func(t *testing.T) {
 			e := newBackoffEnv(t)
@@ -270,7 +270,6 @@ func TestEndpointBackoffUpgradePreservesWaitingAndInFlight(t *testing.T) {
 			if _, err := e.store.DB().Exec(`INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at) VALUES(?,?,?)`, e.donationKey, e.clock.Load()+123, e.clock.Load()); err != nil {
 				t.Fatal(err)
 			}
-			e.upgradeBackoffSchema(t, 26, "")
 			if _, err := e.rail.RecoverNonterminal(t.Context(), 100); err != nil {
 				t.Fatal(err)
 			}

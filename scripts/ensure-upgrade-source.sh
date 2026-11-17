@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 test "$#" -eq 1
 source_commit=$1
 case "$source_commit" in
-  82f1711b674425745a768f781e0e0c34dcb37ac3) ;;
+  03456c51d7537e806fc1b4576fc7e9660dc3f696) ;;
   *) printf 'Unrecognized released source commit\n' >&2; exit 2 ;;
 esac
 if ! git cat-file -e "$source_commit^{commit}" 2>/dev/null; then

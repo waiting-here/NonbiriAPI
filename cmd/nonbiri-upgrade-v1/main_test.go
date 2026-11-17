@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -17,7 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/upgrade/v1"
 )
 
-var expectedSourceSchemaVersions = []int{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54}
+var expectedSourceSchemaVersions = []int{54}
 
 func TestArgumentErrorsDoNotReadOrExposeEnvironment(t *testing.T) {
 	t.Setenv("NONBIRI_MASTER_KEY", "private-key-value")
@@ -47,14 +48,6 @@ func TestSchemaInfoNeedsNoDatabaseOrSecretEnvironment(t *testing.T) {
 		if source.SourceSchemaVersion != expectedSourceSchemaVersions[index] || source.TargetSchemaVersion != db.CurrentSchemaVersion || source.Tool != "nonbiri-upgrade-v1" || len(source.SourceCommit) != 40 || len(source.SourceManifestHash) != 64 {
 			t.Fatal("unexpected source descriptor", source)
 		}
-	}
-	published := descriptor.OfflineConversions[slices.Index(expectedSourceSchemaVersions, 45)]
-	if published.SourceSchemaVersion != 45 || published.SourceManifestHash != db.Schema45ManifestHash || published.SourceCommit != "34afb7524eb7e1d7583dcf88352b15a5b233dc5d" {
-		t.Fatal("published source identity changed", published)
-	}
-	production := descriptor.OfflineConversions[slices.Index(expectedSourceSchemaVersions, 52)]
-	if production.SourceManifestHash != db.Schema52ManifestHash || production.SourceCommit != "d8a00f455c6e2bc42f0bb2c760a1ecf05f919221" {
-		t.Fatal("production source identity changed", production)
 	}
 	last := descriptor.OfflineConversions[len(descriptor.OfflineConversions)-1]
 	if last.SourceSchemaVersion != 54 || last.SourceManifestHash != db.Schema54ManifestHash || last.SourceCommit != "03456c51d7537e806fc1b4576fc7e9660dc3f696" {
@@ -112,5 +105,22 @@ func TestCurrentDatabaseCommandNeedsOnlyEncryptionEnvironment(t *testing.T) {
 		if !target || audit != (mode == "--check") {
 			t.Fatal("progress did not describe explicit audit scope", mode, audit, target)
 		}
+	}
+
+	database, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = database.Exec("UPDATE credit_capacity SET reserved_future_rows=nbi_u128(1)"); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	if err = database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	err = run(t.Context(), []string{"--check"}, &output)
+	if err == nil || !strings.Contains(err.Error(), "ledger and reservation audit") || strings.Contains(err.Error(), path) || output.Len() != 0 {
+		t.Fatal("default CLI audit error", err)
 	}
 }

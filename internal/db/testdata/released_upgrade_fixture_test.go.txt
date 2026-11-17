@@ -4,31 +4,29 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"os"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
-	"github.com/waiting-here/NonbiriAPI/internal/lakenotes/rules"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // This fixture is compiled with the pinned released source.
 func TestWriteReleasedUpgradeFixture(t *testing.T) {
-	if db.GenerationTwoSchemaHash() != "f497335da8efcdd49132bc9d7c3d97bf8bb41dc5f2ca14ce557871ddc76e5c17" || db.PinnedGenerationTwoManifestHash != "484bf7ee92aec1dfb9c8750e9bb1a73b2b4b5d1e9761e1f86c5dcd31d2719f23" || db.PinnedGenerationTwoFreshConfigSeedHash != "9773098cd2282c59dbecb6062ba1a64a13b4e0b0bf8c43845c152ced03d813d5" {
+	if db.CurrentSchemaVersion != 54 || db.GenerationTwoSchemaHash() != "5bbdbb07331f5eef57d12ca5f84a95527c7635c4f37f803e7661afdc2dfd9718" || db.PinnedGenerationTwoManifestHash != "ca682daf10a780b8ab38d4095301324a1f007af3fb2ac159fbbbf0daef0107b5" || db.PinnedGenerationTwoFreshConfigSeedHash != "a9a83a0f0aa9002cc8db5ba9488237f6420579ef95bee6193310a64fe04585c6" {
 		t.Fatal("wrong released schema")
 	}
 	path := os.Getenv("NONBIRI_RELEASED_FIXTURE")
 	if path == "" {
 		t.Fatal("missing fixture destination")
 	}
-	dbfixture.Materialize(t, path)
 	vault, err := secret.New(bytes.Repeat([]byte{0x42}, secret.MasterKeyBytes))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer vault.Close()
+	dbfixture.Materialize(t, path, vault)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)
@@ -107,8 +105,7 @@ func TestWriteReleasedUpgradeFixture(t *testing.T) {
 	}
 	seedReleasedGovernanceFacts(t, tx, vault, users)
 	seedReleasedEconomyAuditProjection(t, tx, users)
-	seedReleasedLakeNotes(t, tx, users[0])
-	seedReleasedGachaFacts(t, tx, users[0])
+
 	if err := ValidateRecovery(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
@@ -127,48 +124,6 @@ func TestWriteReleasedUpgradeFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-type releasedLakeRandom struct{}
-
-func (releasedLakeRandom) Float53() (float64, error) { return 0.5, nil }
-
-func seedReleasedLakeNotes(t *testing.T, tx *sql.Tx, user int64) {
-	t.Helper()
-	profile := rules.InitialProfile()
-	profile.Coins = "3700"
-	profile.OwnedGear = append(profile.OwnedGear, "trainingRod")
-	profile.BaitStock["basic"] = 7
-	profile, cast, err := rules.Start(profile, releasedLakeRandom{}, 17)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cast.Paused = true
-	profileRaw, err := rules.EncodeProfile(profile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	castRaw, err := rules.EncodeCast(cast)
-	if err != nil {
-		t.Fatal(err)
-	}
-	coins, err := db.ParseU128Decimal(string(profile.Coins))
-	if err != nil {
-		t.Fatal(err)
-	}
-	period := mustLedgerID(t, "lnp_")
-	if _, err := tx.Exec(`INSERT INTO lake_notes_periods(id,name,revision,status,starts_at,ends_at,entry_fee_milli,created_at,updated_at) VALUES(?,'Saved lake',1,'published',?,?,0,?,?)`, period, ledgerTestNow-100, ledgerTestNow+100, ledgerTestNow, ledgerTestNow); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`INSERT INTO lake_notes_profiles(user_id,revision,rules_id,coin_mag,profile,updated_at) VALUES(?,2,?,?,?,?)`, user, rules.RulesID, db.EncodeU128(coins), profileRaw, ledgerTestNow); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`INSERT INTO lake_notes_casts(id,user_id,source_period_id,rules_id,phase,paused,generation,revision,last_tick,snapshot,reward_plan,held,active_elapsed_ns,created_at,updated_at) VALUES(?,?,?,?,'waiting',1,1,2,0,?,X'7b7d',0,0,?,?)`, mustLedgerID(t, "lnc_"), user, period, rules.RulesID, castRaw, ledgerTestNow, ledgerTestNow); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`INSERT INTO lake_notes_entitlements(user_id,period_id,fee_milli,period_revision,operation_key_hash,created_at) VALUES(?,?,0,1,zeroblob(32),?)`, user, period, ledgerTestNow); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -198,27 +153,5 @@ func TestReleasedRejectsStableSchema(t *testing.T) {
 	after, err := os.ReadFile(path)
 	if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
 		t.Fatal("rejection modified the database", err)
-	}
-}
-
-func seedReleasedGachaFacts(t *testing.T, tx *sql.Tx, user int64) {
-	t.Helper()
-	pool := mustLedgerID(t, "gp_")
-	queries := []struct {
-		query string
-		args  []any
-	}{
-		{"INSERT INTO gacha_pools(id,config,revision,created_at) SELECT ?,config,7,? FROM gacha_presets ORDER BY id LIMIT 1", []any{pool, ledgerTestNow}},
-		{"INSERT INTO gacha_config_events(actor_user_id,target,revision,config,created_at) SELECT ?,id,revision,config,created_at FROM gacha_pools WHERE id=?", []any{user, pool}},
-		{"INSERT INTO gacha_profiles(user_id,permanent,limited,n_shards,r_shards,sr_shards,ssr_shards,newcomer,checked_day,month,monthly_permanent,monthly_limited,entered_at,updated_at,limited_checked_day,welcome_granted) VALUES(?,37,11,9,7,5,3,0,'2023-11-14','2023-11',4,2,?,?,'2023-11-14',1)", []any{user, ledgerTestNow, ledgerTestNow}},
-		{"INSERT INTO gacha_owned(user_id,card_id,obtained_at,source) VALUES(?,'a-chatgpt',?,'reward')", []any{user, ledgerTestNow}},
-		{"INSERT INTO gacha_pity(user_id,group_id,sr,ssr,sr_limit,ssr_limit,sr_featured,ssr_featured,ssr_misses) VALUES(?,'permanent',3,42,10,90,1,0,1)", []any{user}},
-		{"INSERT INTO gacha_claims(user_id,kind,target,created_at) VALUES(?,'card','a-chatgpt',?)", []any{user, ledgerTestNow}},
-		{"UPDATE gacha_presets SET name='Edited synthetic template',revision=8 WHERE id=(SELECT id FROM gacha_presets ORDER BY id LIMIT 1)", nil},
-	}
-	for _, item := range queries {
-		if _, err := tx.Exec(item.query, item.args...); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
