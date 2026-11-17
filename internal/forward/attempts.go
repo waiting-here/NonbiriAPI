@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
@@ -116,6 +117,7 @@ func (service *Service) runAttempts(
 				})
 			}
 		}
+		aggregateClaim := balanced
 		handle, err := service.claims.Claim(executionContext, claimInput)
 		if err != nil {
 			queueCandidates = append(queueCandidates, claim.KeyQueueCandidates(err)...)
@@ -124,6 +126,7 @@ func (service *Service) runAttempts(
 				if queue, ok := service.claims.(interface {
 					WaitForKey(context.Context, []claim.ClaimInput) (claim.Handle, error)
 				}); ok {
+					aggregateClaim = true
 					handle, err = queue.WaitForKey(executionContext, queueCandidates)
 					if executionContext.Err() != nil && err != nil {
 						break
@@ -155,6 +158,13 @@ func (service *Service) runAttempts(
 			}
 		}
 		if err != nil {
+			// A balanced claim or wait can examine several bindings. Its result
+			// cannot be attributed to the first candidate in the plan.
+			scope := candidate
+			if aggregateClaim {
+				scope = RouteCandidate{}
+			}
+			observeClaimError(parent, scope, "claim", err)
 			if errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable) {
 				if plan.charity || !run.dispatched {
 					value := failureForError(err, plan.charity)
@@ -207,6 +217,9 @@ func (service *Service) runAttempts(
 		dispatch, err := service.claims.TakeForDispatch(executionContext, handle)
 		if err != nil {
 			released := run.handleDispatchFailure(parent, service, handle, err)
+			if released {
+				observeClaimError(parent, candidate, "dispatch", err)
+			}
 			if released && (errors.Is(err, donationquota.ErrLimited) || errors.Is(err, claim.ErrKeyRateLimited) || (plan.charity && errors.Is(err, claim.ErrNotFound))) {
 				keyLimited = keyLimited || errors.Is(err, donationquota.ErrLimited) || errors.Is(err, claim.ErrKeyRateLimited)
 				run.err = nil
@@ -398,6 +411,19 @@ func (service *Service) runAttempts(
 		}
 	}
 	return run
+}
+
+func observeClaimError(ctx context.Context, candidate RouteCandidate, stage string, err error) {
+	var reason string
+	switch {
+	case errors.Is(err, claim.ErrKeyRateLimited), errors.Is(err, donationquota.ErrLimited), errors.Is(err, donationquota.ErrCapacity):
+		reason = "capacity"
+	case errors.Is(err, claim.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
+		reason = "unavailable"
+	default:
+		return
+	}
+	requestattempt.ObserveRecheck(ctx, candidate.BindingID, candidate.Authorization.NativeService, reason, stage)
 }
 
 func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Service, handle claim.Handle, dispatchErr error) bool {

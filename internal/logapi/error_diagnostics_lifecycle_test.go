@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func TestFailureFactsFollowAccountRetirementRetentionAndHold(t *testing.T) {
@@ -24,7 +24,8 @@ func TestFailureFactsFollowAccountRetirementRetentionAndHold(t *testing.T) {
 	}
 	ids := make([]string, 2)
 	for i := range ids {
-		ids[i], err = db.GenerateOpaqueID("req_")
+		ctx, id, err := requestattempt.New(t.Context(), owner, "POST", "/v1/chat/completions")
+		ids[i] = id
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,7 +35,10 @@ func TestFailureFactsFollowAccountRetirementRetentionAndHold(t *testing.T) {
 		if _, err = f.store.DB().Exec("INSERT INTO request_attempt_diagnostics(claim_id,request_log_id,attempt_seq,category,phase,details,completed_at) SELECT claim_id,request_log_id,attempt_seq,'network','read_response',?,? FROM request_attempts WHERE request_log_id=?", facts, now, logID); err != nil {
 			t.Fatal(err)
 		}
-		if err = recorder.RecordDelivery(t.Context(), ids[i], diagnostic.Delivery{HTTPStatus: 200, Bytes: 12}); err != nil {
+		if i == 1 {
+			requestattempt.ObserveRoute(ctx, 4, "responses", "eligible", "conversion", "")
+		}
+		if err = recorder.RecordDelivery(ctx, ids[i], diagnostic.Delivery{HTTPStatus: 200, Bytes: 12}); err != nil {
 			t.Fatal(err)
 		}
 		if i == 1 {
@@ -65,13 +69,16 @@ func TestFailureFactsFollowAccountRetirementRetentionAndHold(t *testing.T) {
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range ids {
+	for i, id := range ids {
 		if _, err = f.repo.GetUser(t.Context(), owner, id, AttemptFilter{}); !errors.Is(err, ErrNotFound) {
 			t.Fatal("deleted owner still reads", err)
 		}
 		detail, err := f.repo.GetAdmin(t.Context(), id, AttemptFilter{})
 		if err != nil || detail.Request.UserID != nil || detail.Delivery == nil || detail.Attempts.Data[0].ErrorDiagnostics.Message != "safe retained cause" {
 			t.Fatal("anonymization destroyed retained facts", detail, err)
+		}
+		if i == 0 && detail.RouteDecision != nil || i == 1 && (detail.RouteDecision == nil || detail.RouteDecision.Observations[0].Reason != "eligible") {
+			t.Fatal("route history changed after account retirement", detail.RouteDecision)
 		}
 	}
 	result, err := f.repo.RetainLifecycleRequestLogs(t.Context(), now+requestLogRetentionSeconds, 100, time.Now().Add(5*time.Second))

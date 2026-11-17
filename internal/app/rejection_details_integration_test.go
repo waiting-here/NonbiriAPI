@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -238,6 +239,11 @@ FROM request_logs WHERE logical_request_id=?`, id).Scan(&diag, &attempts, &claim
 				var admin logapi.AdminLogDetail
 				if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &admin) != nil || admin.Request.RejectionDetail == nil || *admin.Request.RejectionDetail != *detail {
 					t.Fatal("administrator detail did not retain the persisted check", read.Code, read.Body)
+				}
+				if admin.RouteDecision == nil || !slices.ContainsFunc(admin.RouteDecision.Observations, func(o requestattempt.RouteObservation) bool {
+					return o.Reason == "protocol_rejected" && o.Match == "conversion" && o.NativeService == "chat_completions" && o.Field == "reasoning"
+				}) {
+					t.Fatalf("reverse conversion was not recorded: %+v", admin.RouteDecision)
 				}
 				steward, err := f.app.logs.GetSteward(context.Background(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{})
 				if err != nil || steward.Request.RejectionDetail == nil || *steward.Request.RejectionDetail != *detail {

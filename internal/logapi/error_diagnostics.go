@@ -5,23 +5,34 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
-func readDelivery(ctx context.Context, reader logReadQueryer, logID int64) (*diagnostic.Delivery, error) {
+func readDelivery(ctx context.Context, reader logReadQueryer, logID int64, management bool) (*diagnostic.Delivery, *requestattempt.RouteDecision, error) {
 	var raw string
 	err := reader.QueryRowContext(ctx, "SELECT details FROM request_delivery_facts WHERE request_log_id=?", logID).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, translateReadError(ctx, err)
+		return nil, nil, translateReadError(ctx, err)
 	}
-	var value diagnostic.Delivery
+	var value struct {
+		diagnostic.Delivery
+		Route json.RawMessage `json:"route_decision"`
+	}
 	if len(raw) > 16<<10 || json.Unmarshal([]byte(raw), &value) != nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return &value, nil
+	if management && len(value.Route) > 0 {
+		var route requestattempt.RouteDecision
+		if json.Unmarshal(value.Route, &route) == nil && route.Valid() {
+			return &value.Delivery, &route, nil
+		}
+	}
+	return &value.Delivery, nil, nil
 }
 
 func redactFailure(f *diagnostic.Failure, redact func(string) string) {
