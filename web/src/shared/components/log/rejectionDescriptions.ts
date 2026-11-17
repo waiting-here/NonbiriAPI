@@ -310,6 +310,12 @@ export const rejectionDescriptionKeys: Record<string, string> = {
     'logs.rejectionSuggestions.Use a supported streaming value and valid stream options.',
   'Correct the field type or value according to the stated requirement.':
     'logs.rejectionSuggestions.Correct the field type or value according to the stated requirement.',
+  "Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.":
+    "logs.rejectionSuggestions.Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.",
+  'Use complete Chat messages or choose a model with native Responses support.':
+    'logs.rejectionSuggestions.Use complete Chat messages or choose a model with native Responses support.',
+  'Turn off tool flattening or choose a model with a source that supports it.':
+    'logs.rejectionSuggestions.Turn off tool flattening or choose a model with a source that supports it.',
   'no usable model resource is available for this request':
     'logs.rejectionDescriptions.no usable model resource is available for this request',
   'shared model resources are temporarily at capacity':

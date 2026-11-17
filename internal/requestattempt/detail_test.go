@@ -83,6 +83,22 @@ func TestTopLevelLocationRetainsPositionWithoutArbitraryNames(t *testing.T) {
 	}
 }
 
+func TestProtocolSuggestionsUseTheRecordedFailure(t *testing.T) {
+	for _, item := range []struct{ reason, want string }{
+		{"field cannot be represented by this connector", "upstream bindings"},
+		{"Responses fields cannot be represented by the selected Chat protocol", "upstream bindings"},
+		{"rerank field is not supported by the selected protocol", "upstream bindings"},
+		{"Responses input cannot be represented as complete Chat messages", "native Responses"},
+		{"tool flattening is unavailable for Responses conversion", "Turn off tool flattening"},
+		{"expected the integer 1", "field type or value"},
+	} {
+		current := NewDetail("n", item.reason)
+		if current == nil || !strings.Contains(current.Suggestion, item.want) {
+			t.Fatalf("%s: %+v", item.reason, current)
+		}
+	}
+}
+
 func TestHistoricalUnknownReasonRebuildsSuggestion(t *testing.T) {
 	detail := DecodeDetail(`{"field":"request","reason":"request validation failed without a recorded field","suggestion":"Check the request format and selected model capabilities. If it persists, share the request ID with support."}`)
 	if detail == nil || detail.Suggestion != "The specific cause was not recorded. Share the request ID with support if the problem persists." {
