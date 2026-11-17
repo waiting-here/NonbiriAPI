@@ -20,8 +20,8 @@ func validateModelReservations(ctx context.Context, tx *sql.Tx) error {
 	if mismatch {
 		return fmt.Errorf("%w: model receipt identity", ErrInvariant)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT q.donation_key_id,q.upstream_model_id,q.tokens_reserved,q.input_tokens_reserved,q.output_tokens_reserved,
- u.claim_id,u.tokens_reserved,u.input_tokens_reserved,u.output_tokens_reserved
+	rows, err := tx.QueryContext(ctx, `SELECT q.donation_key_id,q.upstream_model_id,q.tokens_reserved,q.input_tokens_reserved,q.output_tokens_reserved,q.calls_reserved,q.price_reserved_mag,
+ u.claim_id,u.tokens_reserved,u.input_tokens_reserved,u.output_tokens_reserved,u.calls_reserved,u.price_reserved_milli
  FROM donation_model_quotas q LEFT JOIN donation_usage_reservations u
  ON u.donation_key_id=q.donation_key_id AND u.upstream_model_id=q.upstream_model_id AND u.state='reserved'
  ORDER BY q.donation_key_id,q.upstream_model_id,u.claim_id`)
@@ -31,21 +31,21 @@ func validateModelReservations(ctx context.Context, tx *sql.Tx) error {
 	defer rows.Close()
 	var key int64
 	var model string
-	var expected, sum [3]db.U128
+	var expected, sum [len(modelMetrics)]db.U128
 	check := func() error {
 		if key != 0 && expected != sum {
-			return fmt.Errorf("%w: model token occupancy", ErrInvariant)
+			return fmt.Errorf("%w: model quota occupancy", ErrInvariant)
 		}
 		return nil
 	}
 	for rows.Next() {
 		var id int64
 		var name string
-		var blobs [3][]byte
+		var blobs [len(modelMetrics)][]byte
 		var claim *string
-		var total sql.NullInt64
+		var total, calls, price sql.NullInt64
 		var input, output *int64
-		if err = rows.Scan(&id, &name, &blobs[0], &blobs[1], &blobs[2], &claim, &total, &input, &output); err != nil {
+		if err = rows.Scan(&id, &name, &blobs[0], &blobs[1], &blobs[2], &blobs[3], &blobs[4], &claim, &total, &input, &output, &calls, &price); err != nil {
 			return err
 		}
 		if id != key || name != model {
@@ -53,8 +53,8 @@ func validateModelReservations(ctx context.Context, tx *sql.Tx) error {
 				return err
 			}
 			key, model = id, name
-			sum = [3]db.U128{}
-			for i := range 3 {
+			sum = [len(modelMetrics)]db.U128{}
+			for i := range modelMetrics {
 				if expected[i], err = magnitude(blobs[i]); err != nil {
 					return err
 				}
@@ -64,11 +64,12 @@ func validateModelReservations(ctx context.Context, tx *sql.Tx) error {
 			continue
 		}
 		vector := TokenVector{Total: total.Int64, Input: input, Output: output}
-		if !total.Valid || !vector.Valid() {
+		usage := Consumption{TokenVector: vector, Calls: calls.Int64, PriceMilli: price.Int64}
+		if !total.Valid || !calls.Valid || !price.Valid || !usage.valid() {
 			return ErrInvariant
 		}
-		values := modelValues(vector)
-		for i := range 3 {
+		values := modelValues(usage.amounts())
+		for i := range modelMetrics {
 			if sum[i], err = add(sum[i], values[i]); err != nil {
 				return err
 			}

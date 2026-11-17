@@ -406,7 +406,7 @@ dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.token
 `+smartbackoff.EffectiveUntilSQL("dk.id")+`,
 EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.upstream_model_id='' AND qr.current_epoch IS NOT NULL),
 (EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=dk.id AND mq.upstream_model_id=t.upstream_model_id
- AND (mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+ AND (mq.price_limit_mag IS NOT NULL OR mq.call_limit_mag IS NOT NULL OR mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
  OR EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.upstream_model_id=t.upstream_model_id AND qr.current_epoch IS NOT NULL))
 FROM charity_model_bindings b
 JOIN charity_binding_targets t ON t.binding_id=b.id
@@ -431,6 +431,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 	weighted := make([]weightedRuntimeCandidate, 0, MaxRuntimeCandidates)
 	type keyQuota struct {
 		reservation        donationquota.TokenVector
+		amounts            donationquota.Amounts
 		budgetAvailable    bool
 		recurringChecked   bool
 		recurringAvailable bool
@@ -525,20 +526,19 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			continue
 		}
 		candidate.Policy.ForceStoreFalse = forceStore == 1
-		quotaPrice, err := db.U128FromBig(big.NewInt(priceReserve))
-		if err != nil {
-			return RuntimeSnapshot{}, ErrInvariant
-		}
-		quotaCalls, _ := db.U128FromBig(big.NewInt(1))
 		if !quota.recurringChecked {
-			amounts := quota.reservation.Amounts()
-			amounts.Calls, amounts.Credits = quotaCalls, quotaPrice
+			quota.amounts = quota.reservation.Amounts()
+			quota.amounts.Calls, _ = db.U128FromBig(big.NewInt(1))
+			quota.amounts.Credits, err = db.U128FromBig(big.NewInt(priceReserve))
+			if err != nil {
+				return RuntimeSnapshot{}, ErrInvariant
+			}
 			// The joined key and rule-presence check use this transaction's
 			// snapshot. Empty current rules need no separate epoch read;
 			// token-vector and cumulative budgets were still checked above.
 			quota.recurringAvailable = true
 			if hasCurrentQuotaRules {
-				quota.recurringAvailable, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, amounts)
+				quota.recurringAvailable, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, quota.amounts)
 				if err != nil {
 					return RuntimeSnapshot{}, err
 				}
@@ -556,7 +556,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		if !checked {
 			modelAvailable = true
 			if hasModelQuotaLimits {
-				modelAvailable, err = donationquota.ModelAvailable(ctx, tx, candidate.DonationKeyID, decisionNow, candidate.UpstreamModelID, quota.reservation)
+				modelAvailable, err = donationquota.ModelAvailable(ctx, tx, candidate.DonationKeyID, decisionNow, candidate.UpstreamModelID, quota.amounts)
 				if err != nil {
 					return RuntimeSnapshot{}, err
 				}

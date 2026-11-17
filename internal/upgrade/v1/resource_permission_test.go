@@ -12,8 +12,21 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
+func restoreSchema54LayoutForTest(t *testing.T, database *sql.DB) {
+	t.Helper()
+	hostileMustExec(t, database, `ALTER TABLE donation_model_quotas DROP COLUMN historical_costs_partial;
+ALTER TABLE donation_model_quotas DROP COLUMN price_reserved_mag;
+ALTER TABLE donation_model_quotas DROP COLUMN calls_reserved;
+ALTER TABLE donation_model_quotas DROP COLUMN price_used_mag;
+ALTER TABLE donation_model_quotas DROP COLUMN calls_used;
+ALTER TABLE donation_model_quotas DROP COLUMN price_limit_mag;
+ALTER TABLE donation_model_quotas DROP COLUMN call_limit_mag;`)
+	assertRetainedManifest(t, database, db.Schema54ManifestHash)
+}
+
 func restoreSchema53LayoutForTest(t *testing.T, database *sql.DB) {
 	t.Helper()
+	restoreSchema54LayoutForTest(t, database)
 	hostileMustExec(t, database, db.StewardCharityPermissionsSQL)
 	assertRetainedManifest(t, database, db.Schema53ManifestHash)
 }

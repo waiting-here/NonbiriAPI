@@ -103,7 +103,8 @@ var storageSchema = schemaRegistry{baseline: 17, target: db.CurrentSchemaVersion
 		controlTables: []string{"discovery_source_revisions", "mainstream_channel_discovery_presets"}, credentials: credentialsUnchanged}},
 	{from: 52, version: 53, manifest: db.Schema53ManifestHash, sql: db.CreditOperationAssetsSQL + db.RequestLogOwnerIndexSQL + db.ImageTaskQueryIndexesSQL, impact: &migrationImpact{
 		relationTables: []string{"credit_operation_assets"}, constraintTables: []string{"credit_entries"}, indexedTables: []string{"request_logs", "image_activity_tasks"}, credentials: credentialsUnchanged}},
-	{from: 53, version: 54, manifest: db.PinnedGenerationTwoManifestHash, sql: db.StewardResourcePermissionSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardResourcePermission(ctx, tx) }, impact: &migrationImpact{controlTables: []string{"steward_permissions"}, credentials: credentialsUnchanged}},
+	{from: 53, version: 54, manifest: db.Schema54ManifestHash, sql: db.StewardResourcePermissionSQL, apply: func(ctx context.Context, tx *sql.Tx) error { return db.UpgradeStewardResourcePermission(ctx, tx) }, impact: &migrationImpact{controlTables: []string{"steward_permissions"}, credentials: credentialsUnchanged}},
+	{from: 54, version: 55, manifest: db.PinnedGenerationTwoManifestHash, sql: db.ModelConsumptionSQL, apply: backfillModelConsumption, impact: &migrationImpact{constraintTables: []string{"donation_model_quotas"}, credentials: credentialsUnchanged}},
 }}
 
 type Options struct {
@@ -159,6 +160,7 @@ func SchemaDescriptor() db.StorageSchemaDescriptor {
 		{51, db.Schema51ManifestHash, "b0f488b08153d8cca7fb54f4d095f7e4feeb3fa1"},
 		{52, db.Schema52ManifestHash, "d8a00f455c6e2bc42f0bb2c760a1ecf05f919221"},
 		{53, db.Schema53ManifestHash, "3a4e7a7631013304db24ab264e412beffdf5737b"},
+		{54, db.Schema54ManifestHash, "03456c51d7537e806fc1b4576fc7e9660dc3f696"},
 	} {
 		descriptor.OfflineConversions = append(descriptor.OfflineConversions, db.OfflineConversionDescriptor{
 			Tool: "nonbiri-upgrade-v1", SourceCommit: source.commit, SourceSchemaVersion: source.version,

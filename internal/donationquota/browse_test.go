@@ -185,12 +185,12 @@ func TestBrowseModelSlidingWindowMatchesExactUpstream(t *testing.T) {
 	}
 	for _, model := range []string{"selected", "unrelated"} {
 		for _, at := range []int64{testNow + 1, testNow + 2, testNow + 61, testNow + 86402} {
-			want, err := ModelAvailable(t.Context(), q, 1, at, model, TokenVector{Total: 2})
+			want, err := ModelAvailable(t.Context(), q, 1, at, model, TokenVector{Total: 2}.Amounts())
 			if err != nil {
 				t.Fatal(err)
 			}
 			var got bool
-			err = q.QueryRowContext(t.Context(), "SELECT "+ModelAvailabilityPredicate("1", "?1", "?2", "2"), model, at).Scan(&got)
+			err = q.QueryRowContext(t.Context(), "SELECT "+ModelAvailabilityPredicate("1", "?1", "?2", "0", "2"), model, at).Scan(&got)
 			if err != nil || got != want {
 				t.Fatalf("model=%s at=%d browse=%v runtime=%v err=%v", model, at, got, want, err)
 			}
@@ -261,5 +261,72 @@ func TestBrowseStartedReservationLeavesAndReentersSlidingWindow(t *testing.T) {
 	var settled bool
 	if err := q.QueryRow(`SELECT EXISTS(SELECT 1 FROM donation_quota_receipts WHERE claim_id=? AND state='settled' AND actual_mag=nbi_u128(3) AND remaining_reserved_mag IS NULL) AND NOT EXISTS(SELECT 1 FROM donation_quota_buckets WHERE reserved_mag<>zeroblob(16)) AND NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE window_reserved<>zeroblob(16) OR pending_reserved<>zeroblob(16))`, id).Scan(&settled); err != nil || !settled {
 		t.Fatalf("settlement left a reservation: %v %v", settled, err)
+	}
+}
+
+func TestBrowseModelConsumptionMatchesRuntime(t *testing.T) {
+	q := newQuotaDB(t)
+	for _, tc := range []struct {
+		name, metric, limit string
+		recurring           bool
+		price               int64
+		want                bool
+	}{
+		{"total-price-exact", "credits", "1.125", false, 1125, true},
+		{"total-price-short", "credits", "1.125", false, 1126, false},
+		{"free-closed", "credits", "0", false, 0, false},
+		{"call-closed", "calls", "0", false, 0, false},
+		{"sliding-price-short", "credits", "1.125", true, 1126, false},
+		{"sliding-call-closed", "calls", "0", true, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := transaction(t, q, func(tx *sql.Tx) error {
+				if tc.recurring {
+					r := rule(tc.metric, tc.limit)
+					r.Mode, r.Interval, r.Alignment = "sliding", "1h", nil
+					return ReplaceModel(t.Context(), tx, 1, testNow, tc.name, []RuleInput{r})
+				}
+				limits := ModelLimits{}
+				if tc.metric == "credits" {
+					limits.Credits = &tc.limit
+				} else {
+					limits.Calls = &tc.limit
+				}
+				return SetModelLimits(t.Context(), tx, 1, testNow, tc.name, limits)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			for _, model := range []string{tc.name, "unlimited"} {
+				want := tc.want || model == "unlimited"
+				runtime, err := ModelAvailable(t.Context(), q, 1, testNow, model, Amounts{Calls: mag(1), Credits: mag(tc.price)})
+				if err != nil || runtime != want {
+					t.Fatal(model, runtime, err)
+				}
+				var browse bool
+				if err := q.QueryRow("SELECT "+ModelAvailabilityPredicate("1", "?1", "?2", "?3", "0"), model, testNow, tc.price).Scan(&browse); err != nil || browse != want {
+					t.Fatal(model, browse, err)
+				}
+			}
+		})
+	}
+}
+
+func TestModelMaximumCreditBudgetRemainsLimited(t *testing.T) {
+	q := newQuotaDB(t)
+	_, err := q.Exec(`INSERT INTO donation_model_quotas(donation_key_id,upstream_model_id,created_at,price_limit_mag,price_used_mag,price_reserved_mag) VALUES(1,'max',?,X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',X'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',nbi_u128(1))`, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := ModelUsage(t.Context(), q, 1, "max")
+	if err != nil || *v.Remaining.Credits != "0" || v.Used.Credits != "340282366920938463463374607431768211.455" {
+		t.Fatal(v, err)
+	}
+	available, err := ModelAvailable(t.Context(), q, 1, testNow, "max", Amounts{Credits: mag(1), Calls: mag(1)})
+	if err != nil || available {
+		t.Fatal(available, err)
+	}
+	var listed bool
+	if err = q.QueryRow("SELECT "+ModelAvailabilityPredicate("1", "'max'", "?", "1", "0"), testNow).Scan(&listed); err != nil || listed {
+		t.Fatal(listed, err)
 	}
 }

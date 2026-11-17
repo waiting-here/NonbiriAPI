@@ -14,7 +14,9 @@ type GenerationTwoCompatibility struct {
 	SourceSchemaVersions []int    `json:"source_schema_versions"`
 }
 
-const CurrentSchemaVersion = 54
+const CurrentSchemaVersion = 55
+
+const Schema54ManifestHash = "ca682daf10a780b8ab38d4095301324a1f007af3fb2ac159fbbbf0daef0107b5"
 
 const Schema53ManifestHash = "1f14811104ce6a18a8c2b5bdf46b2bf9566074e1efbdf4e53acf4f588ec06b63"
 

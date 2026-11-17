@@ -30,7 +30,7 @@ type fakeActivityOwner struct {
 func TestModelQuotaExportProjection(t *testing.T) {
 	limit, started := "42", int64(100)
 	owner := &fakeDonationOwner{export: []donation.ExportDonation{{Keys: []donation.ExportDonationKey{{ModelLimits: []donationquota.ModelExport{{
-		ModelView:       donationquota.ModelView{UpstreamModelID: "exact/model", Limits: donationquota.ModelLimits{Tokens: &limit}, Used: donationquota.ModelAmounts{Tokens: "5", InputTokens: "2", OutputTokens: "3"}, Reserved: donationquota.ModelAmounts{Tokens: "7", InputTokens: "3", OutputTokens: "4"}, Remaining: donationquota.ModelLimits{Tokens: &limit}, UnattributedTotalTokens: "0", TrackingStartedAt: &started},
+		ModelView:       donationquota.ModelView{HistoricalCostsPartial: true, UpstreamModelID: "exact/model", Limits: donationquota.ModelLimits{Credits: &limit, Tokens: &limit}, Used: donationquota.ModelAmounts{Credits: "1.125", Calls: "2", Tokens: "5", InputTokens: "2", OutputTokens: "3"}, Reserved: donationquota.ModelAmounts{Tokens: "7", InputTokens: "3", OutputTokens: "4"}, Remaining: donationquota.ModelLimits{Tokens: &limit}, UnattributedTotalTokens: "0", TrackingStartedAt: &started},
 		RecurringLimits: []donationquota.RuleView{{RuleInput: donationquota.RuleInput{Metric: "tokens", Limit: "10"}}},
 	}}}}}}}
 	values, err := NewDonation(owner).ExportDonations(t.Context(), nil, lifecycle.ExportRequest{UserID: 1, DecisionNow: 100, Limit: 100})
@@ -38,7 +38,7 @@ func TestModelQuotaExportProjection(t *testing.T) {
 		t.Fatal(values, err)
 	}
 	model := values[0].Keys[0].ModelLimits[0]
-	if model.UpstreamModelID != "exact/model" || *model.Limits.Tokens != "42" || model.Used.InputTokens != "2" || model.Reserved.OutputTokens != "4" || *model.TrackingStartedAt != 100 || len(model.RecurringLimits) != 1 || model.RecurringLimits[0].Metric != "tokens" {
+	if !model.HistoricalCostsPartial || model.Used.Calls != "2" || model.Used.Credits != "1.125" || *model.Limits.Credits != "42" || model.UpstreamModelID != "exact/model" || *model.Limits.Tokens != "42" || model.Used.InputTokens != "2" || model.Reserved.OutputTokens != "4" || *model.TrackingStartedAt != 100 || len(model.RecurringLimits) != 1 || model.RecurringLimits[0].Metric != "tokens" {
 		t.Fatal(model)
 	}
 	limit, started = "9", 101
