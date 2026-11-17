@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from './test';
@@ -13,6 +14,7 @@ const NOW = 1_800_000_000;
 const EXPIRY = Date.parse('2030-01-01T05:00:00Z') / 1000;
 function endpoint(id: number) {
   return {
+    ...endpointScope,
     id: String(id),
     connection_id: String(id),
     native_services: ['chat_completions', 'responses'],
@@ -32,6 +34,7 @@ function endpointKey(id: number, parent: number, submitted: boolean) {
     id: String(id),
     endpoint_id: String(parent),
     credential_id: String(id + 1000),
+    credential_available: true,
     credential_version: '1',
     grant_revision: '1',
     native_services: ['chat_completions', 'responses'],

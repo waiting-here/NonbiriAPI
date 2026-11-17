@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../../../../test/fixtures/resourceScopes';
 import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -72,6 +73,7 @@ function endpointWire(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
+    ...endpointScope,
     id,
     connector_type: 'openai-compatible',
     base_url: `https://endpoint-${id}.example/v1`,
@@ -114,6 +116,8 @@ function keyWire(
   withBrowse = true,
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
+    ...credentialGrant,
+    credential_id: id,
     id,
     endpoint_id: endpointId,
     display_head: `head-${id}`,
@@ -260,6 +264,11 @@ function selectedChoice(endpointId: string, keyId: string): EndpointKeyChoice {
       updatedAt: 1_700_000_001,
     },
     key: {
+      credentialId: keyId,
+      credentialVersion: credentialGrant.credential_version,
+      grantRevision: credentialGrant.grant_revision,
+      nativeServices: credentialGrant.native_services,
+      discoverySourceId: null,
       id: keyId,
       endpointId,
       displayHead: `head-${keyId}`,
