@@ -153,11 +153,9 @@ describe('connection entry list', () => {
       role: 'user',
       route: '/endpoints',
     });
-    expect(await screen.findByText('Nothing here yet')).toBeVisible();
+    expect(await screen.findByText('No services yet')).toBeVisible();
     expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument();
-    const createButtons = screen.getAllByRole('button', { name: 'Add service' });
-    expect(createButtons).toHaveLength(2);
-    await view.user.click(createButtons[1]);
+    await view.user.click(screen.getByRole('button', { name: 'Add service' }));
     const form = screen.getByRole('dialog', { name: 'Add service' });
     expect(await within(form).findByRole('textbox', { name: 'Service address' })).toBeVisible();
     expect(await within(form).findByRole('textbox', { name: 'Service name' })).toBeVisible();
