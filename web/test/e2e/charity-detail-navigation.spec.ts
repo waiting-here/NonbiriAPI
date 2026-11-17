@@ -1131,7 +1131,7 @@ for (const station of ['admin', 'user'] as const) {
       await list.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
       if (station === 'user') await page.setViewportSize({ width: 375, height: 900 });
       await list.getByRole('button', { name: 'Next', exact: true }).click();
-      const card = list.locator('section.ops-subcard').filter({
+      const card = list.locator('section').filter({
         has: page.getByRole('heading', {
           name: '[公益]DetailProvider/detail-model-19',
           exact: true,
