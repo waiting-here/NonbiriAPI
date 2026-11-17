@@ -11,6 +11,15 @@
   font-size: var(--nb-font-size-sm);
   font-variant-numeric: tabular-nums;
 }
+.nb-panel__body:not(.nb-panel__body--flush) > .pagination.nb-pager {
+  padding-inline: 0;
+}
+.pagination.nb-pager:not(:has(.nb-pager__pages, .nb-pager__size, .nb-pager__notice)) {
+  justify-content: flex-start;
+  width: fit-content;
+  border-top: 0;
+  padding: var(--nb-space-1) 0;
+}
 .nb-pager__pages {
   display: flex;
   flex-wrap: wrap;

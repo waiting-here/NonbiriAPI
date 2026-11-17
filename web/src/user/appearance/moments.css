@@ -1,16 +1,20 @@
 .nb-moment-picker__selection {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 1fr);
-  gap: var(--nb-space-5);
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--nb-space-4);
   align-items: center;
-  margin-bottom: var(--nb-space-5);
+  margin-bottom: var(--nb-space-4);
+  padding: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
 }
 .nb-moment-picker__preview {
   width: 100%;
-  height: 16rem;
+  height: 10rem;
   object-fit: contain;
   background: var(--nb-color-surface-muted);
-  border-radius: var(--nb-radius-md);
+  border-radius: var(--nb-radius-sm);
 }
 .nb-moment-picker__copy {
   display: grid;

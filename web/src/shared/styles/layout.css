@@ -596,7 +596,7 @@ tr:first-child td {
 
 .mono,
 .read-only-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--nb-font-mono);
   font-size: 0.84em;
 }
 

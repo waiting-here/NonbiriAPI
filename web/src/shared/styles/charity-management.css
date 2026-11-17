@@ -20,14 +20,15 @@
   margin-top: 1rem;
 }
 .charity-management fieldset:where(:not(.nb-fields, .nb-fieldset)) {
-  border: 1px solid var(--nb-color-border);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid var(--nb-color-border);
+  border-radius: 0;
+  padding: var(--nb-space-4) 0 0;
+  margin: var(--nb-space-4) 0 0;
 }
 .charity-management fieldset:where(:not(.nb-fields, .nb-fieldset)) > legend {
-  padding: 0 0.4rem;
-  font-weight: 700;
+  padding: 0 var(--nb-space-2) 0 0;
+  font-weight: var(--nb-font-weight-semibold);
 }
 .charity-management .charity-model-card,
 .charity-management .donation-review-card {
@@ -144,7 +145,7 @@
 .charity-donation-summary small,
 .charity-available-count {
   display: block;
-  font-size: 0.75rem;
+  font-size: var(--nb-font-size-xs);
   color: var(--nb-color-text-muted);
   overflow-wrap: anywhere;
 }
@@ -181,7 +182,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (width <= 64rem) {
+@media (width < 64rem) {
   .charity-donations__panes.nb-md {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -190,8 +191,13 @@
 .charity-donation-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: start;
+  align-items: end;
   gap: var(--nb-space-3);
+}
+@media (width < 48rem) {
+  .charity-donation-toolbar {
+    align-items: stretch;
+  }
 }
 .charity-donation-toolbar > .nb-filter {
   flex: 1;

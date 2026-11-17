@@ -23,6 +23,26 @@ form.ops-toolbar > label {
   gap: var(--nb-space-4);
 }
 
+.ops-readable-page {
+  width: 100%;
+  max-width: var(--nb-content-readable);
+  margin-inline: auto;
+}
+
+.announcement-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+
+.announcement-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-3);
+}
+
 .gateway-capability-target {
   flex: 1 1 16rem;
   min-width: 0;
@@ -206,8 +226,9 @@ fieldset.ops-field-grid {
   .ops-table--responsive > tbody > tr > :is(.ops-cell-wide, [colspan]) {
     grid-column: 1 / -1;
   }
-  .ops-table--responsive td > :is(button, a) {
+  .ops-table--responsive td > :is(button, a, .status-badge, .nb-badge) {
     justify-self: start;
+    width: auto;
   }
 }
 

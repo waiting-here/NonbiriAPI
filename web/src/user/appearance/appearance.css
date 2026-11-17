@@ -149,9 +149,20 @@ html:is(
   display: block;
 }
 @media (width < 40rem) {
+  .nb-appearance-options {
+    gap: var(--nb-space-2);
+    margin-top: var(--nb-space-3);
+  }
   .nb-appearance-option {
-    grid-template-columns: 6rem 1fr;
+    grid-template-columns: 5.25rem 1fr;
     gap: var(--nb-space-3);
+    min-height: 4.75rem;
+  }
+  .nb-appearance-option__image {
+    min-height: 4.75rem;
+  }
+  .nb-appearance-option__copy {
+    padding: var(--nb-space-2) var(--nb-space-2) var(--nb-space-2) 0;
   }
   .nb-appearance-still {
     object-position: 100% center;
@@ -381,7 +392,7 @@ html:is(
     [data-appearance='heart-thief'],
     [data-appearance='tomorrow']
   )
-  :is(.nb-filter, .nb-pager, .economy-owner-filters, .core-resource-filters, form.ops-toolbar) {
+  :is(.nb-filter, .nb-pager, .core-resource-filters, form.ops-toolbar) {
   padding: var(--nb-space-3) var(--nb-space-4);
   border-radius: var(--nb-radius-md);
   background: var(--nb-appearance-glass-core);
@@ -471,7 +482,6 @@ html:is(
       .ops-subcard,
       .nb-filter,
       .nb-pager,
-      .economy-owner-filters,
       .core-resource-filters,
       form.ops-toolbar
     ) {
@@ -491,9 +501,11 @@ html:is(
     [data-appearance='tomorrow']
   )
   :is(
-    :is(.page, .nb-page) > :is(h2, .field-help, .time-context-notice),
-    :is(.page, .nb-page) > section > h2,
-    :is(.page, .nb-page) > .nb-section-head
+    :is(.page, .nb-page) > :is(h2, .field-help, .time-context-notice, .game-privacy-control, [role='status']:not(.nb-note)),
+    :is(.page, .nb-page) > section > :is(h2, .nb-section-head, .field-help, .time-context-notice),
+    :is(.page, .nb-page) > .nb-section-head,
+    .home-checkins > .nb-section-head,
+    .nb-pager:not(:has(.nb-pager__pages, .nb-pager__size, .nb-pager__notice))
   ) {
   justify-self: start;
   width: fit-content;
@@ -503,6 +515,20 @@ html:is(
   border-radius: var(--nb-radius-md);
   background: var(--nb-appearance-glass-core);
   backdrop-filter: blur(16px);
+}
+
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
+  )
+  :is(.page, .nb-page) > .nb-note {
+  backdrop-filter: blur(12px);
 }
 
 html[data-background-view='true'] .nb-user-shell,

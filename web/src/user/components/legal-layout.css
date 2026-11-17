@@ -1,11 +1,14 @@
 .legal-copy {
+  max-width: 66rem;
+  width: 100%;
+  margin-inline: auto;
   line-height: 1.7;
 }
 .legal-markdown blockquote {
   margin-inline: 0;
-  padding: 0.75rem 0.9rem;
+  padding: var(--nb-space-3) var(--nb-space-4);
   border: 1px solid var(--nb-color-border);
-  border-radius: 0.75rem;
+  border-radius: var(--nb-radius-md);
   background: var(--nb-color-surface-alt);
 }
 .legal-layout {

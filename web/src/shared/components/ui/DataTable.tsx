@@ -3,11 +3,19 @@ import { Fragment, type MouseEvent, type ReactNode } from 'react';
 export interface DataColumn<Row> {
   key: string;
   header: ReactNode;
-  cell: 'title' | 'status' | 'meta' | 'action' | 'hide-m';
+  cell: 'title' | 'status' | 'meta' | 'action' | 'hide-m' | 'select';
 
   mobileLabel?: string;
   align?: 'num' | 'action' | 'nowrap';
   render: (row: Row) => ReactNode;
+}
+
+function columnClassName<Row>(column: DataColumn<Row>): string | undefined {
+  const align = column.align ?? (column.cell === 'action' ? 'action' : undefined);
+  const classes = [align ? `is-${align}` : '', column.cell === 'select' ? 'is-select' : ''].filter(
+    Boolean,
+  );
+  return classes.length > 0 ? classes.join(' ') : undefined;
 }
 
 export function DataTable<Row>({
@@ -36,11 +44,7 @@ export function DataTable<Row>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th
-                key={column.key}
-                scope="col"
-                className={column.align ? `is-${column.align}` : undefined}
-              >
+              <th key={column.key} scope="col" className={columnClassName(column)}>
                 {column.header}
               </th>
             ))}
@@ -61,7 +65,7 @@ export function DataTable<Row>({
                       key={column.key}
                       data-cell={column.cell}
                       data-label={column.mobileLabel}
-                      className={column.align ? `is-${column.align}` : undefined}
+                      className={columnClassName(column)}
                     >
                       {column.render(row)}
                     </td>

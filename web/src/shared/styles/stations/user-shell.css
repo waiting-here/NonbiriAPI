@@ -161,6 +161,8 @@
 
 .nb-user-shell__footer {
   flex: 0 0 auto;
+  display: block;
+  padding: 0;
   border-top: 1px solid var(--nb-color-border);
 }
 

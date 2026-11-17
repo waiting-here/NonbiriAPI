@@ -230,6 +230,15 @@
 
 .nb-admin-content > .nb-page {
   width: 100%;
+  max-width: none;
+  padding: 0;
+}
+
+.nb-admin-content > .nb-page-footer {
+  max-width: none;
+  margin: var(--nb-space-8) 0 0;
+  padding: var(--nb-space-5) 0 0;
+  border-top: 1px solid var(--nb-color-border);
 }
 
 /* Admin headers are text-only so every page lines up; only a few pages passed an icon. */
