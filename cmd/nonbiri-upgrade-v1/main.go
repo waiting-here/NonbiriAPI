@@ -52,7 +52,7 @@ func runWithProgress(ctx context.Context, args []string, output, progress io.Wri
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 	encoder := json.NewEncoder(progress)
-	result, err := v1.Run(ctx, *path, vault, v1.Options{Apply: *apply, LegacyGatewayModels: os.Getenv("NONBIRI_GATEWAY_MODEL_CAPABILITIES"), Progress: func(event v1.Progress) {
+	result, err := v1.Run(ctx, *path, vault, v1.Options{Apply: *apply, Progress: func(event v1.Progress) {
 		// Losing a progress reader does not cancel the owned conversion.
 		_ = encoder.Encode(event)
 	}})

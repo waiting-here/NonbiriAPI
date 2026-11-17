@@ -1,13 +1,8 @@
 package db
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 var schema51ConfigurationPermissions = []string{"charity.request_adaptation", "charity.affinity", "charity.price_templates.manage", "risk.configure"}
@@ -34,73 +29,6 @@ func permissionCaptureSQL(keys []string) string {
 		fmt.Fprintf(&result, "DROP TRIGGER %s;\nCREATE TRIGGER %s\n", name, body)
 	}
 	return result.String()
-}
-
-// UpgradeStewardCharityPermissions adds closed, disabled grants to schema50
-// policies. Revisions, limits, scopes, timestamps and old audit evidence survive.
-func UpgradeStewardCharityPermissions(ctx context.Context, q stewardPolicyMigrationDB) error {
-	return upgradeStewardPolicies(ctx, q, normalizeSchema50StewardPolicy)
-}
-
-func upgradeStewardPolicies(ctx context.Context, q stewardPolicyMigrationDB, normalize func(string) (string, error)) error {
-	var after int64
-	for {
-		rows, err := q.QueryContext(ctx, "SELECT user_id,permissions FROM steward_permissions WHERE user_id>? ORDER BY user_id LIMIT 100", after)
-		if err != nil {
-			return err
-		}
-		type policy struct {
-			id   int64
-			body string
-		}
-		var batch []policy
-		for rows.Next() {
-			var p policy
-			if err := rows.Scan(&p.id, &p.body); err != nil {
-				rows.Close()
-				return err
-			}
-			batch = append(batch, p)
-		}
-		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
-			return err
-		}
-		if len(batch) == 0 {
-			return nil
-		}
-		for _, p := range batch {
-			normalized, err := normalize(p.body)
-			if err != nil {
-				return err
-			}
-			if _, err = q.ExecContext(ctx, "UPDATE steward_permissions SET permissions=? WHERE user_id=?", normalized, p.id); err != nil {
-				return err
-			}
-			after = p.id
-		}
-	}
-}
-func normalizeSchema50StewardPolicy(body string) (string, error) {
-	invalid := errors.New("stored steward policy does not match source catalog")
-	if strictjson.ValidateObject([]byte(body)) != nil {
-		return "", invalid
-	}
-	var grants map[string]json.RawMessage
-	if json.Unmarshal([]byte(body), &grants) != nil || len(grants) != 51 {
-		return "", invalid
-	}
-	source := append(append([]string{}, schema36StewardPermissionKeys...), "ai.chat", "ai.review.read", "ai.memory.edit")
-	for _, key := range source {
-		value := strings.TrimSpace(string(grants[key]))
-		if value != "true" && value != "false" {
-			return "", invalid
-		}
-	}
-	for _, key := range schema51ConfigurationPermissions {
-		grants[key] = json.RawMessage("false")
-	}
-	encoded, err := json.Marshal(grants)
-	return string(encoded), err
 }
 
 // CharityAdaptationAuditSQL preserves retained audit facts while admitting the
