@@ -35,6 +35,7 @@ export function ConnectionResourceList<T>({
   emptyAction,
   refetchInterval = false,
   embedded = false,
+  showHeading = true,
   restoreScroll = false,
   filters,
   filterKey = '',
@@ -51,6 +52,7 @@ export function ConnectionResourceList<T>({
   emptyAction?: ReactNode;
   refetchInterval?: number | false;
   embedded?: boolean;
+  showHeading?: boolean;
   restoreScroll?: boolean;
   filters?: ReactNode;
   filterKey?: string;
@@ -100,40 +102,46 @@ export function ConnectionResourceList<T>({
     refetchInterval,
   });
   useResourceListScroll(accountId, Boolean(query.data) && !query.isFetching, restoreScroll);
+  const isEmptyUnfiltered =
+    query.data?.pagination.total_items === '0' && !q.trim() && !filterKey;
   const content = (
     <>
-      <PanelHead title={title} level={embedded ? 3 : 2} actions={actions} />
+      {showHeading || actions ? (
+        <PanelHead title={showHeading ? title : ''} level={embedded ? 3 : 2} actions={actions} />
+      ) : null}
       <PanelBody>
-        <FilterBar
-          query={query}
-          as="div"
-          activeCount={q ? 1 : 0}
-          search={
-            <>
-              <Field label={t('common.connections.search')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="search"
-                    placeholder={searchPlaceholder}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                  />
-                )}
-              </Field>
-            </>
-          }
-          secondary={filters}
-          onSubmit={search}
-          onReset={() => {
-            setDraft('');
-            setParams((previous) => {
-              const next = new URLSearchParams(previous);
-              next.delete(queryParam);
-              return next;
-            });
-          }}
-        />
+        {!isEmptyUnfiltered ? (
+          <FilterBar
+            query={query}
+            as="div"
+            activeCount={q ? 1 : 0}
+            search={
+              <>
+                <Field label={t('common.connections.search')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="search"
+                      placeholder={searchPlaceholder}
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                    />
+                  )}
+                </Field>
+              </>
+            }
+            secondary={filters}
+            onSubmit={search}
+            onReset={() => {
+              setDraft('');
+              setParams((previous) => {
+                const next = new URLSearchParams(previous);
+                next.delete(queryParam);
+                return next;
+              });
+            }}
+          />
+        ) : null}
         {query.error ? (
           <CoreErrorPanel error={query.error} onRetry={() => void query.refetch()} />
         ) : null}

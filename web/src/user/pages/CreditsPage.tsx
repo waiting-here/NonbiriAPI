@@ -258,7 +258,7 @@ function CreditHistory({
                       <tr>
                         <th>{copy.time}</th>
                         <th>{copy.asset}</th>
-                        <th>{copy.change}</th>
+                        <th className="is-num">{copy.change}</th>
                         <th>{copy.category}</th>
                         {data.data.some((entry) => entry.request_id !== null) ? (
                           <th>{copy.request}</th>
@@ -274,7 +274,7 @@ function CreditHistory({
                             </time>
                           </td>
                           <td data-label={copy.asset}>{copy[entry.asset_type]}</td>
-                          <td data-label={copy.change} className="credit-history__amount">
+                          <td data-label={copy.change} className="credit-history__amount is-num">
                             <CreditChange value={entry.delta} />
                           </td>
                           <td data-label={copy.category}>{reason(entry)}</td>

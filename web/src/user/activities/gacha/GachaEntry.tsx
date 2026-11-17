@@ -7,7 +7,6 @@ import { Icon } from '@shared/components/Icon';
 import { formatDateTime } from '@shared/utils/datetime';
 import { cardById } from './catalog';
 import type { GachaPoolEntry } from './entry';
-import './gacha.css';
 import './gacha-entry.css';
 
 export function GachaEntry() {
@@ -21,8 +20,10 @@ export function GachaEntry() {
         alt=""
         loading="lazy"
       />
-      <div>
-        <span>{english ? 'COLLECT A LITTLE JOY' : '收藏每一次心动'}</span>
+      <div className="gacha-entry__body">
+        <span className="gacha-entry__eyebrow">
+          {english ? 'COLLECT A LITTLE JOY' : '收藏每一次心动'}
+        </span>
         <h2 id="gacha-entry-title">{english ? 'The Gacha Simulator' : '真·抽卡模拟器'}</h2>
         <p>
           {english

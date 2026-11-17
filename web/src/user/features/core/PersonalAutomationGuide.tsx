@@ -37,26 +37,28 @@ export function PersonalAutomationGuide() {
           <section>
             <h3>{text('lookupTitle')}</h3>
             <p>{text('lookup')}</p>
-            <table>
-              <thead>
-                <tr>
-                  <th>{text('method')}</th>
-                  <th>{text('path')}</th>
-                  <th>{text('purpose')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {routes.map(([key, path]) => (
-                  <tr key={key}>
-                    <td>GET</td>
-                    <td>
-                      <code>{path}</code>
-                    </td>
-                    <td>{text(key)}</td>
+            <div className="nb-table-wrap">
+              <table className="nb-table">
+                <thead>
+                  <tr>
+                    <th>{text('method')}</th>
+                    <th>{text('path')}</th>
+                    <th>{text('purpose')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {routes.map(([key, path]) => (
+                    <tr key={key}>
+                      <td>GET</td>
+                      <td>
+                        <code>{path}</code>
+                      </td>
+                      <td>{text(key)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p>{text('pagination')}</p>
             {example('read')}
           </section>

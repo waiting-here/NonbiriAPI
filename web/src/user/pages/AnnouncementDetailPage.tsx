@@ -1,11 +1,18 @@
 import { Link, useLocation, useParams } from 'react-router';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { useTranslation } from 'react-i18next';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { StatusBadge } from '@shared/components/ui';
 import { formatDateTime } from '@shared/utils/datetime';
 import { SafeAnnouncementBody } from '../features/operations/SafeAnnouncementBody';
 import { useAnnouncement } from '../features/operations/data';
 import '@shared/operations/operations.css';
+
+const SEVERITY_TONES = {
+  info: 'info',
+  warning: 'warn',
+  important: 'bad',
+} as const;
 
 const SEVERITY_LABEL_KEYS = {
   info: 'user.announcements.severity.info',
@@ -25,7 +32,7 @@ export function AnnouncementDetailPage() {
   const { t } = useTranslation();
   const announcement = useAnnouncement(announcementId);
   return (
-    <div className="page ops-stack">
+    <div className="page ops-stack ops-readable-page">
       <PageHeader
         eyebrow={announcement.data ? t('user.announcements.eyebrow') : undefined}
         title={announcement.data?.title ?? t('user.announcements.title')}
@@ -37,13 +44,16 @@ export function AnnouncementDetailPage() {
         <ErrorState error={announcement.error} onRetry={() => void announcement.refetch()} />
       ) : (
         <Card className="ops-stack">
-          <div className="ops-actions">
-            <StatusBadge
-              active={announcement.data.severity === 'info'}
-              danger={announcement.data.severity === 'important'}
-              label={t(SEVERITY_LABEL_KEYS[announcement.data.severity])}
-            />
-            <span>{formatDateTime(announcement.data.published_at)}</span>
+          <div className="announcement-detail__meta">
+            <StatusBadge tone={SEVERITY_TONES[announcement.data.severity]}>
+              {t(SEVERITY_LABEL_KEYS[announcement.data.severity])}
+            </StatusBadge>
+            {announcement.data.pinned ? (
+              <StatusBadge tone="accent">{t('user.core.home.announcement.pinned')}</StatusBadge>
+            ) : null}
+            <span className="nb-small nb-muted">
+              {formatDateTime(announcement.data.published_at)}
+            </span>
           </div>
           {announcement.data.fallback_from ? (
             <p className="inline-notice">

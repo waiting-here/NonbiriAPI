@@ -329,6 +329,7 @@ const keys = {
   'account.created': 'user.core.account.created',
   'account.languageTitle': 'user.core.account.languageTitle',
   'account.languageBody': 'user.core.account.languageBody',
+  'account.languageUnsetHint': 'user.core.account.languageUnsetHint',
   'account.language': 'user.core.account.language',
   'account.zh': 'user.core.account.zh',
   'account.en': 'user.core.account.en',

@@ -19,7 +19,7 @@ import { RoleLogPanel } from '@shared/components/log';
 import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
 import { RiskAuditPanel } from '@shared/riskAudit/Panel';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
-import { Tabs, Panel } from '@shared/components/ui';
+import { Tabs } from '@shared/components/ui';
 import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import { TimeContextProvider } from '@shared/components/TimeContext';
 import { useUserAuthority } from '../features/operations/data';
@@ -128,7 +128,12 @@ function StewardPageContent() {
     if (!authority.isPending && !allowed) void clearSensitiveQueries();
   }, [allowed, authority.isPending, clearSensitiveQueries]);
 
-  if (authority.isPending || authorityRefreshing) return <LoadingState />;
+  if (authority.isPending || authorityRefreshing)
+    return (
+      <div className="page ops-page">
+        <LoadingState />
+      </div>
+    );
   if (authority.error)
     return (
       <div className="page ops-page">
@@ -156,7 +161,12 @@ function StewardPageContent() {
       </div>
     );
 
-  if (scopeChanged) return <LoadingState />;
+  if (scopeChanged)
+    return (
+      <div className="page ops-page">
+        <LoadingState />
+      </div>
+    );
   return (
     <TimeContextProvider key={authorityScope} station="steward">
       <div className="page ops-page">
@@ -164,34 +174,36 @@ function StewardPageContent() {
           icon="steward"
           title={t('user.steward.title')}
           description={t('user.steward.presentation.description')}
+          actions={
+            <div className="nb-actions">
+              <Link className="nb-btn nb-btn--secondary" to="/steward/ai">
+                {t('common.agent.title')}
+              </Link>
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to="/steward/endpoints"
+                state={{ returnTo: location.pathname + location.search }}
+              >
+                {t('management.endpoints.title')}
+              </Link>
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to="/endpoint-policies"
+                state={{ returnTo: location.pathname + location.search }}
+              >
+                {t('common.endpointPolicies.title')}
+              </Link>
+            </div>
+          }
         />
-        <div className="nb-actions">
-          <Link className="nb-btn nb-btn--secondary" to="/steward/ai">
-            {t('common.agent.title')}
-          </Link>
-          <Link
-            className="nb-btn nb-btn--secondary"
-            to="/steward/endpoints"
-            state={{ returnTo: location.pathname + location.search }}
-          >
-            {t('management.endpoints.title')}
-          </Link>
-          <Link
-            className="nb-btn nb-btn--secondary"
-            to="/endpoint-policies"
-            state={{ returnTo: location.pathname + location.search }}
-          >
-            {t('common.endpointPolicies.title')}
-          </Link>
-        </div>
         <Tabs
           label={t('user.steward.sectionsLabel')}
           value={section}
           onChange={setSection}
           tabs={(
             [
-              'risk',
               'logs',
+              'risk',
               'charity',
               'users',
               'blacklist',
@@ -301,13 +313,11 @@ function StewardPageContent() {
             )
           ) : null}
           {sectionAllowed && section === 'maintenance' ? (
-            <Panel tone="danger">
-              <MaintenancePanel
-                key={`maintenance:${authority.data.id}`}
-                role="steward"
-                onAuthorityLoss={authorityLoss}
-              />
-            </Panel>
+            <MaintenancePanel
+              key={`maintenance:${authority.data.id}`}
+              role="steward"
+              onAuthorityLoss={authorityLoss}
+            />
           ) : null}
         </Tabs>
       </div>

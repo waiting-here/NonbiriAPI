@@ -32,6 +32,10 @@
   align-content: start;
 }
 
+.economy-charity-sidebar > .progression-ranking {
+  margin-top: 0;
+}
+
 .economy-capability-card,
 .economy-activity-card,
 .economy-master-card,
@@ -82,26 +86,6 @@
 .economy-owner-rule-preview {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.economy-owner-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: var(--nb-space-3);
-  min-width: 0;
-}
-
-.economy-owner-filters label {
-  display: grid;
-  flex: 1 1 12rem;
-  min-width: 0;
-  gap: var(--nb-space-1);
-}
-
-.economy-owner-filters :where(input, select) {
-  width: 100%;
-  min-width: 0;
 }
 
 .economy-donation-notice {
@@ -329,7 +313,7 @@
 }
 
 .economy-countdown strong {
-  font-size: 1.25rem;
+  font-size: var(--nb-font-size-xl);
 }
 
 .economy-countdown small {
@@ -362,7 +346,7 @@
   margin-bottom: var(--nb-space-4);
 }
 
-@media (width <= 48rem) {
+@media (width < 48rem) {
   .economy-capability-grid,
   .economy-activities-grid,
   .economy-limit-grid,

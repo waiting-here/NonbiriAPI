@@ -422,7 +422,7 @@ export function GachaApp({
     <div className={'gacha-app' + (preferences.reduced ? ' gacha-static' : '')}>
       <PageHeader
         title={t('真·抽卡模拟器', 'The Gacha Simulator')}
-        eyebrow="NONBIRI · COLLECTION"
+        eyebrow={t('悠哉珍藏', 'NONBIRI · COLLECTION')}
         back={back}
         className="gacha-page-header"
         actions={
@@ -540,27 +540,39 @@ export function GachaApp({
           {page === 'pools' && (
             <>
               <div className="gacha-pool-nav">
-                <Tabs
-                  label={t('选择奖池', 'Choose a pool')}
-                  value={pool.id}
-                  onChange={(id) => {
-                    setPoolId(id);
-                    setHeroIndex(0);
-                  }}
-                  tabs={state.pools.map((p) => ({
-                    value: p.id,
-                    id: 'gacha-pool-tab-' + p.id,
-                    label: (
-                      <>
-                        <span>{english && p.name_en ? p.name_en : p.name}</span>
-                        <ArtworkBadge
-                          artworkKey={['cover:' + p.cover, ...p.featured.map((id) => 'card:' + id)]}
-                        />
-                      </>
-                    ),
-                  }))}
-                  panelId="gacha-panel-1"
-                />
+                {state.pools.length === 1 ? (
+                  <div className="gacha-pool-single" id={'gacha-pool-tab-' + pool.id}>
+                    <span>{english && pool.name_en ? pool.name_en : pool.name}</span>
+                    <ArtworkBadge
+                      artworkKey={['cover:' + pool.cover, ...pool.featured.map((id) => 'card:' + id)]}
+                    />
+                  </div>
+                ) : (
+                  <Tabs
+                    label={t('选择奖池', 'Choose a pool')}
+                    value={pool.id}
+                    onChange={(id) => {
+                      setPoolId(id);
+                      setHeroIndex(0);
+                    }}
+                    tabs={state.pools.map((p) => ({
+                      value: p.id,
+                      id: 'gacha-pool-tab-' + p.id,
+                      label: (
+                        <>
+                          <span>{english && p.name_en ? p.name_en : p.name}</span>
+                          <ArtworkBadge
+                            artworkKey={[
+                              'cover:' + p.cover,
+                              ...p.featured.map((id) => 'card:' + id),
+                            ]}
+                          />
+                        </>
+                      ),
+                    }))}
+                    panelId="gacha-panel-1"
+                  />
+                )}
                 <div
                   className="gacha-checkins"
                   role="group"
@@ -600,10 +612,10 @@ export function GachaApp({
               </div>
               <div
                 className="nb-tab-content"
-                role="tabpanel"
+                role={state.pools.length === 1 ? undefined : 'tabpanel'}
                 id="gacha-panel-1"
-                aria-labelledby={'gacha-pool-tab-' + pool.id}
-                tabIndex={0}
+                aria-labelledby={state.pools.length === 1 ? undefined : 'gacha-pool-tab-' + pool.id}
+                tabIndex={state.pools.length === 1 ? undefined : 0}
               >
                 <section
                   className={'gacha-banner gacha-banner--' + pool.cover}
@@ -827,7 +839,9 @@ export function GachaApp({
                 </div>
                 <div className="gacha-home-bottom">
                   <div>
-                    <span className="gacha-eyebrow">YOUR NEXT CHAPTER</span>
+                    <span className="gacha-eyebrow">
+                      {t('下一段旅程', 'YOUR NEXT CHAPTER')}
+                    </span>
                     <h3>{t('有些美好，要一起才完整', 'Some memories need everyone')}</h3>
                     <p>
                       {t(
@@ -883,7 +897,7 @@ export function GachaApp({
                 'Cards are collectibles and cannot be traded or redeemed for credits. Draws have no regular credit income; complete themes for one-time rewards.',
               )}
             </p>
-            <span>NONBIRI · COLLECT A LITTLE JOY</span>
+            <span>{t('悠哉 · 收集一点点开心', 'NONBIRI · COLLECT A LITTLE JOY')}</span>
           </footer>
         </div>
       </div>
@@ -939,7 +953,7 @@ export function GachaApp({
             </div>
           ) : (
             <>
-              <CardTile card={card} english={english} showRating={false} onClick={() => {}} />
+              <CardTile card={card} english={english} showRating={false} />
               <h3>{t('等待与你相遇', 'Waiting to meet you')}</h3>
               <p>
                 {t('获得后解锁完整卡面欣赏。', 'Collect this card to view the full illustration.')}

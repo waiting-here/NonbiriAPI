@@ -18,22 +18,12 @@
     2px 2px 0 #ce299438,
     -1px -1px 0 #30dcea38;
 }
-.likes-heading::after {
-  content: '';
-  position: absolute;
-  bottom: -3px;
-  left: 0;
-  width: 5rem;
-  height: 5px;
-  background: var(--l-cyan);
-  clip-path: polygon(0 0, 100% 0, 94% 100%, 0 100%);
-}
 .likes-game .likes-role-option[aria-pressed='true'] {
   box-shadow:
     inset 0 0 0 1px var(--l-cyan),
     0 0 22px #46dceb30;
 }
-.likes-game .likes-primary {
+.likes-game .likes-primary:not(:disabled) {
   box-shadow:
     3px 3px 0 var(--l-pink),
     0 0 22px #34cfe52a;
@@ -506,6 +496,6 @@
 }
 .likes-lock-note {
   display: block;
-  color: var(--text-secondary);
+  color: var(--l-muted, var(--nb-color-text-muted));
   line-height: 1.5;
 }

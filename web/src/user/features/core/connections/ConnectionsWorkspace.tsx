@@ -111,6 +111,7 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
       </Sheet>
       <ConnectionResourceList
         restoreScroll
+        showHeading={false}
         accountId={user.id}
         scope="all"
         listType="connections"
@@ -118,7 +119,15 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         searchPlaceholder={t('common.connections.connectionSearch')}
         load={connectionAPI.list}
         rowKey={(row) => row.id}
-        emptyAction={createButton}
+        emptyAction={
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            onClick={() => setCreating(true)}
+          >
+            {t('user.workflows.addService')}
+          </button>
+        }
         columns={[
           {
             key: 'name',

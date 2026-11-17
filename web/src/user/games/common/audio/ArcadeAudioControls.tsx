@@ -1,3 +1,4 @@
+import { Icon } from '@shared/components/Icon';
 import { GameHeaderTool } from '../GameHeader';
 import { useDuelText } from '../duel/copy';
 export function ArcadeAudioControls({
@@ -22,7 +23,7 @@ export function ArcadeAudioControls({
     <>
       {compact ? (
         <GameHeaderTool
-          icon="♪"
+          icon={<Icon name={sound.enabled ? 'sound' : 'sound-off'} />}
           label={sound.enabled ? text('common.soundOn') : text('common.soundOff')}
           aria-pressed={sound.enabled}
           onClick={sound.toggle}
@@ -40,7 +41,7 @@ export function ArcadeAudioControls({
       {music &&
         (compact ? (
           <GameHeaderTool
-            icon="♫"
+            icon={<Icon name="music" />}
             label={music.enabled ? text('common.musicOn') : text('common.musicOff')}
             aria-pressed={music.enabled}
             onClick={music.toggle}

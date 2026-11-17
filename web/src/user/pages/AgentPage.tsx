@@ -6,12 +6,25 @@ import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
 export function AgentPage() {
   const session = useUserSession();
-  if (session.isPending) return <LoadingState />;
+  if (session.isPending)
+    return (
+      <div className="page">
+        <LoadingState />
+      </div>
+    );
   if (session.error)
-    return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
+    return (
+      <div className="page">
+        <ErrorState error={session.error} onRetry={() => void session.refetch()} />
+      </div>
+    );
   const user = session.data?.user;
   if (!user || ![5, 6].includes(user.effective_level) || user.is_banned)
-    return <StewardPermissionNotice />;
+    return (
+      <div className="page">
+        <StewardPermissionNotice />
+      </div>
+    );
   const account = [user.id, user.effective_level, user.steward_permissions?.revision ?? '0'].join(
     ':',
   );

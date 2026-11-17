@@ -1,8 +1,10 @@
 import { CreditNumber } from '@shared/components/CreditNumber';
+import { Fold } from '@shared/components/ui/Fold';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { Icon, type IconName } from '@shared/components/Icon';
+import { GameMoney } from '../common/GameMoney';
 import { GameWallets } from '../common/GameWallets';
 import { GameBackLink } from '../common/GameBackLink';
 import { GameToolbar } from '../common/GameToolbar';
@@ -61,26 +63,29 @@ function EntryTerms({ entry, playing }: { entry: Entry; playing: boolean }) {
     if (playing) setExpanded(false);
   }
   return (
-    <details
+    <Fold
+      plain
       className="entry-terms"
       open={expanded}
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      onOpenChange={setExpanded}
+      title={
+        <>
+          {t('门票 ', 'Entry ')}
+          <CreditNumber value={formatCredits(entry.price)} />
+          {t(' 积分 · ', ' credits · ')}
+          {entry.firstCleared ? (
+            t('已首通，本局不发积分', 'Already cleared; no credits this game')
+          ) : Number(entry.firstClearReward) > 0 ? (
+            <>
+              {t('首通可领 ', 'First-clear reward: ')}
+              <GameMoney value={entry.firstClearReward} />
+            </>
+          ) : (
+            t('本局不发积分', 'No credits this game')
+          )}
+        </>
+      }
     >
-      <summary>
-        {t('门票 ', 'Entry ')}
-        <CreditNumber value={formatCredits(entry.price)} />
-        {t(' 积分 · ', ' credits · ')}
-        {entry.firstCleared ? (
-          t('已首通，本局不发积分', 'Already cleared; no credits this game')
-        ) : Number(entry.firstClearReward) > 0 ? (
-          <>
-            {t('首通可领 ', 'First-clear reward: ')}
-            <CreditNumber value={formatCredits(entry.firstClearReward)} />
-          </>
-        ) : (
-          t('本局不发积分', 'No credits this game')
-        )}
-      </summary>
       <p className="reward-notice">
         <strong>{t('没有逐局积分奖励', 'No per-game credit rewards')}</strong>
         <span>
@@ -92,13 +97,14 @@ function EntryTerms({ entry, playing }: { entry: Entry; playing: boolean }) {
           ) : (
             <>
               {t('仅首次通关可领取游戏积分：', 'Only the first clear awards game credits: ')}
-              <CreditNumber value={formatCredits(entry.firstClearReward)} />
+              <GameMoney value={entry.firstClearReward} />
+              {t('。', '.')}
             </>
           )}{' '}
           {t('局内分数不等于钱包积分。', 'Game score is not wallet credit.')}
         </span>
       </p>
-    </details>
+    </Fold>
   );
 }
 
@@ -637,7 +643,7 @@ function Round({
               '结束当前局，旧门票不退，本局不进入排行榜。新局门票：',
               'End this game without refund or leaderboard entry. New game entry: ',
             )}
-            {entry?.price ?? '—'}
+            {entry ? <GameMoney value={entry.price} /> : '—'}
           </p>
           <button
             className="primary"

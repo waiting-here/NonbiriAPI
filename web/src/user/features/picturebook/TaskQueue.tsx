@@ -37,10 +37,13 @@ export function TaskQueue({
           ) : null}
           <h3>{t('我的未完成任务', 'My unfinished tasks')}</h3>
           {query.data.own.length ? (
-            <ul>
+            <ul className="picturebook-queue-list">
               {query.data.own.map((task) => (
                 <li key={task.task_id}>
-                  <button className="nb-btn nb-btn--secondary" onClick={() => onSelect(task.task_id)}>
+                  <button
+                    className="nb-btn nb-btn--secondary nb-btn--sm"
+                    onClick={() => onSelect(task.task_id)}
+                  >
                     {task.position === null
                       ? t('查看执行中的任务', 'View running task')
                       : t('查看排队任务，位置 ', 'View queued task, position ') + task.position}
@@ -49,7 +52,7 @@ export function TaskQueue({
               ))}
             </ul>
           ) : (
-            <p>{t('没有未完成任务。', 'No unfinished tasks.')}</p>
+            <p className="nb-small nb-muted">{t('没有未完成任务。', 'No unfinished tasks.')}</p>
           )}
         </>
       ) : null}

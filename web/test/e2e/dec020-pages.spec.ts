@@ -1398,7 +1398,7 @@ test('administrator charity provenance grouping and report lineage expose safe d
   const sourceRow = page.locator('.charity-source-browser__source');
   await expect(sourceRow).toContainText('Hosted channel');
   await expect(sourceRow).toContainText('https://channel.example.test/v1');
-  await expect(sourceRow).toContainText('openai-compatible');
+  await expect(sourceRow).toContainText('OpenAI-compatible');
   const keyRow = page.locator('.charity-source-browser__key');
   await expect(keyRow.getByRole('heading', { name: 'safe-head…safe-tail' })).toBeVisible();
   await expect(keyRow.getByText('Safe administrative note', { exact: true })).toHaveCount(0);

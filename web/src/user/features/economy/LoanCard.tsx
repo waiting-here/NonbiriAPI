@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Field, FormActions } from '@shared/components/ui';
+import { Field, FormActions, StatusBadge } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { LoanFacts, LoanHistory } from '@shared/components/LoanDetails';
 import { loanReasons, useLoanText } from '@shared/components/loanCopy';
@@ -111,11 +111,11 @@ export function LoanCard({
           </p>
           <div className="card-title-row">
             <h2>{text('赛博网贷', 'Cyber loan')}</h2>
-            <span className={`nb-badge nb-badge--${available ? 'ok' : 'plain'}`}>
+            <StatusBadge tone={available ? 'ok' : 'neutral'}>
               {available
                 ? t('user.games.copy.common.open')
                 : t('user.activities.presentation.unavailable')}
-            </span>
+            </StatusBadge>
           </div>
           <p className="loan-promo__slogan">
             {text('升！升舱的钱我来出！', 'Upgrade! I’ll cover your ticket!')}
@@ -193,7 +193,7 @@ export function LoanCard({
       </div>
       {request.error ? <ErrorState error={request.error} /> : null}
       {receipt ? (
-        <div role="status">
+        <div className="loan-card__receipt" role="status">
           <h3>{text('借款已到账', 'Loan received')}</h3>
           <LoanFacts loan={receipt} projection="owner" />
         </div>

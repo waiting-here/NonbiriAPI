@@ -482,38 +482,32 @@ export function ServiceCreateForm({
               )}
             </Field>
             {channel ? (
-              <Fold title={t('common.connections.entries')}>
+              <Fold plain title={t('common.connections.entries')}>
                 {channel.entries
                   ?.filter((entry) => entry.enabled && entry.id)
                   .map((entry) => (
                     <div key={entry.id} className="nb-stack nb-stack--sm">
-                      <Field label={entry.name}>
-                        {(props) => (
-                          <input
-                            {...props}
-                            type="checkbox"
-                            checked={Boolean(selected[entry.id!])}
-                            disabled={locked || started}
-                            onChange={(event) =>
-                              setSelected((previous) => {
-                                const next = { ...previous };
-                                if (event.target.checked)
-                                  next[entry.id!] = protocolServices(entry.connector_type);
-                                else delete next[entry.id!];
-                                return next;
-                              })
-                            }
-                          />
-                        )}
-                      </Field>
+                      <label className="core-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selected[entry.id!])}
+                          disabled={locked || started}
+                          onChange={(event) =>
+                            setSelected((previous) => {
+                              const next = { ...previous };
+                              if (event.target.checked)
+                                next[entry.id!] = protocolServices(entry.connector_type);
+                              else delete next[entry.id!];
+                              return next;
+                            })
+                          }
+                        />
+                        <span>{entry.name}</span>
+                      </label>
                       {selected[entry.id!] && channel.discovery_source ? (
-                        <Field
-                          label={t('common.connections.useSuggestedCatalog')}
-                          help={<span className="mono">{channel.discovery_source.base_url}</span>}
-                        >
-                          {(props) => (
+                        <div className="nb-stack nb-stack--xs">
+                          <label className="core-checkbox">
                             <input
-                              {...props}
                               type="checkbox"
                               checked={!skipCatalog[entry.id!]}
                               disabled={locked || started}
@@ -524,8 +518,12 @@ export function ServiceCreateForm({
                                 }))
                               }
                             />
-                          )}
-                        </Field>
+                            <span>{t('common.connections.useSuggestedCatalog')}</span>
+                          </label>
+                          <p className="nb-small nb-muted mono">
+                            {channel.discovery_source.base_url}
+                          </p>
+                        </div>
                       ) : null}
                     </div>
                   ))}
@@ -606,7 +604,7 @@ export function ServiceCreateForm({
             <p className="nb-small nb-muted">{t('user.services.keyOwnership')}</p>
           </>
         )}
-        <Fold title={t('user.services.keySettings')}>
+        <Fold plain title={t('user.services.keySettings')}>
           <p className="nb-small nb-muted">{t('common.keyLimits.newKeysHint')}</p>
           <KeyLimitFields
             concurrency={concurrency}
@@ -620,7 +618,7 @@ export function ServiceCreateForm({
           />
         </Fold>
         {mode === 'custom' ? (
-          <Fold title={t('user.services.advancedSetup')} lazy>
+          <Fold plain title={t('user.services.advancedSetup')} lazy>
             <Field label={t('common.connections.protocol')}>
               {(props) => (
                 <select
@@ -661,25 +659,23 @@ export function ServiceCreateForm({
               baseURL={address}
               disabled={locked || started}
             />
-            <Fold title={t('common.connections.discoveryOptional')}>
-              <Field label={t('user.workflows.discoverModels')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="checkbox"
-                    checked={Boolean(customDiscovery)}
-                    disabled={locked || started}
-                    onChange={(event) =>
-                      setDiscoveryOverride(
-                        event.target.checked
-                          ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ??
-                              defaultDiscovery('openai-compatible', address))
-                          : null,
-                      )
-                    }
-                  />
-                )}
-              </Field>
+            <Fold plain title={t('common.connections.discoveryOptional')}>
+              <label className="core-checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(customDiscovery)}
+                  disabled={locked || started}
+                  onChange={(event) =>
+                    setDiscoveryOverride(
+                      event.target.checked
+                        ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ??
+                            defaultDiscovery('openai-compatible', address))
+                        : null,
+                    )
+                  }
+                />
+                <span>{t('user.workflows.discoverModels')}</span>
+              </label>
               {customDiscovery ? (
                 <>
                   <Field

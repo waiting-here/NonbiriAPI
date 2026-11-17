@@ -51,8 +51,8 @@
   min-width: 0;
 }
 .duel-finance > dl > div > dt {
-  font-size: 0.85rem;
-  opacity: 0.8;
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
 }
 .duel-finance > dl > div > dd {
   margin: 0.4rem 0;
@@ -67,10 +67,10 @@
   border-radius: 1rem;
   color: var(--nb-color-text);
   background: var(--nb-color-surface);
-  box-shadow: 0 24px 100px #0006;
+  box-shadow: var(--nb-elevation-overlay);
 }
 .duel-dialog::backdrop {
-  background: #0c1428a8;
+  background: color-mix(in srgb, var(--nb-color-bg) 72%, transparent);
   backdrop-filter: blur(3px);
 }
 .duel-dialog > header {
@@ -132,7 +132,7 @@
   outline: 3px solid var(--nb-color-focus);
   outline-offset: 3px;
 }
-@media (max-width: 480px) {
+@media (width < 32rem) {
   .duel-dialog {
     width: calc(100vw - 1rem);
   }

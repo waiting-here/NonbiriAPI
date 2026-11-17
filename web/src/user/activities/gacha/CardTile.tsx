@@ -15,18 +15,13 @@ export function CardTile({
   card: Card;
   owned?: boolean;
   note?: string;
-  onClick: () => void;
+  onClick?: () => void;
   index?: number;
   english?: boolean;
   showRating?: boolean;
 }) {
-  return (
-    <button
-      className={'gacha-card gacha-card--' + card.rarity + (owned ? ' is-owned' : '')}
-      style={{ '--card-index': index } as CSSProperties}
-      onClick={onClick}
-      aria-label={(english ? card.name_en : card.name) + (note ? ', ' + note : '')}
-    >
+  const inner = (
+    <>
       <Artwork card={card} />
       {showRating && <ArtworkBadge artworkKey={'card:' + card.id} />}
       <span className="gacha-card__rarity">{card.rarity}</span>
@@ -42,6 +37,21 @@ export function CardTile({
           </svg>
         </span>
       )}
+    </>
+  );
+  const className = 'gacha-card gacha-card--' + card.rarity + (owned ? ' is-owned' : '');
+  const style = { '--card-index': index } as CSSProperties;
+  const ariaLabel = (english ? card.name_en : card.name) + (note ? ', ' + note : '');
+  if (!onClick) {
+    return (
+      <div className={className + ' is-static'} style={style} aria-label={ariaLabel}>
+        {inner}
+      </div>
+    );
+  }
+  return (
+    <button className={className} style={style} onClick={onClick} aria-label={ariaLabel}>
+      {inner}
     </button>
   );
 }

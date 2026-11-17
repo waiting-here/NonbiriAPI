@@ -12,11 +12,11 @@ import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
+import { GameWallets } from '../common/GameWallets';
 import { useGameSettlement } from '../common/useGameSettlement';
 import { GameMoney } from '../common/GameMoney';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
 import { GamePayment } from '../common/GamePayment';
-import { GameWallets } from '../common/GameWallets';
 import { RandomnessProof } from '../common/RandomnessProof';
 import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
@@ -471,7 +471,7 @@ function LeaderboardCard({
         <h2>{text(titleKey)}</h2>
         <button
           type="button"
-          className="nb-btn nb-btn--secondary fishing-board__refresh"
+          className="nb-btn nb-btn--secondary nb-btn--sm fishing-board__refresh"
           aria-label={text('fishing.leaderboard.refresh')}
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
@@ -483,7 +483,7 @@ function LeaderboardCard({
       </div>
       <p>{text(helpKey)}</p>
       {rows.length === 0 && missingMe.length === 0 ? (
-        <p>{text('fishing.leaderboard.empty')}</p>
+        <p className="nb-small nb-muted">{text('fishing.leaderboard.empty')}</p>
       ) : (
         <div className="fishing-table-wrap">
           <table>
@@ -573,7 +573,6 @@ function FishingSingleBoards() {
   return (
     <div className="fishing-board-switch">
       <Tabs
-        className="fishing-board-switch__tabs"
         label={text('fishing.leaderboard.single')}
         value={board}
         onChange={setBoard}
@@ -1131,24 +1130,13 @@ export function FishingGame() {
           </fieldset>
           <dl className="fishing-totals">
             <div>
-              <dt>{text('fishing.unitPrice')}</dt>
-              <dd>
-                <GameMoney value={unit} />
-              </dd>
-            </div>
-            <div>
               <dt>{text('fishing.totalPrice')}</dt>
               <dd>
                 <GameMoney value={frozenTotal} />
               </dd>
             </div>
-            <div>
-              <dt>{text('fishing.balance')}</dt>
-              <dd>
-                <GameWallets wallets={snapshot.data} />
-              </dd>
-            </div>
           </dl>
+          <p className="nb-small nb-muted">{text('fishing.winGeneralCredits')}</p>
           {!affordable ? (
             <p className="game-inline-notice game-inline-notice--danger">
               {text('fishing.insufficient')}
@@ -1166,7 +1154,6 @@ export function FishingGame() {
           </GameActionBar>
         </Card>
       </div>
-      <GamePrivacyLink />
       <div id="game-rankings">
         <LeaderboardTabs
           items={[
@@ -1197,6 +1184,7 @@ export function FishingGame() {
             },
           ]}
         />
+        <GamePrivacyLink />
       </div>
       {rulesDialog}
     </main>

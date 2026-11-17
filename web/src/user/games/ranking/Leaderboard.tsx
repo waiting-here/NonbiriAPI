@@ -1,4 +1,5 @@
 import { CreditNumber } from '@shared/components/CreditNumber';
+import { Illustration } from '@shared/components/Illustration';
 import { useTranslation } from 'react-i18next';
 import { Toggle, Fold, Field } from '@shared/components/ui';
 import { useState } from 'react';
@@ -6,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useUserSession, userKeys } from '../../data';
 import { patchCharityProfile } from '../../features/core/api';
 import { useDuelText } from '../common/duel/copy';
@@ -77,6 +79,7 @@ function RankingPanel({
   readonly foldHelp: boolean;
 }) {
   const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
   const text = useDuelText();
   const [selectedWindow, setWindow] = useState<RankWindow>('7d');
   const [page, setPage] = useState('1');
@@ -126,10 +129,21 @@ function RankingPanel({
             : text('ranking.positiveProfitsBeforeFeesAreAddedSeparately');
   const data = !query.error && owner ? query.data : undefined;
   const rows = [...(data?.rows ?? []), ...(data?.me ? [data.me] : [])];
+  const hasPeriodSelect = board === 'bidding' || board === 'blackjack';
   return (
     <Card className="progression-ranking">
       <div className="rank-heading">
-        <h2>{names[board][0]}</h2>
+        <div className="rank-heading__top">
+          <h2>{names[board][0]}</h2>
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary nb-btn--sm"
+            disabled={!owner || query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            {text('ranking.refreshLeaderboard')}
+          </button>
+        </div>
         {board === 'charity' ? <CharityPrivacy /> : null}
       </div>
       {foldHelp ? (
@@ -137,10 +151,10 @@ function RankingPanel({
           <p>{help}</p>
         </Fold>
       ) : (
-        <p>{help}</p>
+        <p className="nb-small nb-muted">{help}</p>
       )}
-      <div className="rank-actions">
-        {board === 'bidding' || board === 'blackjack' ? (
+      {hasPeriodSelect ? (
+        <div className="rank-actions">
           <Field label={text('ranking.period')}>
             {(props) => (
               <select
@@ -154,16 +168,8 @@ function RankingPanel({
               </select>
             )}
           </Field>
-        ) : null}
-        <button
-          type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={!owner || query.isFetching}
-          onClick={() => void query.refetch()}
-        >
-          {text('ranking.refreshLeaderboard')}
-        </button>
-      </div>
+        </div>
+      ) : null}
       {enabled && query.isPending && <LoadingState />}
       {query.error && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
       {data && board === 'bidding_net_profit' && data.rebuildStatus !== 'completed' && (
@@ -176,15 +182,17 @@ function RankingPanel({
           {text('ranking.verifiableHistoryStarts')}:{' '}
           {data.historyCoverageStart === null
             ? text('ranking.unknown')
-            : new Date(data.historyCoverageStart * 1000).toLocaleString()}{' '}
-          · {text('ranking.knownMissingEvents')}: {data.missingEvents}
+            : formatDateTime(new Date(data.historyCoverageStart * 1000).toISOString())}
+          {data.missingEvents !== '0'
+            ? ` · ${text('ranking.knownMissingEvents')}: ${data.missingEvents}`
+            : ''}
         </p>
       )}
       {data && window === 'history' && board !== 'charity' && (
         <p className="table-note">
           {text('ranking.statisticsStarted')}
           <time dateTime={new Date(data.statisticsStart * 1000).toISOString()}>
-            {new Date(data.statisticsStart * 1000).toLocaleString()}
+            {formatDateTime(new Date(data.statisticsStart * 1000).toISOString())}
           </time>
         </p>
       )}
@@ -192,7 +200,21 @@ function RankingPanel({
         rows.length === 0 &&
         data.rebuildStatus !== 'scanning' &&
         data.rebuildStatus !== 'publishing' &&
-        data.rebuildStatus !== 'pending' && <p>{text('ranking.noQualifyingRankingsYet')}</p>}
+        data.rebuildStatus !== 'pending' && (
+          <div className="rank-empty">
+            <span className="rank-empty__art" aria-hidden="true">
+              <Illustration name="empty" />
+            </span>
+            <p className="rank-empty__title">{text('ranking.noQualifyingRankingsYet')}</p>
+            <p className="nb-small nb-muted">
+              {t(
+                board === 'charity'
+                  ? 'user.games.ranking.charityEmptyHint'
+                  : 'user.games.ranking.emptyHint',
+              )}
+            </p>
+          </div>
+        )}
       {rows.length > 0 && (
         <div className="rank-table-scroll">
           <table className="data-table">

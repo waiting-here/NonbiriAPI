@@ -124,15 +124,20 @@ export function TaskHistory({
       ) : query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : null}
-      {query.data?.data.length === 0 ? <p>{t('暂无任务。', 'No tasks yet.')}</p> : null}
+      {query.data?.data.length === 0 ? (
+        <p className="nb-small nb-muted">{t('暂无任务。', 'No tasks yet.')}</p>
+      ) : null}
       <div className="picturebook-stack">
         {query.data?.data.map((task) => (
-          <article className="picturebook-card" key={task.id}>
+          <article className="picturebook-card picturebook-task-item" key={task.id}>
             <p>
               {formatDateTime(task.created_at)} · {taskStatusLabel(task.status, t)} ·{' '}
               <ExactCount value={String(task.n)} /> {t('张', 'images')}
             </p>
-            <button className="nb-btn nb-btn--secondary" onClick={() => onSelect(task.id)}>
+            <button
+              className="nb-btn nb-btn--secondary nb-btn--sm"
+              onClick={() => onSelect(task.id)}
+            >
               {t('查看任务', 'View task')}
             </button>
           </article>

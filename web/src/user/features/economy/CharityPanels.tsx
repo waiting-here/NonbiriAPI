@@ -787,7 +787,7 @@ export function DonationKeyPanel({
       donationKey.endedReason === null &&
       donationKey.charityState !== 'ended' &&
       donationKey.charityState !== 'expired' ? (
-        <Fold lazy title={t('common.connections.addServices')}>
+        <Fold plain lazy title={t('common.connections.addServices')}>
           <OwnerUseAddition
             accountId={accountID}
             donationId={donationId}
@@ -883,6 +883,7 @@ export function DonationKeyPanel({
         </div>
       </dl>
       <Fold
+        plain
         className="economy-key-details"
         defaultOpen={!compact}
         title={t('user.charity.quotaDetails')}

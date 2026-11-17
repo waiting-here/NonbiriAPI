@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ErrorState } from '@shared/components/States';
+import { ErrorState, LoadingState } from '@shared/components/States';
 import { Segmented } from '@shared/components/ui/Segmented';
 import { gameRequest } from '../common/request';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
@@ -35,8 +35,8 @@ export function GwentLeaderboard() {
       ).data,
     staleTime: 30000,
   });
-  const row = (item: Row) => (
-    <tr key={item.rank}>
+  const row = (item: Row, keyPrefix = 'row') => (
+    <tr key={`${keyPrefix}-${item.rank}`}>
       <td>{item.rank}</td>
       <td>
         <PublicGameIdentity
@@ -51,12 +51,12 @@ export function GwentLeaderboard() {
       <td>{((Number(item.wins) / Number(item.played)) * 100).toFixed(1)}%</td>
     </tr>
   );
+  const rows = query.data?.rows ?? [];
+  const extraMe =
+    query.data?.me && !rows.some((item) => item.is_me) ? query.data.me : null;
+  const hasRows = rows.length > 0 || extraMe !== null;
   return (
     <section className="gwt-leaderboard" id="game-rankings">
-      <header>
-        <h2>{t('胜场榜', 'Wins leaderboard')}</h2>
-        <GamePrivacyControl />
-      </header>
       <div className="duel-actions">
         <Segmented
           label={t('榜单周期', 'Leaderboard period')}
@@ -67,29 +67,43 @@ export function GwentLeaderboard() {
             { value: '30d', label: t('近 30 天', 'Last 30 days') },
           ]}
         />
+        <GamePrivacyControl />
+        <button
+          type="button"
+          className="nb-btn nb-btn--secondary nb-btn--sm"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          {t('刷新', 'Refresh')}
+        </button>
       </div>
       <p>
         {t('按胜场、胜率、更早达成排序。', 'Ordered by wins, win rate, then earlier achievement.')}
       </p>
+      {query.isPending && <LoadingState />}
       {query.error && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
-      <div className="gwt-ranking-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>{t('玩家', 'Player')}</th>
-              <th>{t('胜场', 'Wins')}</th>
-              <th>{t('场次', 'Played')}</th>
-              <th>{t('胜率', 'Win rate')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {query.data?.rows.map(row)}
-            {query.data?.me && row(query.data.me)}
-          </tbody>
-        </table>
-      </div>
-      {query.data?.rows.length === 0 && <p>{t('暂无成绩', 'No results yet')}</p>}
+      {query.data &&
+        (hasRows ? (
+          <div className="gwt-ranking-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>{t('玩家', 'Player')}</th>
+                  <th>{t('胜场', 'Wins')}</th>
+                  <th>{t('场次', 'Played')}</th>
+                  <th>{t('胜率', 'Win rate')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((item) => row(item, 'row'))}
+                {extraMe && row(extraMe, 'me')}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p>{t('暂无成绩', 'No results yet')}</p>
+        ))}
     </section>
   );
 }

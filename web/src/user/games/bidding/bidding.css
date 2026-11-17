@@ -28,12 +28,12 @@
   outline: 3px solid #c28b37;
   outline-offset: 4px;
 }
-.bidding-game :is(.btn-primary, .nb-btn--primary) {
+.bidding-game :is(.btn-primary, .nb-btn--primary):not(:disabled) {
   background: var(--bid-ink);
   border-color: var(--bid-ink);
   color: var(--bid-paper);
 }
-.bidding-game :is(.btn-secondary, .nb-btn--secondary) {
+.bidding-game :is(.btn-secondary, .nb-btn--secondary):not(:disabled) {
   background: transparent;
   color: var(--bid-ink);
   border-color: var(--bid-line);
@@ -745,7 +745,7 @@
     opacity: 1;
   }
 }
-@media (max-width: 600px) {
+@media (width < 40rem) {
   .bid-table {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -810,13 +810,16 @@
 .bid-ai-lobby {
   margin: 1.5rem 0;
 }
-.bid-opponent-tabs,
+.bid-opponent-tabs {
+  width: fit-content;
+  max-width: 100%;
+  padding-block: 0.5rem;
+}
 .bid-ai-select {
   display: flex;
   gap: 0.5rem;
   padding-block: 0.5rem;
 }
-.bid-opponent-tabs button,
 .bid-ai-select button {
   border: 1px solid var(--bid-line);
   border-radius: 0.75rem;
@@ -824,14 +827,10 @@
   background: var(--bid-paper);
   color: var(--bid-ink);
 }
-.bid-opponent-tabs button[aria-pressed='true'],
 .bid-ai-select button[aria-pressed='true'] {
   background: var(--bid-ink);
   color: var(--bid-paper);
   border-color: var(--bid-ink);
-}
-.bid-opponent-tabs button {
-  flex: 1;
 }
 .bid-ai-select {
   overflow-x: auto;
@@ -873,7 +872,7 @@
   margin: 0;
   font-weight: 700;
 }
-.bid-ai-card :is(.btn, .nb-btn) {
+.bid-ai-card .nb-btn {
   margin-top: auto;
 }
 .bid-ai-mark {

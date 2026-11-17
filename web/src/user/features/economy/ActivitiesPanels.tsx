@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Fold, FormActions, Note } from '@shared/components/ui';
-import { Card, ErrorState, StatusBadge } from '@shared/components/States';
+import { Fold, FormActions, Note, StatusBadge } from '@shared/components/ui';
+import { Card, ErrorState } from '@shared/components/States';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { formatDateTime } from '@shared/utils/datetime';
 import { isConflictError, isResponseUnknown } from './api';
@@ -165,10 +165,18 @@ export function WelfareCard({
           <h2>{t('user.activities.welfare.title')}</h2>
         </div>
         <StatusBadge
-          active={welfare.state === 'available'}
-          danger={stateDanger(welfare.state)}
-          label={t(`user.activities.welfare.state.${welfare.state}`)}
-        />
+          tone={
+            welfare.state === 'available'
+              ? 'ok'
+              : stateDanger(welfare.state)
+                ? 'bad'
+                : welfare.state === 'empty'
+                  ? 'warn'
+                  : 'neutral'
+          }
+        >
+          {t(`user.activities.welfare.state.${welfare.state}`)}
+        </StatusBadge>
       </div>
       <p>{t(`user.activities.welfare.body.${welfare.state}`)}</p>
       <div className="nb-stats economy-stat-grid">
@@ -326,10 +334,18 @@ export function ThursdayCard({
           <h2>{t('user.activities.thursday.title')}</h2>
         </div>
         <StatusBadge
-          active={thursday.state === 'open'}
-          danger={stateDanger(thursday.state)}
-          label={t(`user.activities.thursday.state.${thursday.state}`)}
-        />
+          tone={
+            thursday.state === 'open'
+              ? 'ok'
+              : stateDanger(thursday.state)
+                ? 'bad'
+                : thursday.state === 'settling'
+                  ? 'info'
+                  : 'neutral'
+          }
+        >
+          {t(`user.activities.thursday.state.${thursday.state}`)}
+        </StatusBadge>
       </div>
       <p>{t(`user.activities.thursday.body.${thursday.state}`)}</p>
       {current ? <h3>{t('user.activities.thursday.currentPeriod')}</h3> : null}

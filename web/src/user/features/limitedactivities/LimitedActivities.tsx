@@ -1,8 +1,15 @@
-import { Field, Fields, FormActions } from '@shared/components/ui';
+import { Field, Fields, FormActions, Note, StatusBadge } from '@shared/components/ui';
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  SectionHead,
+} from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import {
@@ -49,84 +56,107 @@ export function LimitedActivitiesSection({
   });
   if (hideEmpty && query.data?.length === 0 && !query.error && !children) return null;
   return (
-    <section aria-labelledby="limited-activities-heading">
-      <h2 id="limited-activities-heading">{text('common.limitedTimeActivities')}</h2>
+    <section className="limited-section" aria-label={text('common.limitedTimeActivities')}>
+      <SectionHead title={text('common.limitedTimeActivities')} />
       {query.isPending ? (
         <LoadingState />
       ) : query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : null}
       {query.data?.length === 0 && !children ? (
-        <p>{text('common.noLimitedTimeActivitiesAreListed')}</p>
+        <EmptyState title={text('common.noLimitedTimeActivitiesAreListed')} body="" />
       ) : null}
-      <div className="limited-grid">
-        {query.data?.map((activity) => {
-          const isBook = activity.key === 'picture-book';
-          const name = isBook ? text('common.pictureBook') : text('common.raiseABigFish');
-          return (
-            <Link
-              key={activity.key}
-              className="card limited-entry"
-              to={'/activities/' + activity.key}
-            >
-              <div className={`limited-entry__cover limited-entry__cover--${activity.cover_key}`}>
-                {isBook ? (
-                  <img
-                    src={pictureBookCover}
-                    alt={text('common.rengeCarefullyDrawingASimplePictureOn')}
-                    width="1280"
-                    height="720"
-                  />
-                ) : (
-                  <img
-                    src="/assets/fatfish/cover.png"
-                    alt={text('common.fatFishMoveObstaclesAndHappilyHead')}
-                    width="1536"
-                    height="1024"
-                    loading="lazy"
-                  />
-                )}
-              </div>
-              <div className="limited-entry__copy">
-                <p className="limited-entry__eyebrow">{text('common.limitedTimeActivity')}</p>
-                <h3>{name}</h3>
-                <p>
-                  {isBook
-                    ? text('common.openThePictureBookAndCollectSketch')
-                    : text('common.moveObstaclesAndGuideHungryFatFish')}
-                </p>
-                <p className="limited-entry__status">{statusLabel(activity.status, text)}</p>
-                {activity.starts_at !== null && activity.ends_at !== null && (
+      {(query.data?.length ?? 0) > 0 || children ? (
+        <div className="limited-grid">
+          {query.data?.map((activity) => {
+            const isBook = activity.key === 'picture-book';
+            const name = isBook ? text('common.pictureBook') : text('common.raiseABigFish');
+            return (
+              <Link
+                key={activity.key}
+                className="card limited-entry"
+                to={'/activities/' + activity.key}
+              >
+                <div className={`limited-entry__cover limited-entry__cover--${activity.cover_key}`}>
+                  {isBook ? (
+                    <img
+                      src={pictureBookCover}
+                      alt={text('common.rengeCarefullyDrawingASimplePictureOn')}
+                      width="1280"
+                      height="720"
+                    />
+                  ) : (
+                    <img
+                      src="/assets/fatfish/cover.png"
+                      alt={text('common.fatFishMoveObstaclesAndHappilyHead')}
+                      width="1536"
+                      height="1024"
+                      loading="lazy"
+                    />
+                  )}
+                </div>
+                <div className="limited-entry__copy">
+                  <div className="limited-entry__head">
+                    <h3>{name}</h3>
+                    <StatusBadge
+                      tone={
+                        activity.status === 'open'
+                          ? 'ok'
+                          : activity.status === 'paused' || activity.status === 'unavailable'
+                            ? 'warn'
+                            : activity.status === 'scheduled'
+                              ? 'info'
+                              : 'neutral'
+                      }
+                    >
+                      {statusLabel(activity.status, text)}
+                    </StatusBadge>
+                  </div>
                   <p>
-                    <span>{text('common.schedule')}: </span>
-                    {formatDateTime(activity.starts_at)} — {formatDateTime(activity.ends_at)}
+                    {isBook
+                      ? text('common.openThePictureBookAndCollectSketch')
+                      : text('common.moveObstaclesAndGuideHungryFatFish')}
                   </p>
-                )}
-                <p>{text(nextStep[activity.status])}</p>
-                <span className="limited-entry__action">
-                  {text('common.viewActivity')}: {name}
-                </span>
-              </div>
-            </Link>
-          );
-        })}
-        {children}
-      </div>
+                  {activity.starts_at !== null && activity.ends_at !== null && (
+                    <p className="limited-entry__schedule">
+                      <span>{text('common.schedule')}: </span>
+                      {formatDateTime(activity.starts_at)} — {formatDateTime(activity.ends_at)}
+                    </p>
+                  )}
+                  <p className="limited-entry__next">{text(nextStep[activity.status])}</p>
+                  <span className="limited-entry__action">
+                    {text('common.viewActivity')}: {name}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }
 function ActivityInformation({ detail }: { readonly detail: ActivityDetail }) {
   const text = useActivityText();
   return (
-    <div className="limited-notice" role="status">
-      <p>{statusLabel(detail.status, text)}</p>
+    <Note
+      tone={
+        detail.status === 'open'
+          ? 'ok'
+          : detail.status === 'paused' || detail.status === 'unavailable'
+            ? 'warn'
+            : 'info'
+      }
+      title={statusLabel(detail.status, text)}
+    >
       {detail.starts_at !== null && detail.ends_at !== null ? (
         <p>
           {formatDateTime(detail.starts_at)} — {formatDateTime(detail.ends_at)}
         </p>
       ) : null}
       <p>{text('common.balancesAndRecordsContinueWhenTheActivity')}</p>
-    </div>
+    </Note>
   );
 }
 function ExchangePanel({
@@ -176,99 +206,111 @@ function ExchangePanel({
     });
   };
   return (
-    <Card>
+    <Card className="limited-exchange-card">
       <h2>{text('common.activityWalletAndExchange')}</h2>
       {wallet.isPending ? (
         <LoadingState />
       ) : wallet.error ? (
         <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
       ) : null}
-      {wallet.data ? (
-        <dl className="limited-facts">
-          <dt>{text('common.generalCredits')}</dt>
-          <dd>
-            <ExactCredits value={wallet.data.general} />
-          </dd>
-          <dt>{text('common.sketchPaper')}</dt>
-          <dd>
-            <ExactCount value={wallet.data.sketch_paper} />
-          </dd>
-          <dt>{text('common.paintBrushes')}</dt>
-          <dd>
-            <ExactCount value={wallet.data.sketch_brush} />
-          </dd>
-        </dl>
-      ) : null}
-      <p>
-        {text('common.brushesRemainingAcrossTheSite')}:{' '}
-        <ExactCount value={supply.brush_remaining} /> / <ExactCount value={supply.brush_cap} />
-      </p>
-      <p>{text('common.exchangeGeneralCreditsForActivityCurrencyExchanges')}</p>
-      <form
-        className="limited-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <fieldset disabled={locked}>
-          <Fields>
-            <Field label={text('common.currency')} size="short">
-              {(props) => (
-                <select
-                  {...props}
-                  value={asset}
-                  onChange={(event) => setAsset(event.target.value as ActivityAsset)}
-                >
-                  <option value="sketch_paper">{currencyLabel('sketch_paper', text)}</option>
-                  <option value="sketch_brush">{currencyLabel('sketch_brush', text)}</option>
-                </select>
-              )}
-            </Field>
-            <Field label={text('common.quantity')} size="short">
-              {(props) => (
-                <input
-                  {...props}
-                  className="limited-exchange-quantity"
-                  value={quantity}
-                  inputMode="numeric"
-                  pattern="[1-9][0-9]*"
-                  maxLength={39}
-                  onChange={(event) => setQuantity(event.target.value)}
-                  required
-                />
-              )}
-            </Field>
-          </Fields>
-        </fieldset>
-        <p>
-          {text('common.generalCreditsCharged')}:{' '}
-          <output>{cost === null ? '—' : <ExactCredits value={cost} />}</output>
-        </p>
-        {uncertain ? (
-          <p role="status">{text('common.thePreviousResultIsUnconfirmedRetryThe')}</p>
-        ) : null}
-        {operation.error ? <ErrorState error={operation.error} /> : null}
-        <FormActions>
-          <button
-            className="nb-btn nb-btn--primary"
-            type="submit"
-            disabled={
-              operation.isPending ||
-              (!uncertain && (detail.status !== 'open' || cost === null || !wallet.data))
-            }
+      <div className="limited-exchange-layout">
+        <div className="limited-wallet-panel">
+          {wallet.data ? (
+            <dl className="limited-facts">
+              <dt>{text('common.generalCredits')}</dt>
+              <dd>
+                <ExactCredits value={wallet.data.general} />
+              </dd>
+              <dt>{text('common.sketchPaper')}</dt>
+              <dd>
+                <ExactCount value={wallet.data.sketch_paper} />
+              </dd>
+              <dt>{text('common.paintBrushes')}</dt>
+              <dd>
+                <ExactCount value={wallet.data.sketch_brush} />
+              </dd>
+            </dl>
+          ) : null}
+          <p className="limited-wallet-panel__supply">
+            {text('common.brushesRemainingAcrossTheSite')}:{' '}
+            <ExactCount value={supply.brush_remaining} /> / <ExactCount value={supply.brush_cap} />
+          </p>
+        </div>
+        <div className="limited-exchange-main">
+          <p className="nb-small nb-muted">
+            {text('common.exchangeGeneralCreditsForActivityCurrencyExchanges')}
+          </p>
+          <form
+            className="limited-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit();
+            }}
           >
-            {uncertain ? text('common.retryTheSameExchange') : text('common.confirmExchange')}
-          </button>
-        </FormActions>
-      </form>
-      {receipt ? (
-        <p role="status">
-          {text('common.exchanged')} {receipt.receipt.quantity}{' '}
-          {currencyLabel(receipt.receipt.asset, text)} · {text('common.generalCreditsCharged')}{' '}
-          {receipt.receipt.cost}
-        </p>
-      ) : null}
+            <fieldset disabled={locked}>
+              <Fields>
+                <Field label={text('common.currency')} size="short">
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={asset}
+                      onChange={(event) => setAsset(event.target.value as ActivityAsset)}
+                    >
+                      <option value="sketch_paper">{currencyLabel('sketch_paper', text)}</option>
+                      <option value="sketch_brush">{currencyLabel('sketch_brush', text)}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field label={text('common.quantity')} size="short">
+                  {(props) => (
+                    <input
+                      {...props}
+                      className="limited-exchange-quantity"
+                      value={quantity}
+                      inputMode="numeric"
+                      pattern="[1-9][0-9]*"
+                      maxLength={39}
+                      onChange={(event) => setQuantity(event.target.value)}
+                      required
+                    />
+                  )}
+                </Field>
+              </Fields>
+            </fieldset>
+            {uncertain ? (
+              <p role="status">{text('common.thePreviousResultIsUnconfirmedRetryThe')}</p>
+            ) : null}
+            {operation.error ? <ErrorState error={operation.error} /> : null}
+            <div className="limited-exchange-footer">
+              <p className="limited-exchange-cost">
+                {text('common.generalCreditsCharged')}:{' '}
+                <output>{cost === null ? '—' : <ExactCredits value={cost} />}</output>
+              </p>
+              <FormActions>
+                <button
+                  className="nb-btn nb-btn--primary"
+                  type="submit"
+                  disabled={
+                    operation.isPending ||
+                    (!uncertain && (detail.status !== 'open' || cost === null || !wallet.data))
+                  }
+                >
+                  {uncertain ? text('common.retryTheSameExchange') : text('common.confirmExchange')}
+                </button>
+              </FormActions>
+            </div>
+          </form>
+          {receipt ? (
+            <Note tone="ok">
+              <span role="status">
+                {text('common.exchanged')} {receipt.receipt.quantity}{' '}
+                {currencyLabel(receipt.receipt.asset, text)} · {text('common.generalCreditsCharged')}{' '}
+                {receipt.receipt.cost}
+              </span>
+            </Note>
+          ) : null}
+        </div>
+      </div>
     </Card>
   );
 }
@@ -290,7 +332,6 @@ function PictureBookContent({
       <PageHeader
         title={text('common.pictureBook')}
         eyebrow={text('common.limitedTimeActivity')}
-        icon="activities"
         back={<Link to="/activities">{text('common.backToActivities')}</Link>}
       />
       {query.isPending ? (

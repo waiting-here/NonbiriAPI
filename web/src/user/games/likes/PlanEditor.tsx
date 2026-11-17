@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from '@shared/components/Icon';
 import type { DuelState } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
 import type { ModeCatalog } from './catalog';
@@ -379,7 +380,7 @@ export function PlanEditor({
                   aria-label={`${skill.name} ${text('likes.details')}`}
                   onClick={() => onInspect(skill.id)}
                 >
-                  ⓘ
+                  <Icon name="info" width={16} height={16} />
                 </button>
               </div>
             ))}

@@ -119,7 +119,7 @@ export function CredentialReportPage() {
   };
 
   return (
-    <div className="page ops-stack">
+    <div className="page ops-stack ops-readable-page">
       <PageHeader
         eyebrow={t('user.report.eyebrow')}
         title={t('user.report.title')}
@@ -201,7 +201,7 @@ export function CredentialReportPage() {
                     </select>
                   )}
                 </Field>
-                <Field label={t('user.report.baseUrlLabel')} size="long">
+                <Field label={t('user.report.baseUrlLabel')}>
                   {(props) => (
                     <input
                       {...props}
@@ -218,7 +218,7 @@ export function CredentialReportPage() {
                     />
                   )}
                 </Field>
-                <Field label={t('user.report.secretLabel')} size="long">
+                <Field label={t('user.report.secretLabel')} span>
                   {(props) => (
                     <textarea
                       {...props}
@@ -235,7 +235,7 @@ export function CredentialReportPage() {
                     />
                   )}
                 </Field>
-                <Field label={t('user.report.noteLabel')} size="long">
+                <Field label={t('user.report.noteLabel')} span>
                   {(props) => (
                     <textarea
                       {...props}

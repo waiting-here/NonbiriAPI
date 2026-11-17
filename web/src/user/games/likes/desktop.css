@@ -183,6 +183,14 @@
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   }
 
+  .likes-harness-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .likes-role-option > .likes-art {
+    max-height: 11.5rem;
+  }
+
   .likes-outcome-art > div {
     width: min(45%, 24rem);
   }

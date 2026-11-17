@@ -26,10 +26,10 @@ export function PresetModels({
 }) {
   const { t } = useTranslation();
   return (
-    <Fold title={t('common.connections.adoptModelSuggestions')} lazy>
+    <Fold plain title={t('common.connections.adoptModelSuggestions')} lazy>
       <Note>{t('common.connections.suggestionsNeedSelection')}</Note>
       {mappings.map((mapping) => (
-        <Fold key={mapping.model_id} title={mapping.model_id} lazy>
+        <Fold plain key={mapping.model_id} title={mapping.model_id} lazy>
           <PresetModelRow
             accountId={accountId}
             mapping={mapping}
@@ -212,32 +212,28 @@ export function PresetModelRow({
         const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
         const selected = selectedServices(entry);
         return (
-          <div key={entry.entry_id}>
-            <Field
-              label={
-                (endpoint?.note || endpoint?.base_url || t('common.connections.entryNotCreated')) +
-                ' · ' +
-                entry.upstream_model_id
-              }
-            >
-              {(props) => (
-                <input
-                  {...props}
-                  type="checkbox"
-                  checked={Boolean(selected)}
-                  disabled={locked || !key}
-                  onChange={(event) =>
-                    setServices((previous) => {
-                      const next = { ...previous };
-                      if (event.target.checked)
-                        next[entry.entry_id] = key?.native_services?.slice() ?? [];
-                      else next[entry.entry_id] = null;
-                      return next;
-                    })
-                  }
-                />
-              )}
-            </Field>
+          <div key={entry.entry_id} className="nb-stack nb-stack--sm">
+            <label className="core-checkbox">
+              <input
+                type="checkbox"
+                checked={Boolean(selected)}
+                disabled={locked || !key}
+                onChange={(event) =>
+                  setServices((previous) => {
+                    const next = { ...previous };
+                    if (event.target.checked)
+                      next[entry.entry_id] = key?.native_services?.slice() ?? [];
+                    else next[entry.entry_id] = null;
+                    return next;
+                  })
+                }
+              />
+              <span>
+                {(endpoint?.note || endpoint?.base_url || t('common.connections.entryNotCreated')) +
+                  ' · ' +
+                  entry.upstream_model_id}
+              </span>
+            </label>
             {editableUpstream && selected ? (
               <Field
                 label={

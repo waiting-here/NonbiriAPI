@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { ErrorState, LoadingState, PageHeader, SectionHead } from '@shared/components/States';
+import { StatusBadge } from '@shared/components/ui';
 import { UserPageGate } from '../components/UserPageGate';
 import { Fold } from '@shared/components/ui/Fold';
 import { useUserSession } from '../data';
@@ -41,9 +42,7 @@ function ActivitySlot({
         if (!available) setState({ available, expanded });
       }}
       meta={
-        <span className="nb-badge nb-badge--plain">
-          {t('user.activities.presentation.unavailable')}
-        </span>
+        <StatusBadge tone="neutral">{t('user.activities.presentation.unavailable')}</StatusBadge>
       }
     >
       <div className="activity-slot__body">{children}</div>
@@ -80,51 +79,53 @@ function ActivitiesContent() {
         ) : null}
       </LimitedActivitiesSection>
       {accountID && <AttendanceSection key={accountID} account={accountID} />}
-      <h2>{t('common.activities.permanent')}</h2>
-      {activities.isPending && !activities.data ? <LoadingState /> : null}
-      {activities.error && !activities.data ? (
-        <ErrorState error={activities.error} onRetry={() => void activities.refetch()} />
-      ) : null}
-      {activities.data ? (
-        <>
-          <ActivityConnectionNotice
-            connection={stream.connection}
-            recoveryError={stream.recoveryError}
-            reconciled={stream.reconciledAt > 0}
-            onRetry={() => void stream.retry()}
-          />
-          <ActivitiesMasterNotice snapshot={activities.data} />
-          <section className="economy-activities-grid" aria-label={t('user.activities.cardsLabel')}>
-            <LoanCard
-              key={`loan:${accountID}`}
-              account={accountID ?? ''}
-              loan={activities.data.loan}
-              masterAvailable={activities.data.master.available}
+      <section className="economy-permanent-section" aria-label={t('common.activities.permanent')}>
+        <SectionHead title={t('common.activities.permanent')} />
+        {activities.isPending && !activities.data ? <LoadingState /> : null}
+        {activities.error && !activities.data ? (
+          <ErrorState error={activities.error} onRetry={() => void activities.refetch()} />
+        ) : null}
+        {activities.data ? (
+          <>
+            <ActivityConnectionNotice
+              connection={stream.connection}
+              recoveryError={stream.recoveryError}
+              reconciled={stream.reconciledAt > 0}
+              onRetry={() => void stream.retry()}
             />
-            {gacha.data?.enabled && <GachaEntry />}
-            <ActivitySlot
-              title={t('user.activities.welfare.title')}
-              available={activities.data.master.available}
-            >
-              <WelfareCard
-                key={`welfare:${accountID}`}
-                welfare={activities.data.welfare}
+            <ActivitiesMasterNotice snapshot={activities.data} />
+            <section className="economy-activities-grid" aria-label={t('user.activities.cardsLabel')}>
+              <LoanCard
+                key={`loan:${accountID}`}
+                account={accountID ?? ''}
+                loan={activities.data.loan}
                 masterAvailable={activities.data.master.available}
               />
-            </ActivitySlot>
-            <ActivitySlot
-              title={t('user.activities.thursday.title')}
-              available={activities.data.master.available}
-            >
-              <ThursdayCard
-                key={`thursday:${accountID}`}
-                thursday={activities.data.thursday}
-                masterAvailable={activities.data.master.available}
-              />
-            </ActivitySlot>
-          </section>
-        </>
-      ) : null}
+              {gacha.data?.enabled && <GachaEntry />}
+              <ActivitySlot
+                title={t('user.activities.welfare.title')}
+                available={activities.data.master.available}
+              >
+                <WelfareCard
+                  key={`welfare:${accountID}`}
+                  welfare={activities.data.welfare}
+                  masterAvailable={activities.data.master.available}
+                />
+              </ActivitySlot>
+              <ActivitySlot
+                title={t('user.activities.thursday.title')}
+                available={activities.data.master.available}
+              >
+                <ThursdayCard
+                  key={`thursday:${accountID}`}
+                  thursday={activities.data.thursday}
+                  masterAvailable={activities.data.master.available}
+                />
+              </ActivitySlot>
+            </section>
+          </>
+        ) : null}
+      </section>
     </div>
   );
 }

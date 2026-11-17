@@ -12,7 +12,7 @@ import {
   clearStationSession,
   stationSessionMatches,
 } from '@shared/charityManagement';
-import { Icon } from '@shared/components/Icon';
+import { StatusBadge } from '@shared/components/ui';
 import { ApiError, isUnauthorized } from '@shared/query/http';
 import { Link } from 'react-router';
 import { SafeAnnouncementBody } from './SafeAnnouncementBody';
@@ -33,7 +33,7 @@ import type {
 } from '../core/types';
 import './homeAnnouncements.css';
 
-const SEVERITY_ICONS = { info: 'info', warning: 'warning', important: 'error' } as const;
+const SEVERITY_TONES = { info: 'info', warning: 'warn', important: 'bad' } as const;
 const SEVERITY_KEYS = {
   info: 'home.announcement.severity.info',
   warning: 'home.announcement.severity.warning',
@@ -124,15 +124,16 @@ function AnnouncementCard({
   return (
     <li className={`nb-row home-announcement-card home-announcement-card--${summary.severity}`}>
       <div className="home-announcement-card__top">
-        <div
-          className={`home-announcement-severity home-announcement-severity--${summary.severity}`}
-        >
-          <Icon name={SEVERITY_ICONS[summary.severity]} />
-          <span>{t(SEVERITY_KEYS[summary.severity])}</span>
+        <div className="home-announcement-severity">
+          <StatusBadge tone={SEVERITY_TONES[summary.severity]}>
+            {t(SEVERITY_KEYS[summary.severity])}
+          </StatusBadge>
+          {summary.pinned ? (
+            <StatusBadge tone="accent">{t('home.announcement.pinned')}</StatusBadge>
+          ) : null}
         </div>
         <div className="home-announcement-meta">
           <CoreTime value={summary.published_at} />
-          {summary.pinned ? <span>{t('home.announcement.pinned')}</span> : null}
           {summary.fallback_from ? (
             <span>
               {t('home.announcement.languageFallback', {

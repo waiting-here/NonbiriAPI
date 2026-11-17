@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { PageHeader } from '@shared/components/States';
+import { Note } from '@shared/components/ui';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { LegalLayout } from '../components/LegalLayout';
 import { LegalSections } from '../components/LegalSections';
@@ -14,20 +16,16 @@ export function PrivacyPage() {
   const authoritativeName = authoritative ? t(`user.legal.localeName.${authoritative}`) : '';
 
   return (
-    <article className="page legal-copy">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">{t('app.name')}</p>
-          <h1>{t('user.legal.privacy.title')}</h1>
-          <p className="page-description">{t('user.legal.privacy.intro')}</p>
-          {!hasOverride ? <p className="legal-notice">{t('user.legal.privacy.notice')}</p> : null}
-          {authoritative ? (
-            <p className="legal-notice" role="note">
-              {t('user.legal.authoritativeNotice', { locale: authoritativeName })}
-            </p>
-          ) : null}
-        </div>
-      </header>
+    <article className="page legal-copy nb-stack">
+      <PageHeader
+        eyebrow={t('app.name')}
+        title={t('user.legal.privacy.title')}
+        description={t('user.legal.privacy.intro')}
+      />
+      {!hasOverride ? <Note>{t('user.legal.privacy.notice')}</Note> : null}
+      {authoritative ? (
+        <Note>{t('user.legal.authoritativeNotice', { locale: authoritativeName })}</Note>
+      ) : null}
       <LegalLayout documentKey="privacy">
         {hasOverride && override ? (
           <LegalSections override={override} />

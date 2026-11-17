@@ -3,13 +3,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--nb-space-5);
-  align-items: start;
+  align-items: stretch;
 }
 .home-start,
 .home-wallet,
 .home-intro {
   padding: var(--nb-space-5);
   display: grid;
+  align-content: start;
   gap: var(--nb-space-4);
   min-width: 0;
 }
@@ -45,27 +46,30 @@
   align-items: center;
 }
 .home-checkins {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--nb-space-3);
   min-width: 0;
   container: home-checkins / inline-size;
 }
 .home-address-copy {
   max-width: 100%;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  padding: var(--nb-space-1) var(--nb-space-2);
 }
 .home-address-copy code {
   min-width: 0;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  overflow: visible;
+  font-size: var(--nb-font-size-xs);
+  white-space: nowrap;
+  overflow-x: auto;
   text-overflow: clip;
 }
 .home-address-copy button {
   flex: 0 0 auto;
 }
 .home-address-copy [role='status'] {
-  flex-basis: 100%;
+  flex: 0 0 auto;
+  font-size: var(--nb-font-size-xs);
 }
 .home-checklist .home-address-copy {
   margin-block: var(--nb-space-1);
@@ -81,8 +85,28 @@
 .home-wallet .nb-facts dd {
   overflow-wrap: anywhere;
 }
+.home-wallet__facts.nb-facts--inline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--nb-space-3);
+  padding-top: var(--nb-space-3);
+  border-top: 1px solid var(--nb-color-border);
+}
+.home-wallet__facts.nb-facts--inline > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--nb-space-1);
+  padding: 0;
+  border: 0;
+}
+@media (width <= 32rem) {
+  .home-wallet__facts.nb-facts--inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .home-page .core-checkin-grid {
+  flex: 1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: var(--nb-space-4);
 }
 @container home-checkins (width < 28rem) {
@@ -91,8 +115,11 @@
   }
 }
 .home-page .core-checkin-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   padding: var(--nb-space-4) var(--nb-space-5);
-  gap: var(--nb-space-2);
+  gap: var(--nb-space-3);
 }
 .home-page .core-checkin-card .core-card__header {
   margin: 0;
@@ -230,6 +257,9 @@
 .api-access-page #client {
   scroll-margin-top: 6rem;
 }
+.api-access-page #client .nb-facts--inline > div:first-child {
+  align-items: center;
+}
 .api-access-page .nb-facts dd p {
   margin: 0 0 var(--nb-space-2);
 }
@@ -246,13 +276,6 @@
 .api-access-page .core-copy-value code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.api-access-page .personal-automation-guide {
-  margin-bottom: var(--nb-space-5);
-}
-.api-access-page .personal-automation-guide table {
-  min-width: 0;
-  table-layout: fixed;
 }
 .api-access-page .personal-automation-guide td,
 .api-access-page .personal-automation-guide th {

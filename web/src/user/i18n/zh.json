@@ -51,7 +51,6 @@
       "stepDone": "已完成",
       "apiAccess": "查看 API 接入",
       "hide": "隐藏",
-      "collapseHelp": "完成后清单会自动收起。",
       "usage": "累计调用",
       "noCalls": "还没有调用",
       "calls": "{{count}} 次",
@@ -1151,6 +1150,7 @@
           "seconds": "{{seconds}} 秒时限",
           "specClosed": "该规格已关闭",
           "startReview": "确认付费开始",
+          "startReviewFree": "确认开始",
           "startConsequences": "确认后扣除下方门票并开始计时。离开页面后计时继续，门票不退还。",
           "hintButton": "提示 / 刷新（剩余 {{count}} 次）",
           "hintTile": "提示",
@@ -1200,7 +1200,6 @@
             "seconds": "{{seconds}} 秒",
             "new": "开始另一局"
           },
-          "empty": "没有进行中的棋盘或近 30 天结果摘要。",
           "noRegularReward": "没有逐局积分奖励。普通完成不发放积分；符合条件的一次性新人任务奖励仍可领取。"
         },
         "onboarding": {
@@ -1297,6 +1296,7 @@
             "body": "接住热梗，躲过故障。和 ChatGPT 一起挑战 90 秒。"
           },
           "free": "免费游玩",
+          "rewardExchange": "可兑积分",
           "lakenotes": {
             "title": "垂钓手记",
             "body": "在四处水域收集渔获、升级装备，写下你的垂钓故事。"
@@ -1370,9 +1370,8 @@
             "ten": "十连收获"
           },
           "selected": "已选鱼饵",
-          "unitPrice": "单次价格",
           "totalPrice": "本次总价",
-          "balance": "可用余额",
+          "winGeneralCredits": "可赢取通用积分",
           "start": "开始垂钓",
           "starting": "正在抛竿…",
           "insufficient": "当前积分不足，请调整鱼饵或抛竿次数。",
@@ -1666,8 +1665,11 @@
           }
         }
       },
+      "ranking": {
+        "emptyHint": "在统计周期内完成对应游戏即可参与排名。",
+        "charityEmptyHint": "累计正值捐赠积分即可进入慈善榜。"
+      },
       "presentation": {
-        "description": "用游戏积分玩几局。",
         "activityWallet": "去活动领游戏积分 →",
         "unavailable": "未开放",
         "test": "测试",
@@ -2361,7 +2363,7 @@
     "activities": {
       "nav": "活动",
       "title": "活动",
-      "description": "赛博网贷、每日游戏低保与疯狂星期四，挑选今天的游戏补给。",
+      "description": "参与限时活动、每日签到与常驻积分活动。",
       "cardsLabel": "可用活动",
       "mutationResponseUnknown": "请求结果无法确认。",
       "mutationConflictRefreshed": "活动在请求完成前已发生变化。",
@@ -2762,6 +2764,7 @@
       "account.created": "账户创建时间",
       "account.languageTitle": "账户语言",
       "account.languageBody": "选择界面语言，保存后生效。",
+      "account.languageUnsetHint": "当前尚未保存账户语言（公告等服务端内容默认优先显示英文）。点击下方语言即可保存到账户。",
       "account.language": "语言",
       "account.zh": "中文",
       "account.en": "English",
@@ -2797,7 +2800,7 @@
       "keys.clientTitle": "在客户端中填写",
       "keys.clientHelp": "选择「OpenAI 兼容」或「自定义 OpenAI」，再填写以下三项。",
       "keys.apiAddress": "API 地址",
-      "keys.clientKey": "上面的本站 API 密钥",
+      "keys.clientKey": "本页生成的本站 API 密钥",
       "keys.modelName": "模型名",
       "keys.charityModels": "公益模型",
       "keys.ownModels": "我的模型",

@@ -155,8 +155,45 @@ function Lobby({
       creditsToMilli(spendableGameCredits(context.wallets).total) >=
       creditsToMilli(mode?.ticket ?? '0');
   const unavailable = entryProblem(context, catalog.mode);
+  const roleName = catalog.roles.find((r) => r.id === selection.role)?.name ?? selection.role;
+  const harnessObj = catalog.harnesses.find((h) => h.id === selection.harness);
+  const slots = 4 + (harnessObj?.activeSlots ?? 0);
   return (
     <>
+      <div className="likes-entry-bar">
+        <div className="likes-entry-bar__info">
+          <p className="likes-entry-bar__summary">
+            <strong>
+              {catalog.mode === 'quick' ? text('likes.quickMode') : text('likes.standardMode')}
+            </strong>{' '}
+            · {roleName} · {harnessObj?.name ?? selection.harness} · {text('likes.skills')}{' '}
+            {selection.skills.length}/{slots} ·{' '}
+            {text('likes.targetRounds', {
+              likes: catalog.parameters.TARGET_LIKES,
+              rounds: catalog.parameters.MAX_ROUNDS,
+            })}
+          </p>
+          {mode && <DuelTerms mode={mode} />}
+        </div>
+        <div className="likes-enqueue">
+          <GameActionBar cost={<GameMoney value={mode?.ticket ?? '0'} />}>
+            <button
+              type="button"
+              className="likes-primary"
+              disabled={
+                blocked || !!unavailable || !enough || !!selectionProblem(catalog, selection)
+              }
+              onClick={() => onQueue(selection)}
+            >
+              {unavailable
+                ? entryMessage(unavailable, text)
+                : !enough
+                  ? text('bidding.insufficientCredits')
+                  : text('bidding.payEntryAndFindAMatch')}
+            </button>
+          </GameActionBar>
+        </div>
+      </div>
       <LoadoutEditor
         disclosure={disclosure}
         catalog={catalog}
@@ -176,30 +213,6 @@ function Lobby({
           onLoad={onPresetLoad}
         />
       </LoadoutEditor>
-      {mode && <DuelTerms mode={mode} />}
-      <div className="likes-enqueue">
-        <span>
-          {catalog.mode === 'quick' ? text('likes.quickMode') : text('likes.standardMode')} ·{' '}
-          {text('likes.targetRounds', {
-            likes: catalog.parameters.TARGET_LIKES,
-            rounds: catalog.parameters.MAX_ROUNDS,
-          })}
-        </span>
-        <GameActionBar cost={<GameMoney value={mode?.ticket ?? '0'} />}>
-          <button
-            type="button"
-            className="likes-primary"
-            disabled={blocked || !!unavailable || !enough || !!selectionProblem(catalog, selection)}
-            onClick={() => onQueue(selection)}
-          >
-            {unavailable
-              ? entryMessage(unavailable, text)
-              : !enough
-                ? text('bidding.insufficientCredits')
-                : text('bidding.payEntryAndFindAMatch')}
-          </button>
-        </GameActionBar>
-      </div>
     </>
   );
 }
@@ -330,8 +343,8 @@ export function LikesGame(context: DuelLobbyContext) {
   return (
     <div className="likes-game">
       <header className="likes-heading">
-        <GameBackLink />
         <div>
+          <GameBackLink />
           <h1>{text('likes.turnBasedBattleMinigameTest')}</h1>
           <BattleAtmosphere
             reduced={reduced}
@@ -378,6 +391,12 @@ export function LikesGame(context: DuelLobbyContext) {
                 icon: 'play',
                 disabled: !canTeach,
                 onClick: () => setTutorial(true),
+              },
+              {
+                id: 'credit-history',
+                label: t('user.games.presentation.creditHistory'),
+                icon: 'credits',
+                to: '/credits',
               },
               {
                 id: 'rankings',

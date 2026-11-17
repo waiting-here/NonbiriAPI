@@ -26,7 +26,6 @@
   width: 100%;
   min-width: 0;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 .credit-history__table th,
 .credit-history__table td {
@@ -34,6 +33,12 @@
   text-align: left;
   border-bottom: 1px solid var(--nb-color-border);
   overflow-wrap: anywhere;
+}
+@media (width >= 40rem) {
+  .credit-history__table .is-num {
+    text-align: right;
+    white-space: nowrap;
+  }
 }
 .credit-history__table th {
   color: var(--nb-color-text-muted);

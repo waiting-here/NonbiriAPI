@@ -595,6 +595,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
         <ModelEditor
           key={`${user.id}:${creationVersion}`}
           accountId={user.id}
+          inSheet
           onCancel={() => setCreating(false)}
           onCapabilityLoss={(error) => setPermissionLost({ scope: user.id, error })}
           onSaved={(saved) => {
@@ -632,7 +633,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
                   </Link>
                   <button
                     type="button"
-                    className="nb-btn nb-btn--primary"
+                    className="nb-btn nb-btn--secondary"
                     onClick={() => setCreating(true)}
                   >
                     {t('models.create')}

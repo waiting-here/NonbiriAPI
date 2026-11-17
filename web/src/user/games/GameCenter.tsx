@@ -1,5 +1,5 @@
 import { CreditText } from '@shared/components/CreditText';
-import { Panel, PanelHead, PanelBody } from '@shared/components/ui';
+import { Panel, PanelHead, PanelBody, StatusBadge } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
 import { GamePrivacyControl } from './common/GamePrivacyControl';
@@ -66,11 +66,12 @@ function cardState(
       price: minimumPrice(Object.values(snapshot.fishing.baitPrices)),
     };
   if (kind === 'linklink') {
-    const specs = Object.values(snapshot.linklink.specs).filter((spec) => spec.enabled);
+    const allSpecs = Object.values(snapshot.linklink.specs);
+    const specs = allSpecs.filter((spec) => spec.enabled);
     return {
       state:
         snapshot.gamesEnabled && snapshot.linklink.enabled && specs.length > 0 ? 'open' : 'closed',
-      price: minimumPrice(specs.map((spec) => spec.price)),
+      price: minimumPrice((specs.length > 0 ? specs : allSpecs).map((spec) => spec.price)),
     };
   }
   if (kind === 'rps')
@@ -83,13 +84,14 @@ function cardState(
           : 'closed',
     };
   const game = snapshot[kind];
-  const modes = Object.values(game.modes).filter((mode) => mode.enabled && mode.available);
+  const allModes = Object.values(game.modes);
+  const modes = allModes.filter((mode) => mode.enabled && mode.available);
   return {
     state:
       snapshot.gamesEnabled && game.enabled && game.available && modes.length > 0
         ? 'open'
         : 'closed',
-    price: minimumPrice(modes.map((mode) => mode.ticket)),
+    price: minimumPrice((modes.length > 0 ? modes : allModes).map((mode) => mode.ticket)),
   };
 }
 
@@ -103,9 +105,13 @@ function GameCard({ card }: { card: CenterCard }) {
       : text('presentation.unavailable');
   const detail =
     card.id === 'lakenotes' ? (
-      ''
+      text('center.free')
     ) : card.price === undefined ? (
-      text('center.reviewCosts')
+      card.state === 'open' ? (
+        text('center.reviewCosts')
+      ) : (
+        ''
+      )
     ) : creditsToMilli(card.price) === 0n ? (
       text('center.free')
     ) : (
@@ -116,7 +122,7 @@ function GameCard({ card }: { card: CenterCard }) {
     );
   const reward = text(
     card.id === 'lakenotes'
-      ? 'center.free'
+      ? 'center.rewardExchange'
       : card.id === 'linklink' || card.id === 'steadycatch'
         ? 'center.firstClearReward'
         : 'center.winCredits',
@@ -127,21 +133,23 @@ function GameCard({ card }: { card: CenterCard }) {
       to={card.path}
     >
       <div className="game-center-card__hero">
-        <GameHero kind={card.id} />
-        <span className={`nb-badge nb-badge--${card.state === 'open' ? 'ok' : 'plain'}`}>
-          {stateLabel}
-        </span>
+        <GameHero kind={card.id} eager />
       </div>
       <div className="game-center-card__body">
-        <h2>{text(card.title)}</h2>
+        <div className="game-card-heading">
+          <h2>{text(card.title)}</h2>
+          <StatusBadge tone={card.state === 'open' ? 'ok' : 'neutral'}>{stateLabel}</StatusBadge>
+        </div>
         <p>{text(card.body)}</p>
         <div className="game-card-foot">
           <span className="game-card-meta">
-            {card.state === 'open' && detail ? <span>{detail}</span> : null}
+            {card.state !== 'maintenance' && detail ? (
+              <span className="game-card-detail">{detail}</span>
+            ) : null}
             <span className="nb-badge nb-badge--plain">{reward}</span>
           </span>
-          <span className="nb-btn nb-btn--sm nb-btn--secondary" aria-hidden="true">
-            {text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')}
+          <span className="game-card-cta" aria-hidden="true">
+            {text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')} →
           </span>
         </div>
       </div>
@@ -191,7 +199,6 @@ export function GameCenter() {
       <PageHeader
         icon="games"
         title={text('center.title')}
-        description={text('presentation.description')}
         actions={
           snapshot.data ? (
             <div className="game-center-wallet">

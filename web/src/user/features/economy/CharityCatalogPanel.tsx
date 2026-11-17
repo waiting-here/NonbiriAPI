@@ -9,6 +9,7 @@ import { CharityPriceTable, type CharityPriceRow } from '@shared/components/Char
 import { DataTable, Field, FilterBar, StatusBadge } from '@shared/components/ui';
 import type { StatusTone } from '@shared/components/ui/StatusBadge';
 import { CopyValue } from '@shared/components/CopyValue';
+import { Icon } from '@shared/components/Icon';
 import { RecentCharitySuccess } from '@shared/components/DonationControlFacts';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -401,7 +402,7 @@ export function CharityCatalogPanel({
                         onClick={() => toggleDescription(model.id)}
                       >
                         <code>{model.fullName}</code>
-                        <span aria-hidden="true">{expanded.has(model.id) ? '−' : '+'}</span>
+                        <Icon name={expanded.has(model.id) ? 'chevron-down' : 'chevron-right'} />
                       </button>
                       <ModelTypesSummary value={model.modelTypes} />
                       {model.publicDescription ? (

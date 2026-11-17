@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Field, Fold, Note, Tabs } from '@shared/components/ui';
+import { Fold, Note, Tabs } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
 import type { DiscoveryEvidence, Endpoint, EndpointKey } from '../types';
@@ -167,11 +167,10 @@ export function ServiceModelSetup({
         ) : (
           <div className="nb-stack">
             {models?.length ? (
-              models.map((row) => (
-                <Field key={row.id} label={row.upstream_model_id}>
-                  {(props) => (
+              <div className="service-model-grid">
+                {models.map((row) => (
+                  <label key={row.id} className="core-checkbox">
                     <input
-                      {...props}
                       type="checkbox"
                       disabled={batchLocked}
                       checked={selected.some(
@@ -208,9 +207,10 @@ export function ServiceModelSetup({
                         )
                       }
                     />
-                  )}
-                </Field>
-              ))
+                    <span className="core-mono">{row.upstream_model_id}</span>
+                  </label>
+                ))}
+              </div>
             ) : (
               <Note>
                 {t(
@@ -231,7 +231,7 @@ export function ServiceModelSetup({
             ) : null}
           </div>
         )}
-        <Fold lazy title={t('user.services.manualModels')}>
+        <Fold lazy plain title={t('user.services.manualModels')}>
           <PairManualCatalog
             accountId={accountId}
             endpointId={entry.id}

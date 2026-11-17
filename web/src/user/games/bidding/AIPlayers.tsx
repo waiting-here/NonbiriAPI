@@ -11,7 +11,7 @@ import {
 } from '@shared/aiPlayers';
 import { gameRequest } from '../common/request';
 import { GameMoney } from '../common/GameMoney';
-import { Toggle } from '@shared/components/ui';
+import { Segmented, Toggle } from '@shared/components/ui';
 import type { DuelIntent } from '../common/duel/api';
 import { useGameVisibility } from '../common/visibility';
 
@@ -24,13 +24,16 @@ export function BiddingLobby({
   const [kind, setKind] = useState<'human' | 'ai'>('human');
   return (
     <>
-      <div className="bid-opponent-tabs" role="group" aria-label={t('对战类型', 'Opponent type')}>
-        <button type="button" aria-pressed={kind === 'human'} onClick={() => setKind('human')}>
-          {t('真人对战', 'Player matches')}
-        </button>
-        <button type="button" aria-pressed={kind === 'ai'} onClick={() => setKind('ai')}>
-          {t('AI 玩家', 'AI players')}
-        </button>
+      <div className="bid-opponent-tabs">
+        <Segmented<'human' | 'ai'>
+          label={t('对战类型', 'Opponent type')}
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'human', label: t('真人对战', 'Player matches') },
+            { value: 'ai', label: t('AI 玩家', 'AI players') },
+          ]}
+        />
       </div>
       {kind === 'human' ? children : <AIPlayers {...props} />}
     </>

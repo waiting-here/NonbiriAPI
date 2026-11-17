@@ -1,4 +1,5 @@
 import { CreditNumber } from '@shared/components/CreditNumber';
+import { Field } from '@shared/components/ui/Field';
 import { GameToolbar } from '../common/GameToolbar';
 import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
@@ -12,6 +13,8 @@ import {
   type BlackjackState,
 } from '@shared/games/blackjack';
 import { ErrorState, LoadingState } from '@shared/components/States';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { useGameCopy } from '../copy';
 import { GameWallets } from '../common/GameWallets';
 import { Leaderboard } from '../ranking/Leaderboard';
 import { LeaderboardTabs } from '../ranking/LeaderboardTabs';
@@ -115,6 +118,7 @@ function Rules({ close }: { readonly close: () => void }) {
 }
 function History({ close }: { readonly close: () => void }) {
   const text = useDuelText();
+  const formatDateTime = useDateTimeFormatter();
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [selected, setSelected] = useState<string | null>(null);
   const cursor = cursors.at(-1) ?? null;
@@ -142,7 +146,7 @@ function History({ close }: { readonly close: () => void }) {
           ) : detail.error ? (
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
           ) : (
-            <div className="bidding-game blackjack-game">
+            <div className="blackjack-game">
               <RandomnessProof game="blackjack" id={detail.data.table.id} terminal />
               <BlackjackBoard table={detail.data.table} ownSeat={detail.data.summary.seat} />
               {detail.data.table.phase === 'result' ? (
@@ -171,7 +175,7 @@ function History({ close }: { readonly close: () => void }) {
                     className="nb-btn nb-btn--secondary"
                     onClick={() => setSelected(h.id)}
                   >
-                    <span>{new Date(h.started_at * 1000).toLocaleString()}</span>
+                    <span>{formatDateTime(new Date(h.started_at * 1000).toISOString())}</span>
                     <span>
                       {h.phase === 'cancelled' ? (
                         text('blackjack.refunded')
@@ -188,24 +192,26 @@ function History({ close }: { readonly close: () => void }) {
               {!page.data.items.length && <p>{text('blackjack.noGamesYet')}</p>}
             </>
           )}
-          <nav className="duel-actions" aria-label={text('blackjack.historyPages')}>
-            <button
-              className="nb-btn nb-btn--secondary"
-              disabled={cursors.length === 1}
-              onClick={() => setCursors((v) => v.slice(0, -1))}
-            >
-              {text('blackjack.previous')}
-            </button>
-            <button
-              className="nb-btn nb-btn--secondary"
-              disabled={!page.data?.next_cursor}
-              onClick={() => {
-                if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
-              }}
-            >
-              {text('blackjack.next')}
-            </button>
-          </nav>
+          {!(page.data?.items.length === 0 && cursors.length === 1 && !page.data?.next_cursor) && (
+            <nav className="duel-actions" aria-label={text('blackjack.historyPages')}>
+              <button
+                className="nb-btn nb-btn--secondary"
+                disabled={cursors.length === 1}
+                onClick={() => setCursors((v) => v.slice(0, -1))}
+              >
+                {text('blackjack.previous')}
+              </button>
+              <button
+                className="nb-btn nb-btn--secondary"
+                disabled={!page.data?.next_cursor}
+                onClick={() => {
+                  if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
+                }}
+              >
+                {text('blackjack.next')}
+              </button>
+            </nav>
+          )}
         </>
       )}
     </DuelDialog>
@@ -249,29 +255,21 @@ function QueueForm({
         if (!blocked && valid && accepting && current) onQueue(stake);
       }}
     >
-      <label>
-        {text('blackjack.baseStake')}
-        <input
-          type="text"
-          inputMode="decimal"
-          value={editingStake || selected === null ? stake : formatCredits(stake)}
-          onFocus={() => setEditingStake(true)}
-          onBlur={() => setEditingStake(false)}
-          onChange={(e) => setStake(e.target.value)}
-          disabled={blocked}
-          aria-invalid={!valid}
-        />
-      </label>
-      <GameActionBar cost={selected === null ? '—' : <GameMoney value={stake} />}>
-        <button
-          className="nb-btn nb-btn--primary"
-          type="submit"
-          form={formID}
-          disabled={blocked || !accepting || !valid || !current}
-        >
-          {accepting ? text('blackjack.joinQueue') : text('blackjack.gameClosed')}
-        </button>
-      </GameActionBar>
+      <Field label={text('blackjack.baseStake')}>
+        {(props) => (
+          <input
+            {...props}
+            type="text"
+            inputMode="decimal"
+            value={editingStake || selected === null ? stake : formatCredits(stake)}
+            onFocus={() => setEditingStake(true)}
+            onBlur={() => setEditingStake(false)}
+            onChange={(e) => setStake(e.target.value)}
+            disabled={blocked}
+            aria-invalid={!valid}
+          />
+        )}
+      </Field>
       {!!config.quick_stakes?.length && (
         <div
           className="bj-quick-stakes"
@@ -292,6 +290,16 @@ function QueueForm({
           ))}
         </div>
       )}
+      <GameActionBar cost={selected === null ? '—' : <GameMoney value={stake} />}>
+        <button
+          className="nb-btn nb-btn--primary"
+          type="submit"
+          form={formID}
+          disabled={blocked || !accepting || !valid || !current}
+        >
+          {accepting ? text('blackjack.joinQueue') : text('blackjack.gameClosed')}
+        </button>
+      </GameActionBar>
       {!current && <p role="status">{text('blackjack.refreshingStakeConfiguration')}</p>}
       {!valid && <p role="status">{text('blackjack.chooseAStakeWithinTheCurrentLimits')}</p>}
     </form>
@@ -299,6 +307,7 @@ function QueueForm({
 }
 export function BlackjackGame() {
   const text = useDuelText();
+  const { language, text: gameCopy } = useGameCopy();
   const game = useBlackjack();
   const snapshot = useGamesSnapshot();
   const home = game.query.data;
@@ -409,6 +418,12 @@ export function BlackjackGame() {
                   onClick: () => setPanel('history'),
                 },
                 {
+                  id: 'credits',
+                  label: gameCopy('presentation.creditHistory'),
+                  icon: 'credits',
+                  to: '/credits',
+                },
+                {
                   id: 'rankings',
                   label: text('ranking.leaderboards'),
                   icon: 'trophy',
@@ -467,8 +482,13 @@ export function BlackjackGame() {
             </section>
             <p className="bid-hint">
               {text('blackjack.nextRound')}{' '}
-              {new Date(home.next_round_at * 1000).toLocaleTimeString()} ·{' '}
-              {text('blackjack.waiting')} {home.queue_count}
+              {new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              }).format(new Date(home.next_round_at * 1000))}{' '}
+              · {text('blackjack.waiting')} {home.queue_count}
             </p>
             {home.table ? (
               <BlackjackBoard table={home.table} ownSeat={home.your_seat} controls={controls} />

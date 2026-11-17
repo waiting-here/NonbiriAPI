@@ -287,12 +287,11 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
           <GamePayment
             payment={{ general: seat.funding.currentGeneral, game: seat.funding.gameRemaining }}
           />
-          <details>
-            <summary>{text('rps.result.buyIn')}</summary>
+          <Fold plain title={text('rps.result.buyIn')}>
             <GamePayment
               payment={{ general: seat.funding.buyInGeneral, game: seat.funding.buyInGame }}
             />
-          </details>
+          </Fold>
         </div>
       ) : null}
       <div className="rps-seat__flags">
@@ -319,10 +318,9 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
           </>
         )}
       </div>
-      <details className="rps-seat__stats">
-        <summary>{text('rps.fun.title')}</summary>
+      <Fold plain className="rps-seat__stats" title={text('rps.fun.title')}>
         <FunStats seat={seat} />
-      </details>
+      </Fold>
     </Card>
   );
 }
@@ -483,8 +481,7 @@ function Match({
         ))}
       </div>
       <RoundReveal state={state} />
-      <details className="card rps-economy">
-        <summary>{text('rps.economyDetails')}</summary>
+      <Fold className="rps-economy" title={text('rps.economyDetails')}>
         <dl>
           <div>
             <dt>{text('rps.base')}</dt>
@@ -562,7 +559,7 @@ function Match({
             }}
           />
         </p>
-      </details>
+      </Fold>
     </section>
   );
 }
@@ -738,7 +735,9 @@ function Leaderboard({
   readonly board: 'profit_rate' | 'net_profit';
 }) {
   const { text } = useGameCopy();
-  const rows = data ? [...data.rows, ...(data.me ? [data.me] : [])] : [];
+  const rows = data
+    ? [...data.rows, ...(data.me && !data.rows.some((r) => r.isMe) ? [data.me] : [])]
+    : [];
   return (
     <Card className="rps-board">
       <h3>{text(`rps.leaderboard.${board}`)}</h3>
@@ -793,11 +792,25 @@ function RPSRankings({ mode }: { readonly mode: RPSMode }) {
   const { text } = useGameCopy();
   const profit = useRPSLeaderboard(mode, 'profit_rate', true);
   const net = useRPSLeaderboard(mode, 'net_profit', true);
+  const busy = profit.isFetching || net.isFetching;
   return (
     <section className="rps-leaderboards">
       <div className="rps-board-heading">
         <h2>{text('rps.leaderboard.title')}</h2>
-        <span>{text(`rps.mode.${mode}`)}</span>
+        <div className="rps-board-heading__actions">
+          <span>{text(`rps.mode.${mode}`)}</span>
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary nb-btn--sm"
+            disabled={busy}
+            onClick={() => {
+              void profit.refetch();
+              void net.refetch();
+            }}
+          >
+            {text(busy ? 'fishing.leaderboard.refreshing' : 'fishing.leaderboard.refresh')}
+          </button>
+        </div>
       </div>
       {profit.isPending || net.isPending ? <LoadingState label={text('common.loading')} /> : null}
       {profit.error ? (
@@ -830,6 +843,7 @@ export function RPSGame() {
     home?.kind === 'session' ? home.session.mode : home?.kind === 'queue' ? home.queue.mode : null;
   const [selectedMode, setSelectedMode] = useState<RPSMode>('quick');
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [rankingsOpen, setRankingsOpen] = useState(false);
   const displayedMode = authoritativeMode ?? selectedMode;
   const [tutorialPage, setTutorialPage] = useState(0);
   const [tutorialVisibility, setTutorialVisibility] = useState<'auto' | 'open' | 'closed'>('auto');
@@ -867,9 +881,15 @@ export function RPSGame() {
       ? viewedResult
       : null;
   const tutorialSeen = home?.kind === 'idle' ? home.tutorialSeen : snapshot.data?.tutorialRPSSeen;
+  const rpsOpen = Boolean(
+    snapshot.data?.gamesEnabled &&
+    snapshot.data.rps.enabled &&
+    Object.values(snapshot.data.rps.modes).some((m) => m.enabled),
+  );
   const tutorialOpen =
     tutorialVisibility === 'open' ||
     (tutorialVisibility === 'auto' &&
+      rpsOpen &&
       Boolean(snapshot.data && !tutorialSeen && home?.kind !== 'pending_result'));
   const activeSessionID = session?.sessionID ?? null;
   const leaseSessionID =
@@ -1181,6 +1201,7 @@ export function RPSGame() {
         game="rps"
         sound={sound}
         onRules={() => setRulesOpen(true)}
+        onRankings={() => setRankingsOpen(true)}
         rankingsAvailable={Boolean(snapshot.data) && home?.kind !== 'pending_result'}
         tools={
           !session
@@ -1365,9 +1386,15 @@ export function RPSGame() {
       ) : null}
       {snapshot.data && home?.kind !== 'pending_result' ? (
         <div id="game-rankings">
-          <Fold title={text('rps.leaderboard.title')} lazy>
+          <Fold
+            title={text('rps.leaderboard.title')}
+            open={rankingsOpen}
+            onOpenChange={setRankingsOpen}
+            lazy
+          >
             <RPSRankings mode={displayedMode} />
           </Fold>
+          <GamePrivacyLink />
         </div>
       ) : null}
       <ConfirmDialog
@@ -1428,7 +1455,6 @@ export function RPSGame() {
       {operationError && operationState !== 'unknown' && !isConflict(operationError) ? (
         <ErrorState error={operationError} onRetry={reconcile} />
       ) : null}
-      <GamePrivacyLink />
       {rulesDialog}
     </main>
   );

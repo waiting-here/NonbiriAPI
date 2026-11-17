@@ -12,6 +12,7 @@ import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/c
 import { useNumberedModels } from '../features/core/modelNumberedQueries';
 import { useCharityCatalog } from '../features/economy/catalog';
 import { PageHeader } from '@shared/components/States';
+import { StatusBadge } from '@shared/components/ui';
 import { Stepper, type StepState, type StepperStep } from '@shared/components/ui/Stepper';
 import { isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
@@ -52,7 +53,6 @@ const pageCopyKeys = {
   'user.home.clientGuide': 'user.home.clientGuide',
   'user.home.clientHelp': 'user.home.clientHelp',
   'user.home.clientStep': 'user.home.clientStep',
-  'user.home.collapseHelp': 'user.home.collapseHelp',
   'user.home.create': 'user.home.create',
   'user.home.getStarted': 'user.home.getStarted',
   'user.home.hide': 'user.home.hide',
@@ -197,7 +197,7 @@ function EconomyCard({ accountId }: { accountId: string }) {
               </div>
             </div>
           </div>
-          <dl className="nb-facts nb-facts--inline nb-small">
+          <dl className="nb-facts nb-facts--inline home-wallet__facts nb-small">
             <div>
               <dt>{t('home.level')}</dt>
               <dd>
@@ -338,7 +338,6 @@ function OnboardingChecklist({
           <h2 id="home-start-title">
             {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
           </h2>
-          {!complete ? <p className="nb-small nb-muted">{t('user.home.collapseHelp')}</p> : null}
         </div>
         <div className="home-start__side">
           {complete ? (
@@ -475,9 +474,9 @@ function CheckinCard({
         !status.isPending &&
         displayedAuthority ? (
           checkedIn || blockedByOtherCheckin ? (
-            <span className={checkedIn ? 'nb-badge nb-badge--ok' : 'nb-badge'}>
+            <StatusBadge tone={checkedIn ? 'ok' : 'neutral'}>
               {text(checkedIn ? 'user.home.claimedToday' : 'user.home.availableTomorrow')}
-            </span>
+            </StatusBadge>
           ) : (
             <button
               type="button"
@@ -666,7 +665,9 @@ function GamesSection({ accountId, adapters }: { accountId: string; adapters: Ho
                   to={GAME_PATHS[item.route_id]}
                 >
                   <strong>{t(GAME_LABELS[item.route_id])}</strong>
-                  <span>{item.kind === 'continue' ? t('home.continue') : t('home.view')}</span>
+                  <StatusBadge tone={item.kind === 'continue' ? 'accent' : 'neutral'}>
+                    {item.kind === 'continue' ? t('home.continue') : t('home.view')}
+                  </StatusBadge>
                 </Link>
               ))}
             </div>

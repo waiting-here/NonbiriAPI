@@ -65,7 +65,7 @@ export function Collection({
     <div className="gacha-collection">
       <div className="gacha-section-heading">
         <div>
-          <span className="gacha-eyebrow">THE MEMORY ATLAS</span>
+          <span className="gacha-eyebrow">{t('记忆图鉴', 'THE MEMORY ATLAS')}</span>
           <h2>{t('每一次相遇，都值得珍藏', 'Every encounter is worth keeping')}</h2>
         </div>
         <div className="gacha-collection-summary">

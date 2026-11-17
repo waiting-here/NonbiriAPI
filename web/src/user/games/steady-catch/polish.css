@@ -78,9 +78,6 @@
     gap: 6px;
     justify-content: space-between;
   }
-  .catch-game .game-money__unit {
-    display: none;
-  }
   .catch-game .entry-terms {
     font-size: 13px;
   }

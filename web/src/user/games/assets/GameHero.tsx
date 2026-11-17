@@ -22,7 +22,7 @@ const heroSources = {
 
 export type GameHeroKind = keyof typeof heroSources;
 
-export function GameHero({ kind }: { kind: GameHeroKind }) {
+export function GameHero({ kind, eager = false }: { kind: GameHeroKind; eager?: boolean }) {
   if (kind === 'lakenotes') return <LakeCover />;
   if (kind === 'gwent')
     return (
@@ -32,7 +32,7 @@ export function GameHero({ kind }: { kind: GameHeroKind }) {
             key={faction}
             src={`/assets/gwent/cards/${faction}_leader-cg-v1.webp`}
             alt=""
-            loading="lazy"
+            loading={eager ? 'eager' : 'lazy'}
             decoding="async"
           />
         ))}
@@ -48,7 +48,7 @@ export function GameHero({ kind }: { kind: GameHeroKind }) {
       alt=""
       aria-hidden="true"
       decoding="async"
-      loading={kind === 'fishing' ? 'eager' : 'lazy'}
+      loading={eager || kind === 'fishing' ? 'eager' : 'lazy'}
       fetchPriority={kind === 'fishing' ? 'high' : 'auto'}
       draggable="false"
     />

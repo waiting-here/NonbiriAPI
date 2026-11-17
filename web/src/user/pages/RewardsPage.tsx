@@ -3,7 +3,16 @@ import { useRef, useState } from 'react';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, Field, Fold, Note, Panel, PanelHead, PanelBody } from '@shared/components/ui';
+import {
+  Button,
+  Field,
+  Fold,
+  Note,
+  Panel,
+  PanelHead,
+  PanelBody,
+  StatusBadge,
+} from '@shared/components/ui';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { RewardSummary } from '@shared/rewards/RewardSummary';
@@ -20,8 +29,18 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import '@shared/rewards/rewards.css';
 export function RewardsPage() {
   const session = useUserSession();
-  if (session.isPending) return <LoadingState />;
-  if (!session.data) return <ErrorState error={session.error} />;
+  if (session.isPending)
+    return (
+      <div className="page reward-stack rewards-page">
+        <LoadingState />
+      </div>
+    );
+  if (!session.data)
+    return (
+      <div className="page reward-stack rewards-page">
+        <ErrorState error={session.error} />
+      </div>
+    );
   return <RewardsContent key={session.data.user.id} account={session.data.user.id} />;
 }
 function RewardsContent({ account }: { account: string }) {
@@ -92,14 +111,13 @@ function RewardsContent({ account }: { account: string }) {
     }
   }
   return (
-    <div className="reward-stack">
+    <div className="page reward-stack rewards-page">
       <PageHeader
         icon="rewards"
         title={t('common.rewards.userTitle')}
         description={t('common.rewards.userIntro')}
       />
       <Panel>
-        <PanelHead title={t('common.rewards.redeem')} />
         <PanelBody>
           <form
             className="reward-form"
@@ -108,29 +126,29 @@ function RewardsContent({ account }: { account: string }) {
               void redeem();
             }}
           >
-            <Field label={t('common.rewards.codeText')} help={t('common.rewards.userCodeHelp')}>
+            <Field label={t('common.rewards.codeText')} help={t('common.rewards.userCodeHelp')} span>
               {(p) => (
-                <input
-                  {...p}
-                  required
-                  autoComplete="off"
-                  maxLength={64}
-                  disabled={busy}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder={t('common.rewards.codePlaceholder')}
-                />
+                <div className="reward-form__controls">
+                  <input
+                    {...p}
+                    required
+                    autoComplete="off"
+                    maxLength={64}
+                    disabled={busy}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder={t('common.rewards.codePlaceholder')}
+                  />
+                  <Button variant="primary" type="submit" disabled={busy || !code.trim()}>
+                    {busy
+                      ? t('common.rewards.redeeming')
+                      : unknown
+                        ? t('common.retry')
+                        : t('common.rewards.redeem')}
+                  </Button>
+                </div>
               )}
             </Field>
-            <div>
-              <Button variant="primary" type="submit" disabled={busy || !code.trim()}>
-                {busy
-                  ? t('common.rewards.redeeming')
-                  : unknown
-                    ? t('common.retry')
-                    : t('common.rewards.redeem')}
-              </Button>
-            </div>
           </form>
           {!!error && <ErrorState error={error} />}
           {unknown && <Note tone="warn">{t('common.rewards.retryUnknown')}</Note>}
@@ -170,16 +188,21 @@ function RewardsContent({ account }: { account: string }) {
               <RewardSummary items={result.results} assets={assets.data ?? []} results />
             </div>
           )}
+          <Fold plain title={t('common.rewards.rules')}>
+            <p>{t('common.rewards.userRules')}</p>
+          </Fold>
         </PanelBody>
       </Panel>
-      <Fold title={t('common.rewards.rules')}>
-        <p>{t('common.rewards.userRules')}</p>
-      </Fold>
       <Panel>
         <PanelHead
           title={t('common.rewards.history')}
           actions={
-            <Button type="button" onClick={() => void history.refetch()}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={history.isFetching}
+              onClick={() => void history.refetch()}
+            >
               {t('common.rewards.refresh')}
             </Button>
           }
@@ -198,11 +221,15 @@ function RewardsContent({ account }: { account: string }) {
             <div className="reward-list">
               {history.data?.items.map((receipt) => (
                 <article key={receipt.id} className="reward-entry">
-                  <h3>{receipt.title}</h3>
-                  <p>
-                    {t(rewardLabels[receipt.kind === 'code' ? 'code' : 'broadcast'])} ·{' '}
-                    {time(receipt.completed_at ?? receipt.created_at)}
-                  </p>
+                  <div className="reward-entry__head">
+                    <h3>{receipt.title}</h3>
+                    <span className="reward-entry__meta">
+                      <StatusBadge tone={receipt.kind === 'code' ? 'accent' : 'info'}>
+                        {t(rewardLabels[receipt.kind === 'code' ? 'code' : 'broadcast'])}
+                      </StatusBadge>
+                      <time>{time(receipt.completed_at ?? receipt.created_at)}</time>
+                    </span>
+                  </div>
                   <RewardSummary items={receipt.results} assets={assets.data ?? []} results />
                 </article>
               ))}

@@ -35,6 +35,58 @@ import {
 import { AccountAppearance } from '../appearance/AppearanceProvider';
 import { BackgroundViewButton } from '../appearance/BackgroundViewButton';
 import { AppearanceButton } from '../appearance/AppearanceButton';
+import { LANGUAGE_STORAGE_KEY } from '@shared/i18n';
+import { patchLanguage } from '../features/core/api';
+import { coreKeys, updateCoreSessionLanguage } from '../features/core/queries';
+import { createOperationIdentity } from '../features/core/request';
+
+function SignedInLanguageControl({ accountId }: { accountId: string }) {
+  const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const current = i18n.resolvedLanguage?.startsWith('zh') ? 'zh' : 'en';
+  const select = (code: 'zh' | 'en') => {
+    if (busy) return;
+    setBusy(true);
+    const identity = createOperationIdentity();
+    void patchLanguage(code, { idempotencyKey: identity.actionId, actionId: identity.actionId })
+      .then(async (envelope) => {
+        if (envelope.user.id !== accountId) return;
+        await i18n.changeLanguage(code);
+        updateCoreSessionLanguage(queryClient, accountId, code);
+        queryClient.setQueryData(coreKeys.me(accountId), envelope);
+        void queryClient.invalidateQueries({ queryKey: ['user', 'operations'] });
+        try {
+          window.localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
+        } catch {
+          // Account language remains authoritative when localStorage is unavailable.
+        }
+        document.documentElement.lang = code === 'zh' ? 'zh-CN' : 'en';
+      })
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="lang-switcher" role="group" aria-label={t('shell.langLabel')}>
+      {(
+        [
+          ['zh', '中文'],
+          ['en', 'EN'],
+        ] as const
+      ).map(([code, label]) => (
+        <button
+          key={code}
+          type="button"
+          disabled={busy}
+          aria-pressed={current === code}
+          aria-current={current === code ? 'true' : undefined}
+          onClick={() => select(code)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const USER_ACCOUNT_PATH = routePath('user', 'account');
 const USER_STEWARD_PATH = routePath('user', 'steward');
@@ -396,6 +448,9 @@ export function UserLayout() {
                 signOutLabel={t('common.signOut')}
                 working={logout.isPending}
                 steward={showStewardEntry}
+                languageControl={
+                  profile ? <SignedInLanguageControl accountId={profile.id} /> : undefined
+                }
                 onSignOut={() => logout.mutate()}
               />
             ) : null}

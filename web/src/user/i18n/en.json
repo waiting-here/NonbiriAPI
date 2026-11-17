@@ -51,7 +51,6 @@
       "stepDone": "Done",
       "apiAccess": "View API access",
       "hide": "Hide",
-      "collapseHelp": "This checklist collapses when setup is complete.",
       "usage": "Lifetime calls",
       "noCalls": "No calls yet",
       "calls": "{{count}} calls",
@@ -1151,6 +1150,7 @@
           "seconds": "{{seconds}} second time limit",
           "specClosed": "This size is closed",
           "startReview": "Review paid start",
+          "startReviewFree": "Review start",
           "startConsequences": "Confirm to pay the displayed ticket price and start the timer. Leaving the page does not pause the game or refund the ticket.",
           "hintButton": "Hint / Refresh ({{count}} left)",
           "hintTile": "Hint",
@@ -1200,7 +1200,6 @@
             "seconds": "{{seconds}} seconds",
             "new": "Start another board"
           },
-          "empty": "No active board or recent 30-day summary.",
           "noRegularReward": "No per-game credit rewards. Regular completions award no credits; eligible one-time newcomer rewards still apply."
         },
         "onboarding": {
@@ -1297,6 +1296,7 @@
             "body": "Catch memes and dodge hazards in a 90-second challenge with ChatGPT."
           },
           "free": "Free play",
+          "rewardExchange": "Redeemable credits",
           "lakenotes": {
             "title": "Lake Notes",
             "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."
@@ -1370,9 +1370,8 @@
             "ten": "Ten-catch batch"
           },
           "selected": "Selected bait",
-          "unitPrice": "Unit price",
           "totalPrice": "Batch total",
-          "balance": "Available balance",
+          "winGeneralCredits": "Wins pay general credits",
           "start": "Start fishing",
           "starting": "Casting…",
           "insufficient": "You need more credits to use this bait and number of casts.",
@@ -1666,8 +1665,11 @@
           }
         }
       },
+      "ranking": {
+        "emptyHint": "Play qualifying rounds during the window to appear on this board.",
+        "charityEmptyHint": "Accounts with positive cumulative donated credits appear here."
+      },
       "presentation": {
-        "description": "Play a few rounds with game credits.",
         "activityWallet": "Get game credits from activities →",
         "unavailable": "Not open",
         "test": "Test",
@@ -2361,7 +2363,7 @@
     "activities": {
       "nav": "Activities",
       "title": "Activities",
-      "description": "Cyber loans, daily game welfare and Crazy Thursday: choose your next game boost.",
+      "description": "Join limited-time events, daily sign-ins, and permanent credit activities.",
       "cardsLabel": "Available activities",
       "mutationResponseUnknown": "The request outcome is uncertain.",
       "mutationConflictRefreshed": "The activity changed before the request completed.",
@@ -2762,6 +2764,7 @@
       "account.created": "Account created",
       "account.languageTitle": "Account language",
       "account.languageBody": "The interface changes only after the server confirms the update.",
+      "account.languageUnsetHint": "No account language saved yet (server announcements default to English). Select a language below to save it to your account.",
       "account.language": "Language",
       "account.zh": "中文",
       "account.en": "English",
@@ -2797,7 +2800,7 @@
       "keys.clientTitle": "Enter these in your client",
       "keys.clientHelp": "Choose “OpenAI compatible” or “Custom OpenAI”, then enter these three items.",
       "keys.apiAddress": "API address",
-      "keys.clientKey": "The site API key shown above",
+      "keys.clientKey": "The site API key generated on this page",
       "keys.modelName": "Model name",
       "keys.charityModels": "Charity models",
       "keys.ownModels": "My models",

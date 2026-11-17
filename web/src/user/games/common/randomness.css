@@ -26,12 +26,12 @@
   font-weight: 600;
 }
 .random-proof-status.is-passed {
-  color: var(--color-success, #15803d);
+  color: var(--nb-color-success);
 }
 .random-proof-status.is-failed {
-  color: var(--color-danger, #be123c);
+  color: var(--nb-color-danger);
 }
 .random-proof-note {
-  opacity: 0.8;
+  color: var(--nb-color-text-muted);
   font-size: 0.8rem;
 }

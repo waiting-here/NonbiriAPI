@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Icon } from '@shared/components/Icon';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 
 export type LoadoutStepID = 'mode' | 'role' | 'harness' | 'skills';
@@ -35,7 +36,7 @@ export function LoadoutStep({
     </details>
   );
 }
-const mobileLoadout = () => window.matchMedia('(max-width: 39.999rem)').matches;
+const mobileLoadout = () => window.matchMedia('(width < 40rem)').matches;
 
 import { useDuelText } from '../common/duel/copy';
 import type { ModeCatalog } from './catalog';
@@ -163,7 +164,7 @@ export function LoadoutEditor({
                 aria-label={`${h.name} ${text('likes.details')}`}
                 onClick={() => onInspect(h.id)}
               >
-                ⓘ
+                <Icon name="info" width={16} height={16} />
               </button>
             </div>
           ))}
@@ -239,7 +240,7 @@ export function LoadoutEditor({
                   aria-label={`${skill.name} ${text('likes.details')}`}
                   onClick={() => onInspect(skill.id)}
                 >
-                  ⓘ
+                  <Icon name="info" width={16} height={16} />
                 </button>
               </div>
             ))}

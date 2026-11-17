@@ -6,8 +6,6 @@ import {
   Note,
   OutcomeNote,
   Panel,
-  PanelBody,
-  PanelHead,
   StatusBadge,
 } from '@shared/components/ui';
 import { MarkdownText } from '@shared/components/MarkdownText';
@@ -50,10 +48,12 @@ function AttendanceCard({
   period,
   account,
   assets,
+  featured = false,
 }: {
   period: AttendancePeriod;
   account: string;
   assets: Asset[];
+  featured?: boolean;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -89,6 +89,12 @@ function AttendanceCard({
   );
   const unknown = operation.outcome === 'unknown';
   const count = period.mode === 'consecutive' ? period.current_streak : period.total_days;
+  const maxDays = period.tiers.reduce((max, tier) => Math.max(max, tier.days), 0);
+  const progressPercent = maxDays > 0 ? Math.min(100, Math.round((count / maxDays) * 100)) : 0;
+  const awardedCount = period.tiers.filter((tier) => tier.awarded).length;
+  const allAwarded = period.tiers.length > 0 && awardedCount === period.tiers.length;
+  const nextTierDays =
+    period.status === 'active' ? period.tiers.find((tier) => !tier.awarded)?.days : undefined;
   const action = unknown
     ? 'retry'
     : period.signed_today
@@ -101,76 +107,116 @@ function AttendanceCard({
             ? 'paused'
             : 'signIn';
   return (
-    <Panel className="attendance-card" aria-label={period.title}>
-      <div className="attendance-card__header">
-        <PanelHead
-          level={3}
-          title={period.title}
-          description={
-            <StatusBadge tone={period.status === 'active' ? 'ok' : 'neutral'}>
-              {t(statusLabels[period.status])}
-            </StatusBadge>
-          }
-        />
-        <img
-          className="attendance-card__art"
-          src="/assets/gacha/groups/a.webp"
-          alt=""
-          width={1672}
-          height={941}
-          loading="lazy"
-        />
-      </div>
-      <PanelBody>
-        <div className="attendance-card__content">
-          <p className="attendance-card__dates">
-            <time dateTime={period.start_date}>{period.start_date}</time>
-            <span aria-hidden="true"> — </span>
-            <time dateTime={period.end_date}>{period.end_date}</time>
-          </p>
-          {period.description && <MarkdownText>{period.description}</MarkdownText>}
-          <div className="attendance-progress">
-            <div>
-              <span className="attendance-progress__label">{t(modeLabels[period.mode])}</span>
-              <strong>
-                {t(count === 1 ? 'user.attendance.days_one' : 'user.attendance.days_other', {
-                  amount: formatCount(count).display,
-                })}
-              </strong>
-            </div>
-            {period.mode === 'consecutive' && (
-              <p>
-                {t(
-                  period.best_streak === 1
-                    ? 'user.attendance.best_one'
-                    : 'user.attendance.best_other',
-                  {
-                    amount: formatCount(period.best_streak).display,
-                  },
-                )}
-              </p>
-            )}
+    <Panel
+      className={featured ? 'attendance-card attendance-card--featured' : 'attendance-card'}
+      aria-label={period.title}
+    >
+      <div className="attendance-card__layout">
+        <div className="attendance-card__hero">
+          <div className="attendance-card__media">
+            <img
+              className="attendance-card__art"
+              src="/assets/gacha/groups/a.webp"
+              alt=""
+              width={1672}
+              height={941}
+              loading="lazy"
+            />
           </div>
-          <p className="attendance-card__today">
-            {t('user.attendance.siteDate', {
-              date: period.site_date,
-              zone: formatOffset(period.timezone_offset_minutes * 60),
-            })}
-          </p>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={operation.isPending || (!unknown && !period.can_sign_in)}
-            onClick={() =>
-              operation.mutate(
-                unknown && operation.variables
-                  ? operation.variables
-                  : { id: period.id, date: period.site_date },
-              )
-            }
-          >
-            {t(operation.isPending ? 'user.attendance.signing' : actionLabels[action])}
-          </Button>
+          <div className="attendance-card__intro">
+            <div className="attendance-card__title-row">
+              <h3>{period.title}</h3>
+              <StatusBadge
+                tone={
+                  period.status === 'active'
+                    ? 'ok'
+                    : period.status === 'upcoming'
+                      ? 'info'
+                      : 'neutral'
+                }
+              >
+                {t(statusLabels[period.status])}
+              </StatusBadge>
+            </div>
+            <p className="attendance-card__dates">
+              <time dateTime={period.start_date}>{period.start_date}</time>
+              <span aria-hidden="true"> — </span>
+              <time dateTime={period.end_date}>{period.end_date}</time>
+              <span aria-hidden="true"> · </span>
+              <span>
+                {t('user.attendance.siteDate', {
+                  date: period.site_date,
+                  zone: formatOffset(period.timezone_offset_minutes * 60),
+                })}
+              </span>
+            </p>
+            {period.description ? (
+              <div className="attendance-card__description">
+                <MarkdownText>{period.description}</MarkdownText>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="attendance-card__main">
+          <div className="attendance-progress">
+            <div className="attendance-progress__top">
+              <div className="attendance-progress__summary">
+                <div className="attendance-progress__meta">
+                  <span className="attendance-progress__label">{t(modeLabels[period.mode])}</span>
+                  {period.mode === 'consecutive' ? (
+                    <span className="attendance-progress__best">
+                      {t(
+                        period.best_streak === 1
+                          ? 'user.attendance.best_one'
+                          : 'user.attendance.best_other',
+                        {
+                          amount: formatCount(period.best_streak).display,
+                        },
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="attendance-progress__count">
+                  <strong>
+                    {t(count === 1 ? 'user.attendance.days_one' : 'user.attendance.days_other', {
+                      amount: formatCount(count).display,
+                    })}
+                  </strong>
+                  {maxDays > 0 ? (
+                    <span className="attendance-progress__goal">
+                      / {formatCount(maxDays).display}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={operation.isPending || (!unknown && !period.can_sign_in)}
+                onClick={() =>
+                  operation.mutate(
+                    unknown && operation.variables
+                      ? operation.variables
+                      : { id: period.id, date: period.site_date },
+                  )
+                }
+              >
+                {t(operation.isPending ? 'user.attendance.signing' : actionLabels[action])}
+              </Button>
+            </div>
+            {maxDays > 0 ? (
+              <div className="attendance-progress__bar" aria-hidden="true">
+                <span
+                  className={
+                    allAwarded
+                      ? 'attendance-progress__fill is-complete'
+                      : 'attendance-progress__fill'
+                  }
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            ) : null}
+          </div>
           {unknown && (
             <OutcomeNote outcome={{ kind: 'unknown' }} body={t('user.attendance.retryHelp')} />
           )}
@@ -205,30 +251,54 @@ function AttendanceCard({
               )}
             </Note>
           )}
-          <ol className="attendance-tiers" aria-label={t('user.attendance.rewards')}>
-            {period.tiers.map((tier) => (
-              <li
-                key={tier.days}
-                className={tier.awarded ? 'attendance-tier is-awarded' : 'attendance-tier'}
-              >
-                <div className="attendance-tier__head">
-                  <strong>
-                    {t('user.attendance.tierDays', { amount: formatCount(tier.days).display })}
-                  </strong>
-                  <StatusBadge tone={tier.awarded ? 'ok' : 'neutral'}>
-                    {t(tier.awarded ? 'user.attendance.awarded' : 'user.attendance.notReached')}
-                  </StatusBadge>
-                </div>
-                <RewardSummary
-                  items={tier.awarded && tier.results ? tier.results : tier.rewards}
-                  assets={assets}
-                  results={tier.awarded && !!tier.results}
-                />
-              </li>
-            ))}
-          </ol>
+          <div className="attendance-tiers-block">
+            <div className="attendance-tiers-head">
+              <span>{t('user.attendance.rewards')}</span>
+              {period.tiers.length > 0 ? (
+                <span className="attendance-tiers-count">
+                  {formatCount(awardedCount).display} / {formatCount(period.tiers.length).display}
+                </span>
+              ) : null}
+            </div>
+            <ol
+              className={
+                featured && period.tiers.length >= 2
+                  ? 'attendance-tiers attendance-tiers--grid'
+                  : 'attendance-tiers'
+              }
+              aria-label={t('user.attendance.rewards')}
+            >
+              {period.tiers.map((tier) => {
+                const isNext = tier.days === nextTierDays;
+                const tierClass = [
+                  'attendance-tier',
+                  tier.awarded ? 'is-awarded' : '',
+                  isNext ? 'is-next' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ');
+                return (
+                  <li key={tier.days} className={tierClass}>
+                    <div className="attendance-tier__head">
+                      <strong>
+                        {t('user.attendance.tierDays', { amount: formatCount(tier.days).display })}
+                      </strong>
+                      <StatusBadge tone={tier.awarded ? 'ok' : isNext ? 'accent' : 'neutral'}>
+                        {t(tier.awarded ? 'user.attendance.awarded' : 'user.attendance.notReached')}
+                      </StatusBadge>
+                    </div>
+                    <RewardSummary
+                      items={tier.awarded && tier.results ? tier.results : tier.rewards}
+                      assets={assets}
+                      results={tier.awarded && !!tier.results}
+                    />
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         </div>
-      </PanelBody>
+      </div>
     </Panel>
   );
 }
@@ -241,6 +311,10 @@ export function AttendanceSection({ account }: { account: string }) {
     queryFn: ({ signal }) => getAssets(false, signal),
     enabled: !!account,
   });
+  const items = query.data?.items ?? [];
+  const paused = query.data?.available === false;
+  const showPager =
+    !!query.data && (query.data.total > query.data.page_size || pager.page !== '1');
   return (
     <section className="attendance-section" aria-label={t('user.attendance.title')}>
       <SectionHead title={t('user.attendance.title')} description={t('user.attendance.intro')} />
@@ -250,21 +324,35 @@ export function AttendanceSection({ account }: { account: string }) {
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : null}
       {assets.error && <ErrorState error={assets.error} onRetry={() => void assets.refetch()} />}
-      {query.data?.available === false && <Note tone="warn">{t('user.attendance.paused')}</Note>}
-      {query.data?.items.length === 0 && (
-        <EmptyState title={t('user.attendance.empty')} body={t('user.attendance.emptyBody')} />
-      )}
-      <div className="attendance-grid">
-        {query.data?.items.map((period) => (
-          <AttendanceCard
-            key={account + ':' + period.id}
-            period={period}
-            account={account}
-            assets={assets.data ?? []}
-          />
-        ))}
-      </div>
-      {query.data && (
+      {paused && items.length > 0 ? <Note tone="warn">{t('user.attendance.paused')}</Note> : null}
+      {query.data && items.length === 0 ? (
+        <EmptyState
+          illustration={paused ? 'maintenance' : 'empty'}
+          title={t('user.attendance.empty')}
+          body={
+            paused
+              ? `${t('user.attendance.paused')} ${t('user.attendance.emptyBody')}`
+              : t('user.attendance.emptyBody')
+          }
+        />
+      ) : null}
+      {items.length > 0 ? (
+        <div
+          className="attendance-grid"
+          data-count={items.length === 1 ? 'single' : items.length === 2 ? 'pair' : 'multi'}
+        >
+          {items.map((period) => (
+            <AttendanceCard
+              key={account + ':' + period.id}
+              period={period}
+              account={account}
+              assets={assets.data ?? []}
+              featured={items.length === 1}
+            />
+          ))}
+        </div>
+      ) : null}
+      {query.data && showPager ? (
         <PagePagination
           metadata={attendanceMetadata(query.data)}
           requestedPage={pager.page}
@@ -272,7 +360,7 @@ export function AttendanceSection({ account }: { account: string }) {
           onPageSizeChange={pager.setPageSize}
           busy={query.isFetching}
         />
-      )}
+      ) : null}
     </section>
   );
 }

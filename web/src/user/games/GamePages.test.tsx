@@ -378,15 +378,9 @@ describe('beta.1 game pages', () => {
     expect(heroes.map(({ width, height }) => [width, height])).toEqual(
       Array.from({ length: 7 }, () => [960, 480]),
     );
-    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual([
-      'eager',
-      'lazy',
-      'lazy',
-      'lazy',
-      'lazy',
-      'lazy',
-      'lazy',
-    ]);
+    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual(
+      Array.from({ length: 7 }, () => 'eager'),
+    );
     expect(heroes.every((hero) => hero.getAttribute('alt') === '')).toBe(true);
     expect(rendered.container.querySelector('.game-center-card__hero svg')).not.toBeInTheDocument();
   });
@@ -1289,10 +1283,9 @@ describe('beta.1 game pages', () => {
       route: '/games/linklink',
       role: 'user',
     });
-    expect(
-      await screen.findByText(/No active board or recent 30-day summary/i),
-    ).toBeInTheDocument();
-    await rendered.user.click(screen.getByRole('button', { name: 'Start 6x8' }));
+    const start = await screen.findByRole('button', { name: 'Start 6x8' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await rendered.user.click(start);
     const dialog = screen.getByRole('alertdialog', { name: 'Review paid start' });
     expect(dialog).toHaveTextContent('3 credits');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Start 6x8' }));

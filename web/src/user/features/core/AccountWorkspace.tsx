@@ -69,6 +69,7 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
     }
     context.commit(() => {
       updateCoreSessionLanguage(queryClient, user.id, confirmed);
+      void queryClient.invalidateQueries({ queryKey: ['user', 'operations'] });
       try {
         window.localStorage.setItem(LANGUAGE_STORAGE_KEY, confirmed);
       } catch {
@@ -141,6 +142,9 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
         <div>
           <h3>{t('account.language')}</h3>
           <p className="core-muted">{t('account.languageBody')}</p>
+          {user.lang === '' ? (
+            <p className="nb-small nb-muted">{t('account.languageUnsetHint')}</p>
+          ) : null}
         </div>
         <Segmented
           label={t('account.language')}
