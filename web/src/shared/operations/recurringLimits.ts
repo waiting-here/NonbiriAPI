@@ -183,7 +183,11 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
   };
 }
 
-function metricValue(value: unknown, metric: RecurringLimitMetric, label: string): string {
+export function quotaMetricValue(
+  value: unknown,
+  metric: RecurringLimitMetric,
+  label: string,
+): string {
   return metric === 'credits'
     ? canonicalCredits(value, label)
     : canonicalUnsignedDecimal(value, label);
@@ -252,9 +256,9 @@ export function normalizeRuleView(value: unknown, label: string): RecurringLimit
   );
   return {
     ...input,
-    used: metricValue(root.used, input.metric, `${label} used`),
-    reserved: metricValue(root.reserved, input.metric, `${label} reserved`),
-    remaining: metricValue(root.remaining, input.metric, `${label} remaining`),
+    used: quotaMetricValue(root.used, input.metric, `${label} used`),
+    reserved: quotaMetricValue(root.reserved, input.metric, `${label} reserved`),
+    remaining: quotaMetricValue(root.remaining, input.metric, `${label} remaining`),
     state,
     period_start: periodSecond(root.period_start, `${label} period start`),
     period_end: periodSecond(root.period_end, `${label} period end`),
@@ -342,8 +346,22 @@ export const recurringLimitsKeys = {
       : role === 'steward'
         ? (['user', 'operations', 'steward', 'recurring-limits', accountId] as const)
         : (['user', 'operations', 'owner', 'recurring-limits', accountId] as const),
-  detail: (role: RecurringLimitRole, accountId: string, donationId: string, keyId: string) =>
-    [...recurringLimitsKeys.root(role, accountId), donationId, keyId] as const,
+  detail: (
+    role: RecurringLimitRole,
+    accountId: string,
+    donationId: string,
+    keyId: string,
+    charityModelID?: string,
+    upstreamModelID?: string,
+  ) =>
+    [
+      ...recurringLimitsKeys.root(role, accountId),
+      donationId,
+      keyId,
+      ...(charityModelID || upstreamModelID
+        ? [charityModelID ?? null, upstreamModelID ?? null]
+        : []),
+    ] as const,
 };
 
 /** Scope used for in-memory drafts; account changes must never reuse it. */

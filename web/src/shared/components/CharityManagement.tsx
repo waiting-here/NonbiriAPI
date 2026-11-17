@@ -344,6 +344,7 @@ function KeyQuotaFields({
         <Fields>
           <NullableValue
             label={t('common.operations.charity.priceLimitCredits')}
+            inputMode="decimal"
             value={value.price_limit}
             onChange={(next) => onChange({ price_limit: next })}
           />
@@ -2644,6 +2645,9 @@ function ScopedKeyBrowser({
               accountId={accountId}
               donationId={detail.data.donation_id}
               keyId={detail.data.key_id}
+              readOnly={
+                detail.data.charity_state === 'ended' || detail.data.charity_state === 'expired'
+              }
               onSaved={() => void refresh()}
               onCapabilityLoss={onCapabilityLoss}
             />
