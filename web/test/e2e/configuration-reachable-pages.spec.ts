@@ -509,7 +509,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
   await expect(page.getByRole('heading', { name: 'My services', level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: 'Manage', exact: true }).click();
+  await page.getByRole('link', { name: 'Browser connection', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Browser connection', exact: true }),
   ).toBeVisible();

@@ -1123,7 +1123,65 @@
   }
 }
 
-/* Model detail: the call name and settings summary sit beside the sources on wide pages. */
+/* Sources lead on desktop and on mobile. */
+:is(.services-page, .models-workspace) > .nb-page-header {
+  margin-block-end: 0;
+}
+:is(.services-page, .models-workspace) > :is(.core-card, .nb-panel) .core-state--empty {
+  padding-block: var(--nb-space-7);
+}
+.model-detail-actions .nb-copy-value {
+  align-items: center;
+}
+.model-detail-heading h1 {
+  overflow-wrap: anywhere;
+}
+.model-editor .model-create-intro {
+  margin: 0;
+}
+.model-editor .core-model-preview > code {
+  justify-self: start;
+  overflow-wrap: anywhere;
+}
+.service-create > form {
+  display: flex;
+  justify-content: end;
+  border-top: 1px solid var(--nb-color-border);
+  padding-top: var(--nb-space-4);
+}
+.service-create .nb-fold__meta {
+  white-space: normal;
+}
+.service-create-result > .service-key-models {
+  padding-top: var(--nb-space-4);
+  border-top: 1px solid var(--nb-color-border);
+}
+.service-key-models__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  overflow-wrap: anywhere;
+}
+.service-key-models__head p {
+  margin: 0;
+}
+.service-key-models .service-model-grid > label {
+  min-height: 40px;
+  align-items: center;
+  padding: var(--nb-space-2);
+  border-radius: var(--nb-radius-control);
+}
+.service-key-models .service-model-grid > label:has(input:checked) {
+  background: var(--nb-color-accent-quiet);
+}
+@media (width < 40rem) {
+  .service-create > form .nb-btn {
+    width: 100%;
+  }
+}
+
 .models-workspace .model-detail-layout,
 .models-workspace .model-detail-aside,
 .models-workspace .model-detail-main {
@@ -1134,7 +1192,7 @@
 }
 @media (width > 64rem) {
   .models-workspace .model-detail-layout {
-    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
     align-items: start;
   }
 }

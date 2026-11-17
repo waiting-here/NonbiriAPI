@@ -10,7 +10,7 @@ import { Link } from 'react-router';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/core/onboarding';
 import { useNumberedModels } from '../features/core/modelNumberedQueries';
-import { useCharityCatalog } from '../features/economy/catalog';
+import { DEFAULT_CHARITY_CATALOG_FILTERS, useCharityCatalog } from '../features/economy/catalog';
 import { PageHeader } from '@shared/components/States';
 import { StatusBadge } from '@shared/components/ui';
 import { Stepper, type StepState, type StepperStep } from '@shared/components/ui/Stepper';
@@ -56,6 +56,7 @@ const pageCopyKeys = {
   'user.home.create': 'user.home.create',
   'user.home.getStarted': 'user.home.getStarted',
   'user.home.hide': 'user.home.hide',
+  'user.home.showGuide': 'user.home.showGuide',
   'user.home.introAddress': 'user.home.introAddress',
   'user.home.introAddressBody': 'user.home.introAddressBody',
   'user.home.introCharity': 'user.home.introCharity',
@@ -64,6 +65,7 @@ const pageCopyKeys = {
   'user.home.introGamesBody': 'user.home.introGamesBody',
   'user.home.keyHelp': 'user.home.keyHelp',
   'user.home.keyStep': 'user.home.keyStep',
+  'user.home.keyStepDone': 'user.home.keyStepDone',
   'user.home.modelHelp': 'user.home.modelHelp',
   'user.home.modelStep': 'user.home.modelStep',
   'user.home.noCalls': 'user.home.noCalls',
@@ -244,17 +246,15 @@ function OnboardingChecklist({
   const hidden = useOnboardingFlag('hidden');
   const enabled = sessionReady && !hidden;
   const key = useCallerKey(accountId, enabled);
-  const models = useNumberedModels(accountId, { page: '1', pageSize: 10 }, enabled);
+  const firstPage = { page: '1', pageSize: 10 } as const;
+  const models = useNumberedModels(accountId, firstPage, enabled, {
+    connection_state: 'available',
+  });
   const charity = useCharityCatalog(
     accountId,
     {
-      page: '1',
-      pageSize: 10,
-      query: '',
-      allowedForMe: 'true',
-      allowedLevel: 'all',
-      currentlyAvailable: 'all',
-      modelType: 'all',
+      ...DEFAULT_CHARITY_CATALOG_FILTERS,
+      ...firstPage,
     },
     enabled && (models.isError || (models.isSuccess && models.data.data.length === 0)),
   );
@@ -288,8 +288,8 @@ function OnboardingChecklist({
     {
       id: 'key',
       state: stateOf(0),
-      title: t('user.home.keyStep'),
-      description: t('user.home.keyHelp'),
+      title: t(keyDone ? 'user.home.keyStepDone' : 'user.home.keyStep'),
+      description: keyDone ? undefined : t('user.home.keyHelp'),
       action: (
         <Link className={button(0)} to="/keys">
           {t('user.home.create')}
@@ -305,7 +305,7 @@ function OnboardingChecklist({
       id: 'model',
       state: stateOf(1),
       title: t('user.home.modelStep'),
-      description: t('user.home.modelHelp'),
+      description: modelDone ? undefined : t('user.home.modelHelp'),
       action: modelLinks(button(1), 'nb-btn nb-btn--secondary nb-btn--sm'),
       doneAction: modelLinks(quiet, quiet),
     },
@@ -313,12 +313,8 @@ function OnboardingChecklist({
       id: 'client',
       state: stateOf(2),
       title: t('user.home.clientStep'),
-      children: (
-        <>
-          <ApiAddressCopy />
-          <p className="nb-stepper__description">{t('user.home.clientHelp')}</p>
-        </>
-      ),
+      description: clientDone ? undefined : t('user.home.clientHelp'),
+      children: clientDone ? null : <ApiAddressCopy />,
       action: guide(button(2)),
       doneAction: guide(quiet),
     },
@@ -334,11 +330,9 @@ function OnboardingChecklist({
       aria-labelledby="home-start-title"
     >
       <div className="home-start__head">
-        <div className="home-start__title">
-          <h2 id="home-start-title">
-            {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
-          </h2>
-        </div>
+        <h2 id="home-start-title">
+          {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
+        </h2>
         <div className="home-start__side">
           {complete ? (
             <Link to="/keys">{t('user.home.apiAccess')}</Link>
@@ -600,6 +594,14 @@ function CheckinSection({ accountId, adapters }: { accountId: string; adapters: 
   });
   const mutuallyExclusive =
     generalStatus.data?.mutually_exclusive || gameStatus.data?.mutually_exclusive;
+  if (
+    !mutuallyExclusive &&
+    generalStatus.isSuccess &&
+    gameStatus.isSuccess &&
+    !generalStatus.data.enabled &&
+    !gameStatus.data.enabled
+  )
+    return null;
   return (
     <div className="home-checkins">
       {mutuallyExclusive ? (
@@ -688,25 +690,41 @@ export function HomeDashboard({
   sessionReady?: boolean;
 }) {
   const { t } = useCoreCopy();
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
+  const guideHidden = useOnboardingFlag('hidden');
   return (
     <div className="page core-page core-stack home-page">
       <PageHeader
         icon="home"
         title={t('home.title', { name: user.guild_nick || user.username })}
-        description={t('home.description')}
+        actions={
+          guideHidden ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() => markOnboarding('hidden', false)}
+            >
+              {text('user.home.showGuide')}
+            </button>
+          ) : null
+        }
       />
-      <OnboardingChecklist key={user.id} accountId={user.id} sessionReady={sessionReady} />
       <div className="home-overview">
-        <EconomyCard accountId={user.id} />
-        <CheckinSection accountId={user.id} adapters={adapters} />
+        <div className="home-overview__main">
+          <OnboardingChecklist key={user.id} accountId={user.id} sessionReady={sessionReady} />
+          <HomeAnnouncements
+            accountId={user.id}
+            language={user.lang}
+            capability={adapters.announcements}
+            sessionReady={sessionReady}
+          />
+        </div>
+        <div className="home-overview__account">
+          <EconomyCard accountId={user.id} />
+          <CheckinSection accountId={user.id} adapters={adapters} />
+        </div>
       </div>
       <GamesSection accountId={user.id} adapters={adapters} />
-      <HomeAnnouncements
-        accountId={user.id}
-        language={user.lang}
-        capability={adapters.announcements}
-        sessionReady={sessionReady}
-      />
     </div>
   );
 }

@@ -906,7 +906,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${USER_ORIGIN}/models`);
-  await page.getByRole('button', { name: 'Edit model', exact: true }).click();
+  await page.getByRole('button', { name: 'View model', exact: true }).click();
   const picker = page.locator('.personal-binding-picker');
   const results = picker.getByRole('region', { name: 'Models', exact: true });
   await expect(results.locator('.personal-binding-picker__model')).toHaveCount(0);

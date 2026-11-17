@@ -37,7 +37,9 @@ export function ServiceModelSetup({
     onLockChange?.(batchLocked);
     return () => onLockChange?.(false);
   }, [batchLocked, onLockChange]);
-  const [view, setView] = useState<'automatic' | 'manual'>('automatic');
+  const [view, setView] = useState<'automatic' | 'manual'>(
+    autoRefresh && !entryKey.discovery_source_id ? 'manual' : 'automatic',
+  );
   const [selected, setSelected] = useState<DiscoveryModel[]>([]);
   const pager = usePagePager({
     station: 'user',
@@ -107,28 +109,28 @@ export function ServiceModelSetup({
   return (
     <div className="nb-stack service-key-models">
       <div className="nb-stack nb-stack--sm">
-        <h3>{t('user.services.modelsForKey', { key: keyLabel })}</h3>
-        <p className="nb-small nb-muted nb-mono">
-          {entry.note || entry.base_url} · {entry.base_url}
-        </p>
-        <div className="nb-actions">
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={
-              locked ||
-              !entryKey.discovery_source_id ||
-              catalog.data?.evidence.state === 'checking' ||
-              !entryKey.enabled
-            }
-            onClick={() =>
-              void refresh
-                .run({ kind: 'refresh', endpointId: entry.id, keyId: entryKey.id })
-                .catch(() => undefined)
-            }
-          >
-            {t('user.services.fetchModels')}
-          </button>
+        <div className="service-key-models__head">
+          <div className="nb-stack nb-stack--xs">
+            <h3>{t('user.services.modelsForKey', { key: keyLabel })}</h3>
+            <p className="nb-small nb-muted">
+              {entry.note && entry.note !== entry.base_url ? <>{entry.note} · </> : null}
+              <span className="mono">{entry.base_url}</span>
+            </p>
+          </div>
+          {entryKey.discovery_source_id ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={locked || catalog.data?.evidence.state === 'checking' || !entryKey.enabled}
+              onClick={() =>
+                void refresh
+                  .run({ kind: 'refresh', endpointId: entry.id, keyId: entryKey.id })
+                  .catch(() => undefined)
+              }
+            >
+              {t('user.services.fetchModels')}
+            </button>
+          ) : null}
         </div>
         <ConnectionOperationNotice operation={refresh} />
         {catalog.data ? <DiscoveryStatus evidence={catalog.data.evidence} /> : null}
@@ -231,7 +233,12 @@ export function ServiceModelSetup({
             ) : null}
           </div>
         )}
-        <Fold lazy plain title={t('user.services.manualModels')}>
+        <Fold
+          lazy
+          plain
+          title={t('user.services.manualModels')}
+          defaultOpen={autoRefresh && !entryKey.discovery_source_id}
+        >
           <PairManualCatalog
             accountId={accountId}
             endpointId={entry.id}

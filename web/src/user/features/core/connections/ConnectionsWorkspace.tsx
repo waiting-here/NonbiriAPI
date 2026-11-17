@@ -57,6 +57,15 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
   const [params, setParams] = useSearchState();
   const selected = params.get('connection_id');
   const [creating, setCreating] = useState(params.get('quickstart') === '1');
+  const [setupReady, setSetupReady] = useState(false);
+  const [createTask, setCreateTask] = useState(0);
+  const beginCreate = () => {
+    if (setupReady) {
+      setCreateTask((task) => task + 1);
+      setSetupReady(false);
+    }
+    setCreating(true);
+  };
   const close = () => {
     setCreating(false);
     setParams((previous) => {
@@ -85,18 +94,13 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
   if (selected)
     return <ConnectionDetail key={user.id + ':' + selected} accountId={user.id} id={selected} />;
   const createButton = (
-    <button type="button" className="nb-btn nb-btn--primary" onClick={() => setCreating(true)}>
+    <button type="button" className="nb-btn nb-btn--primary" onClick={beginCreate}>
       {t('user.workflows.addService')}
     </button>
   );
   return (
     <div className="page core-page core-stack services-page">
-      <PageHeader
-        icon="resources"
-        title={t('common.connections.title')}
-        description={t('common.connections.intro')}
-        actions={createButton}
-      />
+      <PageHeader icon="resources" title={t('common.connections.title')} actions={createButton} />
       <SectionTabs group="own" />
       <Sheet
         key={user.id}
@@ -107,7 +111,12 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         title={t('user.workflows.addService')}
         closeLabel={t('common.connections.close')}
       >
-        <ServiceCreateForm accountId={user.id} onManage={close} />
+        <ServiceCreateForm
+          key={createTask}
+          accountId={user.id}
+          onManage={close}
+          onReady={setSetupReady}
+        />
       </Sheet>
       <ConnectionResourceList
         restoreScroll
@@ -119,15 +128,8 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
         searchPlaceholder={t('common.connections.connectionSearch')}
         load={connectionAPI.list}
         rowKey={(row) => row.id}
-        emptyAction={
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            onClick={() => setCreating(true)}
-          >
-            {t('user.workflows.addService')}
-          </button>
-        }
+        emptyTitle={t('user.services.emptyServices')}
+        emptyDescription={t('common.connections.intro')}
         columns={[
           {
             key: 'name',
@@ -157,19 +159,6 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
             align: 'num',
             render: (row) => formatCount(row.credential_count).display,
           },
-          {
-            key: 'manage',
-            header: t('common.connections.actions'),
-            cell: 'action',
-            render: (row) => (
-              <Link
-                className="nb-btn nb-btn--secondary"
-                to={connectionURL(location.search, row.id)}
-              >
-                {t('common.connections.manage')}
-              </Link>
-            ),
-          },
         ]}
       />
     </div>
@@ -181,6 +170,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   const [params, setParams] = useSearchState();
   const [adding, setAdding] = useState(false);
   const [addTask, setAddTask] = useState(0);
+  const [setupReady, setSetupReady] = useState(false);
   const [settingsVersion, setSettingsVersion] = useState(0);
   const tabsID = useId();
   const requestedView = params.get('connection_view');
@@ -239,9 +229,21 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
         description={connection.data.note}
         back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
         actions={
-          <button type="button" className="nb-btn nb-btn--primary" onClick={() => setAdding(true)}>
-            {t('common.connections.addEntry')}
-          </button>
+          view === 'entries' ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              onClick={() => {
+                if (setupReady) {
+                  setAddTask((task) => task + 1);
+                  setSetupReady(false);
+                }
+                setAdding(true);
+              }}
+            >
+              {t('common.connections.addEntry')}
+            </button>
+          ) : null
         }
       />
       <Tabs
@@ -305,10 +307,8 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
         <ServiceCreateForm
           accountId={accountId}
           connection={connection.data}
-          onManage={() => {
-            setAdding(false);
-            setAddTask((task) => task + 1);
-          }}
+          onReady={setSetupReady}
+          onManage={() => setAdding(false)}
         />
       </Sheet>
     </div>

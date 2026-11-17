@@ -52,11 +52,9 @@ export function DirectoryBatch({
     onLockChange?.(locked);
     return () => onLockChange?.(false);
   }, [locked, onLockChange]);
+
   return (
     <div className="nb-stack">
-      {initialTarget ? (
-        <Note>{initialTarget.entry.note || initialTarget.entry.base_url}</Note>
-      ) : null}
       {!initialTarget ? (
         <Fold title={t('common.connections.chooseEntry')}>
           <Note>{t('common.connections.batchTargetHelp')}</Note>
@@ -101,7 +99,7 @@ export function DirectoryBatch({
             <PresetModelRow
               accountId={accountId}
               rowId={row.id}
-              initialProvider={row.provider}
+              initialProvider={row.provider || (initialTarget ? 'my' : '')}
               bulk={bulk}
               editableUpstream
               grantsByEntry
@@ -121,37 +119,45 @@ export function DirectoryBatch({
           </Fold>
         ))}
       </fieldset>
-      {!remaining.length ? (
-        <Link to="/keys" className="nb-btn nb-btn--secondary">
-          {t('user.services.apiKeyLink')}
-        </Link>
+      {remaining.length ? (
+        <>
+          <Note>{t('common.connections.batchMappingHelp')}</Note>
+          <button
+            type="button"
+            className="nb-btn nb-btn--primary"
+            disabled={locked || remaining.some((row) => !states[row.id]?.ready)}
+            onClick={() => {
+              setAttempted(true);
+              setBusy(true);
+              void (async () => {
+                try {
+                  for (const row of remaining) {
+                    if (!(await saves.current[row.id]?.())) break;
+                  }
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            {t(
+              attempted
+                ? 'common.connections.retryUnfinishedModels'
+                : 'common.connections.saveSelectedModels',
+              { count: remaining.length },
+            )}
+          </button>
+        </>
+      ) : rows.length ? (
+        <div className="nb-actions">
+          <Link to="/models" className="nb-btn nb-btn--secondary">
+            {t('user.services.viewModels')}
+          </Link>
+          <Link to="/keys#client" className="nb-btn nb-btn--secondary">
+            {t('user.services.apiKeyLink')}
+          </Link>
+        </div>
       ) : null}
-      <Note>{t('common.connections.batchMappingHelp')}</Note>
-      <button
-        type="button"
-        className="nb-btn nb-btn--primary"
-        disabled={locked || !remaining.length || remaining.some((row) => !states[row.id]?.ready)}
-        onClick={() => {
-          setAttempted(true);
-          setBusy(true);
-          void (async () => {
-            try {
-              for (const row of remaining) {
-                if (!(await saves.current[row.id]?.())) break;
-              }
-            } finally {
-              setBusy(false);
-            }
-          })();
-        }}
-      >
-        {t(
-          attempted
-            ? 'common.connections.retryUnfinishedModels'
-            : 'common.connections.saveSelectedModels',
-          { count: remaining.length },
-        )}
-      </button>
     </div>
   );
 }

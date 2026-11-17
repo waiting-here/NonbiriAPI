@@ -33,6 +33,8 @@ export function ConnectionResourceList<T>({
   rowKey,
   searchPlaceholder,
   emptyAction,
+  emptyTitle,
+  emptyDescription,
   refetchInterval = false,
   embedded = false,
   showHeading = true,
@@ -50,6 +52,8 @@ export function ConnectionResourceList<T>({
   rowKey: (row: T) => string;
   searchPlaceholder: string;
   emptyAction?: ReactNode;
+  emptyTitle?: string;
+  emptyDescription?: string;
   refetchInterval?: number | false;
   embedded?: boolean;
   showHeading?: boolean;
@@ -102,8 +106,7 @@ export function ConnectionResourceList<T>({
     refetchInterval,
   });
   useResourceListScroll(accountId, Boolean(query.data) && !query.isFetching, restoreScroll);
-  const isEmptyUnfiltered =
-    query.data?.pagination.total_items === '0' && !q.trim() && !filterKey;
+  const isEmptyUnfiltered = query.data?.pagination.total_items === '0' && !q.trim() && !filterKey;
   const content = (
     <>
       {showHeading || actions ? (
@@ -153,8 +156,14 @@ export function ConnectionResourceList<T>({
               <DataTable caption={title} columns={columns} rows={query.data.data} rowKey={rowKey} />
             ) : (
               <CoreEmpty
-                title={t('common.connections.emptyTitle')}
-                body={q ? t('common.connections.noMatches') : t('common.connections.emptyBody')}
+                title={
+                  isEmptyUnfiltered && emptyTitle ? emptyTitle : t('common.connections.emptyTitle')
+                }
+                body={
+                  q
+                    ? t('common.connections.noMatches')
+                    : (emptyDescription ?? t('common.connections.emptyBody'))
+                }
                 action={emptyAction}
                 illustration={q ? 'search' : 'empty'}
               />
