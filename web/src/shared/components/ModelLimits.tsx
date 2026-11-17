@@ -33,6 +33,17 @@ import './modelLimits.css';
 const primaryMetrics = ['credits', 'calls', 'tokens'] as const;
 const splitMetrics = ['input_tokens', 'output_tokens'] as const;
 const metrics: readonly ModelMetric[] = [...primaryMetrics, ...splitMetrics];
+const labelKeys = {
+  credits: 'common.modelLimits.credits',
+  calls: 'common.modelLimits.calls',
+  tokens: 'common.modelLimits.tokens',
+  input_tokens: 'common.modelLimits.input_tokens',
+  output_tokens: 'common.modelLimits.output_tokens',
+  limits: 'common.modelLimits.limits',
+  used: 'common.modelLimits.used',
+  reserved: 'common.modelLimits.reserved',
+  remaining: 'common.modelLimits.remaining',
+} as const;
 
 function Amount({ value, metric }: { value: string | null | undefined; metric: ModelMetric }) {
   const { t } = useTranslation();
@@ -167,7 +178,7 @@ function ModelLimitList(props: RecurringLimitsProps) {
                           {limited.map((metric) => (
                             <span key={metric}>
                               {metric === 'credits' ? null : (
-                                <>{t('common.modelLimits.' + metric)} · </>
+                                <>{t(labelKeys[metric])} · </>
                               )}
                               <Amount value={item.remaining[metric]} metric={metric} />
                             </span>
@@ -358,7 +369,7 @@ function ModelLimitEditor({
     return (
       <QuotaAmountField
         key={metric}
-        label={t('common.modelLimits.' + metric)}
+        label={t(labelKeys[metric])}
         value={amount}
         inputMode={metric === 'credits' ? 'decimal' : 'numeric'}
         maxLength={128}
@@ -468,7 +479,7 @@ function ModelLimitEditor({
                     .map((metric) => (
                       <p key={metric}>
                         {t('common.modelLimits.currentLimit', {
-                          metric: t('common.modelLimits.' + metric),
+                          metric: t(labelKeys[metric]),
                           limit:
                             value.limits[metric] === null
                               ? t('common.modelLimits.unlimited')
@@ -520,13 +531,13 @@ function ModelLimitEditor({
                     key: 'metric',
                     header: t('common.modelLimits.metric'),
                     cell: 'title',
-                    render: (metric) => t('common.modelLimits.' + metric),
+                    render: (metric) => t(labelKeys[metric]),
                   },
                   ...(['limits', 'used', 'reserved', 'remaining'] as const).map((key) => ({
                     key,
-                    header: t('common.modelLimits.' + key),
+                    header: t(labelKeys[key]),
                     cell: 'meta' as const,
-                    mobileLabel: t('common.modelLimits.' + key),
+                    mobileLabel: t(labelKeys[key]),
                     render: (metric: ModelMetric) => (
                       <Amount metric={metric} value={value[key][metric]} />
                     ),
