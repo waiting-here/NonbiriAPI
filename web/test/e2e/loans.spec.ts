@@ -139,7 +139,7 @@ for (const scenario of [
     await expect(history.locator('.loan-facts dt')).toHaveCount(5);
     await expect(history.locator('.loan-facts')).not.toContainText(/系数|coefficient|→/);
     await expect(history.locator('select')).toHaveCount(0);
-    await expect(history.getByText(zh ? '共 1 项' : '1 items', { exact: true })).toBeVisible();
+    await expect(history.getByText(zh ? '共 1 项' : '1 item', { exact: true })).toBeVisible();
     expect(pages).toEqual(['?page=1&page_size=20']);
     expect(await history.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await history.getByRole('button', { name: zh ? '关闭' : 'Close', exact: true }).click();

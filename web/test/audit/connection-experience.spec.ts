@@ -2175,8 +2175,13 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     );
     const ownerPage = await owner.newPage();
     await ownerPage.goto(fixture().user_url + '/charity/donations/' + donation.id);
+    const ownerDetail = ownerPage.locator('.economy-donation-card').filter({
+      has: ownerPage.getByRole('heading', {
+        name: userEn.user.charity.donationNumber.replace('{{id}}', donation.id),
+      }),
+    });
     await expect(
-      ownerPage.locator('.status-badge').filter({ hasText: c.donationStates.rejected }).first(),
+      ownerDetail.getByText(c.donationStates.rejected, { exact: true }).first(),
     ).toBeVisible();
 
     const saved = await credential(
@@ -2514,9 +2519,9 @@ test('a key without a catalog can recover, show a readable failure and load mode
       page.getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true }),
     ).toHaveCount(0);
     await page.getByRole('button', { name: userEn.user.services.viewModels, exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: services.fetchModels, exact: true }),
-    ).toBeDisabled();
+    await expect(page.getByRole('button', { name: services.fetchModels, exact: true })).toHaveCount(
+      0,
+    );
     await openFold(page, services.manualModels);
     await page
       .getByLabel(core['endpoints.manualModel'], { exact: true })

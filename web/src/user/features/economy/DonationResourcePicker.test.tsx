@@ -326,7 +326,7 @@ describe('DonationResourcePicker', () => {
     expect(await screen.findByText('No matching keys')).toBeVisible();
     const navigations = screen.getAllByRole('navigation', { name: 'Pagination' });
     expect(navigations).toHaveLength(1);
-    expect(navigations[0]).toHaveTextContent('1 items');
+    expect(navigations[0]).toHaveTextContent('1 item');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
       expect.arrayContaining([endpointPath(), keyPath('1')]),

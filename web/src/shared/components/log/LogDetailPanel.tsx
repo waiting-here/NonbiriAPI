@@ -15,7 +15,7 @@ export interface LogDetailField {
 interface LogDetailPanelProps {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: ReactNode;
   fields: readonly LogDetailField[];
   diagnostics?: { label: string; text: string };
   result?: ReactNode;

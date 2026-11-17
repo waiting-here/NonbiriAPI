@@ -401,6 +401,8 @@ Request logs and JSON/CSV exports include nullable `requested_streaming` (the ca
 
 Administrator and authorized steward request details can include `route_decision` for personal and charity requests. Its `observations` describe candidates as the platform saw them during that request. An observation has a `reason` and can identify the `binding_id`, `native_service`, native or conversion `match`, and a safe parameter `field`. For example, a direct binding can be disabled after repeated failures, followed by a converted candidate that rejects a particular parameter before dispatch. An eligible candidate can still fail later. Actual upstream calls are recorded under `attempts`. The optional `truncated` flag identifies a partial record. Historical requests can lack observations. These details are restricted to management detail reads.
 
+An observation with `stage: "claim"` records a resource reservation check. A `"dispatch"` observation records the last check before the upstream call. Reasons distinguish a key's rate or concurrency limit, a recurring quota, and exhausted platform reservation storage. An aggregate check across several bindings can omit the binding ID.
+
 Request-log list/detail and JSON exports may include safe `rejection_detail:{field,reason,suggestion?}` for a recorded pre-handler refusal or a platform resource refusal before any upstream attempt. Administrators, authorized stewards and the ordinary caller viewing **their own** log receive the same server-authored check and corrective suggestion, subject to existing display privacy. For example:
 
 ```json

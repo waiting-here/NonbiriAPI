@@ -691,7 +691,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
               ? '/api/steward/logs'
               : '/api/logs';
         const missing = locale === 'zh' ? '模型不存在' : 'Model not found';
-        const unavailable = locale === 'zh' ? '暂无可用密钥' : 'No usable key';
+        const unavailable = locale === 'zh' ? '模型暂无可用来源' : 'No available model source';
         await mockJson(page, {
           origin,
           method: 'GET',

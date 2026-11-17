@@ -83,7 +83,30 @@ test('real rejection details show safe top-level positions and explain historica
             expect(unbound.route_decision.observations).toContainEqual({ reason: 'no_bindings' });
             expect(unbound.attempts.data).toHaveLength(0);
           }
-          await page.goto(origin + route + samples.unbound_id);
+          const listRoute =
+            role === 'steward' ? '/steward?tab=logs&status=400' : '/logs?status=400';
+          await page.goto(origin + listRoute);
+          await page.getByRole('tab', { name: '按请求 ID 查找' }).click();
+          const lookup = page.getByLabel('请求 ID', { exact: true });
+          const submit = page.getByRole('button', { name: '打开详情', exact: true });
+          if (width === 1440 && theme === 'light') {
+            await lookup.fill('req_' + 'A'.repeat(21) + 'Q');
+            await submit.click();
+            const missing = page.locator('.nb-expandable-panel:not([hidden])');
+            await expect(missing.getByRole('status')).toContainText(
+              role === 'user' ? '已过期或不属于当前账号' : '没有找到这条记录',
+            );
+            await missing.getByRole('button', { name: '关闭' }).click();
+            expect(new URL(page.url()).searchParams.get('status')).toBe('400');
+            expect(new URL(page.url()).searchParams.has('request_id')).toBe(false);
+          }
+          await lookup.fill(samples.unbound_id);
+          await submit.click();
+          await expect(page).toHaveURL(
+            (url) =>
+              url.searchParams.get('request_id') === samples.unbound_id &&
+              url.searchParams.get('status') === '400',
+          );
           const routing = page.getByRole('region', { name: '本次路由选择' });
           if (role !== 'user') {
             await expect(routing.getByText('当时没有已配置的绑定。')).toBeVisible();

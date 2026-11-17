@@ -29,6 +29,7 @@ const maxRouteObservations = 16
 func (o RouteObservation) valid() bool {
 	switch o.Reason {
 	case "no_bindings", "failure_disabled", "cooldown", "unavailable", "expired", "capacity", "quota",
+		"key_rate_limit", "quota_storage_full", "routing_busy", "caller_level", "credential_unavailable", "dependency_unavailable",
 		"operation_unsupported", "features_unsupported", "preparation_rejected", "continuation_mismatch", "protocol_rejected", "eligible":
 	default:
 		return false

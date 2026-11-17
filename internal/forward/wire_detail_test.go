@@ -3,6 +3,7 @@ package forward
 import (
 	"context"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,7 +16,7 @@ import (
 
 func TestUnavailableCandidatesKeepSafeDetailBeforeDispatch(t *testing.T) {
 	for _, charity := range []bool{false, true} {
-		for _, denied := range []error{claim.ErrNotFound, claim.ErrKeyRateLimited, donationquota.ErrLimited} {
+		for denied, reason := range map[error]string{claim.ErrNotFound: "unavailable", claim.ErrKeyRateLimited: "key_rate_limit", donationquota.ErrLimited: "quota"} {
 			f := newServiceFixture(t, nil)
 			f.claims.claimErrors = map[int]error{0: denied}
 			model, status := "provider/model", 503
@@ -28,7 +29,17 @@ func TestUnavailableCandidatesKeepSafeDetailBeforeDispatch(t *testing.T) {
 			request := decodeChatForTest(t, `{"model":"`+model+`","messages":[{"role":"user","content":"complete request"}]}`)
 			defer request.Clear()
 			writer := httptest.NewRecorder()
-			f.service.Chat(context.Background(), writer, 1, request, nil, "application/json", "en")
+			ctx, _, err := requestattempt.New(t.Context(), 1, "POST", "/v1/chat/completions")
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.service.Chat(ctx, writer, 1, request, nil, "application/json", "en")
+			trace := requestattempt.RouteSnapshot(ctx)
+			if trace == nil || !slices.ContainsFunc(trace.Observations, func(o requestattempt.RouteObservation) bool {
+				return o.Stage == "claim" && o.Reason == reason
+			}) {
+				t.Fatalf("missing %s claim decision: %+v", reason, trace)
+			}
 			if writer.Code != status || f.openAI.calls != 0 || len(f.claims.outcomes) != 0 || len(f.claims.requestResults) != 1 {
 				t.Fatal(charity, denied, writer.Code, writer.Body.String(), f.claims.events)
 			}

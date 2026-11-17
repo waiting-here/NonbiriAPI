@@ -847,7 +847,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await act(async () => resolveSearch!(jsonResponse(numbered([searchedCandidate], '1', 10, 1))));
     expect(within(automaticSection).queryByText('needle-result')).not.toBeInTheDocument();
     expect(within(automaticSection).getByText('latest-result')).toBeInTheDocument();
-    expect(within(automaticSection).getByText('1 items')).toBeInTheDocument();
+    expect(within(automaticSection).getByText('1 item')).toBeInTheDocument();
   });
   it('drops source selections, search and late query results across account boundaries', async () => {
     let actor = 'first';
