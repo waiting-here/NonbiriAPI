@@ -5,6 +5,34 @@ import (
 	"testing"
 )
 
+func TestRouteObservationsReserveSpaceForProtocolAndRecheck(t *testing.T) {
+	ctx, _, err := New(t.Context(), 1, "POST", "/v1/chat/completions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ObserveRoute(ctx, 1, "PRIVATE_SERVICE", "unavailable", "", "")
+	ObserveRoute(ctx, 1, "responses", "protocol_rejected", "conversion", "PRIVATE_FIELD")
+	if RouteSnapshot(ctx) != nil {
+		t.Fatal("retained unknown service or field")
+	}
+	for id := int64(1); id <= 100; id++ {
+		ObserveRoute(ctx, id, "chat_completions", "failure_disabled", "", "")
+	}
+	ObserveRoute(ctx, 101, "responses", "protocol_rejected", "conversion", "request.fields[2]")
+	for id := int64(102); id <= 120; id++ {
+		ObserveRoute(ctx, id, "responses", "eligible", "conversion", "")
+	}
+	d := RouteSnapshot(ctx)
+	if !d.Valid() || !d.Truncated || len(d.Observations) >= maxRouteObservations || d.Essential().Observations[0].Field != "request.fields[2]" {
+		t.Fatal(d)
+	}
+	ObserveRecheck(ctx, 120, "responses", "capacity", "dispatch")
+	d = RouteSnapshot(ctx)
+	if !d.Valid() || len(d.Observations) != maxRouteObservations || d.Essential().Observations[0].Stage != "dispatch" {
+		t.Fatal(d)
+	}
+}
+
 func TestRejectionDetailsNeverKeepArbitraryFieldsOrReasons(t *testing.T) {
 	detail := NewDetail("SECRET_FIELD", "unsupported top-level field")
 	if detail == nil || detail.Field != "request" || strings.Contains(EncodeDetail(detail), "SECRET") {

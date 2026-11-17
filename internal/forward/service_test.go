@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
@@ -896,8 +898,18 @@ func TestCandidateRevocationBeforeClaimDoesNotExpandSnapshot(t *testing.T) {
 	request := decodeChatForTest(t, `{"model":"provider/model","messages":[]}`)
 	recorder := httptest.NewRecorder()
 
-	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
+	ctx, _, err := requestattempt.New(t.Context(), 1, "POST", "/v1/chat/completions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.service.Chat(ctx, recorder, 1, request, []byte(`{}`), "application/json", "en")
 
+	d := requestattempt.RouteSnapshot(ctx)
+	if d == nil || !slices.ContainsFunc(d.Observations, func(o requestattempt.RouteObservation) bool {
+		return o.Stage == "claim" && o.Reason == "unavailable" && o.BindingID != ""
+	}) {
+		t.Fatalf("missing post-acceptance recheck: %+v", d)
+	}
 	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), httperr.CodeUnboundModel) {
 		t.Fatalf("response=%d %q", recorder.Code, recorder.Body.String())
 	}

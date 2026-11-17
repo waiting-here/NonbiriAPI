@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -194,10 +195,11 @@ type AdminLogAttempt struct {
 }
 
 type AdminLogDetail struct {
-	Delivery          *diagnostic.Delivery  `json:"delivery,omitempty"`
-	Request           AdminLogRow           `json:"request"`
-	Attempts          Page[AdminLogAttempt] `json:"attempts"`
-	AttemptPagination *pagination.Metadata  `json:"attempt_pagination,omitempty"`
+	RouteDecision     *requestattempt.RouteDecision `json:"route_decision,omitempty"`
+	Delivery          *diagnostic.Delivery          `json:"delivery,omitempty"`
+	Request           AdminLogRow                   `json:"request"`
+	Attempts          Page[AdminLogAttempt]         `json:"attempts"`
+	AttemptPagination *pagination.Metadata          `json:"attempt_pagination,omitempty"`
 }
 
 // Management projections expose the same facts to administrators and stewards.
@@ -246,10 +248,11 @@ type StewardLogAttempt struct {
 }
 
 type StewardLogDetail struct {
-	Delivery          *diagnostic.Delivery    `json:"delivery,omitempty"`
-	Request           StewardLogRow           `json:"request"`
-	Attempts          Page[StewardLogAttempt] `json:"attempts"`
-	AttemptPagination *pagination.Metadata    `json:"attempt_pagination,omitempty"`
+	RouteDecision     *requestattempt.RouteDecision `json:"route_decision,omitempty"`
+	Delivery          *diagnostic.Delivery          `json:"delivery,omitempty"`
+	Request           StewardLogRow                 `json:"request"`
+	Attempts          Page[StewardLogAttempt]       `json:"attempts"`
+	AttemptPagination *pagination.Metadata          `json:"attempt_pagination,omitempty"`
 }
 
 type ListFilter struct {

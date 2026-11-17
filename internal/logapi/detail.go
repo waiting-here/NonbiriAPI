@@ -53,7 +53,7 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 		return nil, err
 	}
 	redactor := requestDNSRedactor(sources[record.rowID])
-	delivery, err := readDelivery(ctx, reader, record.rowID)
+	delivery, _, err := readDelivery(ctx, reader, record.rowID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	if err != nil {
 		return AdminLogDetail{}, err
 	}
-	delivery, err := readDelivery(ctx, tx, record.rowID)
+	delivery, routeDecision, err := readDelivery(ctx, tx, record.rowID, true)
 	if err != nil {
 		return AdminLogDetail{}, err
 	}
@@ -173,7 +173,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
-	return AdminLogDetail{Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+	return AdminLogDetail{RouteDecision: routeDecision, Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 func (repository *Repository) GetSteward(
@@ -242,7 +242,7 @@ func (repository *Repository) GetSteward(
 	if err != nil {
 		return StewardLogDetail{}, err
 	}
-	delivery, err := readDelivery(ctx, tx, record.rowID)
+	delivery, routeDecision, err := readDelivery(ctx, tx, record.rowID, true)
 	if err != nil {
 		return StewardLogDetail{}, err
 	}
@@ -269,7 +269,7 @@ func (repository *Repository) GetSteward(
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
-	return StewardLogDetail{Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+	return StewardLogDetail{RouteDecision: routeDecision, Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 type attemptRecord struct {

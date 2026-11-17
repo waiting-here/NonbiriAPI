@@ -5,12 +5,25 @@ import (
 	"encoding/json"
 
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 // RecordDelivery attaches facts only to an already authorized request-log root.
 // No root is created if the public request was not retained by the existing rail.
 func (r *Repository) RecordDelivery(ctx context.Context, requestID string, value diagnostic.Delivery) error {
-	encoded, err := json.Marshal(value)
+	route := requestattempt.RouteSnapshot(ctx)
+	payload := struct {
+		diagnostic.Delivery
+		Route *requestattempt.RouteDecision `json:"route_decision,omitempty"`
+	}{value, route}
+	encoded, err := json.Marshal(payload)
+	if len(encoded) > 16<<10 && route != nil {
+		payload.Route = route.Essential()
+		encoded, err = json.Marshal(payload)
+	}
+	if len(encoded) > 16<<10 && route != nil {
+		encoded, err = json.Marshal(value)
+	}
 	if err != nil || len(encoded) > 16<<10 {
 		return ErrInvalid
 	}

@@ -1,16 +1,18 @@
 package forward
 
 import (
+	"context"
 	"errors"
 	"sort"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 // expandServiceTargets keeps authorization separate from wire capability.
 // Alternatives exist only during preflight; acceptance sees one per binding.
-func expandServiceTargets(candidates []RouteCandidate, operation connectorcontract.Operation) ([]RouteCandidate, error) {
+func expandServiceTargets(ctx context.Context, candidates []RouteCandidate, operation connectorcontract.Operation) ([]RouteCandidate, error) {
 	result := make([]RouteCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		authorization := candidate.Authorization
@@ -20,6 +22,9 @@ func expandServiceTargets(candidates []RouteCandidate, operation connectorcontra
 		}
 		routes, err := connector.ResolveServiceRoutes(authorization.ConfiguredType, candidate.NativeServices, authorization.RerankFormat, operation)
 		if errors.Is(err, connector.ErrNoServiceRoute) {
+			for _, s := range candidate.NativeServices.Services() {
+				requestattempt.ObserveRoute(ctx, candidate.BindingID, s, "operation_unsupported", "", "")
+			}
 			continue
 		}
 		if err != nil {

@@ -2,6 +2,7 @@ package forward
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sort"
 
@@ -41,6 +42,7 @@ func (service *Service) snapshot(
 		connectorTypes := service.supportedCharityConnectorTypes(physical, admission.flatten)
 		physical.Clear()
 		if len(connectorTypes) == 0 {
+			requestattempt.ObserveRoute(ctx, 0, "", "features_unsupported", "", "")
 			return executionPlan{}, &openai.ValidationError{Detail: requestattempt.NewDetail("request", "no connector supports the required request features")}
 		}
 		value, err := service.charity.Snapshot(ctx, userID, admission.modelID, admission.decisionNow, connectorTypes, request.operation)
@@ -59,6 +61,9 @@ func (service *Service) snapshot(
 	} else {
 		value, err := service.personal.Snapshot(ctx, userID, identifier)
 		if err != nil {
+			if errors.Is(err, routing.ErrUnbound) {
+				requestattempt.ObserveRoute(ctx, 0, "", "unavailable", "", "")
+			}
 			return executionPlan{}, err
 		}
 		if !value.ModelTypes.Supports(request.operation) {
@@ -80,7 +85,7 @@ func (service *Service) snapshot(
 		return executionPlan{}, routing.ErrUnbound
 	}
 	var expandErr error
-	plan.candidates, expandErr = expandServiceTargets(plan.candidates, request.operation)
+	plan.candidates, expandErr = expandServiceTargets(ctx, plan.candidates, request.operation)
 	if expandErr != nil {
 		return executionPlan{}, expandErr
 	}
@@ -109,6 +114,7 @@ func (service *Service) snapshot(
 			return executionPlan{}, ErrInternal
 		}
 		if candidate.preparationError != nil {
+			observeCandidate(ctx, candidate, "preparation_rejected", candidate.preparationError)
 			if rejection == nil {
 				rejection = candidate.preparationError
 			}
@@ -117,6 +123,7 @@ func (service *Service) snapshot(
 		candidateRequest := candidate.prepared.source(request)
 		adaptedContinuation, err := continuationID(candidateRequest)
 		if err != nil || continuation != adaptedContinuation || continuation != "" && admission.flatten {
+			observeCandidate(ctx, candidate, "continuation_mismatch", nil)
 			rejection = continuationRejection()
 			continue
 		}
@@ -126,6 +133,7 @@ func (service *Service) snapshot(
 			return executionPlan{}, bindingErr
 		}
 		if continuation != "" && continuation != binding {
+			observeCandidate(ctx, candidate, "continuation_mismatch", nil)
 			rejection = continuationRejection()
 			continue
 		}
@@ -144,12 +152,16 @@ func (service *Service) snapshot(
 			candidate.Policy.FlattenToolCalls = request.chat != nil && admission.flatten
 			capable = append(capable, candidate)
 		} else {
+			observeCandidate(ctx, candidate, "protocol_rejected", rejected)
 			if rejection == nil {
 				rejection = rejected
 			}
 		}
 	}
 	capable = firstCapableBindings(capable)
+	for _, candidate := range capable {
+		observeCandidate(ctx, candidate, "eligible", nil)
+	}
 	plan.clearUnusedPrepared(capable)
 	clear(plan.candidates)
 	if len(capable) == 0 {
@@ -192,6 +204,20 @@ func (service *Service) snapshot(
 		}
 	}
 	return plan, nil
+}
+
+func observeCandidate(ctx context.Context, candidate RouteCandidate, reason string, err error) {
+	match := "conversion"
+	if candidate.NativeMatch {
+		match = "native"
+	}
+	var field string
+	if err != nil {
+		if d := failureForError(err, false).detail; d != nil {
+			field = d.Field
+		}
+	}
+	requestattempt.ObserveRoute(ctx, candidate.BindingID, candidate.Authorization.NativeService, reason, match, field)
 }
 
 func (service *Service) supportedCharityConnectorTypes(request *validatedRequest, flatten bool) []connectorcontract.Type {

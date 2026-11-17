@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
@@ -52,9 +53,12 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	groups := make(map[int64]bool)
 	sawAvailableOperation := false
 	for _, item := range candidates {
+		var approvedMask int64
+		var unsupported connectorcontract.NativeService
+		start := len(result)
 		for _, use := range uses[item.candidate.DonationKeyID] {
 			candidate, grant := item.candidate, use.Grant
-			if !available[use.UseID] || grant.EndpointID != candidate.EndpointID || grant.EndpointKeyID != candidate.EndpointKeyID ||
+			if grant.EndpointID != candidate.EndpointID || grant.EndpointKeyID != candidate.EndpointKeyID ||
 				!candidate.NativeServices.Has(use.NativeService) || !grant.EffectiveServices.Has(use.NativeService) {
 				continue
 			}
@@ -62,6 +66,16 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 			if err != nil {
 				return nil, ErrInvariant
 			}
+			approvedMask |= services.Mask()
+			state, present := available[use.UseID]
+			if !present || state != "" {
+				if state == "" {
+					state = "unavailable"
+				}
+				requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, state, "", "")
+				continue
+			}
+			matchedOperation := false
 			compatible := false
 			for _, requested := range operations {
 				routes, err := connector.ResolveServiceRoutes(grant.ConfiguredType, services, grant.RerankFormat, requested)
@@ -73,6 +87,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				}
 				if len(routes) > 0 {
 					sawAvailableOperation = true
+					matchedOperation = true
 				}
 				for _, route := range routes {
 					_, allowed := connectorSet[route.WireType]
@@ -86,6 +101,11 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				}
 			}
 			if !compatible {
+				if matchedOperation {
+					requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, "features_unsupported", "", "")
+				} else if unsupported == "" {
+					unsupported = use.NativeService
+				}
 				continue
 			}
 			candidate.NativeServices = services
@@ -100,6 +120,11 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 			result = append(result, candidate)
 			groups[candidate.BindingID] = true
 		}
+		if len(result) == start && unsupported != "" {
+			requestattempt.ObserveRoute(ctx, item.candidate.BindingID, unsupported, "operation_unsupported", "", "")
+		}
+		missing, _ := connectorcontract.NativeServicesFromMask(item.candidate.NativeServices.Mask() &^ approvedMask)
+		observeBinding(ctx, item.candidate.BindingID, missing, "unavailable")
 	}
 	if len(groups) > MaxRuntimeCandidates {
 		return nil, ErrResourceLimit
@@ -114,32 +139,33 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	return result, nil
 }
 
-func availableServiceUsesTx(ctx context.Context, tx *sql.Tx, keys []int64, now int64) (map[int64]bool, error) {
+func availableServiceUsesTx(ctx context.Context, tx *sql.Tx, keys []int64, now int64) (map[int64]string, error) {
 	if len(keys) == 0 || len(keys) > maxBindingBatch {
 		return nil, ErrInvalidRequest
 	}
-	args := make([]any, 0, len(keys)+2)
+	args := make([]any, 1, len(keys)+1)
+	args[0] = now
 	for _, key := range keys {
 		args = append(args, key)
 	}
-	args = append(args, now)
-	rows, err := tx.QueryContext(ctx, `SELECT a.use_id FROM charity_use_availability a
+	rows, err := tx.QueryContext(ctx, `SELECT a.use_id,CASE WHEN h.failure_disabled=1 THEN 'failure_disabled'
+WHEN `+smartbackoff.ServiceUntilSQL("h")+`>? THEN 'cooldown' ELSE '' END FROM charity_use_availability a
 JOIN donation_keys dk ON dk.id=a.donation_key_id
 LEFT JOIN donation_service_health h ON h.use_id=a.use_id AND h.endpoint_key_id=dk.endpoint_key_id
 AND h.native_service_bit=a.native_service_bit AND h.credential_version_id=a.credential_version_id
-WHERE a.donation_key_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")+`)
-AND COALESCE(h.failure_disabled,0)=0 AND `+smartbackoff.ServiceUntilSQL("h")+`<=?`, args...)
+WHERE a.donation_key_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := make(map[int64]bool)
+	result := make(map[int64]string)
 	for rows.Next() {
 		var useID int64
-		if err := rows.Scan(&useID); err != nil {
+		var reason string
+		if err := rows.Scan(&useID, &reason); err != nil {
 			return nil, err
 		}
-		result[useID] = true
+		result[useID] = reason
 	}
 	return result, rows.Err()
 }

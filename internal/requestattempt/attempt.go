@@ -27,6 +27,7 @@ type Fact struct {
 type Recorder func(context.Context, int64, Fact) error
 type key struct{}
 type attempt struct {
+	route     *RouteDecision
 	mu        sync.Mutex
 	user      int64
 	fact      Fact

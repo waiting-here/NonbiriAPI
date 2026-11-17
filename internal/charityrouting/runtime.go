@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -443,6 +444,10 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 	}
 	modelQuotas := make(map[modelQuotaKey]bool)
 	sawRecurringLimit := false
+	var listed []int64
+	if requestattempt.CurrentID(ctx) != "" && len(operations) == 1 && operations[0] != "" {
+		listed = []int64{}
+	}
 	for rows.Next() {
 		var candidate RuntimeCandidate
 		var connector string
@@ -459,6 +464,9 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			&tokensUsed, &tokensInflight, &rateLimitedUntil, &hasCurrentQuotaRules, &hasModelQuotaLimits); err != nil {
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
 		}
+		if listed != nil {
+			listed = append(listed, candidate.Authorization.TargetID)
+		}
 		candidate.ConnectorType = connectorcontract.Type(connector)
 		if !candidate.ConnectorType.Valid() {
 			return RuntimeSnapshot{}, ErrInvariant
@@ -472,9 +480,11 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "expired")
 			continue
 		}
 		if rateLimitedUntil.Valid && rateLimitedUntil.Int64 > decisionNow {
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "cooldown")
 			sawRecurringLimit = true
 			continue
 		}
@@ -496,6 +506,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.budgetAvailable {
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "capacity")
 			continue
 		}
 		tokenReserve = quota.reservation.Total
@@ -510,6 +521,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "capacity")
 			continue
 		}
 		candidate.Policy.ForceStoreFalse = forceStore == 1
@@ -535,6 +547,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.recurringAvailable {
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "quota")
 			sawRecurringLimit = true
 			continue
 		}
@@ -551,6 +564,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			modelQuotas[modelKey] = modelAvailable
 		}
 		if !modelAvailable {
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "quota")
 			sawRecurringLimit = true
 			continue
 		}
@@ -568,6 +582,9 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: close runtime candidates: %w", err)
 	}
 	if len(weighted) == 0 {
+		if listed != nil {
+			observeUnlistedTargets(ctx, tx, modelID, listed)
+		}
 		if sawRecurringLimit {
 			return RuntimeSnapshot{}, donationquota.ErrLimited
 		}
@@ -581,6 +598,11 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		operation = operations[0]
 	}
 	snapshot.candidates, err = authorizedServiceTargetsTx(ctx, tx, weighted, connectorSet, operation, decisionNow)
+	if listed != nil && !slices.ContainsFunc(snapshot.candidates, func(c RuntimeCandidate) bool {
+		return c.Authorization.NativeService == connectorcontract.NativeService(operation)
+	}) {
+		observeUnlistedTargets(ctx, tx, modelID, listed)
+	}
 	if err != nil {
 		return RuntimeSnapshot{}, err
 	}

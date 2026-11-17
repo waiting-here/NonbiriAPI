@@ -328,6 +328,12 @@ func (f *embeddingHTTPFixture) call(t *testing.T, model, input, encoding, scenar
 
 func (f *embeddingHTTPFixture) post(t *testing.T, path, body string) (int, []byte) {
 	t.Helper()
+	status, data, _ := f.postWithID(t, path, body)
+	return status, data
+}
+
+func (f *embeddingHTTPFixture) postWithID(t *testing.T, path, body string) (int, []byte, string) {
+	t.Helper()
 	r, err := http.NewRequest("POST", f.server.URL+path, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -344,7 +350,7 @@ func (f *embeddingHTTPFixture) post(t *testing.T, path, body string) (int, []byt
 	if err != nil {
 		t.Fatal(err)
 	}
-	return response.StatusCode, data
+	return response.StatusCode, data, response.Header.Get("X-Request-ID")
 }
 
 func TestEmbeddingHTTPAccountingAndProjection(t *testing.T) {
