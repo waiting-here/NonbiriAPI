@@ -10,6 +10,8 @@ import {
   normalizeServiceRoutes,
   type ServiceRoute,
   normalizeServiceProjection,
+  CONNECTOR_TYPES,
+  type ConnectorType,
   type ServiceProjection,
 } from '@shared/connections';
 import { normalizeUseSummary, type UseSummary } from './donationUses';
@@ -39,6 +41,7 @@ import {
 import { MODEL_TYPES, normalizeModelTypes, type ModelType } from '@shared/modelTypes';
 import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { apiFetch } from '@shared/query/http';
+import { asRecord } from '@shared/query/normalize';
 import { normalizeRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
 import { decoded, idempotentOptions, queryPath } from './api';
@@ -97,30 +100,15 @@ export interface ManagedDonationFilters {
   q?: string;
 }
 
-type CharityConnectorType =
-  | 'openai-compatible'
-  | 'anthropic-compatible'
-  | 'ai-sdk-gateway-v3'
-  | 'ai-sdk-gateway-v4'
-  | 'google-gemini'
-  | 'openai-responses'
-  | 'openai-decisions'
-  | 'cohere-rerank'
-  | 'jina-rerank'
-  | 'siliconflow-rerank'
-  | 'voyage-rerank'
-  | 'typesafe-systemone'
-  | 'openai-chat-completions';
-
 export type ManagedSafeSource = { endpoint_tags?: string[] } & (
   | {
       kind: 'custom';
-      connector_type: CharityConnectorType;
+      connector_type: ConnectorType;
       base_url: string;
     }
   | {
       kind: 'mainstream';
-      connector_type: CharityConnectorType;
+      connector_type: ConnectorType;
       base_url: string;
       channel_id: string;
       name: string;
@@ -204,9 +192,7 @@ export interface AdminDonation extends DonationCommon {
   owner: { user_id: string; discord_id: string | null; display_name: string } | null;
 }
 
-export interface StewardDonation extends DonationCommon {
-  owner: { user_id: string; discord_id: string | null; display_name: string } | null;
-}
+export type StewardDonation = AdminDonation;
 
 export function containsForbiddenControl(value: string): boolean {
   return Array.from(value).some((character) => {
@@ -226,7 +212,7 @@ export function normalizeManagedSource(
   label: string,
   role: CharityRole,
 ): ManagedSafeSource {
-  const discriminator = record(
+  const source = record(
     value,
     [
       'kind',
@@ -241,55 +227,20 @@ export function normalizeManagedSource(
     label,
     ['kind', 'connector_type', 'base_url'],
   );
-  const kind = oneOf(discriminator.kind, ['custom', 'mainstream'] as const, `${label} kind`);
-  const connectorType = oneOf(
-    discriminator.connector_type,
-    [
-      'openai-compatible',
-      'anthropic-compatible',
-      'ai-sdk-gateway-v3',
-      'ai-sdk-gateway-v4',
-      'google-gemini',
-      'openai-responses',
-      'openai-decisions',
-      'cohere-rerank',
-      'jina-rerank',
-      'siliconflow-rerank',
-      'voyage-rerank',
-      'typesafe-systemone',
-      'openai-chat-completions',
-    ] as const,
-    `${label} connector`,
-  );
-  const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`);
+  const kind = oneOf(source.kind, ['custom', 'mainstream'] as const, `${label} kind`);
+  const connectorType = oneOf(source.connector_type, CONNECTOR_TYPES, `${label} connector`);
+  const baseURL = sourceText(source.base_url, `${label} canonical base URL`);
   const tags =
-    discriminator.endpoint_tags === undefined
+    source.endpoint_tags === undefined
       ? {}
       : {
-          endpoint_tags: array(discriminator.endpoint_tags, `${label} endpoint tags`).map((tag) =>
+          endpoint_tags: array(source.endpoint_tags, `${label} endpoint tags`).map((tag) =>
             string(tag, `${label} endpoint tag`),
           ),
         };
   if (kind === 'custom') {
     return { kind, connector_type: connectorType, base_url: baseURL, ...tags };
   }
-  const fields = [
-    'kind',
-    'connector_type',
-    'base_url',
-    'channel_id',
-    'name',
-    'channel_revision',
-    'category',
-    'endpoint_tags',
-  ] as const;
-  const source = record(value, fields, label, [
-    'kind',
-    'connector_type',
-    'base_url',
-    'channel_id',
-    'name',
-  ]);
   const name = sourceText(source.name, `${label} channel name`);
   if (name.trim() !== name) invalidResponse(`${label} channel name`);
   const mainstream: Extract<ManagedSafeSource, { kind: 'mainstream' }> = {
@@ -664,109 +615,29 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
   };
 }
 
-export function normalizeAdminDonation(value: unknown): AdminDonation {
-  const fields = [
-    'discord_public_thanks',
-    'handling',
-    'id',
-    'status',
-    'revision',
-    'description',
-    'review_result',
-    'keys',
-    'owner',
-    'reviewer',
-    'created_at',
-    'updated_at',
-    'use_summary',
-    'first_approval_origin',
-    'can_force_reject',
-    'force_reject_unavailable_reason',
-  ] as const;
-  const root = record(
-    value,
-    fields,
-    'administrator donation',
-    fields.filter(
-      (field) =>
-        ![
-          'discord_public_thanks',
-          'use_summary',
-          'first_approval_origin',
-          'can_force_reject',
-          'force_reject_unavailable_reason',
-        ].includes(field),
-    ),
-  );
-  const common = normalizeDonationCommon(root, 'administrator donation');
+function normalizeManagementDonation(value: unknown): AdminDonation {
+  const root = asRecord(value) ?? invalidResponse('managed donation');
+  const common = normalizeDonationCommon(root, 'managed donation');
   let owner: AdminDonation['owner'] = null;
   if (root.owner !== null) {
     const item = record(
       root.owner,
       ['user_id', 'discord_id', 'display_name'],
-      'administrator donation owner',
+      'managed donation owner',
     );
     owner = {
-      user_id: decimalID(item.user_id, 'administrator donation owner id'),
-      discord_id: nullableString(item.discord_id, 'administrator donation Discord id', {
+      user_id: decimalID(item.user_id, 'managed donation owner id'),
+      discord_id: nullableString(item.discord_id, 'managed donation Discord id', {
         ascii: true,
       }),
-      display_name: string(item.display_name, 'administrator donation owner display', { min: 1 }),
+      display_name: string(item.display_name, 'managed donation owner display', { min: 1 }),
     };
   }
   return { ...common, owner };
 }
 
-export function normalizeStewardDonation(value: unknown): StewardDonation {
-  const fields = [
-    'discord_public_thanks',
-    'handling',
-    'id',
-    'status',
-    'revision',
-    'description',
-    'review_result',
-    'keys',
-    'owner',
-    'reviewer',
-    'created_at',
-    'updated_at',
-    'use_summary',
-    'first_approval_origin',
-    'can_force_reject',
-    'force_reject_unavailable_reason',
-  ] as const;
-  const root = record(
-    value,
-    fields,
-    'steward donation',
-    fields.filter(
-      (field) =>
-        ![
-          'discord_public_thanks',
-          'use_summary',
-          'first_approval_origin',
-          'can_force_reject',
-          'force_reject_unavailable_reason',
-        ].includes(field),
-    ),
-  );
-  const common = normalizeDonationCommon(root, 'steward donation');
-  if (root.owner === null) return { ...common, owner: null };
-  const item = record(
-    root.owner,
-    ['user_id', 'discord_id', 'display_name'],
-    'steward donation owner',
-  );
-  return {
-    ...common,
-    owner: {
-      user_id: decimalID(item.user_id, 'steward owner id'),
-      discord_id: nullableString(item.discord_id, 'steward owner Discord id', { ascii: true }),
-      display_name: string(item.display_name, 'steward owner display', { min: 1 }),
-    },
-  };
-}
+export const normalizeAdminDonation = normalizeManagementDonation;
+export const normalizeStewardDonation = normalizeManagementDonation;
 
 export interface CharityModel {
   cloudflare_proxy_enabled: boolean;
@@ -873,16 +744,11 @@ function normalizeBindingGuide(value: unknown): BindingGuide | undefined {
     }),
   };
 }
-export interface CharityBinding extends Partial<ServiceProjection> {
-  binding_guide?: BindingGuide;
-  targets?: CharityTarget[];
-  gateway_capabilities?: GatewayCapabilityPolicy | null;
-  id: string;
-  ord: number;
+interface BindingSource {
   donation_key_id: string;
   donation_id: string;
   source: Partial<KeyQueueConfig> & {
-    connector_type: CharityConnectorType;
+    connector_type: ConnectorType;
     canonical_base_url: string;
     display_head: string;
     display_tail: string;
@@ -892,16 +758,23 @@ export interface CharityBinding extends Partial<ServiceProjection> {
   upstream_model_id: string;
   source_types: ('automatic' | 'manual')[];
 }
-export type CharityBindingCandidate = Omit<CharityBinding, 'id' | 'ord'> & {
-  current_binding_id?: string | null;
-  other_binding_count?: string;
-  other_bindings?: { charity_model_id: string; full_name: string; binding_id: string }[];
-};
+export interface CharityBinding extends BindingSource {
+  targets: CharityTarget[];
+  gateway_capabilities?: GatewayCapabilityPolicy | null;
+  id: string;
+  ord: number;
+}
+export interface CharityBindingCandidate extends BindingSource, ServiceProjection {
+  binding_guide?: BindingGuide;
+  current_binding_id: string | null;
+  other_binding_count: string;
+  other_bindings: { charity_model_id: string; full_name: string; binding_id: string }[];
+}
 export function suggestedBindingServices(entry: CharityBindingCandidate) {
-  if (!entry.capabilities?.can_bind) return undefined;
-  if (!entry.binding_guide) return entry.native_services?.slice();
+  if (!entry.capabilities.can_bind) return undefined;
+  if (!entry.binding_guide) return entry.native_services.slice();
   const routes = entry.binding_guide.routes;
-  return entry.native_services?.filter((service) =>
+  return entry.native_services.filter((service) =>
     routes.some((route) => route.native_service === service),
   );
 }
@@ -1263,25 +1136,7 @@ function normalizeSource(value: unknown, label: string): CharityBinding['source'
         : integer(root.max_concurrency, `${label} concurrency`, 0, 2_147_483_647),
     max_rpm:
       root.max_rpm === undefined ? 0 : integer(root.max_rpm, `${label} RPM`, 0, 2_147_483_647),
-    connector_type: oneOf(
-      root.connector_type,
-      [
-        'openai-compatible',
-        'anthropic-compatible',
-        'ai-sdk-gateway-v3',
-        'ai-sdk-gateway-v4',
-        'google-gemini',
-        'openai-responses',
-        'openai-decisions',
-        'cohere-rerank',
-        'jina-rerank',
-        'siliconflow-rerank',
-        'voyage-rerank',
-        'typesafe-systemone',
-        'openai-chat-completions',
-      ] as const,
-      `${label} connector`,
-    ),
+    connector_type: oneOf(root.connector_type, CONNECTOR_TYPES, `${label} connector`),
     canonical_base_url: string(root.canonical_base_url, `${label} base URL`, { min: 1 }),
     display_head: string(root.display_head, `${label} display head`, { ascii: true }),
     display_tail: string(root.display_tail, `${label} display tail`, { ascii: true }),
@@ -1302,30 +1157,23 @@ function normalizeCandidateSourceTypes(value: unknown, label: string): ('automat
   return values;
 }
 
-function normalizeLegacyBinding(value: unknown, label: string): CharityBinding {
-  const root = record(
-    value,
-    [
-      'id',
-      'ord',
-      'donation_key_id',
-      'donation_id',
-      'source',
-      'upstream_model_id',
-      'source_types',
-      'gateway_capabilities',
-    ],
-    label,
-    ['id', 'ord', 'donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
-  );
+function bindingSource(root: Record<string, unknown>, label: string) {
   return {
-    id: decimalID(root.id, `${label} id`),
-    ord: integer(root.ord, `${label} order`, 0, 1_000_000),
     donation_key_id: decimalID(root.donation_key_id, `${label} donation key id`),
     donation_id: decimalID(root.donation_id, `${label} donation id`),
     source: normalizeSource(root.source, `${label} source`),
     upstream_model_id: string(root.upstream_model_id, `${label} upstream model`, { min: 1 }),
+  };
+}
+
+function normalizeBinding(value: unknown, label: string): CharityBinding {
+  const root = asRecord(value) ?? invalidResponse(label);
+  return {
+    id: decimalID(root.id, `${label} id`),
+    ord: integer(root.ord, `${label} order`, 0, 1_000_000),
+    ...bindingSource(root, label),
     source_types: normalizeSourceTypes(root.source_types, `${label} source types`),
+    targets: array(root.targets, 'binding targets').map(normalizeCharityTarget),
     ...(root.gateway_capabilities === undefined
       ? {}
       : {
@@ -1340,61 +1188,32 @@ function normalizeLegacyBinding(value: unknown, label: string): CharityBinding {
   };
 }
 
-function normalizeLegacyCharityBindingCandidate(
+export function normalizeCharityBindingCandidate(
   value: unknown,
   label: string,
-  requireBindingMarkers = false,
 ): CharityBindingCandidate {
-  const root = record(
-    value,
-    [
-      'donation_key_id',
-      'donation_id',
-      'source',
-      'upstream_model_id',
-      'source_types',
-      'current_binding_id',
-      'other_binding_count',
-      'other_bindings',
-    ],
-    label,
-    ['donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
-  );
-  const hasMarkers = root.current_binding_id !== undefined || requireBindingMarkers;
-  const markers = hasMarkers
-    ? {
-        current_binding_id: nullableDecimalID(root.current_binding_id, `${label} current binding`),
-        other_binding_count: decimal(root.other_binding_count, `${label} other binding count`),
-        other_bindings: array(root.other_bindings, `${label} other bindings`, 3).map((entry) => {
-          const binding = record(
-            entry,
-            ['charity_model_id', 'full_name', 'binding_id'],
-            `${label} other binding`,
-          );
-          return {
-            charity_model_id: decimalID(binding.charity_model_id, `${label} other target`),
-            full_name: string(binding.full_name, `${label} other target name`, { min: 1 }),
-            binding_id: decimalID(binding.binding_id, `${label} other binding id`),
-          };
-        }),
-      }
-    : {};
-  if (
-    markers.other_bindings &&
-    BigInt(markers.other_binding_count!) < BigInt(markers.other_bindings.length)
-  )
-    invalidResponse(`${label} other binding count`);
+  const root = asRecord(value) ?? invalidResponse(label);
   return {
-    ...markers,
-    donation_key_id: decimalID(root.donation_key_id, `${label} donation key id`),
-    donation_id: decimalID(root.donation_id, `${label} donation id`),
-    source: normalizeSource(root.source, `${label} source`),
-    upstream_model_id: string(root.upstream_model_id, `${label} upstream model`, { min: 1 }),
+    ...bindingSource(root, label),
     source_types: normalizeCandidateSourceTypes(root.source_types, `${label} source types`),
+    ...normalizeServiceProjection(value),
+    binding_guide: normalizeBindingGuide(root.binding_guide),
+    current_binding_id: nullableDecimalID(root.current_binding_id, `${label} current binding`),
+    other_binding_count: decimal(root.other_binding_count, `${label} other binding count`),
+    other_bindings: array(root.other_bindings, `${label} other bindings`, 3).map((entry) => {
+      const binding = record(
+        entry,
+        ['charity_model_id', 'full_name', 'binding_id'],
+        `${label} other binding`,
+      );
+      return {
+        charity_model_id: decimalID(binding.charity_model_id, `${label} other target`),
+        full_name: string(binding.full_name, `${label} other target name`, { min: 1 }),
+        binding_id: decimalID(binding.binding_id, `${label} other binding id`),
+      };
+    }),
   };
 }
-
-const normalizeCandidate = normalizeCharityBindingCandidate;
 
 function normalizeBindings(value: unknown, label: string): CharityBindings {
   const root = record(value, ['bindings', 'binding_revision', 'coverage', 'can_reorder'], label, [
@@ -1464,9 +1283,7 @@ export const charityKeys = {
 };
 
 const base = (role: CharityRole) => (role === 'admin' ? '/admin/api' : '/api/steward');
-function decodeDonation(role: CharityRole, value: unknown): AdminDonation | StewardDonation {
-  return role === 'admin' ? normalizeAdminDonation(value) : normalizeStewardDonation(value);
-}
+
 export const getManagedDonations = (
   role: CharityRole,
   status: string,
@@ -1483,7 +1300,7 @@ export const getManagedDonations = (
     }),
     (value) =>
       page<AdminDonation | StewardDonation>(value, `${role} donation page`, (entry) =>
-        decodeDonation(role, entry),
+        normalizeManagementDonation(entry),
       ),
   );
 export const getManagedDonation = (
@@ -1494,7 +1311,7 @@ export const getManagedDonation = (
   decoded(
     `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}`,
     (value) => {
-      const item = decodeDonation(role, value);
+      const item = normalizeManagementDonation(value);
       if (item.id !== id) invalidResponse('donation identity');
       return item;
     },
@@ -1544,7 +1361,7 @@ export const reviewManagedDonation = (
 ): Promise<AdminDonation | StewardDonation> =>
   decoded(
     `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}/review`,
-    (value) => decodeDonation(role, value),
+    normalizeManagementDonation,
     idempotentOptions(key, { method: 'POST', json: body }),
   );
 export interface PendingDonationReviewInput {
@@ -1563,7 +1380,7 @@ export const reviewPendingDonation = (
   decoded(
     `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}/pending-review`,
     (value) => {
-      const item = decodeDonation(role, value);
+      const item = normalizeManagementDonation(value);
       if (item.id !== id) invalidResponse('donation identity');
       return item;
     },
@@ -1578,7 +1395,7 @@ export const patchManagedDonationKey = (
 ): Promise<AdminDonation | StewardDonation> =>
   decoded(
     `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}/keys/${encodeURIComponent(decimalID(keyID, `${role} donation key id`))}`,
-    (value) => decodeDonation(role, value),
+    normalizeManagementDonation,
     idempotentOptions(key, { method: 'PATCH', json: body }),
   );
 export const getManagedCharityModels = (
@@ -1703,7 +1520,7 @@ export const getManagedBindingCandidates = (
     ),
     (value) =>
       page(value, `${role} binding candidate page`, (entry) =>
-        normalizeCandidate(entry, `${role} binding candidate`),
+        normalizeCharityBindingCandidate(entry, `${role} binding candidate`),
       ),
   );
 export const addManagedBindings = (
@@ -1824,8 +1641,8 @@ export interface CharityTarget extends ServiceProjection {
   upstream_model_id: string;
   donation_id: string;
   endpoint_id: string;
-  connector_type: CharityConnectorType;
-  configuration_type: CharityConnectorType;
+  connector_type: ConnectorType;
+  configuration_type: ConnectorType;
   base_url: string;
   uses: {
     use_id: string;
@@ -1837,68 +1654,14 @@ export interface CharityTarget extends ServiceProjection {
   }[];
 }
 function normalizeCharityTarget(value: unknown): CharityTarget {
-  const row = record(
-    value,
-    [
-      'id',
-      'revision',
-      'donation_id',
-      'endpoint_id',
-      'donation_key_id',
-      'upstream_model_id',
-      'native_services',
-      'model_types',
-      'service_routes',
-      'capabilities',
-      'uses',
-      'connector_type',
-      'configuration_type',
-      'base_url',
-      'availability',
-      'gateway_capabilities',
-      'binding_guide',
-    ],
-    'charity target',
-    [
-      'id',
-      'revision',
-      'donation_id',
-      'endpoint_id',
-      'donation_key_id',
-      'upstream_model_id',
-      'native_services',
-      'model_types',
-      'service_routes',
-      'capabilities',
-      'uses',
-      'connector_type',
-      'configuration_type',
-      'base_url',
-    ],
-  );
+  const row = asRecord(value) ?? invalidResponse('charity target');
   return {
     id: decimalID(row.id, 'target'),
     revision: decimalID(row.revision, 'target revision'),
     donation_id: decimalID(row.donation_id, 'donation'),
     endpoint_id: decimalID(row.endpoint_id, 'endpoint'),
-    connector_type: normalizeSource(
-      {
-        connector_type: row.connector_type,
-        canonical_base_url: row.base_url,
-        display_head: '',
-        display_tail: '',
-      },
-      'target source',
-    ).connector_type,
-    configuration_type: normalizeSource(
-      {
-        connector_type: row.configuration_type,
-        canonical_base_url: row.base_url,
-        display_head: '',
-        display_tail: '',
-      },
-      'target configuration',
-    ).connector_type,
+    connector_type: oneOf(row.connector_type, CONNECTOR_TYPES, 'target connector'),
+    configuration_type: oneOf(row.configuration_type, CONNECTOR_TYPES, 'target configuration'),
     base_url: string(row.base_url, 'target URL'),
     donation_key_id: decimalID(row.donation_key_id, 'donation key'),
     upstream_model_id: string(row.upstream_model_id, 'target model'),
@@ -1930,29 +1693,5 @@ function normalizeCharityTarget(value: unknown): CharityTarget {
         revision: decimalID(use.revision, 'use revision'),
       };
     }),
-  };
-}
-function normalizeBinding(value: unknown, label: string): CharityBinding {
-  const base = normalizeLegacyBinding(value, label);
-  const row = value as Record<string, unknown>;
-  return {
-    ...base,
-    ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
-    ...(row.targets === undefined
-      ? {}
-      : { targets: array(row.targets, 'binding targets').map(normalizeCharityTarget) }),
-  };
-}
-export function normalizeCharityBindingCandidate(
-  value: unknown,
-  label: string,
-  requireBindingMarkers = false,
-): CharityBindingCandidate {
-  const base = normalizeLegacyCharityBindingCandidate(value, label, requireBindingMarkers);
-  const row = value as Record<string, unknown>;
-  return {
-    ...base,
-    binding_guide: normalizeBindingGuide(row.binding_guide),
-    ...(row.native_services === undefined ? {} : normalizeServiceProjection(value)),
   };
 }

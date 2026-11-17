@@ -1,3 +1,4 @@
+import { chatProjection } from '../fixtures/resourceScopes';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { numberedPage } from './numbered-fixtures';
@@ -1184,6 +1185,7 @@ for (const station of ['admin', 'user'] as const) {
           binding_revision: '1',
           bindings: [
             {
+              targets: [],
               id: '1',
               ord: 0,
               donation_id: '20',
@@ -1690,6 +1692,7 @@ for (const station of ['admin', 'user'] as const) {
           numberedPage(
             [
               {
+                ...chatProjection,
                 donation_id: '1',
                 donation_key_id: '1000',
                 upstream_model_id: refreshed ? 'shortcut-new-model' : 'shortcut-old-model',

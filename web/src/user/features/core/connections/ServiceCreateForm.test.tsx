@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../../test/fixtures/resourceScopes';
 import { useState } from 'react';
 import { QueryObserver, type QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
@@ -50,6 +51,7 @@ const options = {
   ],
   mainstream_channels: [
     {
+      ...channelPreset,
       id: 'mch_' + 'A'.repeat(22),
       name: 'Example preset',
       revision: '1',

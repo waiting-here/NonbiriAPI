@@ -1,3 +1,4 @@
+import { unboundCandidate } from '../../../../test/fixtures/resourceScopes';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
@@ -46,6 +47,7 @@ const source = {
   display_tail: 'tail',
 };
 const binding = (id: string, ord: number) => ({
+  targets: [],
   id,
   ord,
   donation_key_id: '21',
@@ -55,6 +57,7 @@ const binding = (id: string, ord: number) => ({
   source_types: ['automatic'],
 });
 const candidate = {
+  ...unboundCandidate,
   donation_key_id: '21',
   donation_id: '7',
   upstream_model_id: 'new-upstream',
@@ -63,7 +66,7 @@ const candidate = {
   native_services: ['embeddings'],
   model_types: ['embeddings'],
   service_routes: [{ operation: 'embeddings', native_service: 'embeddings', mode: 'native' }],
-  capabilities: { can_bind: true },
+  capabilities: { can_bind: true, unavailable_reason: null },
 } as CharityBindingCandidate;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 

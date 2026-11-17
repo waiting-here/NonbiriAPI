@@ -1,3 +1,4 @@
+import { chatProjection, unboundCandidate } from '../../../../test/fixtures/resourceScopes';
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor } from '@testing-library/react';
@@ -18,6 +19,9 @@ vi.mock('../CharityBindingPicker', () => ({
   }: Parameters<typeof CharityBindingPicker>[0]) => {
     useEffect(() => onReadStateChange?.(false), [onReadStateChange]);
     const entry: CharitySelection = {
+      ...chatProjection,
+      ...unboundCandidate,
+      selected_native_services: chatProjection.native_services,
       donation_key_id: '21',
       donation_id: '7',
       upstream_model_id: 'provider/model-2026-10',
@@ -126,7 +130,17 @@ describe('compact binding write recovery', () => {
     expect(writes[0]?.key).toBeTruthy();
     expect(writes[0]?.body).toEqual({
       expected_binding_revision: '1',
-      selections: [{ donation_key_id: '21', upstream_model_id: 'provider/model-2026-10' }],
+      selections: [
+        {
+          targets: [
+            {
+              donation_key_id: '21',
+              upstream_model_id: 'provider/model-2026-10',
+              native_services: ['chat_completions'],
+            },
+          ],
+        },
+      ],
     });
   });
 

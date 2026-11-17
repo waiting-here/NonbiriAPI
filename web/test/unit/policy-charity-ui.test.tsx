@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -130,6 +131,7 @@ const model = {
 };
 
 const coreEndpoint = {
+  ...endpointScope,
   id: '1',
   connector_type: 'openai-compatible',
   base_url: 'https://upstream.test/v1',
@@ -143,6 +145,7 @@ const coreEndpoint = {
 };
 
 const coreEndpointKey = {
+  ...credentialGrant,
   id: '2',
   endpoint_id: '1',
   display_head: 'sk-a',
@@ -234,6 +237,7 @@ function coreNumberedCatalog<T extends { automatic_entries: unknown[]; manual_en
 
 function coreBinding(id: string, upstreamModelId: string, ord: number) {
   return {
+    targets: [],
     id,
     endpoint_key_id: '2',
     upstream_model_id: upstreamModelId,
@@ -465,6 +469,7 @@ function RealManagement({
 }
 
 const bindingFixture = {
+  targets: [],
   id: '10',
   ord: 0,
   donation_key_id: '6',
@@ -1297,6 +1302,12 @@ describe('experimental policy and charity controls', () => {
       binding_count: '0',
     };
     const candidate = {
+      native_services: ['anthropic_messages'],
+      model_types: ['chat_completions'],
+      service_routes: [
+        { operation: 'chat_completions', native_service: 'anthropic_messages', mode: 'converted' },
+      ],
+      capabilities: { can_bind: true, unavailable_reason: null },
       endpoint_key_id: '5',
       endpoint_base_url: anthropicEndpoint.base_url,
       connector_type: 'anthropic-compatible',
@@ -1333,7 +1344,7 @@ describe('experimental policy and charity controls', () => {
         expect(params.get('key_id')).toBe('5');
         return jsonResponse(coreNumberedPage([candidate]));
       }
-      if (method === 'POST' && path === '/api/models/3/bindings/batch') {
+      if (method === 'POST' && path === '/api/models/3/bindings/batch-receipt') {
         return jsonResponse(
           { error: { code: 'conflict', message: 'binding policy conflict' } },
           409,
@@ -1348,9 +1359,19 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('checkbox', { name: /^claude-3 / }));
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
     await waitFor(() =>
-      expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch')).toEqual({
+      expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch-receipt')).toEqual({
         expected_binding_revision: '0',
-        selections: [{ endpoint_key_id: '5', upstream_model_id: 'claude-3' }],
+        selections: [
+          {
+            targets: [
+              {
+                endpoint_key_id: '5',
+                upstream_model_id: 'claude-3',
+                native_services: ['anthropic_messages'],
+              },
+            ],
+          },
+        ],
       }),
     );
     await waitFor(() => expect(bindingReads).toBeGreaterThan(1));
@@ -1358,7 +1379,7 @@ describe('experimental policy and charity controls', () => {
     expect(
       fetchMock.mock.calls.filter(
         (call) =>
-          requestPath(call[0] as string) === '/api/models/3/bindings/batch' &&
+          requestPath(call[0] as string) === '/api/models/3/bindings/batch-receipt' &&
           (call[1] as RequestInit | undefined)?.method === 'POST',
       ),
     ).toHaveLength(1);
@@ -3727,7 +3748,7 @@ describe('experimental policy and charity controls', () => {
 
     await waitFor(() => {
       expect(listReads).toBe(1);
-      expect(screen.getByText('Nothing here yet')).toBeVisible();
+      expect(screen.getByText('No services yet')).toBeVisible();
     });
     expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1')).toEqual({
       expected_revision: '1',
@@ -3795,7 +3816,7 @@ describe('experimental policy and charity controls', () => {
       ),
     );
 
-    await waitFor(() => expect(screen.getByText('Nothing here yet')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('No services yet')).toBeVisible());
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBeGreaterThanOrEqual(3);
   });

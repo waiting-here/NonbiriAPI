@@ -38,6 +38,7 @@ const model = (id: string, revision = '0'): Model => ({
 });
 
 const binding = (id: string): Binding => ({
+  targets: [],
   id,
   endpoint_key_id: '21',
   endpoint_base_url: 'https://example.com/v1',

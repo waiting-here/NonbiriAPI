@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { numberedPage } from './numbered-fixtures';
@@ -17,6 +18,7 @@ import zhUser from '../../src/user/i18n/zh.json' with { type: 'json' };
 import { serviceCopy, servicePanel } from '../service-onboarding';
 
 const endpoint = {
+  ...endpointScope,
   id: '11',
   connection_id: '1',
   native_services: ['chat_completions', 'responses'],
@@ -39,6 +41,7 @@ const evidence = {
   count: '2',
 };
 const key = {
+  ...credentialGrant,
   id: '21',
   credential_id: '31',
   credential_version: '1',
@@ -415,6 +418,7 @@ for (const locale of ['en', 'zh'] as const) {
             bindings: bound.has(id)
               ? [
                   {
+                    targets: [],
                     id: `${id}1`,
                     endpoint_key_id: '21',
                     endpoint_base_url: endpoint.base_url,

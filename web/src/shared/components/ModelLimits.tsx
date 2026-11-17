@@ -45,11 +45,11 @@ const labelKeys = {
   remaining: 'common.modelLimits.remaining',
 } as const;
 
-function Amount({ value, metric }: { value: string | null | undefined; metric: ModelMetric }) {
+function Amount({ value, metric }: { value: string | null; metric: ModelMetric }) {
   const { t } = useTranslation();
   if (value === null) return <>{t('common.modelLimits.unlimited')}</>;
   const display = displayQuotaAmount(value, metric);
-  return metric === 'credits' && value !== undefined ? (
+  return metric === 'credits' ? (
     <CreditText i18nKey="common.modelLimits.creditAmount" amounts={{ amount: display }} />
   ) : (
     <>{display}</>
@@ -177,9 +177,7 @@ function ModelLimitList(props: RecurringLimitsProps) {
                         <div className="nb-stack nb-stack--sm">
                           {limited.map((metric) => (
                             <span key={metric}>
-                              {metric === 'credits' ? null : (
-                                <>{t(labelKeys[metric])} · </>
-                              )}
+                              {metric === 'credits' ? null : <>{t(labelKeys[metric])} · </>}
                               <Amount value={item.remaining[metric]} metric={metric} />
                             </span>
                           ))}
@@ -355,7 +353,6 @@ function ModelLimitEditor({
     );
   const busy = props.disabled || save.isPending || uncertain;
   const budgets = { ...value.limits, ...draft?.changes };
-  const supported = metrics.filter((metric) => value.limits[metric] !== undefined);
   const invalid = (metric: ModelMetric) => {
     const amount = budgets[metric];
     return amount != null && !validQuotaInput(amount, metric);
@@ -364,7 +361,6 @@ function ModelLimitEditor({
     save.mutate(payload, { onSuccess: (receipt) => props.onSaved?.(receipt) });
   }
   function amountField(metric: ModelMetric) {
-    if (value.limits[metric] === undefined) return null;
     const amount = budgets[metric] ?? null;
     return (
       <QuotaAmountField
@@ -429,14 +425,14 @@ function ModelLimitEditor({
               className="nb-stack"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!read.data || !current || !draft || busy || conflict || supported.some(invalid))
+                if (!read.data || !current || !draft || busy || conflict || metrics.some(invalid))
                   return;
                 const payload: ModelLimitPayload = {
                   ...current.limits,
                   upstream_model_id: model,
                   expected_revision: read.data.donation_revision,
                 };
-                for (const metric of supported) {
+                for (const metric of metrics) {
                   const input = draft.changes[metric];
                   if (input !== undefined)
                     payload[metric] = input === null ? null : quotaInput(input, metric);
@@ -462,7 +458,7 @@ function ModelLimitEditor({
                 <Button
                   type="submit"
                   variant="primary"
-                  disabled={busy || !current || !draft || conflict || supported.some(invalid)}
+                  disabled={busy || !current || !draft || conflict || metrics.some(invalid)}
                 >
                   {t('common.modelLimits.save')}
                 </Button>
@@ -474,7 +470,7 @@ function ModelLimitEditor({
               {conflict && draft ? (
                 <div className="nb-stack nb-stack--sm" role="status">
                   <p>{t('common.modelLimits.conflict')}</p>
-                  {supported
+                  {metrics
                     .filter((metric) => metric in draft.changes)
                     .map((metric) => (
                       <p key={metric}>
@@ -524,7 +520,7 @@ function ModelLimitEditor({
               <h4>{t('common.modelLimits.cumulative')}</h4>
               <DataTable
                 caption={t('common.modelLimits.cumulative')}
-                rows={supported}
+                rows={metrics}
                 rowKey={(metric) => metric}
                 columns={[
                   {
@@ -547,9 +543,7 @@ function ModelLimitEditor({
             </>
           )}
           <div className="nb-stack nb-stack--sm field-help">
-            {value.limits.credits !== undefined ? (
-              <p>{t('common.modelLimits.creditsHelp')}</p>
-            ) : null}
+            <p>{t('common.modelLimits.creditsHelp')}</p>
             <p>
               {value.tracking_started_at === null
                 ? t('common.modelLimits.trackingNew')

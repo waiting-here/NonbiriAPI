@@ -545,7 +545,7 @@ function CharityBindingPickerBody({
   const keyGuide = candidatePage?.data[0]?.binding_guide;
   const selectable =
     candidatePage?.data.filter(
-      (entry) => !entry.current_binding_id && entry.capabilities?.can_bind !== false,
+      (entry) => !entry.current_binding_id && entry.capabilities.can_bind,
     ) ?? [];
   const selectCandidate = (entry: CharityBindingCandidate): CharitySelection => ({
     ...entry,
@@ -1024,7 +1024,7 @@ function CharityBindingPickerBody({
                                       disabled={
                                         interactionBlocked ||
                                         Boolean(entry.current_binding_id) ||
-                                        entry.capabilities?.can_bind === false ||
+                                        !entry.capabilities.can_bind ||
                                         (!selected[key] && Object.keys(selected).length >= capacity)
                                       }
                                       checked={Boolean(selected[key])}
@@ -1032,7 +1032,7 @@ function CharityBindingPickerBody({
                                         if (
                                           interactionBlocked ||
                                           Boolean(entry.current_binding_id) ||
-                                          entry.capabilities?.can_bind === false ||
+                                          !entry.capabilities.can_bind ||
                                           (event.target.checked &&
                                             !selected[key] &&
                                             Object.keys(selected).length >= capacity)

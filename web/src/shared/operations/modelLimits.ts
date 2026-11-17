@@ -2,7 +2,7 @@ import { decoded, idempotentOptions, queryPath } from './api';
 import { charityScopePath } from './charityScope';
 import { normalizeNumberedPage } from './numberedPage';
 import type { PageSize } from './pageNumbers';
-import { decimal, decimalID, integer, record, string } from './wire';
+import { boolean, decimal, decimalID, integer, record, string } from './wire';
 import {
   recurringLimitsBase,
   quotaMetricValue,
@@ -12,10 +12,8 @@ import {
 } from './recurringLimits';
 
 export type ModelMetric = RecurringLimitMetric;
-type ModelValues<T> = Record<'tokens' | 'input_tokens' | 'output_tokens', T> &
-  Partial<Record<'credits' | 'calls', T>>;
-export type ModelAmounts = ModelValues<string>;
-export type ModelBudgets = ModelValues<string | null>;
+export type ModelAmounts = Record<ModelMetric, string>;
+export type ModelBudgets = Record<ModelMetric, string | null>;
 export interface ModelLimitView {
   upstream_model_id: string;
   limits: ModelBudgets;
@@ -37,18 +35,16 @@ function path(role: RecurringLimitRole, donationId: string, keyId: string) {
 function amounts(value: unknown, nullable: true): ModelBudgets;
 function amounts(value: unknown, nullable: false): ModelAmounts;
 function amounts(value: unknown, nullable: boolean) {
-  const tokenFields = ['tokens', 'input_tokens', 'output_tokens'];
   const row = record(
     value,
-    [...tokenFields, 'credits', 'calls'],
+    ['credits', 'calls', 'tokens', 'input_tokens', 'output_tokens'],
     'model quota amounts',
-    tokenFields,
   );
   const parse = (metric: ModelMetric) =>
     nullable && row[metric] === null ? null : quotaMetricValue(row[metric], metric, metric);
   return {
-    ...(row.credits === undefined ? {} : { credits: parse('credits') }),
-    ...(row.calls === undefined ? {} : { calls: parse('calls') }),
+    credits: parse('credits'),
+    calls: parse('calls'),
     tokens: parse('tokens'),
     input_tokens: parse('input_tokens'),
     output_tokens: parse('output_tokens'),
@@ -63,8 +59,9 @@ function view(value: unknown): ModelLimitView {
     'remaining',
     'unattributed_total_tokens',
     'tracking_started_at',
+    'historical_costs_partial',
   ];
-  const row = record(value, [...required, 'historical_costs_partial'], 'model quota', required);
+  const row = record(value, required, 'model quota');
   return {
     upstream_model_id: string(row.upstream_model_id, 'upstream model', { min: 1 }),
     limits: amounts(row.limits, true),
@@ -74,7 +71,7 @@ function view(value: unknown): ModelLimitView {
     unattributed_total_tokens: decimal(row.unattributed_total_tokens, 'unattributed tokens', {
       u128: true,
     }),
-    historical_costs_partial: row.historical_costs_partial === true,
+    historical_costs_partial: boolean(row.historical_costs_partial, 'historical cost coverage'),
     tracking_started_at:
       row.tracking_started_at === null
         ? null

@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { ServiceProjection } from '../../src/shared/connections';
@@ -138,6 +139,7 @@ async function fixture(page: Page, empty: boolean) {
   const keyReads: string[] = [];
   const bindingReads: { revision: string; order: string[] }[] = [];
   const endpoints = ['11', '12'].map((id) => ({
+    ...endpointScope,
     id,
     connection_id: id === '11' ? '51' : '52',
     connector_type: 'openai-compatible',

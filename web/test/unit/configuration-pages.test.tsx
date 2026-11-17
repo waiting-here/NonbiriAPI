@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, test, vi, type Mock } from 'vitest';
@@ -1692,6 +1693,7 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(() => normalizeCoreEndpoint({ id: '1' })).toThrow(/invalid endpoint/i);
     expect(() =>
       normalizeCoreEndpoint({
+        ...endpointScope,
         id: '1',
         connector_type: 'unknown',
         base_url: 'https://upstream.test/v1',
@@ -1730,6 +1732,7 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toThrow(/unexpected store policy/i);
 
     const validEndpoint = {
+      ...endpointScope,
       id: '1',
       connector_type: 'openai-compatible',
       base_url: 'https://upstream.test/v1',

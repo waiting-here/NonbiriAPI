@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../test/fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
@@ -21,6 +22,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function endpointOptionsResponse(): Response {
   return jsonResponse({
+    native_service_options: [],
     base_connector_types: ['anthropic-compatible', 'openai-compatible'],
     mainstream_channels: [],
   });
@@ -134,9 +136,11 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input) === '/api/endpoint-create-options') {
         return jsonResponse({
+          native_service_options: [],
           base_connector_types: ['anthropic-compatible', 'openai-compatible'],
           mainstream_channels: [
             {
+              ...channelPreset,
               id: channelID,
               name: 'Hosted channel',
               connector_type: 'openai-compatible',

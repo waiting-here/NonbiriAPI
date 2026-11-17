@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { numberedResponse } from './numbered-fixtures';
@@ -441,6 +442,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
 }) => {
   const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
   const endpoint = {
+    ...endpointScope,
     id: '1',
     connection_id: '1',
     native_services: ['chat_completions', 'responses'],
@@ -469,6 +471,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
       ...numberedResponse(
         [
           {
+            ...credentialGrant,
             id: '2',
             endpoint_id: '1',
             display_head: 'sk-a',

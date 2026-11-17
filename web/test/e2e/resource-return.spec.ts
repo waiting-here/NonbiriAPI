@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import {
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
@@ -13,6 +14,7 @@ import { numberedPage } from './numbered-fixtures';
 const EPHEMERAL_MARKER = 'resource-return-browser-marker';
 
 const endpoint = {
+  ...endpointScope,
   id: '11',
   connection_id: '11',
   configuration_type: 'openai-compatible',
@@ -69,6 +71,7 @@ function binding(index: number) {
 
 const bindings = Array.from({ length: 11 }, (_, index) => binding(index + 1));
 const endpointKey = {
+  ...credentialGrant,
   id: '2',
   endpoint_id: endpoint.id,
   display_head: 'sk-a',
@@ -167,6 +170,7 @@ async function installEndpointRoutes(
     method: 'GET',
     path: '/api/endpoint-create-options',
     body: {
+      native_service_options: [],
       base_connector_types: ['openai-compatible', 'anthropic-compatible'],
       mainstream_channels: [],
     },

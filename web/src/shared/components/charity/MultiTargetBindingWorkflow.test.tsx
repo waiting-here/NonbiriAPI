@@ -1,3 +1,4 @@
+import { chatProjection, unboundCandidate } from '../../../../test/fixtures/resourceScopes';
 import { useEffect } from 'react';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,6 +22,9 @@ vi.mock('../CharityBindingPicker', () => ({
   }: Parameters<typeof CharityBindingPicker>[0]) => {
     useEffect(() => onReadStateChange?.(false), [onReadStateChange]);
     const candidate: CharitySelection = {
+      ...chatProjection,
+      ...unboundCandidate,
+      selected_native_services: chatProjection.native_services,
       donation_id: '7',
       donation_key_id: '21',
       upstream_model_id: `up-${modelId}`,
@@ -299,8 +303,18 @@ describe('multi-target donation binding recovery', () => {
     expect(writes[0]?.body).toEqual({
       expected_donation_revision: '4',
       targets: [
-        { charity_model_id: '31', expected_binding_revision: '1', upstream_model_id: 'up-31' },
-        { charity_model_id: '32', expected_binding_revision: '3', upstream_model_id: 'up-32' },
+        {
+          charity_model_id: '31',
+          expected_binding_revision: '1',
+          upstream_model_id: 'up-31',
+          native_services: ['chat_completions'],
+        },
+        {
+          charity_model_id: '32',
+          expected_binding_revision: '3',
+          upstream_model_id: 'up-32',
+          native_services: ['chat_completions'],
+        },
       ],
     });
     expect(screen.getByRole('button', { name: 'Add 1 connections' })).toBeEnabled();

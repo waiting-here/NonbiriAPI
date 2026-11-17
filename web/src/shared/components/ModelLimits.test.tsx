@@ -5,24 +5,25 @@ import { renderWithProviders } from '../../../test/unit/support';
 import { ModelLimits } from './ModelLimits';
 
 const model = 'upstream/model';
-const legacyLimits = { tokens: '90', input_tokens: null, output_tokens: '50' };
-const legacyUsage = { tokens: '9', input_tokens: '4', output_tokens: '5' };
+const tokenLimits = { tokens: '90', input_tokens: null, output_tokens: '50' };
+const tokenUsage = { tokens: '9', input_tokens: '4', output_tokens: '5' };
 const amountLimit = '340282366920938463463374607431768211.455';
 
-function modelView(legacy: boolean) {
+function modelView(partial: boolean) {
   const costs = { credits: '12.345', calls: '2' };
   return {
     upstream_model_id: model,
-    limits: { ...legacyLimits, ...(legacy ? {} : { credits: amountLimit, calls: null }) },
-    remaining: { ...legacyLimits, ...(legacy ? {} : { credits: '0.001', calls: null }) },
-    used: { ...legacyUsage, ...(legacy ? {} : costs) },
+    limits: { ...tokenLimits, credits: amountLimit, calls: null },
+    remaining: { ...tokenLimits, credits: '0.001', calls: null },
+    used: { ...tokenUsage, ...costs },
     reserved: {
       tokens: '0',
       input_tokens: '0',
       output_tokens: '0',
-      ...(legacy ? {} : { credits: '0', calls: '0' }),
+      credits: '0',
+      calls: '0',
     },
-    ...(legacy ? {} : { historical_costs_partial: true }),
+    historical_costs_partial: partial,
     unattributed_total_tokens: '0',
     tracking_started_at: 1_800_000_000,
   };
@@ -39,11 +40,11 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 async function editor(
-  legacy: boolean,
+  partial: boolean,
   write: (body: Record<string, unknown>, key: string) => Response,
 ) {
   let revision = 1;
-  const view = modelView(legacy);
+  const view = modelView(partial);
   const requests: { body: Record<string, unknown>; key: string }[] = [];
   vi.stubGlobal(
     'fetch',
@@ -85,9 +86,9 @@ async function editor(
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('edits a legacy token budget without synthesizing credit or call limits and replays an unknown save', async () => {
+it('replays the same token edit and keeps the other four budgets on a fresh model', async () => {
   let attempt = 0;
-  const { user, requests, save } = await editor(true, () =>
+  const { user, requests, save } = await editor(false, () =>
     ++attempt === 1
       ? json({}, 503)
       : json({
@@ -96,7 +97,8 @@ it('edits a legacy token budget without synthesizing credit or call limits and r
           donation_revision: '2',
         }),
   );
-  expect(screen.queryByLabelText('Credits')).not.toBeInTheDocument();
+  expect(screen.queryByText(/records still available/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Credits')).toHaveValue(amountLimit);
   const total = screen.getByLabelText('Total tokens');
   fireEvent.change(total, { target: { value: '0' } });
   await user.click(save);
@@ -106,8 +108,10 @@ it('edits a legacy token budget without synthesizing credit or call limits and r
   expect(requests[1]).toEqual(requests[0]);
   expect(requests[0]?.key).toBeTruthy();
   expect(requests[0]?.body).toEqual({
-    ...legacyLimits,
+    ...tokenLimits,
     tokens: '0',
+    credits: amountLimit,
+    calls: null,
     expected_revision: '1',
     upstream_model_id: model,
   });
@@ -115,7 +119,7 @@ it('edits a legacy token budget without synthesizing credit or call limits and r
 
 it('preserves the edited field, adopts unrelated concurrent edits, and clears a credit limit explicitly', async () => {
   let attempt = 0;
-  const { user, requests, save } = await editor(false, () =>
+  const { user, requests, save } = await editor(true, () =>
     ++attempt === 1
       ? json({ error: { code: 'conflict' } }, 409)
       : json({
@@ -140,7 +144,7 @@ it('preserves the edited field, adopts unrelated concurrent edits, and clears a 
   await user.click(save);
   await screen.findByText('Model quotas saved.');
   expect(requests[1]?.body).toEqual({
-    ...legacyLimits,
+    ...tokenLimits,
     tokens: '80',
     credits: null,
     calls: null,
