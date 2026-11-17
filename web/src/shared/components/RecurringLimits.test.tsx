@@ -814,7 +814,7 @@ describe('RecurringLimits', () => {
       screen.getByText('Changing a limit keeps recorded usage and in-flight reservations.'),
     ).toBeVisible();
     expect(
-      screen.getByText(/Calls already sent finish under the rules captured when sent\./),
+      screen.getByText('Calls already sent keep their original rules.'),
     ).toBeVisible();
   });
 

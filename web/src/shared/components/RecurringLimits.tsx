@@ -768,14 +768,16 @@ function structuralChangeMessages(
   const draftIDs = new Set(
     draft.filter((rule) => rule.id !== null).map((rule) => rule.id as string),
   );
+  const newRules: number[] = [];
   draft.forEach((rule, index) => {
-    if (rule.id === null) messages.push(copy.structuralAdded(index + 1));
+    if (rule.id === null) newRules.push(index + 1);
     else if (
       baselineByID.has(rule.id) &&
       recurringLimitRuleStructureChanged(baselineByID.get(rule.id)!, rule)
     )
       messages.push(copy.structuralReset(index + 1));
   });
+  if (newRules.length) messages.unshift(copy.structuralAdded(newRules));
   baseline.forEach((rule) => {
     if (rule.id !== null && !draftIDs.has(rule.id)) messages.push(copy.structuralDeleted);
   });
