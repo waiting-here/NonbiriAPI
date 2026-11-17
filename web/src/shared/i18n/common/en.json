@@ -3492,6 +3492,9 @@
       "Set a positive integer within the model limit and keep output-token limits consistent.": "Set a positive integer within the model limit and keep output-token limits consistent.",
       "Use a supported streaming value and valid stream options.": "Use a supported streaming value and valid stream options.",
       "Correct the field type or value according to the stated requirement.": "Correct the field type or value according to the stated requirement.",
+      "Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.": "Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.",
+      "Use complete Chat messages or choose a model with native Responses support.": "Use complete Chat messages or choose a model with native Responses support.",
+      "Turn off tool flattening or choose a model with a source that supports it.": "Turn off tool flattening or choose a model with a source that supports it.",
       "No upstream request was sent. Retry later or choose another available model.": "No upstream request was sent. Retry later or choose another available model.",
       "The specific cause was not recorded. Share the request ID with support if the problem persists.": "The specific cause was not recorded. Share the request ID with support if the problem persists."
     },

@@ -447,4 +447,8 @@ var chineseMessages = map[string]string{
 	"Credit history could not be loaded. Please try again.":                                   "积分记录加载失败，请重试。",
 	"Credit history is unavailable for this account.":                                         "当前账号无法查看积分记录。",
 	"Sign in to view your credit history.":                                                    "请先登录，再查看积分记录。",
+
+	"Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.": "可移除此参数。需要保留时，请换用支持它的模型，或请维护者检查模型的上游绑定。",
+	"Use complete Chat messages or choose a model with native Responses support.":                                              "请发送完整的聊天消息，或选择原生支持 Responses 的模型。",
+	"Turn off tool flattening or choose a model with a source that supports it.":                                               "请关闭工具调用扁平化，或选择上游服务支持该设置的模型。",
 }

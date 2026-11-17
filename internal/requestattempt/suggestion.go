@@ -2,6 +2,8 @@ package requestattempt
 
 import "strings"
 
+const unsupportedOptionSuggestion = "Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings."
+
 // Suggestions are derived from the same bounded server-authored reason. A
 // stored suggestion is never trusted or echoed when decoding an older record.
 func rejectionSuggestion(field, reason string) string {
@@ -13,7 +15,7 @@ func rejectionSuggestion(field, reason string) string {
 		if validTopLevelPosition(field) {
 			return "The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1."
 		}
-		return "Remove or adjust the unsupported option, or choose a model that supports it."
+		return unsupportedOptionSuggestion
 	case "request validation failed without a recorded field":
 		return "The specific cause was not recorded. Share the request ID with support if the problem persists."
 	case "no usable model resource is available for this request", "shared model resources are temporarily at capacity":
@@ -32,6 +34,12 @@ func rejectionSuggestion(field, reason string) string {
 		return "Choose an available model from the model list for this account."
 	case "required field is missing":
 		return "Add the required field using the format expected by this API."
+	case "field cannot be represented by this connector", "Responses fields cannot be represented by the selected Chat protocol", "rerank field is not supported by the selected protocol":
+		return unsupportedOptionSuggestion
+	case "Responses input cannot be represented as complete Chat messages":
+		return "Use complete Chat messages or choose a model with native Responses support."
+	case "tool flattening is unavailable for Responses conversion":
+		return "Turn off tool flattening or choose a model with a source that supports it."
 	}
 	if validContentLengthReason(reason) {
 		return "Add more message text to meet the minimum content length."

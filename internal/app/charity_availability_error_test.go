@@ -77,7 +77,7 @@ SELECT a.use_id,dk.endpoint_key_id,a.native_service_bit,a.credential_version_id,
 		t.Fatalf("steward decisions: %+v %v", steward.RouteDecision, err)
 	}
 	own := string(f.ownLogJSON(t, id))
-	if !strings.Contains(own, "presence_penalty") || strings.Contains(own, "route_decision") || strings.Contains(own, "failure_disabled") || strings.Contains(own, "native_service") || strings.Contains(own, "PRIVATE_INPUT") {
+	if !strings.Contains(own, "presence_penalty") || !strings.Contains(own, "upstream bindings") || strings.Contains(own, "route_decision") || strings.Contains(own, "failure_disabled") || strings.Contains(own, "native_service") || strings.Contains(own, "PRIVATE_INPUT") {
 		t.Fatal(own)
 	}
 	success := getAdmin(t, restored)

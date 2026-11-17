@@ -3492,6 +3492,9 @@
       "Set a positive integer within the model limit and keep output-token limits consistent.": "请设置模型允许范围内的正整数，并保持输出 token 上限一致。",
       "Use a supported streaming value and valid stream options.": "请使用受支持的流式开关值，并检查流式选项格式。",
       "Correct the field type or value according to the stated requirement.": "请按上述要求修改字段类型或值。",
+      "Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.": "可移除此参数。需要保留时，请换用支持它的模型，或请维护者检查模型的上游绑定。",
+      "Use complete Chat messages or choose a model with native Responses support.": "请发送完整的聊天消息，或选择原生支持 Responses 的模型。",
+      "Turn off tool flattening or choose a model with a source that supports it.": "请关闭工具调用扁平化，或选择上游服务支持该设置的模型。",
       "No upstream request was sent. Retry later or choose another available model.": "请求未发送到上游。请稍后重试，或选择其他可用模型。",
       "The specific cause was not recorded. Share the request ID with support if the problem persists.": "当时未记录具体原因。如问题持续，请提供请求编号以便排查。"
     },
