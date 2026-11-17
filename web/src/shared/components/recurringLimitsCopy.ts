@@ -129,7 +129,7 @@ const en: RecurringLimitsCopy = {
   charityOnly:
     "Donation limits count charity calls only. Personal calls are not included and may cause actual usage of a shared key to exceed the site's charity totals. We recommend using separate keys for donations and personal use.",
   privacyNote:
-    "Administrators and current level-5 users can manage charity settings. Owners can view their limits. Steward views hide other donors' private details; these pages never show complete keys.",
+    'Administrators and stewards with quota-management access can edit these limits. Donors can view the limits on their own keys.',
   ruleCount: (count) => `${count} of 16 rules`,
   noRules: 'No recurring rules are configured for this key.',
   addRule: 'Add recurring rule',
@@ -259,7 +259,7 @@ const zh: RecurringLimitsCopy = {
   charityOnly:
     '本站的捐赠限量只统计公益调用，不包含自用调用。同一密钥同时用于自用时，实际消耗可能高于本站记录的公益用量，影响限额控制。建议将捐赠密钥与自用密钥分开使用。',
   privacyNote:
-    '管理员和当前 5 级用户可管理公益配置，捐赠者可查看本人限量。协管视图隐藏他人的捐赠者资料；这些页面都不会显示完整密钥。',
+    '管理员及拥有额度管理权限的协管可以编辑限额。捐赠人可查看自己密钥的限额。',
   ruleCount: (count) => `${count}/16 条规则`,
   noRules: '此密钥尚未配置循环规则。',
   addRule: '添加循环规则',

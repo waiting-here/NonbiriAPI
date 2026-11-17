@@ -5,13 +5,17 @@ import type { PageSize } from './pageNumbers';
 import { decimal, decimalID, integer, record, string } from './wire';
 import {
   recurringLimitsBase,
+  quotaMetricValue,
+  type RecurringLimitMetric,
   type RecurringLimitRole,
   type RecurringLimitsWriteReceipt,
 } from './recurringLimits';
 
-export type ModelMetric = 'tokens' | 'input_tokens' | 'output_tokens';
-export type ModelAmounts = Record<ModelMetric, string>;
-export type ModelBudgets = Record<ModelMetric, string | null>;
+export type ModelMetric = RecurringLimitMetric;
+type ModelValues<T> = Record<'tokens' | 'input_tokens' | 'output_tokens', T> &
+  Partial<Record<'credits' | 'calls', T>>;
+export type ModelAmounts = ModelValues<string>;
+export type ModelBudgets = ModelValues<string | null>;
 export interface ModelLimitView {
   upstream_model_id: string;
   limits: ModelBudgets;
@@ -20,6 +24,7 @@ export interface ModelLimitView {
   remaining: ModelBudgets;
   unattributed_total_tokens: string;
   tracking_started_at: number | null;
+  historical_costs_partial: boolean;
 }
 export interface ModelLimitPayload extends ModelBudgets {
   upstream_model_id: string;
@@ -32,29 +37,34 @@ function path(role: RecurringLimitRole, donationId: string, keyId: string) {
 function amounts(value: unknown, nullable: true): ModelBudgets;
 function amounts(value: unknown, nullable: false): ModelAmounts;
 function amounts(value: unknown, nullable: boolean) {
-  const row = record(value, ['tokens', 'input_tokens', 'output_tokens'], 'model token amounts');
-  const count = (metric: ModelMetric) =>
-    nullable && row[metric] === null ? null : decimal(row[metric], metric, { u128: true });
+  const tokenFields = ['tokens', 'input_tokens', 'output_tokens'];
+  const row = record(
+    value,
+    [...tokenFields, 'credits', 'calls'],
+    'model quota amounts',
+    tokenFields,
+  );
+  const parse = (metric: ModelMetric) =>
+    nullable && row[metric] === null ? null : quotaMetricValue(row[metric], metric, metric);
   return {
-    tokens: count('tokens'),
-    input_tokens: count('input_tokens'),
-    output_tokens: count('output_tokens'),
+    ...(row.credits === undefined ? {} : { credits: parse('credits') }),
+    ...(row.calls === undefined ? {} : { calls: parse('calls') }),
+    tokens: parse('tokens'),
+    input_tokens: parse('input_tokens'),
+    output_tokens: parse('output_tokens'),
   };
 }
 function view(value: unknown): ModelLimitView {
-  const row = record(
-    value,
-    [
-      'upstream_model_id',
-      'limits',
-      'used',
-      'reserved',
-      'remaining',
-      'unattributed_total_tokens',
-      'tracking_started_at',
-    ],
-    'model quota',
-  );
+  const required = [
+    'upstream_model_id',
+    'limits',
+    'used',
+    'reserved',
+    'remaining',
+    'unattributed_total_tokens',
+    'tracking_started_at',
+  ];
+  const row = record(value, [...required, 'historical_costs_partial'], 'model quota', required);
   return {
     upstream_model_id: string(row.upstream_model_id, 'upstream model', { min: 1 }),
     limits: amounts(row.limits, true),
@@ -64,6 +74,7 @@ function view(value: unknown): ModelLimitView {
     unattributed_total_tokens: decimal(row.unattributed_total_tokens, 'unattributed tokens', {
       u128: true,
     }),
+    historical_costs_partial: row.historical_costs_partial === true,
     tracking_started_at:
       row.tracking_started_at === null
         ? null
@@ -119,6 +130,7 @@ export function putModelLimits(
   payload: ModelLimitPayload,
   idempotencyKey: string,
   charityModelID?: string,
+  signal?: AbortSignal,
 ): Promise<RecurringLimitsWriteReceipt> {
   return decoded(
     charityScopePath(path(role, donationId, keyId), charityModelID),
@@ -134,6 +146,6 @@ export function putModelLimits(
         donation_revision: decimal(row.donation_revision, 'revision', { positive: true }),
       };
     },
-    idempotentOptions(idempotencyKey, { method: 'PUT', json: payload }),
+    idempotentOptions(idempotencyKey, { method: 'PUT', json: payload, signal }),
   );
 }

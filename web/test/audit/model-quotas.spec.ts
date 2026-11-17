@@ -38,13 +38,15 @@ test.skip(
   'Requires the isolated management fixture.',
 );
 
-async function session(browser: Browser, role: 'admin' | 'owner' | 'caller') {
+async function session(browser: Browser, role: 'admin' | 'owner' | 'caller' | 'steward') {
   const state = fixture();
   const admin = role === 'admin';
   const origin = admin ? state.admin_url : state.user_url;
   const cookie = admin
     ? state.admin_cookie
-    : state.users.filter((user) => user.level === 1)[role === 'owner' ? 0 : 1]!.cookie;
+    : role === 'steward'
+      ? state.users.find((user) => user.level === 6)!.cookie
+      : state.users.filter((user) => user.level === 1)[role === 'owner' ? 0 : 1]!.cookie;
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     reducedMotion: 'reduce',
@@ -76,13 +78,17 @@ async function read<T>(context: BrowserContext, origin: string, path: string): P
   expect(response.status(), path).toBe(200);
   return response.json() as Promise<T>;
 }
-async function open(page: Page, role: 'admin' | 'owner') {
+async function open(page: Page, role: 'admin' | 'owner' | 'steward') {
   const state = fixture(),
     data = state.management.model_quotas;
   await page.goto(
     role === 'admin'
       ? `${state.admin_url}/charity?charity_section=donations&donation_id=${data.donation_id}`
-      : `${state.user_url}/charity/donations/${data.donation_id}`,
+      : role === 'steward'
+        ? state.user_url +
+          '/steward?tab=charity&charity_section=donations&donation_id=' +
+          data.donation_id
+        : `${state.user_url}/charity/donations/${data.donation_id}`,
   );
   await page.getByText(copy.title, { exact: true }).click();
   return page
@@ -136,6 +142,7 @@ test('model quotas preserve another upstream and show the owner read-only amount
     data = state.management.model_quotas;
   const admin = await session(browser, 'admin'),
     owner = await session(browser, 'owner'),
+    steward = await session(browser, 'steward'),
     caller = await session(browser, 'caller');
   try {
     const page = await admin.newPage(),
@@ -143,19 +150,79 @@ test('model quotas preserve another upstream and show the owner read-only amount
     page.on('pageerror', (error) => errors.push(error.message));
     const fold = await open(page, 'admin');
     const path = `/admin/api/donations/${data.donation_id}/keys/${data.key_id}/model-limits`;
+    const recurringPath = path.replace('model-limits', 'recurring-limits');
+    const recurring = async (model?: string) =>
+      (
+        await read<{ rules: { mode: string; metric: string; limit: string; interval: string }[] }>(
+          admin,
+          state.admin_url,
+          recurringPath + (model ? '?upstream_model_id=' + encodeURIComponent(model) : ''),
+        )
+      ).rules;
+    const keyRules = await recurring();
+    const siblingRules = await recurring(data.upstream_models[1]!);
+    const stewardPage = await steward.newPage();
+    stewardPage.on('pageerror', (error) => errors.push(error.message));
+    const stewardFold = await open(stewardPage, 'steward');
     for (const [index, model] of data.upstream_models.entries()) {
-      const editor = await choose(fold, model, true);
+      const managerPage = index === 0 ? page : stewardPage;
+      const editor = await choose(index === 0 ? fold : stewardFold, model, true);
       const total = editor.getByLabel(copy.tokens, { exact: true });
       await expect(total).toBeEnabled();
       await total.fill(index === 0 ? '5' : '10');
-      const saved = page.waitForResponse(
+      if (index === 0) {
+        const credits = editor.getByLabel(copy.credits, { exact: true });
+        await credits.fill('12.3456');
+        await expect(editor.getByText(copy.invalidCredits, { exact: true })).toBeVisible();
+        await credits.fill('12.345');
+        await editor.getByLabel(copy.calls, { exact: true }).fill('20');
+      }
+      const savePath = index === 0 ? path : path.replace('/admin/api', '/api/steward');
+      const saved = managerPage.waitForResponse(
         (response) =>
-          new URL(response.url()).pathname === path && response.request().method() === 'PUT',
+          new URL(response.url()).pathname === savePath && response.request().method() === 'PUT',
       );
       await editor.getByRole('button', { name: copy.save, exact: true }).click();
       expect((await saved).status()).toBe(200);
       await expect(editor.getByText(copy.saved, { exact: true })).toBeVisible();
-      if (index === 0) await visuals(page, editor, info, 'model-quota-admin');
+      if (index === 0) {
+        await visuals(page, editor, info, 'model-quota-admin');
+        await editor.getByText(copy.recurring, { exact: true }).click();
+        const rules = editor.getByRole('region', { name: copy.recurringTitle });
+        for (const [metric, mode, interval, limit] of [
+          ['credits', 'reset', 'day', '3.500'],
+          ['calls', 'sliding', '1h', '4'],
+        ] as const) {
+          await rules.getByRole('button', { name: 'Add recurring rule', exact: true }).click();
+          const card = rules.locator('.recurring-limits__rule').last();
+          const measure = card.getByLabel('Measure', { exact: true });
+          expect(
+            await measure
+              .locator('option')
+              .evaluateAll((nodes) =>
+                nodes.map((node) => (node as HTMLOptionElement).value).sort(),
+              ),
+          ).toEqual(['calls', 'credits', 'input_tokens', 'output_tokens', 'tokens']);
+          await measure.selectOption(metric);
+          await card.getByLabel('Mode', { exact: true }).selectOption(mode);
+          await card.getByLabel('Period', { exact: true }).selectOption(interval);
+          if (mode === 'reset')
+            await card.getByLabel('Starts at', { exact: true }).selectOption('calendar');
+          await card.getByLabel('Limit', { exact: true }).fill(limit);
+        }
+        const confirmed = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === recurringPath &&
+            response.request().method() === 'PUT',
+        );
+        await rules.getByRole('button', { name: 'Save recurring limits', exact: true }).click();
+        expect((await confirmed).status()).toBe(200);
+        await expect(rules.getByText('Recurring limits saved.', { exact: true })).toBeVisible();
+        expect(await recurring(model)).toMatchObject([
+          { metric: 'credits', mode: 'reset', interval: 'day', limit: '3.5' },
+          { metric: 'calls', mode: 'sliding', interval: '1h', limit: '4' },
+        ]);
+      }
       await editor.getByRole('button', { name: copy.back, exact: true }).click();
     }
     const saved = await read<{ data: ModelLimitView[] }>(
@@ -165,7 +232,11 @@ test('model quotas preserve another upstream and show the owner read-only amount
     );
     expect(
       saved.data.find((model) => model.upstream_model_id === data.upstream_models[0]),
-    ).toMatchObject({ limits: { tokens: '5' }, used: { tokens: '5' }, remaining: { tokens: '0' } });
+    ).toMatchObject({
+      limits: { tokens: '5', credits: '12.345', calls: '20' },
+      used: { tokens: '5', credits: '1.125', calls: '2' },
+      remaining: { tokens: '0', credits: '11.22', calls: '18' },
+    });
     expect(
       saved.data.find((model) => model.upstream_model_id === data.upstream_models[1]),
     ).toMatchObject({
@@ -173,6 +244,8 @@ test('model quotas preserve another upstream and show the owner read-only amount
       used: { tokens: '0' },
       remaining: { tokens: '10' },
     });
+    expect(await recurring()).toEqual(keyRules);
+    expect(await recurring(data.upstream_models[1]!)).toEqual(siblingRules);
     const catalog = await read<{ models: { id: string }[] }>(
       caller,
       state.user_url,
@@ -183,12 +256,37 @@ test('model quotas preserve another upstream and show the owner read-only amount
     ownerPage.on('pageerror', (error) => errors.push(error.message));
     const ownerFold = await open(ownerPage, 'owner');
     const details = await choose(ownerFold, data.upstream_models[0]!, false);
-    await expect(details.getByLabel(copy.tokens, { exact: true })).toHaveValue('5');
-    await expect(details.getByLabel(copy.tokens, { exact: true })).toBeDisabled();
+    const usage = details.getByRole('table', { name: copy.cumulative });
+    for (const [metric, cap, used, left] of [
+      [copy.credits, '12.345 credits', '1.125 credits', '11.22 credits'],
+      [copy.calls, '20', '2', '18'],
+      [copy.tokens, '5', '5', '0'],
+    ] as const) {
+      const row = usage
+        .getByRole('row')
+        .filter({ has: usage.page().getByRole('cell', { name: metric, exact: true }) });
+      await expect(row.getByRole('cell')).toHaveText([
+        metric,
+        cap,
+        used,
+        metric === copy.credits ? '0 credits' : '0',
+        left,
+      ]);
+    }
     await expect(details.getByRole('button', { name: copy.save, exact: true })).toHaveCount(0);
     await visuals(ownerPage, details, info, 'model-quota-owner');
+    await details.getByText(copy.recurring, { exact: true }).click();
+    const rules = details.getByRole('region', { name: copy.recurringTitle });
+    await expect(rules.locator('.recurring-limits__rule')).toHaveCount(2);
+    await expect(rules.getByRole('button', { name: 'Add recurring rule' })).toHaveCount(0);
+    await visuals(
+      ownerPage,
+      rules.locator('.recurring-limits__rule').first(),
+      info,
+      'model-quota-cycle',
+    );
     expect(errors).toEqual([]);
   } finally {
-    await Promise.all([admin.close(), owner.close(), caller.close()]);
+    await Promise.all([admin.close(), owner.close(), caller.close(), steward.close()]);
   }
 });

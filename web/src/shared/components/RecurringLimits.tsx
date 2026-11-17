@@ -17,7 +17,9 @@ import {
 } from '@shared/charityManagement';
 import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import { responseOutcomeUnknown } from '@shared/operations/api';
-import { amount } from '@shared/operations/wire';
+import { CreditText } from './CreditText';
+import { QuotaAmountField } from './QuotaAmountField';
+import { displayQuotaAmount, quotaInput, validQuotaInput } from '@shared/utils/quotaAmounts';
 import {
   getRecurringLimits,
   isHourlyInterval,
@@ -43,7 +45,6 @@ import {
   type TimeStation,
 } from '@shared/time';
 import { useCharityModelScope } from './charityModelScopeContext';
-import { formatCount } from '@shared/utils/formatNumber';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
 import { ErrorState, LoadingState } from './States';
@@ -56,8 +57,6 @@ import {
 import './recurringLimits.css';
 
 const MAX_RULES = 16;
-const U128_MAX = (1n << 128n) - 1n;
-const DECIMAL = /^(0|[1-9][0-9]*)$/;
 const TIME_ZONE = /^[A-Za-z0-9_+/-]{1,64}$/;
 
 type DraftRule = RecurringLimitDraft;
@@ -80,7 +79,6 @@ interface RecurringLimitsProps {
 }
 
 interface RuleCardProps {
-  tokensOnly?: boolean;
   copy: RecurringLimitsCopy;
   draft: DraftRule;
   index: number;
@@ -113,7 +111,7 @@ function payloadRuleFromDraft(rule: DraftRule): RecurringLimitRuleInput {
     time_zone: rule.time_zone,
     week_starts_on: rule.week_starts_on,
     metric: rule.metric,
-    limit: rule.limit,
+    limit: quotaInput(rule.limit, rule.metric),
   };
 }
 
@@ -140,24 +138,6 @@ function sameRuleSet(
 
 function sameWritePayload(a: RecurringLimitsWritePayload, b: RecurringLimitsWritePayload) {
   return a.expected_revision === b.expected_revision && sameRuleSet(a.rules, b.rules);
-}
-
-function canonicalDecimal(value: string): boolean {
-  if (!DECIMAL.test(value)) return false;
-  try {
-    return BigInt(value) <= U128_MAX;
-  } catch {
-    return false;
-  }
-}
-
-function canonicalCredits(value: string): boolean {
-  try {
-    amount(value, 'credits', false, U128_MAX);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function validTimeZone(value: string, zones: readonly string[]): boolean {
@@ -193,7 +173,7 @@ function draftValidationError(
   if (rules.length > MAX_RULES) return copy.maxRules;
   for (const rule of rules) {
     if (rule.limit === '') return copy.missingLimit;
-    if (rule.metric === 'credits' ? !canonicalCredits(rule.limit) : !canonicalDecimal(rule.limit)) {
+    if (!validQuotaInput(rule.limit, rule.metric)) {
       return copy.invalidLimit;
     }
     if (zones && !validTimeZone(rule.time_zone, zones)) return copy.invalidTimeZone;
@@ -224,24 +204,12 @@ function newDraftRule(id: string, zone: string): DraftRule {
   };
 }
 
-function displayInteger(value: string | null | undefined): string {
-  if (value === null || value === undefined) return '—';
-  return formatCount(value).display;
-}
-
-function displayMetric(value: string | null | undefined, metric: RecurringLimitMetric): string {
-  if (value === null || value === undefined) return '—';
-  if (metric !== 'credits') return displayInteger(value);
-  const split = value.split('.');
-  return `${displayInteger(split[0])}${split[1] ? `.${split[1]}` : ''}`;
-}
-
 function metricWithUnit(
   value: string | null | undefined,
   metric: RecurringLimitMetric,
   copy: RecurringLimitsCopy,
 ): string {
-  const rendered = displayMetric(value, metric);
+  const rendered = displayQuotaAmount(value, metric);
   if (rendered === '—') return rendered;
   return copy.formatMetricValue(rendered, metric);
 }
@@ -346,6 +314,15 @@ function RuleUsage({
   if (!view) {
     return <p className="recurring-limits__new-note">{copy.preserveUsage}</p>;
   }
+  const display = (value: string) =>
+    view.metric === 'credits' ? (
+      <CreditText
+        i18nKey="common.modelLimits.creditAmount"
+        amounts={{ amount: displayQuotaAmount(value, view.metric) }}
+      />
+    ) : (
+      metricWithUnit(value, view.metric, copy)
+    );
   const period =
     view.period_start !== null && view.period_end !== null
       ? `${timeValue(view.period_start, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel)} — ${timeValue(view.period_end, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel)}`
@@ -374,19 +351,19 @@ function RuleUsage({
       <dl className="recurring-limits__metrics">
         <div>
           <dt>{copy.used}</dt>
-          <dd title={view.used}>{metricWithUnit(view.used, view.metric, copy)}</dd>
+          <dd title={view.used}>{display(view.used)}</dd>
         </div>
         <div>
           <dt>{copy.reserved}</dt>
-          <dd title={view.reserved}>{metricWithUnit(view.reserved, view.metric, copy)}</dd>
+          <dd title={view.reserved}>{display(view.reserved)}</dd>
         </div>
         <div>
           <dt>{copy.remaining}</dt>
-          <dd title={view.remaining}>{metricWithUnit(view.remaining, view.metric, copy)}</dd>
+          <dd title={view.remaining}>{display(view.remaining)}</dd>
         </div>
         <div>
           <dt>{copy.limit}</dt>
-          <dd title={view.limit}>{metricWithUnit(view.limit, view.metric, copy)}</dd>
+          <dd title={view.limit}>{display(view.limit)}</dd>
         </div>
       </dl>
       <div
@@ -456,7 +433,6 @@ function ruleSummary(
 }
 
 function RuleCard({
-  tokensOnly = false,
   copy,
   draft,
   index,
@@ -482,9 +458,13 @@ function RuleCard({
     ? ['first_success']
     : ['first_success', 'calendar', 'exact_time'];
   const intervalOptions: RecurringLimitInterval[] = ['1h', '5h', 'day', 'week', 'month'];
-  const metricOptions: RecurringLimitMetric[] = tokensOnly
-    ? ['tokens', 'input_tokens', 'output_tokens']
-    : ['calls', 'tokens', 'input_tokens', 'output_tokens', 'credits'];
+  const metricOptions: RecurringLimitMetric[] = [
+    'calls',
+    'credits',
+    'tokens',
+    'input_tokens',
+    'output_tokens',
+  ];
   const modeOptions: RecurringLimitMode[] = ['reset', 'sliding'];
   const exact = draft.mode === 'reset' && draft.alignment === 'exact_time';
   const preview = useQuery({
@@ -758,21 +738,16 @@ function RuleCard({
                   </>
                 )}
               </Field>
-              <Field label={copy.limit} size="medium">
-                {(field) => (
-                  <input
-                    {...field}
-                    type="text"
-                    inputMode={draft.metric === 'credits' ? 'decimal' : 'numeric'}
-                    value={draft.limit}
-                    maxLength={128}
-                    required
-                    placeholder={copy.limitPlaceholder}
-                    disabled={disabled}
-                    onChange={(event) => onChange({ limit: event.target.value })}
-                  />
-                )}
-              </Field>
+              <QuotaAmountField
+                label={copy.limit}
+                value={draft.limit}
+                inputMode={draft.metric === 'credits' ? 'decimal' : 'numeric'}
+                maxLength={128}
+                required
+                placeholder={copy.limitPlaceholder}
+                disabled={disabled}
+                onChange={(limit) => onChange({ limit })}
+              />
             </Fields>
           ) : null}
         </div>
@@ -946,6 +921,13 @@ export function RecurringLimits({
   const baseCopy = copyForRecurringLimits(i18n.language);
   const copy = {
     ...baseCopy,
+    ...(upstreamModelID
+      ? {
+          title: t('common.modelLimits.recurringTitle'),
+          noRules: t('common.modelLimits.noRules'),
+          maxRules: t('common.modelLimits.maxRules'),
+        }
+      : {}),
     alignmentValue: {
       ...baseCopy.alignmentValue,
       exact_time: t('recurringLimits.exact.alignment'),
@@ -989,7 +971,9 @@ export function RecurringLimits({
   } | null>(null);
   const notifiedReceiptRef = useRef<RecurringLimitsWriteReceipt | null>(null);
   const read = useQuery({
-    queryKey: recurringLimitsKeys.detail(role, accountScope, donationId, keyId),
+    queryKey: recurringLimitsKeys.detail(
+      role, accountId, donationId, keyId, modelID, upstreamModelID,
+    ),
     queryFn: ({ signal }) =>
       getRecurringLimits(role, donationId, keyId, signal, modelID, upstreamModelID),
     enabled:
@@ -1155,12 +1139,11 @@ export function RecurringLimits({
     authoritySyncPending ||
     authoritySyncUnavailable;
   const addRule = () => {
-    if (!draftRules || draftRules.length >= MAX_RULES || save.isPending || unresolvedCommand)
+    if (disabled || !draftRules || draftRules.length >= MAX_RULES || save.isPending || unresolvedCommand)
       return;
     draftID.current += 1;
     const zone = browserTimeZone() ?? 'UTC';
     const item = newDraftRule(`new-${draftID.current}`, zone);
-    if (upstreamModelID) item.metric = 'tokens';
     setDraftRules((current) => (current ? [...current, item] : current));
     setExpanded((current) => new Set(current).add(item.draftId));
     setSaveFeedback(false);
@@ -1202,6 +1185,7 @@ export function RecurringLimits({
   const submit = () => {
     if (
       !editable ||
+      disabled ||
       !draftRules ||
       !baseline ||
       !expectedRevision ||
@@ -1212,7 +1196,10 @@ export function RecurringLimits({
     )
       return;
     const payload: RecurringLimitsWritePayload = {
-      expected_revision: expectedRevision,
+      expected_revision:
+        read.data && sameRuleSet(baseline.rules, read.data.rules)
+          ? read.data.donation_revision
+          : expectedRevision,
       rules: payloadRulesFromDraft(draftRules),
     };
     setAttemptedPayload(payload);
@@ -1336,6 +1323,8 @@ export function RecurringLimits({
         previous.accountId,
         previous.donationId,
         previous.keyId,
+        previous.modelID,
+        previous.upstreamModelID,
       ),
       exact: true,
     });
@@ -1468,7 +1457,7 @@ export function RecurringLimits({
           <Button
             type="button"
 
-            disabled={save.isPending || unresolvedCommand || draftRules.length >= MAX_RULES}
+            disabled={disabled || save.isPending || unresolvedCommand || draftRules.length >= MAX_RULES}
             onClick={addRule}
           >
             {copy.addRule}
@@ -1482,7 +1471,6 @@ export function RecurringLimits({
       <div className="recurring-limits__rules">
         {draftRules.map((rule, index) => (
           <RuleCard
-            tokensOnly={Boolean(upstreamModelID)}
             key={rule.draftId}
             copy={copy}
             draft={rule}
@@ -1619,6 +1607,7 @@ export function RecurringLimits({
               type="submit"
               variant="primary"
               disabled={
+                disabled ||
                 save.isPending ||
                 !dirty ||
                 Boolean(validationError) ||

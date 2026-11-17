@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Field } from '../ui';
+import { QuotaAmountField } from '../QuotaAmountField';
 import { useTranslation } from 'react-i18next';
 
 export function NullableValue({
   label,
   value,
   onChange,
+  inputMode,
 }: {
   label: string;
+  inputMode?: 'numeric' | 'decimal';
   value: string | null;
   onChange: (value: string | null) => void;
 }) {
@@ -15,16 +17,13 @@ export function NullableValue({
   const [unlimited, setUnlimited] = useState(value === null);
   return (
     <div className="nb-stack nb-stack--sm nb-field--short">
-      <Field label={label}>
-        {(field) => (
-          <input
-            {...field}
-            value={value ?? ''}
-            disabled={unlimited}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        )}
-      </Field>
+      <QuotaAmountField
+        label={label}
+        inputMode={inputMode}
+        value={value}
+        disabled={unlimited}
+        onChange={onChange}
+      />
       <label className="checkbox-label">
         <input
           type="checkbox"

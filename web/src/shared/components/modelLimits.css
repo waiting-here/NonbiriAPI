@@ -2,3 +2,13 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+
+.model-limits__editor > .nb-btn {
+  justify-self: start;
+}
+
+.model-limits__editor .nb-table td,
+.model-limits__editor .nb-field__help {
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
