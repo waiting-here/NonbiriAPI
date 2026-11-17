@@ -210,6 +210,10 @@ test('model quotas preserve another upstream and show the owner read-only amount
             await card.getByLabel('Starts at', { exact: true }).selectOption('calendar');
           await card.getByLabel('Limit', { exact: true }).fill(limit);
         }
+        const lastRule = rules.locator('.recurring-limits__rule').last();
+        await visuals(page, lastRule, info, 'model-quota-recurring');
+        const amount = await lastRule.getByLabel('Limit', { exact: true }).boundingBox();
+        expect(amount?.width ?? 0).toBeGreaterThanOrEqual(248);
         const confirmed = page.waitForResponse(
           (response) =>
             new URL(response.url()).pathname === recurringPath &&

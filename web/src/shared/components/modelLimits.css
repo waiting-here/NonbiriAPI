@@ -12,3 +12,10 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
+
+@media (width < 40rem) {
+  .model-limits > summary,
+  .model-limits__editor .nb-fold > summary {
+    min-height: 2.75rem;
+  }
+}

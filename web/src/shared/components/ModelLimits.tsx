@@ -67,7 +67,7 @@ export function ModelLimits(props: RecurringLimitsProps) {
     charityModelID,
   ]);
   return (
-    <Fold title={t('common.modelLimits.title')} lazy>
+    <Fold title={t('common.modelLimits.title')} className="model-limits" plain lazy>
       <ModelLimitList key={scope} {...props} />
     </Fold>
   );
@@ -563,6 +563,7 @@ function ModelLimitEditor({
           <Fold
             title={t('common.modelLimits.recurring')}
             summary={t('common.modelLimits.recurringHelp')}
+            plain
             lazy
           >
             <RecurringLimits
