@@ -71,7 +71,9 @@ function PagePaginationControls({
   return (
     <nav className="pagination page-pagination nb-pager" aria-label={t('common.pagination')}>
       <span className="nb-pager__total" aria-live="polite">
-        {t('common.pageControls.totalOnly', { total: metadata.total_items })}
+        {total === 1n
+          ? t('common.pageControls.oneItem')
+          : t('common.pageControls.totalOnly', { total: metadata.total_items })}
       </span>
       {last > 1n ? (
         <span className="nb-pager__pages">

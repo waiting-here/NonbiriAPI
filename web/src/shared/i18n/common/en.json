@@ -297,6 +297,7 @@
       "invalid": "Enter a whole page number from 1 to 2147483647.",
       "clamped": "That page is no longer available. Showing page {{page}}.",
       "totalOnly": "{{total}} items",
+      "oneItem": "1 item",
       "pageOf": "Page {{page}} of {{pages}}",
       "sizeShort": "Per page",
       "jumpShort": "Page"

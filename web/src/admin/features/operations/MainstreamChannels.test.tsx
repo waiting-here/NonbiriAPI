@@ -231,7 +231,7 @@ describe('administrator mainstream channels page', () => {
     expect(params.get('page')).toBe('1');
     expect(params.get('page_size')).toBe('50');
 
-    expect(screen.getByText('1 items')).toBeVisible();
+    expect(screen.getByText('1 item')).toBeVisible();
     expect(screen.queryByRole('combobox', { name: 'Items per page' })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(
       '/admin/api/mainstream-channels?state=active&cursor=',

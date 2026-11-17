@@ -297,6 +297,7 @@
       "invalid": "请输入 1～2147483647 的整数页码。",
       "clamped": "原页码已超出当前范围，现显示第 {{page}} 页。",
       "totalOnly": "共 {{total}} 项",
+      "oneItem": "共 1 项",
       "pageOf": "第 {{page}} / {{pages}} 页",
       "sizeShort": "每页",
       "jumpShort": "页码"
