@@ -18,14 +18,10 @@ import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
+import { QuotaAmountField } from './QuotaAmountField';
+import { ChoiceRow } from './ui/ChoiceRow';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  SectionHead,
-} from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, SectionHead } from '@shared/components/States';
 import {
   DataTable,
   FilterBar,
@@ -338,6 +334,10 @@ function KeyQuotaFields({
 }) {
   const { t, i18n } = useTranslation();
   const copy = charityControlCopy(i18n.language);
+  const previousReservations = useRef({ input: '', output: '' });
+  const splitRequired = value.input_tokens_limit !== null || value.output_tokens_limit !== null;
+  const split =
+    splitRequired || value.input_token_reserve !== null || value.output_token_reserve !== null;
   return (
     <>
       <fieldset className="ops-form-section">
@@ -373,18 +373,40 @@ function KeyQuotaFields({
       </fieldset>
       <fieldset className="ops-form-section">
         <legend>{copy.tokenReservations}</legend>
-        <p className="muted">{copy.splitHint}</p>
+        <ChoiceRow
+          label={copy.splitReservations}
+          description={splitRequired ? copy.splitRequired : copy.splitHint}
+          checked={split}
+          disabled={splitRequired}
+          onChange={(enabled) => {
+            if (!enabled)
+              previousReservations.current = {
+                input: value.input_token_reserve ?? '',
+                output: value.output_token_reserve ?? '',
+              };
+            onChange({
+              input_token_reserve: enabled ? previousReservations.current.input : null,
+              output_token_reserve: enabled ? previousReservations.current.output : null,
+            });
+          }}
+        />
         <Fields>
-          <NullableValue
-            label={copy.inputReserve}
-            value={value.input_token_reserve}
-            onChange={(next) => onChange({ input_token_reserve: next })}
-          />
-          <NullableValue
-            label={copy.outputReserve}
-            value={value.output_token_reserve}
-            onChange={(next) => onChange({ output_token_reserve: next })}
-          />
+          {split && (
+            <>
+              <QuotaAmountField
+                label={copy.inputReserve}
+                required
+                value={value.input_token_reserve}
+                onChange={(next) => onChange({ input_token_reserve: next })}
+              />
+              <QuotaAmountField
+                label={copy.outputReserve}
+                required
+                value={value.output_token_reserve}
+                onChange={(next) => onChange({ output_token_reserve: next })}
+              />
+            </>
+          )}
           <Field label={t('common.operations.charity.tokenReserve')} size="short">
             {(field) => (
               <input

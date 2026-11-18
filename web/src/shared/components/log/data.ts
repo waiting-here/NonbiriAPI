@@ -976,6 +976,10 @@ export function validLogDiscordID(value: string): boolean {
   return /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18_446_744_073_709_551_615n;
 }
 
+export function validLogResourceID(value: string): boolean {
+  return /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n;
+}
+
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
   const result: LogFiltersValue = {};
   if (isLogOperation(raw.operation)) result.operation = raw.operation;
@@ -999,8 +1003,7 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
     assign('upstream_model', 512);
     assign('charity_model', 512);
     const keyID = raw.endpoint_key_id?.trim();
-    if (keyID && /^[1-9][0-9]{0,18}$/.test(keyID) && BigInt(keyID) <= 9_223_372_036_854_775_807n)
-      result.endpoint_key_id = keyID;
+    if (keyID && validLogResourceID(keyID)) result.endpoint_key_id = keyID;
   }
   assign('error_code', 96);
   const status = raw.status?.trim();

@@ -1,39 +1,69 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LANGUAGE_STORAGE_KEY } from '@shared/i18n';
+import { LANGUAGE_STORAGE_KEY, prepareLanguage, type SupportedLanguage } from '@shared/i18n';
 
 const LANGUAGES = [
   { code: 'zh', label: '中文' },
   { code: 'en', label: 'EN' },
 ] as const;
 
-type LanguageCode = (typeof LANGUAGES)[number]['code'];
-
-export function LanguageSwitcher() {
+export function LanguageSwitcher({
+  save,
+}: {
+  save?: (code: SupportedLanguage) => Promise<boolean>;
+}) {
   const { t, i18n } = useTranslation();
-  const current: LanguageCode = i18n.resolvedLanguage?.startsWith('zh') ? 'zh' : 'en';
+  const current = i18n.resolvedLanguage?.startsWith('zh') ? 'zh' : 'en';
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  const select = (code: LanguageCode) => {
+  async function select(code: SupportedLanguage) {
+    if (busy || current === code) return;
+    setBusy(true);
+    setFailed(false);
     try {
-      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
+      await prepareLanguage(i18n, code);
+      if (save && !(await save(code))) return;
+      await i18n.changeLanguage(code);
+      try {
+        window.localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
+      } catch {
+        // Language selection also works when storage is blocked.
+      }
     } catch {
-      // Language switching remains usable when storage is blocked.
+      setFailed(true);
+    } finally {
+      setBusy(false);
     }
-    void i18n.changeLanguage(code);
-  };
+  }
 
   return (
-    <div className="lang-switcher" role="group" aria-label={t('shell.langLabel')}>
-      {LANGUAGES.map(({ code, label }) => (
-        <button
-          key={code}
-          type="button"
-          aria-pressed={current === code}
-          aria-current={current === code ? 'true' : undefined}
-          onClick={() => select(code)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <>
+      <div
+        className="lang-switcher"
+        role="group"
+        aria-label={t('shell.langLabel')}
+        aria-busy={busy}
+      >
+        {LANGUAGES.map(({ code, label }) => (
+          <button
+            key={code}
+            type="button"
+            lang={code}
+            aria-pressed={current === code}
+            aria-current={current === code ? 'true' : undefined}
+            disabled={busy}
+            onClick={() => void select(code)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {failed ? (
+        <span className="field-error" role="alert">
+          {t('shell.languageRetry')}
+        </span>
+      ) : null}
+    </>
   );
 }

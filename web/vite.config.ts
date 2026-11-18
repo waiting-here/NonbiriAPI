@@ -1,7 +1,6 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type ConfigEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import catalogPairPlugin from './scripts/catalogPairPlugin.mjs';
 
 /**
  * Two independent stations, each a separate Vite build producing its own
@@ -14,35 +13,6 @@ interface StationConfig {
   devPort: number;
   previewPort: number;
 }
-
-function normalized(id: string): string {
-  return id.replaceAll('\\', '/');
-}
-
-function isCopyModule(id: string): boolean {
-  const value = normalized(id);
-  return (
-    value.endsWith('/src/user/games/copy.ts') ||
-    value.endsWith('/src/user/features/core/copy.ts') ||
-    value.endsWith('/src/user/features/credits/copy.ts') ||
-    value.includes('nonbiri-catalog-pair:') ||
-    value.includes('nonbiri-catalog-wrapper:')
-  );
-}
-
-const copyGroups = {
-  includeDependenciesRecursively: false,
-  groups: [
-    {
-      name: 'copy-combined',
-      test: isCopyModule,
-      minSize: 0,
-      minModuleSize: 0,
-      minShareCount: 1,
-      entriesAware: false,
-    },
-  ],
-};
 
 const STATIONS: Record<'admin' | 'user', StationConfig> = {
   admin: { root: 'src/admin', distDir: 'admin', devPort: 5173, previewPort: 4173 },
@@ -58,12 +28,12 @@ function stationFor(mode: string): StationConfig {
   );
 }
 
-export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
+export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
   const station = stationFor(mode);
   return {
     root: station.root,
     publicDir: fileURLToPath(new URL('./public/', import.meta.url)),
-    plugins: [react(), ...(command === 'build' ? [catalogPairPlugin()] : [])],
+    plugins: [react()],
     resolve: {
       alias: {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
@@ -83,11 +53,6 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
       outDir: fileURLToPath(new URL(`./dist/${station.distDir}`, import.meta.url)),
       emptyOutDir: true,
       sourcemap: false,
-      rolldownOptions: {
-        output: {
-          codeSplitting: copyGroups,
-        },
-      },
     },
   };
 });

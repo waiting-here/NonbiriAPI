@@ -14,7 +14,9 @@ export function FilterBar({
   secondaryLabel,
   secondaryAlwaysVisible = false,
   activeCount,
+  footer,
   chips,
+  chipsLabel,
   onClearAll,
   clearAllLabel,
   onSubmit,
@@ -40,7 +42,10 @@ export function FilterBar({
   secondaryLabel?: string;
   secondaryAlwaysVisible?: boolean;
   activeCount: number;
+  /** Actions or search feedback following all fields, including the disclosure. */
+  footer?: ReactNode;
   chips?: readonly { key: string; label: ReactNode; onRemove: () => void; removeLabel: string }[];
+  chipsLabel?: string;
   onClearAll?: () => void;
   clearAllLabel?: string;
   onSubmit: () => void;
@@ -74,6 +79,9 @@ export function FilterBar({
           if (
             Tag === 'div' &&
             event.key === 'Enter' &&
+            !event.defaultPrevented &&
+            !event.nativeEvent.isComposing &&
+            event.nativeEvent.keyCode !== 229 &&
             (event.target as HTMLElement).tagName === 'INPUT'
           ) {
             event.preventDefault();
@@ -139,12 +147,31 @@ export function FilterBar({
         {secondary && secondaryAlwaysVisible ? (
           <div className="nb-filter__fields">{secondary}</div>
         ) : null}
+        {footer}
         {chips && chips.length ? (
-          <div className="nb-chips">
+          <div className="nb-chips" role={chipsLabel ? 'group' : undefined} aria-label={chipsLabel}>
+            {chipsLabel && <span className="nb-small nb-muted">{chipsLabel}</span>}
             {chips.map((chip) => (
               <span key={chip.key} className="nb-chip">
-                {chip.label}
-                <button type="button" aria-label={chip.removeLabel} onClick={chip.onRemove}>
+                <span>{chip.label}</span>
+                <button
+                  type="button"
+                  aria-label={chip.removeLabel}
+                  onClick={(event) => {
+                    const button = event.currentTarget;
+                    if (button === document.activeElement) {
+                      const item = button.parentElement;
+                      const next =
+                        item?.nextElementSibling?.querySelector('button') ??
+                        item?.previousElementSibling?.querySelector('button') ??
+                        button
+                          .closest('.nb-filter')
+                          ?.querySelector<HTMLElement>('input, select, button');
+                      next?.focus();
+                    }
+                    chip.onRemove();
+                  }}
+                >
                   ×
                 </button>
               </span>

@@ -23,6 +23,7 @@ describe('optional personal automation guide', () => {
       );
       const details = summary.closest('details')!;
       expect(details).not.toHaveAttribute('open');
+      expect(screen.queryByText('/api/automation/models/{id}/bindings')).not.toBeInTheDocument();
       await view.user.click(summary.closest('summary')!);
       expect(details).toHaveAttribute('open');
       expect(screen.getByText('/api/automation/models/{id}/bindings')).toBeInTheDocument();
@@ -31,6 +32,8 @@ describe('optional personal automation guide', () => {
           locale === 'en' ? '4 · Check each result and retry' : '4 · 检查每项结果和重试',
         ),
       ).toBeInTheDocument();
+      await view.user.click(summary.closest('summary')!);
+      expect(screen.queryByText('/api/automation/models/{id}/bindings')).not.toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalled();
     },
   );

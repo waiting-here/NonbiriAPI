@@ -1,25 +1,17 @@
 import { CopyValue } from '@shared/components/CopyValue';
-import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { Fold, OutcomeNote, PanelBody, PanelHead } from '@shared/components/ui';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { Link, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 import { ApiAddressCopy, apiAddress, markOnboarding } from '../features/core/onboarding';
 import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
-import { useNumberedModels } from '../features/core/modelNumberedQueries';
-import { DEFAULT_CHARITY_CATALOG_FILTERS, useCharityCatalog } from '../features/economy/catalog';
+import { ClientModelField } from '../features/core/ClientModelField';
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
 import { useOperation } from '@shared/operations/useOperation';
 import { regenerateCallerKey } from '../features/core/api';
-import {
-  CoreErrorPanel,
-  CoreLoading,
-  CoreTime,
-  CoreUserGate,
-  SafeCopyValue,
-} from '../features/core/components';
+import { CoreErrorPanel, CoreLoading, CoreTime, CoreUserGate } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
 import { coreKeys, coreSessionMatchesAccount, useCallerKey } from '../features/core/queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from '../features/core/request';
@@ -34,19 +26,14 @@ import '../features/core/home.css';
 import '../features/core/api-access.css';
 
 const pageCopyKeys = {
-  'common.refresh': 'common.refresh',
-  'user.core.keys.apiAddress': 'user.core.keys.apiAddress',
-  'user.core.keys.charityModels': 'user.core.keys.charityModels',
-  'user.core.keys.clientHelp': 'user.core.keys.clientHelp',
-  'user.core.keys.clientTitle': 'user.core.keys.clientTitle',
-  'user.core.keys.showModelNames': 'user.core.keys.showModelNames',
-  'user.core.keys.noAvailableModels': 'user.core.keys.noAvailableModels',
-  'user.core.keys.curlHelp': 'user.core.keys.curlHelp',
-  'user.core.keys.curlPlaceholder': 'user.core.keys.curlPlaceholder',
-  'user.core.keys.curlTitle': 'user.core.keys.curlTitle',
-  'user.core.keys.modelName': 'user.core.keys.modelName',
-  'user.core.keys.ownModels': 'user.core.keys.ownModels',
-  'user.core.keys.supportedPaths': 'user.core.keys.supportedPaths',
+  apiAddress: 'user.core.keys.apiAddress',
+  clientHelp: 'user.core.keys.clientHelp',
+  clientTitle: 'user.core.keys.clientTitle',
+  savedKey: 'user.core.keys.savedKey',
+  curlTitle: 'user.core.keys.curlTitle',
+  curlHelp: 'user.core.keys.curlHelp',
+  curlPlaceholder: 'user.core.keys.curlPlaceholder',
+  curlResult: 'user.core.keys.curlResult',
 } as const;
 
 function pageInstanceIdentity(): string {
@@ -70,112 +57,17 @@ type SecretCopyResult = {
   status: 'copied' | 'failed';
 };
 
-function ClientModelNames({ accountId }: { accountId: string }) {
+function AccessCheck() {
   const { t } = useRegisteredCopy(pageCopyKeys);
-  const firstPage = { page: '1', pageSize: 10 } as const;
-  const own = useNumberedModels(accountId, firstPage, true, { connection_state: 'available' });
-  const charity = useCharityCatalog(accountId, {
-    ...DEFAULT_CHARITY_CATALOG_FILTERS,
-    ...firstPage,
-  });
-  const groups = [
-    {
-      key: 'own',
-      title: t('user.core.keys.ownModels'),
-      models: own.data?.data.map((model) => ({
-        name: model.full_name,
-        types: model.model_types,
-      })),
-      query: own,
-    },
-    {
-      key: 'charity',
-      title: t('user.core.keys.charityModels'),
-      models: charity.data?.models.map((model) => ({
-        name: model.fullName,
-        types: model.modelTypes,
-      })),
-      query: charity,
-    },
-  ];
+  const modelsUrl = (apiAddress() + '/models').replaceAll("'", "'\\''");
+  const curl = `curl -i -H "Authorization: Bearer $NONBIRI_KEY" '${modelsUrl}'`;
   return (
-    <div className="api-model-names">
-      {groups.map(({ key, title, models, query }) => (
-        <div key={key} className="nb-stack nb-stack--sm">
-          <h3>{title}</h3>
-          {query.isPending ? (
-            <CoreLoading compact />
-          ) : query.isError ? (
-            <CoreErrorPanel error={query.error} compact onRetry={() => void query.refetch()} />
-          ) : models?.length ? (
-            <ul>
-              {models.slice(0, 3).map(({ name, types }) => (
-                <li key={name}>
-                  <CopyValue value={name} label={name} variant="secondary" />
-                  <ModelTypesSummary value={types} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="nb-small nb-muted">{t('user.core.keys.noAvailableModels')}</p>
-          )}
-        </div>
-      ))}
-      <div className="api-model-names__actions">
-        <button
-          type="button"
-          className="nb-btn nb-btn--secondary"
-          disabled={own.isFetching || charity.isFetching}
-          onClick={() => {
-            void own.refetch();
-            void charity.refetch();
-          }}
-        >
-          {t('common.refresh')}
-        </button>
+    <Fold lazy title={t('curlTitle')} summary={t('curlHelp')}>
+      <div className="api-access-check">
+        <p>{t('curlPlaceholder')}</p>
+        <CopyValue value={curl} label={t('curlTitle')} variant="secondary" />
+        <p className="nb-small nb-muted">{t('curlResult')}</p>
       </div>
-    </div>
-  );
-}
-
-function ClientModelField({ accountId }: { accountId: string }) {
-  const { t } = useRegisteredCopy(pageCopyKeys);
-  return (
-    <div className="api-client-row">
-      <h3>{t('user.core.keys.modelName')}</h3>
-      <div className="api-client-row__value">
-        <div className="nb-actions">
-          <Link className="nb-btn nb-btn--secondary" to="/charity">
-            {t('user.core.keys.charityModels')}
-          </Link>
-          <Link className="nb-btn nb-btn--secondary" to="/models">
-            {t('user.core.keys.ownModels')}
-          </Link>
-        </div>
-        <Fold plain lazy title={t('user.core.keys.showModelNames')}>
-          <ClientModelNames accountId={accountId} />
-        </Fold>
-      </div>
-    </div>
-  );
-}
-
-function DeveloperReference() {
-  const { t } = useRegisteredCopy(pageCopyKeys);
-  const curl = `curl "${apiAddress()}/chat/completions" \
-  -H "Authorization: Bearer $NONBIRI_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"my/model","messages":[{"role":"user","content":"Hello"}]}'`;
-  return (
-    <Fold lazy title={t('user.core.keys.curlTitle')} summary={t('user.core.keys.curlHelp')}>
-      <p>{t('user.core.keys.curlPlaceholder')}</p>
-      <SafeCopyValue value={curl} label={t('user.core.keys.curlTitle')} />
-      <p className="nb-small nb-muted api-paths">
-        <code>/v1/chat/completions</code> · <code>/v1/embeddings</code> ·{' '}
-        <code>/v1/images/generations</code> · <code>/v1/decisions</code>
-        <br />
-        {t('user.core.keys.supportedPaths')} <code>/v1/models</code>
-      </p>
     </Fold>
   );
 }
@@ -422,16 +314,13 @@ export function CallerKeyPanel({
       <section
         className="nb-panel api-client"
         id="client"
-        aria-label={text('user.core.keys.clientTitle')}
+        aria-label={text('clientTitle')}
         ref={clientRef}
       >
-        <PanelHead
-          title={text('user.core.keys.clientTitle')}
-          description={text('user.core.keys.clientHelp')}
-        />
+        <PanelHead title={text('clientTitle')} description={text('clientHelp')} />
         <PanelBody>
           <div className="api-client-row">
-            <h3>{text('user.core.keys.apiAddress')}</h3>
+            <h3>{text('apiAddress')}</h3>
             <div className="api-client-row__value">
               <ApiAddressCopy />
             </div>
@@ -450,26 +339,29 @@ export function CallerKeyPanel({
                     onRetry={() => void authority.refetch()}
                   />
                 ) : metadata ? (
-                  <dl className="api-key-facts">
-                    <div>
-                      <dt>{t('keys.display')}</dt>
-                      <dd>
-                        <code>{metadata.display}</code>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('common.created')}</dt>
-                      <dd>
-                        <CoreTime value={metadata.created_at} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('common.updated')}</dt>
-                      <dd>
-                        <CoreTime value={metadata.updated_at} />
-                      </dd>
-                    </div>
-                  </dl>
+                  <div className="nb-stack nb-stack--sm">
+                    {!state.reveal ? <p className="nb-small nb-muted">{text('savedKey')}</p> : null}
+                    <dl className="api-key-facts">
+                      <div>
+                        <dt>{t('keys.display')}</dt>
+                        <dd>
+                          <code>{metadata.display}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('common.created')}</dt>
+                        <dd>
+                          <CoreTime value={metadata.created_at} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('common.updated')}</dt>
+                        <dd>
+                          <CoreTime value={metadata.updated_at} />
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
                 ) : state.authority ? (
                   <div className="nb-stack nb-stack--xs">
                     <strong>{t('keys.noKeyTitle')}</strong>
@@ -553,12 +445,12 @@ export function CallerKeyPanel({
             </div>
           </div>
 
-          <ClientModelField accountId={accountId} />
+          <ClientModelField key={accountId} accountId={accountId} />
         </PanelBody>
       </section>
 
       <div className="api-reference">
-        <DeveloperReference />
+        <AccessCheck />
         {children}
       </div>
 

@@ -1053,6 +1053,37 @@ describe('CharityManagement corrective controls', () => {
       ],
     });
   });
+  it('restores edited quotas and paired token reservations when a reviewer changes their mind', async () => {
+    installDonationFetch(approvedDonation(managedKey()));
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+    await screen.findByRole('heading', { name: 'Donation review' });
+    await view.user.click(screen.getByText('Quota and reserve', { selector: 'summary strong' }));
+    const limit = screen.getByRole('textbox', { name: 'Call limit' });
+    const unlimited = screen.getByRole('checkbox', { name: 'Call limit · No limit' });
+    await view.user.click(unlimited);
+    expect(limit).toHaveValue('');
+    await view.user.type(limit, '750');
+    await view.user.click(unlimited);
+    expect(limit).toBeDisabled();
+    await view.user.click(unlimited);
+    expect(limit).toHaveValue('750');
+    const split = screen.getByRole('checkbox', {
+      name: 'Reserve input and output tokens separately',
+    });
+    await view.user.click(split);
+    await view.user.type(screen.getByRole('textbox', { name: 'Input token reservation' }), '80');
+    await view.user.type(screen.getByRole('textbox', { name: 'Output token reservation' }), '20');
+    await view.user.click(split);
+    expect(screen.queryByRole('textbox', { name: 'Input token reservation' })).toBeNull();
+    await view.user.click(split);
+    expect(screen.getByRole('textbox', { name: 'Input token reservation' })).toHaveValue('80');
+    expect(screen.getByRole('textbox', { name: 'Output token reservation' })).toHaveValue('20');
+  });
+
   it('omits enabled when reset is the only switch-related operator action', async () => {
     const fixture = approvedDonation(
       managedKey({

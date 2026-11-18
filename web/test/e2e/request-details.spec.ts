@@ -141,6 +141,12 @@ test('management diagnostics use shared buttons and recover without refreshing',
   page,
 }) => {
   const errors = collectConsoleViolations(page);
+  const modules: string[] = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') modules.push(new URL(request.url()).pathname);
+  });
+  const loadsActivity = () =>
+    modules.some((path) => /\/IndependentDiagnostics-[^/]+\.js$/.test(path));
   await mockRoleSession(page, 'admin', 'admin');
   await mockPublicConfig(page, 'admin');
   await page.route('**/admin/api/logs?*', (route) =>
@@ -167,9 +173,18 @@ test('management diagnostics use shared buttons and recover without refreshing',
     });
   });
   await page.goto(ADMIN_ORIGIN + '/logs');
+  const activityTab = page.getByRole('tab', { name: 'Discovery and activity' });
+  await expect(
+    page.getByRole('region', { name: 'Discovery and activity diagnostics' }),
+  ).toHaveCount(0);
+  await expect(activityTab).toBeVisible();
+  expect(loadsActivity()).toBe(false);
+  await activityTab.click();
+  await expect(page).toHaveURL(/log_view=activity/);
   const section = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
   const button = section.getByRole('button', { name: 'Search', exact: true });
   await expect(button).toBeVisible();
+  expect(loadsActivity()).toBe(true);
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(section.getByRole('alert')).toBeVisible();

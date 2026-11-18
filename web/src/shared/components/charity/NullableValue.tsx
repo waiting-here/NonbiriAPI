@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef } from 'react';
 import { QuotaAmountField } from '../QuotaAmountField';
 import { useTranslation } from 'react-i18next';
 
@@ -14,7 +14,9 @@ export function NullableValue({
   onChange: (value: string | null) => void;
 }) {
   const { t } = useTranslation();
-  const [unlimited, setUnlimited] = useState(value === null);
+  const previousAmount = useRef('');
+  const unlimited = value === null;
+  const noLimit = t('common.operations.charity.noLimit');
   return (
     <div className="nb-stack nb-stack--sm nb-field--short">
       <QuotaAmountField
@@ -22,18 +24,24 @@ export function NullableValue({
         inputMode={inputMode}
         value={value}
         disabled={unlimited}
+        required={!unlimited}
         onChange={onChange}
       />
       <label className="checkbox-label">
         <input
           type="checkbox"
+          aria-label={label + ' · ' + noLimit}
           checked={unlimited}
           onChange={(event) => {
-            setUnlimited(event.target.checked);
-            onChange(event.target.checked ? null : '0');
+            if (event.currentTarget.checked) {
+              previousAmount.current = value ?? '';
+              onChange(null);
+            } else {
+              onChange(previousAmount.current);
+            }
           }}
         />
-        <span>{t('common.operations.charity.noLimit')}</span>
+        <span>{noLimit}</span>
       </label>
     </div>
   );

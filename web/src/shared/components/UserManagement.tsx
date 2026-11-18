@@ -1,3 +1,4 @@
+import { TableCheckbox } from './ui/TableCheckbox';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
@@ -1619,23 +1620,20 @@ export function UserManagement({
                         <span className="user-list-selection">
                           {entry.account_state === 'active' &&
                           canEditInferenceLimits(entry.user, role, account, actorLevel === 5) ? (
-                            <label className="user-limit-select">
-                              <input
-                                type="checkbox"
-                                aria-label={t('management.users.selectLimitUser', {
-                                  user: entry.user.username,
-                                })}
-                                checked={limitSelected.includes(entry.user.id)}
-                                disabled={batchBusy || users.isFetching}
-                                onChange={(event) =>
-                                  setLimitSelected(
-                                    event.target.checked
-                                      ? [...limitSelected, entry.user.id]
-                                      : limitSelected.filter((id) => id !== entry.user.id),
-                                  )
-                                }
-                              />
-                            </label>
+                            <TableCheckbox
+                              aria-label={t('management.users.selectLimitUser', {
+                                user: entry.user.username,
+                              })}
+                              checked={limitSelected.includes(entry.user.id)}
+                              disabled={batchBusy || users.isFetching}
+                              onChange={(event) =>
+                                setLimitSelected(
+                                  event.target.checked
+                                    ? [...limitSelected, entry.user.id]
+                                    : limitSelected.filter((id) => id !== entry.user.id),
+                                )
+                              }
+                            />
                           ) : null}
                         </span>
                       ),

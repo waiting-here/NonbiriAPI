@@ -44,9 +44,10 @@ function row(role: LogRole) {
   };
 }
 
-function installFixtures(role: 'admin' | 'steward') {
+function installFixtures(role: LogRole) {
   const prefix = role === 'admin' ? '/admin/api' : '/api';
-  const logPath = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+  const logPath =
+    role === 'admin' ? '/admin/api/logs' : role === 'steward' ? '/api/steward/logs' : '/api/logs';
   const listBody = {
     data: [row(role)],
     next_cursor: null,
@@ -118,21 +119,31 @@ afterEach(() => {
 
 describe('role log time filters', () => {
   it('rechecks a zone change that has not emitted a browser notification', async () => {
-    const fetchMock = installFixtures('admin');
-    await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
-      station: 'admin',
-      role: 'admin',
+    const fetchMock = installFixtures('user');
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
+      station: 'user',
+      role: 'user',
     });
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-        '/admin/api/logs?page=1&page_size=20',
+        '/api/logs?page=1&page_size=20',
       ),
     );
+    await view.user.click(screen.getByText('More filters', { exact: true }));
+    const start = screen.getByLabelText('Filter by start time');
+    fireEvent.change(start, { target: { value: localFrom.slice(0, 16) } });
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/time/resolve?'))).toBe(
+        true,
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText('Checking this time…')).toBeNull());
     currentZone = 'Asia/Tokyo';
     fireEvent.submit(screen.getByRole('button', { name: 'Search' }).closest('form')!);
-    expect(screen.getByText(/status code or time range is invalid/i)).toBeVisible();
-    expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain(
-      `/admin/api/logs?from=${from}&to=${to}&page=1&page_size=20`,
+    expect(screen.getByText('Check the date and time zone, then search again.')).toBeVisible();
+    expect(start).toHaveFocus();
+    expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/api/logs?from='))).toBe(
+      false,
     );
   });
 
@@ -195,7 +206,8 @@ describe('role log time filters', () => {
     fireEvent.change(toInput, { target: { value: localFrom.slice(0, 16) } });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
-    expect(screen.getByText(/status code or time range is invalid/i)).toBeVisible();
+    expect(toInput).toHaveAccessibleDescription('Choose an end time later than the start time.');
+    expect(toInput).toHaveFocus();
     expect(fromInput).toHaveValue(localTo.slice(0, 16));
     expect(toInput).toHaveValue(localFrom.slice(0, 16));
   });

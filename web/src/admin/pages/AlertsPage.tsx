@@ -1,3 +1,4 @@
+import { TableCheckbox } from '@shared/components/ui/TableCheckbox';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -653,21 +654,19 @@ export function AlertsPage() {
         />
         <div className="alerts-bulk-bar">
           <div className="nb-actions">
-            <label className="alerts-select-all">
-              <input
-                type="checkbox"
-                aria-label={t('admin.alerts.selectPage')}
-                disabled={actionDisabled || selectable.length === 0}
-                checked={selectable.length > 0 && selected.length === selectable.length}
-                onChange={() =>
-                  setSelection({
-                    scope: selectionScope,
-                    ids: selected.length === selectable.length ? [] : selectable,
-                  })
-                }
-              />
-              <span>{t('admin.alerts.selectPage')}</span>
-            </label>
+            <TableCheckbox
+              text={t('admin.alerts.selectPage')}
+              indeterminate={selected.length > 0 && selected.length < selectable.length}
+              aria-label={t('admin.alerts.selectPage')}
+              disabled={actionDisabled || selectable.length === 0}
+              checked={selectable.length > 0 && selected.length === selectable.length}
+              onChange={() =>
+                setSelection({
+                  scope: selectionScope,
+                  ids: selected.length === selectable.length ? [] : selectable,
+                })
+              }
+            />
             {selected.length > 0 ? (
               <button
                 className="nb-btn nb-btn--secondary nb-btn--sm"
@@ -711,10 +710,9 @@ export function AlertsPage() {
                   {
                     key: 'select',
                     header: t('admin.alerts.select'),
-                    cell: 'meta',
+                    cell: 'select',
                     render: (alert) => (
-                      <input
-                        type="checkbox"
+                      <TableCheckbox
                         aria-label={t('admin.alerts.selectAlert', { id: alert.id })}
                         checked={selected.includes(alert.id)}
                         disabled={actionDisabled || alert.resolved}
@@ -827,9 +825,7 @@ export function AlertsPage() {
                           className="nb-btn nb-btn--secondary nb-btn--sm"
                           type="button"
                           disabled={actionDisabled}
-                          onClick={() =>
-                            mutation.mutate({ id: alert.id, value: !alert.resolved })
-                          }
+                          onClick={() => mutation.mutate({ id: alert.id, value: !alert.resolved })}
                         >
                           {alert.resolved ? t('admin.alerts.reopen') : t('admin.alerts.resolve')}
                         </button>

@@ -1187,6 +1187,35 @@
   white-space: nowrap;
   width: 1%;
 }
+.nb-table-check {
+  display: inline-flex;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nb-space-2);
+  border-radius: var(--nb-radius-control);
+  color: var(--nb-color-text);
+  font-size: var(--nb-font-size-sm);
+  cursor: pointer;
+}
+.nb-table-check input {
+  margin: 0;
+  accent-color: var(--nb-color-accent);
+}
+.nb-table-check:has(input:focus-visible) {
+  outline: 2px solid var(--nb-color-accent);
+}
+.nb-table-check:has(:disabled) {
+  color: var(--nb-color-text-muted);
+  cursor: default;
+}
+@media (hover: hover) {
+  .nb-table-check:has(:enabled):hover {
+    background: var(--nb-color-accent-soft);
+  }
+}
+
 .nb-table :is(th, td).is-select,
 .nb-table td[data-cell='select'] {
   width: 2.5rem;

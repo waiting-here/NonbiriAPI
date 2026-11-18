@@ -1,19 +1,20 @@
 import { SuggestInput } from '@shared/components/ui/SuggestInput';
 import { Button, Field, FilterBar, Tabs } from '@shared/components/ui';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import './logs.css';
-import { logRequestID, validLogDiscordID } from './data';
+import { logRequestID, validLogDiscordID, validLogResourceID } from './data';
 import type { LogUrlState } from './useLogUrlState';
 
 export interface LogFilterField {
   name: string;
   label: string;
   ariaLabel: string;
-  inputType?: 'text' | 'number';
+  inputMode?: 'numeric';
   placeholder?: string;
   maxLength?: number;
   suggestions?: readonly string[];
@@ -31,19 +32,35 @@ interface LogFiltersProps {
   station: TimeStation;
   fields: readonly LogFilterField[];
   state: FilterState;
-  onApply: (next: FilterState) => void;
+  onApply: (next: FilterState, keepFilters?: readonly string[]) => void;
+  linkErrors?: Record<string, string>;
   toolbarActions?: ReactNode;
 }
 
-export function LogFilters({ station, fields, state, onApply, toolbarActions }: LogFiltersProps) {
+export function LogFilters({
+  station,
+  fields,
+  state,
+  onApply,
+  linkErrors,
+  toolbarActions,
+}: LogFiltersProps) {
   const { t } = useTranslation();
+  const formatDateTime = useDateTimeFormatter();
+  const form = useRef<HTMLFormElement>(null);
+  const keyLinkError = Boolean(linkErrors?.endpoint_key_id);
+  useEffect(() => {
+    if (!keyLinkError) return;
+    const field = form.current?.elements.namedItem('endpoint_key_id');
+    const disclosure = field instanceof HTMLElement && field.closest('details');
+    if (disclosure) disclosure.open = true;
+  }, [keyLinkError]);
   const [drafts, setDrafts] = useState<Record<string, string>>(() => ({ ...state.filters }));
   const [draftFrom, setDraftFrom] = useState<TimeDraft>(() =>
     createTimeDraft(state.fromUnix ?? null),
   );
   const [draftTo, setDraftTo] = useState<TimeDraft>(() => createTimeDraft(state.toUnix ?? null));
-  const [invalidRange, setInvalidRange] = useState(false);
-  const [invalidDiscord, setInvalidDiscord] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const seed = (value: FilterState) =>
     JSON.stringify([
       Object.entries(value.filters).sort(([a], [b]) => a.localeCompare(b)),
@@ -62,68 +79,123 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
   } else if (seededFor !== stateSeed) {
     setPendingOwnSeed(null);
     setSeededFor(stateSeed);
-    setInvalidDiscord(false);
-    setInvalidRange(false);
+    setSubmitted(false);
     setDrafts({ ...state.filters });
     setDraftFrom(createTimeDraft(state.fromUnix ?? null));
     setDraftTo(createTimeDraft(state.toUnix ?? null));
   }
 
-  const apply = (next: FilterState) => {
+  const apply = (next: FilterState, partial = false) => {
     // Selects and quick ranges do not submit unfinished text searches.
     setPendingOwnSeed(seed(next));
-    onApply(next);
+    // Keep malformed deep-link IDs on unrelated edits until the operator repairs or resets them.
+    if (partial && linkErrors) onApply(next, Object.keys(linkErrors));
+    else onApply(next);
   };
-  const submit = () => {
+  const readDraft = () => {
     const filters: Record<string, string> = {};
-    let badDiscord = false;
-    let badRange = false;
+    const errors: Record<string, string> = {};
     for (const field of fields) {
       const value = (drafts[field.name] ?? '').trim();
-      if (field.name === 'discord_id' && value && !validLogDiscordID(value)) {
-        badDiscord = true;
+      if (!value) {
+        if (linkErrors?.[field.name]) errors[field.name] = linkErrors[field.name];
         continue;
       }
-      if (field.name === 'status' && value && !/^[1-5][0-9]{2}$/.test(value)) {
-        badRange = true;
-        continue;
-      }
-      if (value) filters[field.name] = value.slice(0, field.maxLength ?? 512);
+      if (field.name === 'discord_id' && !validLogDiscordID(value))
+        errors[field.name] = t('common.operations.logs.invalidDiscordFilter');
+      if (
+        (field.name === 'user_id' || field.name === 'endpoint_key_id') &&
+        !validLogResourceID(value)
+      )
+        errors[field.name] = t('logs.invalidNumericID');
+      if (field.name === 'status' && !/^[1-5][0-9]{2}$/.test(value))
+        errors[field.name] = t('logs.invalidStatus');
+      filters[field.name] = value;
     }
     const from = timeDraftValue(draftFrom);
     const to = timeDraftValue(draftTo);
-    const invalidTime =
-      from === undefined || to === undefined || (from !== null && to !== null && from >= to);
-    setInvalidDiscord(badDiscord);
-    setInvalidRange(badRange || invalidTime);
-    if (badDiscord || badRange || invalidTime) return;
-    apply({
-      filters,
-      fromUnix: from ?? undefined,
-      toUnix: to ?? undefined,
-    });
+    if (from === undefined) errors.from = t('logs.checkTime');
+    else if (to === undefined) errors.to = t('logs.checkTime');
+    else if (from !== null && to !== null && from >= to) errors.to = t('logs.invalidTimeRange');
+    return { filters, from, to, errors };
+  };
+  const submit = () => {
+    const { filters, from, to, errors } = readDraft();
+    if (Object.keys(errors).length) {
+      setSubmitted(true);
+      const invalid = Array.from(form.current?.elements ?? []).find(
+        (control): control is HTMLInputElement =>
+          control instanceof HTMLInputElement && Boolean(errors[control.name]),
+      );
+      const disclosure = invalid?.closest('details');
+      if (disclosure) disclosure.open = true;
+      if (invalid?.disabled) disclosure?.querySelector('summary')?.focus();
+      else invalid?.focus();
+      return;
+    }
+    setSubmitted(false);
+    setDrafts(filters);
+    apply({ filters, fromUnix: from ?? undefined, toUnix: to ?? undefined });
   };
   const reset = () => {
     setDrafts({});
     setDraftFrom(createTimeDraft(null));
     setDraftTo(createTimeDraft(null));
-    setInvalidDiscord(false);
-    setInvalidRange(false);
+    setSubmitted(false);
     apply({ filters: {}, fromUnix: undefined, toUnix: undefined });
   };
   const primaryNames = ['operation', 'discord_id', 'model', 'charity_model'];
+  const errors: Record<string, string> = submitted ? readDraft().errors : {};
+  for (const [name, error] of Object.entries(linkErrors ?? {})) {
+    if (!drafts[name]?.trim()) errors[name] = error;
+  }
+  const pendingFields = fields
+    .filter(
+      (field) =>
+        !field.options && (drafts[field.name] ?? '').trim() !== (state.filters[field.name] ?? ''),
+    )
+    .map((field) => field.label);
+  const timeBounds = [
+    {
+      name: 'from',
+      label: t('common.from'),
+      ariaLabel: t('common.filterFromAria'),
+      draft: draftFrom,
+      setDraft: setDraftFrom,
+      epoch: state.fromUnix,
+      key: 'fromUnix',
+    },
+    {
+      name: 'to',
+      label: t('common.to'),
+      ariaLabel: t('common.filterToAria'),
+      draft: draftTo,
+      setDraft: setDraftTo,
+      epoch: state.toUnix,
+      key: 'toUnix',
+    },
+  ] as const;
+  for (const bound of timeBounds) {
+    const value =
+      !bound.draft.invalidInput && bound.draft.text === bound.draft.originalText
+        ? bound.draft.originalEpoch
+        : timeDraftValue(bound.draft);
+    if (value !== (bound.epoch ?? null)) pendingFields.push(bound.label);
+  }
   const renderFields = (values: readonly LogFilterField[]) =>
     values.map((field) => (
       <Field
         key={field.name}
         label={field.label}
-        size={field.options || field.inputType === 'number' ? 'short' : undefined}
+        size={field.options || field.inputMode === 'numeric' ? 'short' : undefined}
+        error={errors[field.name]}
       >
         {(props) => (
           <>
             {field.options ? (
               <select
                 {...props}
+                name={field.name}
                 value={state.filters[field.name] ?? ''}
                 aria-label={field.ariaLabel}
                 onChange={(event) => {
@@ -132,7 +204,7 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
                   const filters = { ...state.filters };
                   if (value) filters[field.name] = value;
                   else delete filters[field.name];
-                  apply({ ...state, filters });
+                  apply({ ...state, filters }, true);
                 }}
               >
                 {field.options.map((option) => (
@@ -144,6 +216,7 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
             ) : field.suggestions?.length ? (
               <SuggestInput
                 {...props}
+                name={field.name}
                 value={drafts[field.name] ?? ''}
                 suggestions={field.suggestions}
                 maxLength={field.maxLength ?? 512}
@@ -154,10 +227,11 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
             ) : (
               <input
                 {...props}
-                type={field.inputType ?? 'text'}
+                type="text"
+                name={field.name}
                 value={drafts[field.name] ?? ''}
-                maxLength={field.maxLength ?? 512}
-                inputMode={field.inputType === 'number' ? 'numeric' : undefined}
+                maxLength={field.inputMode === 'numeric' ? undefined : (field.maxLength ?? 512)}
+                inputMode={field.inputMode}
                 onChange={(event) =>
                   setDrafts((old) => ({ ...old, [field.name]: event.target.value }))
                 }
@@ -171,6 +245,8 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
     ));
   return (
     <form
+      ref={form}
+      noValidate
       className="log-filters"
       data-testid="log-filters"
       onSubmit={(event) => {
@@ -195,7 +271,7 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
                 const now = Math.floor(Date.now() / 1000);
                 setDraftFrom(createTimeDraft(now - range.seconds));
                 setDraftTo(createTimeDraft(now));
-                apply({ filters: state.filters, fromUnix: now - range.seconds, toUnix: now });
+                apply({ filters: state.filters, fromUnix: now - range.seconds, toUnix: now }, true);
               }}
             >
               {t(range.key)}
@@ -212,54 +288,74 @@ export function LogFilters({ station, fields, state, onApply, toolbarActions }: 
             .length + (state.fromUnix !== undefined || state.toUnix !== undefined ? 1 : 0)
         }
         onSubmit={submit}
-        onReset={reset}
         search={renderFields(fields.filter((field) => primaryNames.includes(field.name)))}
         secondary={
           <>
             {renderFields(fields.filter((field) => !primaryNames.includes(field.name)))}
-            <TimeInput
-              station={station}
-              label={t('common.from')}
-              showZoneHint={false}
-              draft={draftFrom}
-              onChange={setDraftFrom}
-              aria-label={t('common.filterFromAria')}
-            />
-            <TimeInput
-              station={station}
-              label={t('common.to')}
-              showZoneHint={false}
-              draft={draftTo}
-              onChange={setDraftTo}
-              aria-label={t('common.filterToAria')}
-            />
+            {timeBounds.map((bound) => (
+              <Field key={bound.name} label={bound.label} error={errors[bound.name]}>
+                {(props) => (
+                  <TimeInput
+                    {...props}
+                    name={bound.name}
+                    station={station}
+                    showZoneHint={false}
+                    draft={bound.draft}
+                    onChange={bound.setDraft}
+                    aria-label={bound.ariaLabel}
+                  />
+                )}
+              </Field>
+            ))}
           </>
         }
-        chips={fields
-          .filter((field) => state.filters[field.name])
-          .map((field) => ({
-            key: field.name,
-            label: `${field.label}: ${field.options?.find((option) => option.value === state.filters[field.name])?.label ?? state.filters[field.name]}`,
-            removeLabel: `${t('common.resetFilter')}: ${field.label}`,
-            onRemove: () => {
-              const filters = { ...state.filters };
-              delete filters[field.name];
-              setDrafts((old) => ({ ...old, [field.name]: '' }));
-              apply({ ...state, filters });
-            },
-          }))}
+        footer={
+          <div className="log-filters__actions">
+            <Button type="submit" variant="primary">
+              {t('common.search')}
+            </Button>
+            <Button type="button" onClick={reset}>
+              {t('common.resetFilter')}
+            </Button>
+            <span className="log-filters__pending" role="status">
+              {pendingFields.length > 0 &&
+                t('logs.applyEdits', { fields: pendingFields.join(' · ') })}
+            </span>
+          </div>
+        }
+        chipsLabel={t('logs.appliedFilters')}
+        chips={[
+          ...fields
+            .filter((field) => state.filters[field.name])
+            .map((field) => ({
+              key: field.name,
+              label: `${field.label}: ${field.options?.find((option) => option.value === state.filters[field.name])?.label ?? state.filters[field.name]}`,
+              removeLabel: t('logs.removeFilter', { field: field.label }),
+              onRemove: () => {
+                const filters = { ...state.filters };
+                delete filters[field.name];
+                setDrafts((old) => ({ ...old, [field.name]: '' }));
+                apply({ ...state, filters }, true);
+              },
+            })),
+          ...timeBounds.flatMap((bound) =>
+            bound.epoch === undefined
+              ? []
+              : [
+                  {
+                    key: bound.name,
+                    label: `${bound.label}: ${formatDateTime(bound.epoch)}`,
+                    removeLabel: t('logs.removeFilter', { field: bound.label }),
+                    onRemove: () => {
+                      bound.setDraft(createTimeDraft(null));
+                      apply({ ...state, [bound.key]: undefined }, true);
+                    },
+                  },
+                ],
+          ),
+        ]}
       />
       <TimeContextNotice station={station} />
-      {invalidDiscord ? (
-        <p className="field-error" role="alert">
-          {t('common.operations.logs.invalidDiscordFilter')}
-        </p>
-      ) : null}
-      {invalidRange ? (
-        <p className="field-error" role="alert">
-          {t('common.operations.logs.filterInvalid')}
-        </p>
-      ) : null}
     </form>
   );
 }
@@ -275,6 +371,7 @@ export function LogSearch({
   const [searchMode, setSearchMode] = useState<'filters' | 'request'>('filters');
   const [lookup, setLookup] = useState('');
   const [lookupInvalid, setLookupInvalid] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   return (
     <Tabs
       label={t('logs.findRequests')}
@@ -294,6 +391,7 @@ export function LogSearch({
             const id = logRequestID(lookup.trim());
             setLookupInvalid(!id);
             if (id) onOpenRequest(id);
+            else input.current?.focus();
           }}
         >
           <Field
@@ -303,7 +401,11 @@ export function LogSearch({
             {(props) => (
               <input
                 {...props}
+                ref={input}
                 className="mono"
+                autoCapitalize="none"
+                autoComplete="off"
+                enterKeyHint="go"
                 value={lookup}
                 placeholder="req_…"
                 spellCheck={false}

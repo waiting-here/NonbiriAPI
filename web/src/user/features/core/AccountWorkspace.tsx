@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { LANGUAGE_STORAGE_KEY } from '@shared/i18n';
+import { LANGUAGE_STORAGE_KEY, prepareLanguage } from '@shared/i18n';
 import { ApiError } from '@shared/query/http';
 import { useTheme } from '@shared/theme/useTheme';
 import type { AppearanceIntensity, Density, FontSize, Theme } from '@shared/theme/context';
@@ -82,6 +82,8 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
   };
   const operation = useRetainedOperation<ExplicitLanguage, void>(
     async (intent, key, context) => {
+      await prepareLanguage(i18n, intent);
+      context.assertCurrent();
       const envelope = await patchLanguage(
         intent,
         { idempotencyKey: key, actionId: key },

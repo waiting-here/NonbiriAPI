@@ -20,6 +20,7 @@ import {
   normalizeUserLogAttempt,
   normalizeUserLogRow,
   validLogDiscordID,
+  validLogResourceID,
   logRequestID,
   isLogOperation,
   type AdminLogAttempt,
@@ -125,7 +126,6 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
   ],
 };
 const MAX_LOG_UNIX_SECOND = 253_402_300_799;
-const MAX_LOG_USER_ID = 9_223_372_036_854_775_807n;
 
 function invalidRequest(label: string): never {
   throw new ApiError('invalid_request', `Invalid ${label}.`, 400);
@@ -175,10 +175,7 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
       invalidRequest('log phase filter');
     if (key === 'discord_id' && !validLogDiscordID(text)) invalidRequest('log Discord ID filter');
     if (key === 'status' && !/^[1-5][0-9]{2}$/.test(text)) invalidRequest('log status filter');
-    if (
-      (key === 'user_id' || key === 'endpoint_key_id') &&
-      (!/^[1-9][0-9]{0,18}$/.test(text) || BigInt(text) > MAX_LOG_USER_ID)
-    )
+    if ((key === 'user_id' || key === 'endpoint_key_id') && !validLogResourceID(text))
       invalidRequest(`log ${key} filter`);
     result[key] = text as never;
   }

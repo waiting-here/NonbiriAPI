@@ -124,4 +124,13 @@ describe('log time range', () => {
     await waitFor(() => expect(query().has('from')).toBe(false));
     expect(query().has('to')).toBe(false);
   });
+
+  it('keeps an ignored reversed link range out of the applied filters', () => {
+    mount('?from=456&to=123&model=shared');
+    const state = JSON.parse(screen.getByTestId('range').textContent!);
+    expect(state.filters.model).toBe('shared');
+    expect(state).not.toHaveProperty('fromUnix');
+    expect(state).not.toHaveProperty('toUnix');
+    expect(query().get('from')).toBe('456');
+  });
 });

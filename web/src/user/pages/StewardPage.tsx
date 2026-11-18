@@ -1,10 +1,6 @@
 import { Link, useLocation } from 'react-router';
-import { UserManagement } from '@shared/components/UserManagement';
-import { BlacklistManagement } from '../../admin/pages/BlacklistPage';
-import { AnnouncementManagement } from '@shared/components/AnnouncementManagement';
-import { AnnouncementEditor } from '@shared/components/AnnouncementEditor';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   hasStewardPermission,
   canAccessStewardCharityManagement,
@@ -14,16 +10,46 @@ import { StewardPermissionNotice } from '@shared/components/StewardPermissionNot
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { CharityManagement } from '@shared/components/CharityManagement';
-import { RoleLogPanel } from '@shared/components/log';
-import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
-import { RiskAuditPanel } from '@shared/riskAudit/Panel';
+import { OperatorLogWorkspace } from '@shared/observability/OperatorLogWorkspace';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { Tabs } from '@shared/components/ui';
-import { MaintenancePanel } from '@shared/operations/MaintenancePanel';
 import { TimeContextProvider } from '@shared/components/TimeContext';
 import { useUserAuthority } from '../features/operations/data';
 import '@shared/operations/operations.css';
+
+const UserManagement = lazy(() =>
+  import('@shared/components/UserManagement').then((module) => ({
+    default: module.UserManagement,
+  })),
+);
+const BlacklistManagement = lazy(() =>
+  import('../../admin/pages/BlacklistPage').then((module) => ({
+    default: module.BlacklistManagement,
+  })),
+);
+const AnnouncementManagement = lazy(() =>
+  import('@shared/components/AnnouncementManagement').then((module) => ({
+    default: module.AnnouncementManagement,
+  })),
+);
+const AnnouncementEditor = lazy(() =>
+  import('@shared/components/AnnouncementEditor').then((module) => ({
+    default: module.AnnouncementEditor,
+  })),
+);
+const CharityManagement = lazy(() =>
+  import('@shared/components/CharityManagement').then((module) => ({
+    default: module.CharityManagement,
+  })),
+);
+const RiskAuditPanel = lazy(() =>
+  import('@shared/riskAudit/Panel').then((module) => ({ default: module.RiskAuditPanel })),
+);
+const MaintenancePanel = lazy(() =>
+  import('@shared/operations/MaintenancePanel').then((module) => ({
+    default: module.MaintenancePanel,
+  })),
+);
 
 const sectionKeys = {
   risk: 'common.audit.risk',
@@ -35,11 +61,18 @@ const sectionKeys = {
   maintenance: 'user.steward.maintenanceTab',
 } as const;
 
-export function StewardPage() {
-  return <StewardPageContent />;
-}
+const sections = [
+  'logs',
+  'risk',
+  'charity',
+  'users',
+  'blacklist',
+  'announcements',
+  'maintenance',
+] as const;
+type Section = (typeof sections)[number];
 
-function StewardPageContent() {
+export function StewardPage() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const authority = useUserAuthority();
@@ -47,20 +80,23 @@ function StewardPageContent() {
   const [searchParams, setSearchParams] = useSearchState();
   const location = useLocation();
   const requestedTab = searchParams.get('tab');
+  const has = (permission: StewardPermission) => hasStewardPermission(authority.data, permission);
+  const access: Record<Section, boolean> = {
+    logs: has('logs.read') || has('diagnostics.read'),
+    risk: has('risk.read') || has('risk.configure'),
+    charity: canAccessStewardCharityManagement(authority.data),
+    users: has('users.read'),
+    blacklist: has('blacklist.read'),
+    announcements: has('announcements.read'),
+    maintenance: has('maintenance.read'),
+  };
   const section =
-    requestedTab === 'charity' ||
-    requestedTab === 'maintenance' ||
-    requestedTab === 'users' ||
-    requestedTab === 'blacklist' ||
-    requestedTab === 'risk' ||
-    requestedTab === 'announcements'
-      ? requestedTab
-      : 'logs';
+    sections.find((value) => value === requestedTab) ??
+    sections.find((value) => access[value]) ??
+    'logs';
   const announcement = searchParams.get('announcement') ?? '';
   const setSection = useCallback(
-    (
-      value: 'logs' | 'charity' | 'maintenance' | 'users' | 'blacklist' | 'announcements' | 'risk',
-    ) => {
+    (value: Section) => {
       setSearchParams({ tab: value }, { replace: true });
     },
     [setSearchParams],
@@ -82,14 +118,13 @@ function StewardPageContent() {
   const authorityLoss = useCallback(() => {
     setAuthorityRefreshing(true);
     void clearSensitiveQueries();
-    setSection('logs');
+    setSearchParams({}, { replace: true });
     void refetchAuthority().finally(() => setAuthorityRefreshing(false));
-  }, [clearSensitiveQueries, refetchAuthority, setSection]);
+  }, [clearSensitiveQueries, refetchAuthority, setSearchParams]);
 
   const allowed = Boolean(
     authority.data && [5, 6].includes(authority.data.effective_level) && !authority.data.is_banned,
   );
-  const has = (permission: StewardPermission) => hasStewardPermission(authority.data, permission);
   const revision = authority.data?.steward_permissions?.revision;
   const authorityScope = authority.data
     ? `${authority.data.id}:${authority.data.effective_level}:${revision ?? '0'}`
@@ -107,23 +142,6 @@ function StewardPageContent() {
       active = false;
     };
   }, [authorityScope, scopeChanged, clearSensitiveQueries]);
-  const sectionAllowed =
-    section === 'charity'
-      ? canAccessStewardCharityManagement(authority.data)
-      : section === 'logs'
-        ? has('logs.read') || has('diagnostics.read')
-        : section === 'risk'
-          ? has('risk.read') || has('risk.configure')
-          : has(
-              (
-                {
-                  users: 'users.read',
-                  blacklist: 'blacklist.read',
-                  announcements: 'announcements.read',
-                  maintenance: 'maintenance.read',
-                } as const
-              )[section],
-            );
   useEffect(() => {
     if (!authority.isPending && !allowed) void clearSensitiveQueries();
   }, [allowed, authority.isPending, clearSensitiveQueries]);
@@ -179,20 +197,24 @@ function StewardPageContent() {
               <Link className="nb-btn nb-btn--secondary" to="/steward/ai">
                 {t('common.agent.title')}
               </Link>
-              <Link
-                className="nb-btn nb-btn--secondary"
-                to="/steward/endpoints"
-                state={{ returnTo: location.pathname + location.search }}
-              >
-                {t('management.endpoints.title')}
-              </Link>
-              <Link
-                className="nb-btn nb-btn--secondary"
-                to="/endpoint-policies"
-                state={{ returnTo: location.pathname + location.search }}
-              >
-                {t('common.endpointPolicies.title')}
-              </Link>
+              {has('endpoints.read') && (
+                <Link
+                  className="nb-btn nb-btn--secondary"
+                  to="/steward/endpoints"
+                  state={{ returnTo: location.pathname + location.search }}
+                >
+                  {t('management.endpoints.title')}
+                </Link>
+              )}
+              {(has('charity.backoff') || has('egress.read')) && (
+                <Link
+                  className="nb-btn nb-btn--secondary"
+                  to="/endpoint-policies"
+                  state={{ returnTo: location.pathname + location.search }}
+                >
+                  {t('common.endpointPolicies.title')}
+                </Link>
+              )}
             </div>
           }
         />
@@ -200,125 +222,106 @@ function StewardPageContent() {
           label={t('user.steward.sectionsLabel')}
           value={section}
           onChange={setSection}
-          tabs={(
-            [
-              'logs',
-              'risk',
-              'charity',
-              'users',
-              'blacklist',
-              'announcements',
-              'maintenance',
-            ] as const
-          ).map((value) => ({
-            value,
-            label: t(sectionKeys[value]),
-          }))}
+          tabs={sections
+            .filter((value) => access[value] || value === section)
+            .map((value) => ({
+              value,
+              label: t(sectionKeys[value]),
+            }))}
         >
-          {!sectionAllowed ? <StewardPermissionNotice /> : null}
-          {sectionAllowed && section === 'logs' ? (
-            <>
-              {has('logs.read') ? (
-                <RoleLogPanel
-                  key={`logs:${authority.data.id}:${authority.data.effective_level}`}
+          {access[section] ? (
+            <Suspense fallback={<LoadingState />}>
+              {section === 'logs' ? (
+                <OperatorLogWorkspace
                   role="steward"
                   accountId={`${authority.data.id}:${authority.data.effective_level}`}
                   scopeReady={allowed}
-                  enabled
+                  canReadRequests={has('logs.read')}
+                  canReadActivity={has('diagnostics.read')}
                   onAuthorityLoss={authorityLoss}
                 />
-              ) : (
-                <StewardPermissionNotice />
-              )}
-              {has('diagnostics.read') ? (
-                <IndependentDiagnostics
+              ) : null}
+              {section === 'risk' ? (
+                <RiskAuditPanel
                   role="steward"
-                  accountId={`${authority.data.id}:${authority.data.effective_level}`}
-                  scopeReady={allowed}
-                  enabled
+                  scopeKey={authority.data.id}
+                  enabled={allowed}
+                  canRead={has('risk.read')}
+                  canConfigure={has('risk.configure')}
+                  embedded
                 />
-              ) : (
-                <StewardPermissionNotice />
-              )}
-            </>
-          ) : null}
-          {sectionAllowed && section === 'risk' ? (
-            <RiskAuditPanel
-              role="steward"
-              scopeKey={authority.data.id}
-              enabled={allowed}
-              canRead={has('risk.read')}
-              canConfigure={has('risk.configure')}
-              embedded
-            />
-          ) : null}
-          {sectionAllowed && section === 'charity' ? (
-            <CharityManagement
-              key={`charity:${authority.data.id}`}
-              frame="steward"
-              accountId={authority.data.id}
-              actorLevel={authority.data.effective_level === 5 ? 5 : 6}
-              permissions={authority.data.steward_permissions}
-              onCapabilityLoss={authorityLoss}
-            />
-          ) : null}
-          {sectionAllowed && section === 'users' ? (
-            <UserManagement
-              key={`users:${authority.data.id}:${authority.data.effective_level}`}
-              role="steward"
-              actorLevel={authority.data.effective_level === 5 ? 5 : 6}
-              permissions={authority.data.steward_permissions}
-              account={authority.data.id}
-              scopeReady={allowed}
-              sessionError={authority.error}
-              onAuthorityLoss={authorityLoss}
-              embedded
-            />
-          ) : null}
-          {sectionAllowed && section === 'blacklist' ? (
-            <BlacklistManagement
-              key={`blacklist:${authority.data.id}`}
-              role="steward"
-              accountID={`steward:${authority.data.id}`}
-              sessionError={authority.error}
-              sessionFetching={authority.isFetching}
-              refreshSession={() => void authority.refetch()}
-              onAuthorityLoss={authorityLoss}
-              embedded
-            />
-          ) : null}
-          {sectionAllowed && section === 'announcements' ? (
-            announcement ? (
-              <AnnouncementEditor
-                key={`announcement:${authority.data.id}:${announcement}`}
-                role="steward"
-                account={authority.data.id}
-                announcementId={announcement}
-                backTo={
-                  listReturnPath(location.state, '/steward') === '/steward'
-                    ? '/steward?tab=announcements'
-                    : listReturnPath(location.state, '/steward')
-                }
-                onAuthorityLoss={authorityLoss}
-                embedded
-              />
-            ) : (
-              <AnnouncementManagement
-                key={`announcements:${authority.data.id}`}
-                role="steward"
-                account={authority.data.id}
-                onAuthorityLoss={authorityLoss}
-                embedded
-              />
-            )
-          ) : null}
-          {sectionAllowed && section === 'maintenance' ? (
-            <MaintenancePanel
-              key={`maintenance:${authority.data.id}`}
-              role="steward"
-              onAuthorityLoss={authorityLoss}
-            />
-          ) : null}
+              ) : null}
+              {section === 'charity' ? (
+                <CharityManagement
+                  key={`charity:${authority.data.id}`}
+                  frame="steward"
+                  accountId={authority.data.id}
+                  actorLevel={authority.data.effective_level === 5 ? 5 : 6}
+                  permissions={authority.data.steward_permissions}
+                  onCapabilityLoss={authorityLoss}
+                />
+              ) : null}
+              {section === 'users' ? (
+                <UserManagement
+                  key={`users:${authority.data.id}:${authority.data.effective_level}`}
+                  role="steward"
+                  actorLevel={authority.data.effective_level === 5 ? 5 : 6}
+                  permissions={authority.data.steward_permissions}
+                  account={authority.data.id}
+                  scopeReady={allowed}
+                  sessionError={authority.error}
+                  onAuthorityLoss={authorityLoss}
+                  embedded
+                />
+              ) : null}
+              {section === 'blacklist' ? (
+                <BlacklistManagement
+                  key={`blacklist:${authority.data.id}`}
+                  role="steward"
+                  accountID={`steward:${authority.data.id}`}
+                  sessionError={authority.error}
+                  sessionFetching={authority.isFetching}
+                  refreshSession={() => void authority.refetch()}
+                  onAuthorityLoss={authorityLoss}
+                  embedded
+                />
+              ) : null}
+              {section === 'announcements' ? (
+                announcement ? (
+                  <AnnouncementEditor
+                    key={`announcement:${authority.data.id}:${announcement}`}
+                    role="steward"
+                    account={authority.data.id}
+                    announcementId={announcement}
+                    backTo={
+                      listReturnPath(location.state, '/steward') === '/steward'
+                        ? '/steward?tab=announcements'
+                        : listReturnPath(location.state, '/steward')
+                    }
+                    onAuthorityLoss={authorityLoss}
+                    embedded
+                  />
+                ) : (
+                  <AnnouncementManagement
+                    key={`announcements:${authority.data.id}`}
+                    role="steward"
+                    account={authority.data.id}
+                    onAuthorityLoss={authorityLoss}
+                    embedded
+                  />
+                )
+              ) : null}
+              {section === 'maintenance' ? (
+                <MaintenancePanel
+                  key={`maintenance:${authority.data.id}`}
+                  role="steward"
+                  onAuthorityLoss={authorityLoss}
+                />
+              ) : null}
+            </Suspense>
+          ) : (
+            <StewardPermissionNotice />
+          )}
         </Tabs>
       </div>
     </TimeContextProvider>

@@ -267,13 +267,13 @@ for (const locale of ['en', 'zh'] as const) {
       `${USER_ORIGIN}/v1`,
     );
     await capture(page, 'api-existing', locale, metrics);
-    const copyModelNames = page.getByText(
-      locale === 'zh' ? '复制可用模型名' : 'Copy an available model name',
-      { exact: true },
-    );
+    const picker = page.getByRole('button', {
+      name: locale === 'zh' ? '选择模型' : 'Choose a model',
+    });
     const readCount = state.reads.length;
-    await copyModelNames.click();
-    const refreshNames = page.locator('.api-model-names').getByRole('button', {
+    await picker.click();
+    const dialog = page.getByRole('dialog');
+    const refreshNames = dialog.getByRole('button', {
       name: locale === 'zh' ? '刷新' : 'Refresh',
       exact: true,
     });
@@ -281,19 +281,23 @@ for (const locale of ['en', 'zh'] as const) {
     state.models = true;
     state.charity = true;
     await refreshNames.click();
-    const nameButton = page.getByRole('button', {
+    await expect(
+      dialog.getByRole('button', {
+        name: locale === 'zh' ? '复制[公益]provider/model' : 'Copy [公益]provider/model',
+      }),
+    ).toBeVisible();
+    expect(state.reads.slice(readCount).some((path) => path.startsWith('/api/models?'))).toBe(
+      false,
+    );
+    await dialog.getByRole('tab', { name: locale === 'zh' ? '我的模型' : 'My models' }).click();
+    await refreshNames.click();
+    const nameButton = dialog.getByRole('button', {
       name: locale === 'zh' ? '复制my/model' : 'Copy my/model',
     });
-    await expect(nameButton).toBeVisible();
     await nameButton.click();
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { copied: string }).copied))
       .toBe('my/model');
-    await expect(
-      page.getByRole('button', {
-        name: locale === 'zh' ? '复制[公益]provider/model' : 'Copy [公益]provider/model',
-      }),
-    ).toBeVisible();
     expect(
       state.reads.slice(readCount).some((path) => path.includes('connection_state=available')),
     ).toBe(true);
@@ -301,15 +305,29 @@ for (const locale of ['en', 'zh'] as const) {
       state.reads.slice(readCount).some((path) => path.includes('currently_available=true')),
     ).toBe(true);
     await capture(page, 'api-model-names', locale, metrics);
-    await copyModelNames.click();
-    await page
-      .getByText(locale === 'zh' ? '命令行测试' : 'Command-line test', { exact: true })
+    const copyTarget = await nameButton.boundingBox();
+    expect(copyTarget?.height).toBeGreaterThanOrEqual(44);
+    expect(copyTarget?.width).toBeGreaterThanOrEqual(44);
+    await dialog
+      .getByRole('button', { name: locale === 'zh' ? '选用 my/model' : 'Choose my/model' })
+      .getByText('my/model', { exact: true })
       .click();
-    await expect(page.locator('.nb-fold[open]')).toContainText('$NONBIRI_KEY');
-    await expect(page.locator('.nb-fold[open]')).toContainText(
-      `${USER_ORIGIN}/v1/chat/completions`,
-    );
-    await expect(page.locator('.nb-fold[open]')).not.toContainText(secret);
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: locale === 'zh' ? '更换模型' : 'Change model' }),
+    ).toBeFocused();
+    await page
+      .getByText(locale === 'zh' ? '支持的接口' : 'Supported APIs', { exact: true })
+      .click();
+    await expect(page.getByText('/v1/embeddings', { exact: true })).toBeVisible();
+    await page
+      .getByText(locale === 'zh' ? '检查 API 接入' : 'Check API access', { exact: true })
+      .click();
+    const check = page.locator('.api-access-check');
+    await expect(check).toContainText('$NONBIRI_KEY');
+    await expect(check).toContainText(`${USER_ORIGIN}/v1/models`);
+    await expect(check).not.toContainText('my/model');
+    await expect(check).not.toContainText(secret);
     await capture(page, 'api-curl', locale, metrics);
     await page
       .getByText(

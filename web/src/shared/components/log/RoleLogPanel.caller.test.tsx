@@ -547,6 +547,31 @@ it.each(['admin', 'steward'] as const)(
   },
 );
 
+it('keeps an empty penalty history in the detail and distinguishes missing facts in the list', async () => {
+  const role = 'steward';
+  const row = { ...stewardRow(null), requested_streaming: false, automatic_actions: [] };
+  installFixtures(role, row);
+  const options = { station: 'user', role: 'level5' } as const;
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, options);
+  const table = await screen.findByRole('table');
+  expect(
+    within(table).getByText(view.i18n.t('common.operations.logs.facts.nonStreaming')),
+  ).toBeVisible();
+  const noActions = view.i18n.t('common.operations.logs.facts.noActions');
+  expect(within(table).queryByText(noActions)).toBeNull();
+  await view.user.click(within(table).getByRole('button', { name: 'Details' }));
+  expect(
+    await within(await screen.findByRole('region', { name: /Log details/ })).findByText(noActions),
+  ).toBeVisible();
+  view.unmount();
+
+  installFixtures(role, stewardRow(null));
+  await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, options);
+  const historical = await screen.findByRole('table');
+  expect(within(historical).getByText('Request mode unknown')).toBeVisible();
+  expect(within(historical).getByText('Penalty history unknown')).toBeVisible();
+});
+
 it.each(['en', 'zh'] as const)(
   'shows the owner safe check and correction in %s',
   async (locale) => {

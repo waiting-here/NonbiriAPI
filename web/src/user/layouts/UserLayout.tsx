@@ -35,57 +35,26 @@ import {
 import { AccountAppearance } from '../appearance/AppearanceProvider';
 import { BackgroundViewButton } from '../appearance/BackgroundViewButton';
 import { AppearanceButton } from '../appearance/AppearanceButton';
-import { LANGUAGE_STORAGE_KEY } from '@shared/i18n';
+import type { SupportedLanguage } from '@shared/i18n';
 import { patchLanguage } from '../features/core/api';
 import { coreKeys, updateCoreSessionLanguage } from '../features/core/queries';
 import { createOperationIdentity } from '../features/core/request';
 
 function SignedInLanguageControl({ accountId }: { accountId: string }) {
-  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const [busy, setBusy] = useState(false);
-  const current = i18n.resolvedLanguage?.startsWith('zh') ? 'zh' : 'en';
-  const select = (code: 'zh' | 'en') => {
-    if (busy) return;
-    setBusy(true);
+  const save = async (code: SupportedLanguage) => {
     const identity = createOperationIdentity();
-    void patchLanguage(code, { idempotencyKey: identity.actionId, actionId: identity.actionId })
-      .then(async (envelope) => {
-        if (envelope.user.id !== accountId) return;
-        await i18n.changeLanguage(code);
-        updateCoreSessionLanguage(queryClient, accountId, code);
-        queryClient.setQueryData(coreKeys.me(accountId), envelope);
-        void queryClient.invalidateQueries({ queryKey: ['user', 'operations'] });
-        try {
-          window.localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
-        } catch {
-          // Account language remains authoritative when localStorage is unavailable.
-        }
-        document.documentElement.lang = code === 'zh' ? 'zh-CN' : 'en';
-      })
-      .finally(() => setBusy(false));
+    const envelope = await patchLanguage(code, {
+      idempotencyKey: identity.actionId,
+      actionId: identity.actionId,
+    });
+    if (envelope.user.id !== accountId || envelope.user.lang !== code) return false;
+    if (!updateCoreSessionLanguage(queryClient, accountId, code)) return false;
+    queryClient.setQueryData(coreKeys.me(accountId), envelope);
+    void queryClient.invalidateQueries({ queryKey: ['user', 'operations'] });
+    return true;
   };
-  return (
-    <div className="lang-switcher" role="group" aria-label={t('shell.langLabel')}>
-      {(
-        [
-          ['zh', '中文'],
-          ['en', 'EN'],
-        ] as const
-      ).map(([code, label]) => (
-        <button
-          key={code}
-          type="button"
-          disabled={busy}
-          aria-pressed={current === code}
-          aria-current={current === code ? 'true' : undefined}
-          onClick={() => select(code)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+  return <LanguageSwitcher save={save} />;
 }
 
 const USER_ACCOUNT_PATH = routePath('user', 'account');

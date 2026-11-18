@@ -12,7 +12,7 @@ export interface NavItem {
   icon?: IconName;
   labelKey?: string;
   fallbackLabelKey?: string;
-  group?: string;
+  group: AdminNavGroupKey;
 }
 
 /** Sidebar groups, top to bottom. */

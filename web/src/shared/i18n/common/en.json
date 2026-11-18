@@ -4,6 +4,7 @@
   },
   "shell": {
     "skipToContent": "Skip to main content",
+    "languageRetry": "Could not switch languages. Select the language again to retry.",
     "langLabel": "Language",
     "themeLabel": "Theme",
     "themeLight": "Light",
@@ -448,7 +449,6 @@
         "attempts": "Service call attempts",
         "noAttempts": "This detail does not show the service call process.",
         "connectorModel": "Service type / model",
-        "filterInvalid": "The status code or time range is invalid.",
         "result": "Result",
         "route": {
           "openaiChatCompletions": "OpenAI-compatible chat completions",
@@ -573,7 +573,6 @@
           "actions": "Actions"
         },
         "facts": {
-          "title": "Request mode / automatic actions",
           "mode": "Caller request mode",
           "actions": "Automatic actions",
           "unknown": "Not recorded",
@@ -3220,6 +3219,9 @@
     }
   },
   "logs": {
+    "workspaceLabel": "Log views",
+    "workspaceRequests": "API requests",
+    "workspaceActivity": "Discovery and activity",
     "findRequests": "Find a request",
     "filterRecords": "Filter records",
     "openByID": "Find by request ID",
@@ -3506,7 +3508,18 @@
       "No upstream request was sent. Retry later or choose another available model.": "No upstream request was sent. Retry later or choose another available model.",
       "The specific cause was not recorded. Share the request ID with support if the problem persists.": "The specific cause was not recorded. Share the request ID with support if the problem persists."
     },
-    "rejectionTopLevelField": "Top-level field {{position}}"
+    "rejectionTopLevelField": "Top-level field {{position}}",
+    "httpStatus": "HTTP status code",
+    "statusExample": "e.g. 429",
+    "invalidStatus": "Enter a three-digit HTTP status code from 100 to 599.",
+    "invalidNumericID": "Enter a whole-number ID from 1 to 9223372036854775807.",
+    "checkTime": "Check the date and time zone, then search again.",
+    "invalidTimeRange": "Choose an end time later than the start time.",
+    "applyEdits": "Select Search to apply changes to {{fields}}.",
+    "appliedFilters": "Applied filters",
+    "modeUnknown": "Request mode unknown",
+    "actionsUnknown": "Penalty history unknown",
+    "removeFilter": "Remove {{field}} filter"
   },
   "management": {
     "users": {

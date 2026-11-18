@@ -74,6 +74,76 @@
   padding: var(--nb-space-4) var(--nb-space-3) var(--nb-space-6);
 }
 
+.nb-nav-lookup {
+  display: grid;
+  gap: var(--nb-space-1);
+  min-width: 0;
+  padding-inline: var(--nb-space-1);
+}
+
+.nb-nav-lookup label {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  font-weight: 600;
+}
+
+.nb-nav-lookup__input {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 2.75rem;
+  gap: var(--nb-space-2);
+  padding-inline-start: var(--nb-space-2);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-control);
+  background: var(--nb-color-surface);
+}
+
+.nb-nav-lookup__input:focus-within {
+  box-shadow: var(--nb-focus-ring);
+}
+.nb-nav-lookup__input > svg {
+  width: 1rem;
+  flex: none;
+  color: var(--nb-color-text-muted);
+}
+.nb-nav-lookup__input input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+  color: var(--nb-color-text);
+  font: inherit;
+}
+
+.nb-nav-lookup__input button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: var(--nb-radius-control);
+  background: transparent;
+  color: var(--nb-color-text-muted);
+}
+.nb-nav-lookup__input button:hover {
+  background: var(--nb-color-accent-soft);
+}
+.nb-nav-lookup__input button svg {
+  width: 1rem;
+}
+.nb-nav-lookup__empty {
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+
 .nb-admin-sidebar__group {
   display: grid;
   min-width: 0;

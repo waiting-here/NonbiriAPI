@@ -1,7 +1,12 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import i18n, { configureI18n, detectLanguage, LANGUAGE_STORAGE_KEY } from '@shared/i18n';
+import i18n, {
+  configureI18n,
+  detectLanguage,
+  LANGUAGE_STORAGE_KEY,
+  prepareLanguage,
+} from '@shared/i18n';
 import { ThemeProvider } from '@shared/theme/ThemeProvider';
 import {
   APPEARANCE_INTENSITY_STORAGE_KEY,
@@ -219,12 +224,24 @@ describe('language preference detection', () => {
   test('synchronizes the document language on initial detection and changes', async () => {
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, 'zh');
     setBrowserLanguages(['en-US']);
-    configureI18n({}, {});
+    const en = vi
+      .fn(async () => ({ local: 'English' }))
+      .mockRejectedValueOnce(new Error('temporarily offline'));
+    const zh = vi.fn(async () => ({ local: '中文' }));
+    await configureI18n({ en, zh });
+    expect(zh).toHaveBeenCalledTimes(1);
+    expect(en).not.toHaveBeenCalled();
+    expect(i18n.t('local')).toBe('中文');
 
     expect(document.documentElement.lang).toBe('zh-CN');
+    await expect(prepareLanguage(i18n, 'en')).rejects.toThrow('temporarily offline');
+    expect(i18n.t('local')).toBe('中文');
+    await Promise.all([prepareLanguage(i18n, 'en'), prepareLanguage(i18n, 'en')]);
     await act(async () => {
       await i18n.changeLanguage('en');
     });
     expect(document.documentElement.lang).toBe('en');
+    expect(en).toHaveBeenCalledTimes(2);
+    expect(i18n.t('local')).toBe('English');
   });
 });

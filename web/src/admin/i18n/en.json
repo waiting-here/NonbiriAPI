@@ -829,6 +829,11 @@
       "login": "Sign in"
     },
     "navigation": {
+      "findPage": "Find a page",
+      "findHint": "Page name or /path",
+      "clearSearch": "Clear page search",
+      "matchCount": "Matching pages ({{count}})",
+      "noPages": "No matching page. Try a shorter name or a route such as /logs.",
       "overview": "Overview",
       "users": "Users",
       "services": "Charity & services",

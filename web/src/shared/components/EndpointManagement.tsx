@@ -1,3 +1,4 @@
+import { TableCheckbox } from './ui/TableCheckbox';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -405,8 +406,10 @@ export function EndpointManagement({
                       {
                         key: 'select',
                         header: (
-                          <input
-                            type="checkbox"
+                          <TableCheckbox
+                            indeterminate={
+                              selected.length > 0 && selected.length < selectable.length
+                            }
                             aria-label={t('management.endpoints.selectAll')}
                             checked={
                               selectable.length > 0 &&
@@ -426,8 +429,7 @@ export function EndpointManagement({
                         ),
                         cell: 'select' as const,
                         render: (group: EndpointOverview) => (
-                          <input
-                            type="checkbox"
+                          <TableCheckbox
                             aria-label={t('management.endpoints.selectEndpoint', {
                               url: group.base_url,
                             })}

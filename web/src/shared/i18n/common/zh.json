@@ -4,6 +4,7 @@
   },
   "shell": {
     "skipToContent": "跳到主要内容",
+    "languageRetry": "未能切换语言，请再选一次重试。",
     "langLabel": "语言",
     "themeLabel": "主题",
     "themeLight": "浅色",
@@ -448,7 +449,6 @@
         "attempts": "服务调用记录",
         "noAttempts": "此详情不显示服务调用过程。",
         "connectorModel": "服务类型 / 模型",
-        "filterInvalid": "状态码或时间范围无效。",
         "result": "结果",
         "route": {
           "openaiChatCompletions": "OpenAI-compatible 聊天补全",
@@ -573,7 +573,6 @@
           "actions": "操作"
         },
         "facts": {
-          "title": "请求方式／自动处罚",
           "mode": "用户请求方式",
           "actions": "自动处罚",
           "unknown": "未记录",
@@ -3220,6 +3219,9 @@
     }
   },
   "logs": {
+    "workspaceLabel": "查询记录类别",
+    "workspaceRequests": "API 请求",
+    "workspaceActivity": "模型拉取与活动诊断",
     "findRequests": "查找请求",
     "filterRecords": "筛选记录",
     "openByID": "按请求 ID 查找",
@@ -3506,7 +3508,18 @@
       "No upstream request was sent. Retry later or choose another available model.": "请求未发送到上游。请稍后重试，或选择其他可用模型。",
       "The specific cause was not recorded. Share the request ID with support if the problem persists.": "当时未记录具体原因。如问题持续，请提供请求编号以便排查。"
     },
-    "rejectionTopLevelField": "第 {{position}} 个顶层字段"
+    "rejectionTopLevelField": "第 {{position}} 个顶层字段",
+    "httpStatus": "HTTP 状态码",
+    "statusExample": "例如 429",
+    "invalidStatus": "请输入 100 至 599 之间的三位 HTTP 状态码。",
+    "invalidNumericID": "请输入 1 至 9223372036854775807 之间的整数 ID。",
+    "checkTime": "请核对日期、时间和时区，再次搜索。",
+    "invalidTimeRange": "结束时间须晚于开始时间。",
+    "applyEdits": "点击「搜索」以应用更改（{{fields}}）。",
+    "appliedFilters": "已应用的筛选条件",
+    "modeUnknown": "请求方式未知",
+    "actionsUnknown": "处罚情况未知",
+    "removeFilter": "移除「{{field}}」筛选"
   },
   "management": {
     "users": {

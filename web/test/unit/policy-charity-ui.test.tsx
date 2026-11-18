@@ -2631,6 +2631,7 @@ describe('experimental policy and charity controls', () => {
       route: '/steward?tab=logs',
     });
     const load = async () => {
+      await rendered.user.click(await screen.findByRole('tab', { name: 'Discovery and activity' }));
       const diagnostics = await screen.findByRole('region', {
         name: 'Discovery and activity diagnostics',
       });
@@ -2651,8 +2652,8 @@ describe('experimental policy and charity controls', () => {
     await act(async () => {
       await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
     });
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Abuse audit' })).toBeVisible());
-    expect(screen.getByRole('tab', { name: 'Request logs' })).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull());
+    expect(await screen.findByRole('tab', { name: 'Request logs' })).toBeVisible();
     await act(async () => {
       finishOld(jsonResponse(detail(false)));
     });
@@ -2867,7 +2868,9 @@ describe('experimental policy and charity controls', () => {
       role: 'level5',
     });
     await rendered.user.click(await screen.findByRole('tab', { name: 'Charity management' }));
-    await rendered.user.click(screen.getByRole('tab', { name: 'Charity models and sources' }));
+    await rendered.user.click(
+      await screen.findByRole('tab', { name: 'Charity models and sources' }),
+    );
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
     const description = screen
@@ -2979,7 +2982,9 @@ describe('experimental policy and charity controls', () => {
     });
     await screen.findByText('No logs');
     await rendered.user.click(screen.getByRole('tab', { name: 'Charity management' }));
-    await rendered.user.click(screen.getByRole('tab', { name: 'Charity models and sources' }));
+    await rendered.user.click(
+      await screen.findByRole('tab', { name: 'Charity models and sources' }),
+    );
     await screen.findByText('[公益]provider/charity-model');
     const modelPageKey = [...charityKeys.root('steward'), 'model-pages'];
     expect(

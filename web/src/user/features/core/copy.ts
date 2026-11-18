@@ -1,7 +1,5 @@
 import type { ConnectorType } from './types';
-import en from '../../i18n/en.json';
-import zh from '../../i18n/zh.json';
-import { useRegisteredCopy, type CopyParameters } from '@shared/i18n/useRegisteredCopy';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 
 const keys = {
   'accountPresentation.preferences': 'user.core.accountPresentation.preferences',
@@ -383,20 +381,6 @@ export const CONNECTOR_COPY_KEYS = {
 } as const satisfies Record<ConnectorType, CoreCopyKey>;
 
 export const CORE_COPY_KEYS = Object.keys(keys) as CoreCopyKey[];
-export const CORE_COPY_DESCRIPTORS = CORE_COPY_KEYS.map((key) => ({
-  key,
-  en: en.user.core[key],
-  zh: zh.user.core[key],
-}));
-
-export function coreText(key: CoreCopyKey, language: 'zh' | 'en', values?: CopyParameters): string {
-  const template = (language === 'zh' ? zh : en).user.core[key];
-  if (!values) return template;
-  return template.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_match, name: string) =>
-    Object.hasOwn(values, name) ? String(values[name]) : '',
-  );
-}
-
 export function useCoreCopy() {
   return useRegisteredCopy(keys);
 }

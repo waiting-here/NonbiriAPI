@@ -146,6 +146,38 @@ it('rejects an invalid Discord draft without applying a broader query', async ()
   expect(screen.getByLabelText('Discord ID')).toHaveValue(discordID);
 });
 
+it('keeps a repeated key ID in the URL until it is corrected, including across quick ranges', async () => {
+  const fetchMock = installEmptyLogs();
+  const view = await renderWithProviders(
+    <>
+      <RoleLogPanel accountId="viewer" role="admin" />
+      <HistoryProbe />
+    </>,
+    {
+      station: 'admin',
+      role: 'admin',
+      route: '/logs?endpoint_key_id=7&endpoint_key_id=8',
+    },
+  );
+  const key = await screen.findByRole('textbox', { name: 'Endpoint key ID' });
+  expect(key).toHaveAccessibleDescription(/key ID filter is invalid/);
+  await view.user.click(screen.getByRole('button', { name: 'Last hour' }));
+  expect(screen.getByTestId('query')).toHaveTextContent('endpoint_key_id=7&endpoint_key_id=8');
+  expect(screen.getByTestId('query')).toHaveTextContent('from=');
+  expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/api/logs?'))).toBe(
+    false,
+  );
+  await view.user.type(key, '8{Enter}');
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(([path]) =>
+        String(path).includes('/admin/api/logs?endpoint_key_id=8&from='),
+      ),
+    ).toBe(true),
+  );
+  expect(screen.getByTestId('query')).not.toHaveTextContent('endpoint_key_id=7');
+});
+
 it('keeps personal log filters limited to the signed-in account', async () => {
   const fetchMock = installEmptyLogs();
   await renderWithProviders(<RoleLogPanel accountId="viewer" role="user" />, {
@@ -158,5 +190,36 @@ it('keeps personal log filters limited to the signed-in account', async () => {
     expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
       '/api/logs?page=1&page_size=20',
     ),
+  );
+});
+
+it('keeps a pasted endpoint key ID whole and correctable before updating the URL', async () => {
+  const fetchMock = installEmptyLogs();
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs?user_id=7',
+  });
+  const form = screen.getByTestId('log-filters');
+  await view.user.click(within(form).getByText('More filters · 1'));
+  const key = within(form).getByRole('textbox', { name: 'Endpoint key ID' });
+  await view.user.click(key);
+  await view.user.paste('12345678901234567890');
+  await view.user.keyboard('{Enter}');
+  expect(key).toHaveValue('12345678901234567890');
+  expect(key).toHaveFocus();
+  expect(key).toHaveAccessibleDescription('Enter a whole-number ID from 1 to 9223372036854775807.');
+  expect(fetchMock.mock.calls.some(([path]) => String(path).includes('endpoint_key_id='))).toBe(
+    false,
+  );
+  await view.user.clear(key);
+  await view.user.paste('9223372036854775807');
+  await view.user.keyboard('{Enter}');
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(([path]) =>
+        String(path).includes('user_id=7&endpoint_key_id=9223372036854775807'),
+      ),
+    ).toBe(true),
   );
 });

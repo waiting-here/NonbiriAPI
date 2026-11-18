@@ -356,6 +356,16 @@
   margin-top: 1rem;
 }
 
+.station-startup {
+  display: flex;
+  min-height: 40svh;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  color: var(--nb-color-text-muted);
+}
+
 .lang-switcher {
   display: inline-flex;
   overflow: hidden;

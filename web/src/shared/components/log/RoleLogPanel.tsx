@@ -42,6 +42,7 @@ import {
   roleLogExportPath,
   validateLogFilter,
   validLogDiscordID,
+  validLogResourceID,
   logRequestID,
   type LogFiltersValue,
   type LogResultClass,
@@ -439,9 +440,7 @@ function ScopedRoleLogPanel({
   const invalidKeyFilter =
     role !== 'user' &&
     keyParams.length > 0 &&
-    (keyParams.length !== 1 ||
-      !/^[1-9][0-9]{0,18}$/.test(keyParams[0]) ||
-      BigInt(keyParams[0]) > 9_223_372_036_854_775_807n);
+    (keyParams.length !== 1 || !validLogResourceID(keyParams[0]));
   const discordParams = searchParams.getAll('discord_id');
   const invalidDiscordFilter =
     role !== 'user' &&
@@ -477,7 +476,6 @@ function ScopedRoleLogPanel({
     const next = validateLogFilter(role, urlState.filters);
     const from = urlState.fromUnix;
     const to = urlState.toUnix;
-    if (from !== undefined && to !== undefined && from >= to) return next;
     return {
       ...next,
       ...(from === undefined ? {} : { from }),
@@ -599,8 +597,7 @@ function ScopedRoleLogPanel({
         label: t('common.userId'),
         ariaLabel: t('common.userId'),
         placeholder: t('common.operations.logs.presentation.userPlaceholder'),
-        inputType: 'number',
-        maxLength: 39,
+        inputMode: 'numeric',
       });
     if (role !== 'user') {
       values.push(
@@ -628,7 +625,7 @@ function ScopedRoleLogPanel({
         label: t('logs.callerDiscordId'),
         ariaLabel: t('logs.callerDiscordId'),
         placeholder: t('common.operations.logs.discordFilterHint'),
-        maxLength: 20,
+        inputMode: 'numeric',
       });
       values.push({
         name: 'usage_total_mismatch',
@@ -643,7 +640,7 @@ function ScopedRoleLogPanel({
         name: 'endpoint_key_id',
         label: t('common.operations.logs.endpointKeyId'),
         ariaLabel: t('common.operations.logs.endpointKeyId'),
-        maxLength: 19,
+        inputMode: 'numeric',
       });
       values.push({
         name: 'endpoint_base_url',
@@ -674,10 +671,10 @@ function ScopedRoleLogPanel({
     });
     values.push({
       name: 'status',
-      label: t('common.status'),
-      ariaLabel: t('common.status'),
-      inputType: 'number',
-      maxLength: 3,
+      label: t('logs.httpStatus'),
+      ariaLabel: t('logs.httpStatus'),
+      inputMode: 'numeric',
+      placeholder: t('logs.statusExample'),
     });
     return values;
   }, [role, t]);
@@ -722,13 +719,16 @@ function ScopedRoleLogPanel({
       return next;
     });
   };
-  const applyFilters = (next: {
-    filters: Record<string, string>;
-    fromUnix?: number;
-    toUnix?: number;
-  }) => {
+  const applyFilters = (
+    next: {
+      filters: Record<string, string>;
+      fromUnix?: number;
+      toUnix?: number;
+    },
+    keepFilters?: readonly string[],
+  ) => {
     setSelectedID(null);
-    patchUrlState({ ...next, page: 1 }, { clearDetail: true });
+    patchUrlState({ ...next, page: 1 }, { clearDetail: true, keepFilters });
   };
 
   const routeSummary = (route: LogRouteKind) =>
@@ -753,13 +753,22 @@ function ScopedRoleLogPanel({
           ) +
           ' · ' +
           routeSummary(row.route_kind);
-    return model ? (
+    const charity = row.route_kind.startsWith('charity_');
+    const mode =
+      charity && (row.requested_streaming == null ? t('logs.modeUnknown') : requestMode(row));
+    return (
       <>
-        <span className="mono">{model}</span>
-        <span className="nb-sub">{kind}</span>
+        {model && <span className="mono">{model}</span>}
+        <span className={model ? 'nb-sub' : undefined}>
+          {kind}
+          {mode && (
+            <>
+              {' '}
+              · <span>{mode}</span>
+            </>
+          )}
+        </span>
       </>
-    ) : (
-      <span>{kind}</span>
     );
   };
   const usageCell = (row: RoleLogRow) => {
@@ -858,25 +867,16 @@ function ScopedRoleLogPanel({
       key: 'result',
       header: t('common.operations.logs.result'),
       cell: 'status',
-      render: (row) => <LogResultBadge row={row} />,
-    },
-    {
-      key: 'request-facts',
-      header: t('common.operations.logs.facts.title'),
-      cell: 'meta',
-      render: (row) =>
-        row.route_kind.startsWith('charity_') ? (
-          row.requested_streaming == null && row.automatic_actions == null ? (
-            <span className="nb-muted">{requestMode(row)}</span>
-          ) : (
-            <>
-              <span>{requestMode(row)}</span>
-              <span className="nb-sub">{actionText(row)}</span>
-            </>
-          )
-        ) : (
-          '—'
-        ),
+      render: (row) => (
+        <>
+          <LogResultBadge row={row} />
+          {row.route_kind.startsWith('charity_') && row.automatic_actions?.length !== 0 && (
+            <span className="nb-sub">
+              {row.automatic_actions == null ? t('logs.actionsUnknown') : actionText(row)}
+            </span>
+          )}
+        </>
+      ),
     },
     { key: 'usage', header: t('logs.tokens'), cell: 'meta', align: 'num', render: usageCell },
     {
@@ -1174,19 +1174,22 @@ function ScopedRoleLogPanel({
           station={station}
           fields={fields}
           state={urlState}
+          linkErrors={
+            invalidFilter
+              ? {
+                  ...(invalidDiscordFilter
+                    ? { discord_id: t('common.operations.logs.invalidDiscordFilter') }
+                    : {}),
+                  ...(invalidKeyFilter
+                    ? { endpoint_key_id: t('common.operations.logs.invalidKeyFilter') }
+                    : {}),
+                }
+              : undefined
+          }
           onApply={applyFilters}
           toolbarActions={role !== 'steward' ? exportMenu : undefined}
         />
       </LogSearch>
-      {invalidFilter ? (
-        <p className="field-error" role="alert">
-          {t(
-            invalidDiscordFilter
-              ? 'common.operations.logs.invalidDiscordFilter'
-              : 'common.operations.logs.invalidKeyFilter',
-          )}
-        </p>
-      ) : null}
       {role !== 'user' && filter.endpoint_key_id ? (
         <p className="inline-notice" role="status">
           {t('common.operations.logs.keyFilterNotice', { id: filter.endpoint_key_id })}

@@ -232,17 +232,3 @@
   border: 0;
   min-width: 0;
 }
-
-.user-limit-select {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  min-height: 1.25rem;
-}
-@media (pointer: coarse) {
-  .user-limit-select {
-    min-width: var(--nb-space-10);
-    min-height: var(--nb-space-10);
-  }
-}

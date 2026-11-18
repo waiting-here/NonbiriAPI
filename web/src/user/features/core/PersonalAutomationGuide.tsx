@@ -1,4 +1,5 @@
 import { Fold } from '@shared/components/ui';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SafeCopyValue } from './components';
 import { usePersonalAutomationCopy } from './personalAutomationCopy';
@@ -16,8 +17,19 @@ const routes = [
 ] as const;
 
 export function PersonalAutomationGuide() {
-  const { t: text } = usePersonalAutomationCopy();
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="personal-automation-guide">
+      <Fold title={t('user.core.keys.automationTitle')} open={open} onOpenChange={setOpen}>
+        {open ? <AutomationInstructions /> : null}
+      </Fold>
+    </div>
+  );
+}
+
+function AutomationInstructions() {
+  const { t: text } = usePersonalAutomationCopy();
   const example = (key: keyof typeof examples) => (
     <div>
       <h4>{text(key === 'read' ? 'readExample' : key)}</h4>
@@ -25,66 +37,62 @@ export function PersonalAutomationGuide() {
     </div>
   );
   return (
-    <div className="personal-automation-guide">
-      <Fold title={t('user.core.keys.automationTitle')}>
-        <div className="core-stack">
-          <p>{text('intro')}</p>
-          <section>
-            <h3>{text('identityTitle')}</h3>
-            <p>{text('identity')}</p>
-            <p>{text('scope')}</p>
-          </section>
-          <section>
-            <h3>{text('lookupTitle')}</h3>
-            <p>{text('lookup')}</p>
-            <div className="nb-table-wrap">
-              <table className="nb-table">
-                <thead>
-                  <tr>
-                    <th>{text('method')}</th>
-                    <th>{text('path')}</th>
-                    <th>{text('purpose')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {routes.map(([key, path]) => (
-                    <tr key={key}>
-                      <td>GET</td>
-                      <td>
-                        <code>{path}</code>
-                      </td>
-                      <td>{text(key)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p>{text('pagination')}</p>
-            {example('read')}
-          </section>
-          <section>
-            <h3>{text('importTitle')}</h3>
-            <p>{text('import')}</p>
-            {example('importBody')}
-            {example('importRequest')}
-          </section>
-          <section>
-            <h3>{text('bindTitle')}</h3>
-            <p>{text('bind')}</p>
-            <p>{text('catalog')}</p>
-            {example('bindBody')}
-            {example('bindRequest')}
-          </section>
-          <section>
-            <h3>{text('resultTitle')}</h3>
-            <p>{text('result')}</p>
-            {example('resultExample')}
-            <p>{text('retry')}</p>
-            <p>{text('statuses')}</p>
-            <p>{text('limits')}</p>
-          </section>
+    <div className="core-stack">
+      <p>{text('intro')}</p>
+      <section>
+        <h3>{text('identityTitle')}</h3>
+        <p>{text('identity')}</p>
+        <p>{text('scope')}</p>
+      </section>
+      <section>
+        <h3>{text('lookupTitle')}</h3>
+        <p>{text('lookup')}</p>
+        <div className="nb-table-wrap">
+          <table className="nb-table">
+            <thead>
+              <tr>
+                <th>{text('method')}</th>
+                <th>{text('path')}</th>
+                <th>{text('purpose')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {routes.map(([key, path]) => (
+                <tr key={key}>
+                  <td>GET</td>
+                  <td>
+                    <code>{path}</code>
+                  </td>
+                  <td>{text(key)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </Fold>
+        <p>{text('pagination')}</p>
+        {example('read')}
+      </section>
+      <section>
+        <h3>{text('importTitle')}</h3>
+        <p>{text('import')}</p>
+        {example('importBody')}
+        {example('importRequest')}
+      </section>
+      <section>
+        <h3>{text('bindTitle')}</h3>
+        <p>{text('bind')}</p>
+        <p>{text('catalog')}</p>
+        {example('bindBody')}
+        {example('bindRequest')}
+      </section>
+      <section>
+        <h3>{text('resultTitle')}</h3>
+        <p>{text('result')}</p>
+        {example('resultExample')}
+        <p>{text('retry')}</p>
+        <p>{text('statuses')}</p>
+        <p>{text('limits')}</p>
+      </section>
     </div>
   );
 }

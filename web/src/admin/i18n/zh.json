@@ -829,6 +829,11 @@
       "login": "登录"
     },
     "navigation": {
+      "findPage": "查找管理页面",
+      "findHint": "页面名称或 /路径",
+      "clearSearch": "清除页面搜索",
+      "matchCount": "找到 {{count}} 个页面",
+      "noPages": "没有匹配的页面。试试更短的名称，或输入 /logs 这样的路径。",
       "overview": "概览",
       "users": "用户",
       "services": "公益与服务",

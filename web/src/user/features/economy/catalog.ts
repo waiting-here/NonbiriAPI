@@ -179,7 +179,7 @@ function normalizedFilter(filter: CatalogFilter): CatalogFilter {
   };
 }
 
-function validCatalogQuery(value: string): boolean {
+export function validCatalogQuery(value: string): boolean {
   try {
     catalogQuery(value);
     return true;
