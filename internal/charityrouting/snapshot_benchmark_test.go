@@ -6,10 +6,14 @@ import (
 	"time"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/donation"
 )
 
 func BenchmarkCallerRoutingSnapshot(b *testing.B) {
 	env := newBrowseProjectionFixture(b, 330, 16)
+	// The transaction-local expiry owner uses the supplied transaction. Include
+	// its real SQL in both builds, also when there is no due work.
+	env.service.donationState = &donation.Service{}
 	for _, model := range []int64{51, 1} { // One target and 74 targets, respectively.
 		for _, hold := range []time.Duration{0, 100 * time.Millisecond} {
 			b.Run(fmt.Sprintf("model=%d/writer=%s", model, hold), func(b *testing.B) {

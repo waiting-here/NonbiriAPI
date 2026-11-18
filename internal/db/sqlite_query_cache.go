@@ -11,6 +11,14 @@ import (
 
 const queryStatementLimit = 64
 
+// Each physical reader or writer reuses its own compiled SELECT statements.
+// SQLite still resolves bindings, visibility and rows on every execution.
+type queryConnection struct {
+	sqliteConnection
+	queries  map[string]*list.Element
+	queryLRU list.List
+}
+
 type queryStatement interface {
 	driver.Stmt
 	driver.StmtQueryContext
@@ -41,7 +49,7 @@ func reusableQuery(query string) bool {
 	return end >= 0 && trimmed[:end] == "SELECT"
 }
 
-func (c *dmlConnection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *queryConnection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -98,7 +106,7 @@ func (c *dmlConnection) QueryContext(ctx context.Context, query string, args []d
 
 type cachedQueryRows struct {
 	sqliteRows
-	conn   *dmlConnection
+	conn   *queryConnection
 	entry  *list.Element
 	ctx    context.Context
 	failed bool
@@ -126,17 +134,17 @@ func (r *cachedQueryRows) Close() error {
 	return err
 }
 
-func (c *dmlConnection) removeQuery(entry *list.Element) error {
+func (c *queryConnection) removeQuery(entry *list.Element) error {
 	statement := entry.Value.(*cachedQuery)
 	delete(c.queries, statement.query)
 	c.queryLRU.Remove(entry)
 	return statement.stmt.Close()
 }
 
-func (c *dmlConnection) closeQueries() error {
+func (c *queryConnection) Close() error {
 	var err error
 	for c.queryLRU.Len() != 0 {
 		err = errors.Join(err, c.removeQuery(c.queryLRU.Back()))
 	}
-	return err
+	return errors.Join(err, c.sqliteConnection.Close())
 }

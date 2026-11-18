@@ -23,10 +23,10 @@ schema is introduced by this optimization.
 
 ## Prepared statements and configuration reads
 
-Writable connections retain at most 128 prepared single-statement
-`INSERT`, `UPDATE` or `DELETE` templates and 64 `SELECT` templates, each at most
-16 KiB of SQL text. A
-connection-local LRU closes evicted statements; execution errors discard the
+Each pooled reader and writer retains up to 64 prepared `SELECT` templates.
+The writer also retains up to 128 prepared single-statement `INSERT`, `UPDATE`
+or `DELETE` templates. Each template holds at most 16 KiB of SQL text. A
+connection-local LRU closes evicted statements. Execution errors discard the
 affected statement, and closing or replacing a connection releases its complete
 set. Preparation uses the already acquired physical connection, so it never
 borrows a second writer during a transaction. The driver binds current arguments

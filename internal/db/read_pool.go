@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"net/url"
 )
 
@@ -22,7 +21,7 @@ func (s *Store) openReadPool(ctx context.Context, path string) error {
 	query := u.Query()
 	query.Add("_pragma", "query_only(1)")
 	u.RawQuery = query.Encode()
-	reader, err := sql.Open("sqlite", u.String())
+	reader, err := openPooledSQLite(u.String(), true, nil)
 	if err != nil {
 		return err
 	}
