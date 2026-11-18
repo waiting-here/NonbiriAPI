@@ -1111,6 +1111,15 @@ export function DonationCard({
     }
   };
 
+  const review = donation.reviewResult;
+  const reviewDecision = review
+    ? t(
+        review.decision === 'approve'
+          ? 'user.charity.status.approved'
+          : 'user.charity.status.rejected',
+      )
+    : null;
+
   const confirm = async () => {
     if (!confirmation) return;
     setLocalError(null);
@@ -1147,8 +1156,6 @@ export function DonationCard({
         </div>
         <DonationStatusBadge status={donation.status} summary={donation.useSummary} />
       </div>
-
-      {!showDetailLink ? <Note>{t('user.charity.presentation.modelSetupHelp')}</Note> : null}
 
       {showEditor ? (
         <>
@@ -1197,18 +1204,26 @@ export function DonationCard({
           <dt>{t('user.charity.updatedAt')}</dt>
           <dd>{formatDateTime(donation.updatedAt)}</dd>
         </div>
+        {review && !review.reason.trim() && (
+          <div className="detail-row">
+            <dt>{t('user.charity.reviewResult')}</dt>
+            <dd>
+              {reviewDecision} · {formatDateTime(review.reviewedAt)}
+            </dd>
+          </div>
+        )}
       </dl>
 
-      {donation.reviewResult ? (
+      {review?.reason.trim() && (
         <Fold
           className="economy-review-result"
           defaultOpen={!showDetailLink}
           title={t('user.charity.reviewResult')}
+          meta={reviewDecision + ' · ' + formatDateTime(review.reviewedAt)}
         >
-          <MarkdownText>{donation.reviewResult.reason}</MarkdownText>
-          <span className="muted">{formatDateTime(donation.reviewResult.reviewedAt)}</span>
+          <MarkdownText>{review.reason}</MarkdownText>
         </Fold>
-      ) : null}
+      )}
 
       {keysContent !== undefined ? (
         keysContent
