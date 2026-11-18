@@ -5,6 +5,12 @@
 .binding-service-description .nb-badge {
   justify-self: start;
 }
+.binding-key-health-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding-block: var(--nb-space-1);
+}
 .binding-coverage,
 .binding-routes {
   display: grid;

@@ -146,9 +146,14 @@ export function BindingServiceEditor({
         help={
           needsAnotherSource ? (
             <>
-              {t('common.bindingGuide.pausedHelp')}{' '}
+              {t('common.bindingGuide.pausedHelp')}
               {detailRole && (
-                <Link to={donationKeyDetailPath(detailRole, source)} target="_blank" rel="noopener">
+                <Link
+                  className="binding-key-health-link"
+                  to={donationKeyDetailPath(detailRole, source)}
+                  target="_blank"
+                  rel="noopener"
+                >
                   {t('common.bindingGuide.inspectKeyHealth')}
                 </Link>
               )}
