@@ -1527,7 +1527,11 @@ test('steward list permission loss clears an already visible private donation de
   });
   await donationSearch.fill('permission recheck');
   await donationSearch.press('Enter');
-  await expect(page).toHaveURL(/tab=logs/);
+  await expect(page).toHaveURL(USER_ORIGIN + '/steward');
+  await expect(page.getByRole('tab', { name: 'Request logs', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await expect(privateNote).toHaveCount(0);
   await assertNoSensitiveBrowserPersistence(page, [setup.marker]);

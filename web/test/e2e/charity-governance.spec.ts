@@ -418,9 +418,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await badge.click();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending`);
   await expect.poll(() => listReads.length).toBeGreaterThanOrEqual(2);
-  await expect(
-    page.locator('.status-badge').filter({ hasText: 'Pending follow-up' }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Pending follow-up', exact: true })).toBeVisible();
   await expect(
     page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
@@ -456,7 +454,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
     idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{22,128}$/),
   });
   await expect(
-    page.locator('.status-badge').filter({ hasText: 'Processed' }).first(),
+    page.getByText('Processed', { exact: true }).filter({ visible: true }).first(),
   ).toBeVisible();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
   await expect(
