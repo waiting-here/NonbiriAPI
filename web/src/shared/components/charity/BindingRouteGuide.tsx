@@ -1,4 +1,6 @@
+import { useContext } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import type { BindingGuide, InterfaceCoverage } from '@shared/operations/charity';
 import type { ServiceRoute } from '@shared/connections';
 import { MODEL_TYPE_LABEL_KEYS, MODEL_TYPE_PATHS } from '@shared/modelTypes';
@@ -6,6 +8,7 @@ import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeSer
 import { NativeServicesField } from '../NativeServicesField';
 import { serviceStateLabel } from '@shared/operations/resourceHealth';
 import { Fold, StatusBadge } from '../ui';
+import { DonationKeyDetailRole, donationKeyDetailPath } from './donationKeyNavigation';
 import './binding-routes.css';
 
 function conversionHelp(route: Pick<ServiceRoute, 'operation' | 'native_service'>) {
@@ -82,18 +85,21 @@ export function BindingRouteGuide({
 
 export function BindingServiceEditor({
   guide,
+  source,
   options,
   value,
   onChange,
   disabled,
 }: {
   guide?: BindingGuide;
+  source: { donation_id: string; donation_key_id: string };
   options: NativeService[];
   value: NativeService[];
   onChange: (services: NativeService[]) => void;
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  const detailRole = useContext(DonationKeyDetailRole);
   const required =
     options.length > 0 && value.length === 0 ? t('common.bindingGuide.required') : undefined;
   if (!guide)
@@ -137,9 +143,20 @@ export function BindingServiceEditor({
         onChange={onChange}
         disabled={disabled}
         error={required}
-        help={t(
-          needsAnotherSource ? 'common.bindingGuide.pausedHelp' : 'common.bindingGuide.chooseHelp',
-        )}
+        help={
+          needsAnotherSource ? (
+            <>
+              {t('common.bindingGuide.pausedHelp')}{' '}
+              {detailRole && (
+                <Link to={donationKeyDetailPath(detailRole, source)} target="_blank" rel="noopener">
+                  {t('common.bindingGuide.inspectKeyHealth')}
+                </Link>
+              )}
+            </>
+          ) : (
+            t('common.bindingGuide.chooseHelp')
+          )
+        }
         describeService={(service) => {
           const state = guide.services.find((item) => item.native_service === service)?.state;
           const routes = guide.routes.filter((route) => route.native_service === service);

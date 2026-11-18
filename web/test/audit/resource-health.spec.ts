@@ -105,6 +105,25 @@ test('current service failures are visible to owner and managers and recover thr
           }
         }
       }
+      if (role !== 'owner') {
+        const base = role === 'admin' ? '/charity?' : '/steward?tab=charity&';
+        await page.goto(origin + base + 'charity_section=models&charity_model=' + ids.model_id);
+        await page.getByRole('button', { name: 'Edit connection', exact: true }).click();
+        const draft = page.getByRole('dialog');
+        await draft.getByText('Adjust upstream services', { exact: true }).click();
+        const extra = draft.getByRole('checkbox', { name: 'Embeddings', exact: true });
+        await extra.check();
+        const [details] = await Promise.all([
+          context.waitForEvent('page'),
+          draft.getByRole('link', { name: /View this key’s service health/ }).click(),
+        ]);
+        await expect(details.getByRole('region', { name: 'Service health' }).first()).toContainText(
+          '10 consecutive failures',
+        );
+        expect(new URL(details.url()).searchParams.get('donation_key')).toBe(ids.key_id);
+        await details.close();
+        await expect(extra).toBeChecked();
+      }
       expect(errors).toEqual([]);
     } finally {
       await context.close();

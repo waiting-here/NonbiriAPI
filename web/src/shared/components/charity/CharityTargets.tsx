@@ -24,6 +24,7 @@ import { DataTable, Field, Fold, Note } from '../ui';
 import { EmptyState, ErrorState, LoadingState } from '../States';
 
 interface Target {
+  donation_id: string;
   donation_key_id: string;
   upstream_model_id: string;
   native_services: NativeService[];
@@ -91,6 +92,7 @@ function TargetEditor({
   const [targets, setTargets] = useState<Target[]>(
     () =>
       binding?.targets?.map((row) => ({
+        donation_id: row.donation_id,
         donation_key_id: row.donation_key_id,
         upstream_model_id: row.upstream_model_id,
         native_services: row.native_services,
@@ -202,6 +204,7 @@ function TargetEditor({
     setTargets((previous) => [
       ...previous,
       {
+        donation_id: row.donation_id,
         donation_key_id: row.donation_key_id,
         upstream_model_id: row.upstream_model_id,
         native_services: suggestedBindingServices(row) ?? [],
@@ -220,6 +223,7 @@ function TargetEditor({
           </legend>
           <BindingServiceEditor
             guide={row.guide}
+            source={row}
             options={Array.from(
               new Set([
                 ...row.options,

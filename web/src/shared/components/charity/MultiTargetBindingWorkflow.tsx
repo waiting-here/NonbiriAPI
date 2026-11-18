@@ -519,6 +519,7 @@ export function MultiTargetBindingWorkflow({
                         <span className="mono nb-workflow-id">{row.upstream_model_id}</span>
                         <BindingServiceEditor
                           guide={row.candidate.binding_guide}
+                          source={row.candidate}
                           options={row.candidate.native_services}
                           value={row.candidate.selected_native_services ?? []}
                           disabled={locked || add.outcome === 'conflict'}

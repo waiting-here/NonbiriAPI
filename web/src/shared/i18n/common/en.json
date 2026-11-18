@@ -1910,7 +1910,8 @@
       "noLongerPending": "This donation has already been reviewed. Return to the pending queue."
     },
     "bindingGuide": {
-      "pausedHelp": "The selected services cannot currently serve this model. Check the donated key for the cause or add an available source for these interfaces.",
+      "pausedHelp": "The selected services cannot currently serve this model. You can add an available source for these interfaces.",
+      "inspectKeyHealth": "View this key’s service health (opens in a new tab)",
       "required": "Select an upstream service for this source before saving.",
       "checkHealth": "Review service health ({{count}})",
       "servesDirect": "Direct for {{interfaces}}",

@@ -1057,6 +1057,7 @@ function CharityBindingPickerBody({
                       {entry.native_services ? (
                         <BindingServiceEditor
                           guide={entry.binding_guide}
+                          source={entry}
                           options={entry.native_services}
                           value={entry.selected_native_services ?? []}
                           onChange={(value) =>

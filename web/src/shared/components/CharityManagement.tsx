@@ -10,6 +10,7 @@ import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { DonationStatusBadge } from './UseSummary';
 import { DonationKeyUseControls } from './DonationKeyUseControls';
 import { DonationSourceContext } from './DonationSourceContext';
+import { DonationKeyDetailRole } from './charity/donationKeyNavigation';
 import { ServiceHealth } from './ResourceHealth';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
@@ -2318,14 +2319,16 @@ function CharityManagementAccount({
           ...(permissions ? { steward_permissions: permissions } : {}),
         });
   const donationsAllowed = donationScope !== 'none';
+  const canOpenDonation =
+    donationsAllowed &&
+    (has('donations.review') ||
+      has('donations.manage_keys') ||
+      has('donations.handle') ||
+      has('donations.discover') ||
+      has('donations.recurring'));
   const sectionAllowed =
     section === 'donations'
-      ? donationsAllowed &&
-        (has('donations.review') ||
-          has('donations.manage_keys') ||
-          has('donations.handle') ||
-          has('donations.discover') ||
-          has('donations.recurring'))
+      ? canOpenDonation
       : section === 'models'
         ? has('charity.read') ||
           has('charity.create') ||
@@ -2373,7 +2376,7 @@ function CharityManagementAccount({
         </p>
       </Card>
     );
-  return (
+  const workspaceContent = (
     <DraftLeaveScope onStay={() => requestAnimationFrame(revealSelectedTab)}>
       <div className="ops-stack charity-management" ref={workspace}>
         {frame === 'steward' ? (
@@ -2510,6 +2513,11 @@ function CharityManagementAccount({
         </div>
       </div>
     </DraftLeaveScope>
+  );
+  return (
+    <DonationKeyDetailRole.Provider value={canOpenDonation ? frame : null}>
+      {workspaceContent}
+    </DonationKeyDetailRole.Provider>
   );
 }
 
