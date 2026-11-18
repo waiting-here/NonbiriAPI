@@ -44,21 +44,7 @@
     flex: 1;
   }
   .alerts-page .nb-table td[data-cell='status'] {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
     max-width: 9rem;
     white-space: normal;
-  }
-  .alerts-page .nb-table td:first-child {
-    grid-column: 1;
-    grid-row: 2;
-    align-self: center;
-  }
-  .alerts-page .nb-table td:first-child::before {
-    display: none;
-  }
-  .alerts-page .nb-table td[data-cell='title'] {
-    grid-column: 1 / -1;
   }
 }

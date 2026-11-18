@@ -266,7 +266,7 @@ async function prepare(
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/models?page=1&page_size=10',
+    path: '/api/models?page=1&page_size=10&connection_state=available',
     body: {
       data: [],
       next_cursor: null,
@@ -459,14 +459,10 @@ test('Home selects the first three visible announcements across cursor pages and
   expect(state.homeRequests).toEqual([null, CURSOR_ONE]);
   expect(new Set(state.detailRequests)).toEqual(new Set([first.id, second.id, third.id]));
   expect(state.maximumActiveDetails).toBeLessThanOrEqual(3);
-  expect(
-    await section.evaluate((element) =>
-      Boolean(
-        (document.querySelector('.core-checkin-grid')?.compareDocumentPosition(element) ?? 0) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ),
-  ).toBe(true);
+  await expect(
+    page.locator('.home-overview__main > .home-start + .home-announcements'),
+  ).toHaveCount(1);
+  await expect(page.locator('.core-checkin-grid')).toHaveCount(0);
   const previewSizes = await section
     .locator('.home-announcement-preview')
     .evaluateAll((elements) =>

@@ -346,25 +346,23 @@ export function AnnouncementEditor({
     <div className={pageClassName}>
       {header}
       <Card>
-        <div className="ops-toolbar">
+        <div className="ops-toolbar announcement-editor-head">
           <h2>{t('management.announcements.detail.editorTitle')}</h2>
-          <div className="nb-actions">
-            <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
-            <Fold plain title={t('common.operations.management.details')}>
+          <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
+          <Fold plain title={t('common.operations.management.details')}>
+            <span>
+              {t('management.announcements.detail.authorityRevision', {
+                revision: item.revision,
+              })}
+            </span>
+            {item.published ? (
               <span>
-                {t('management.announcements.detail.authorityRevision', {
-                  revision: item.revision,
+                {t('management.announcements.detail.publishedRevision', {
+                  revision: item.published.revision,
                 })}
               </span>
-              {item.published ? (
-                <span>
-                  {t('management.announcements.detail.publishedRevision', {
-                    revision: item.published.revision,
-                  })}
-                </span>
-              ) : null}
-            </Fold>
-          </div>
+            ) : null}
+          </Fold>
         </div>
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
@@ -381,25 +379,33 @@ export function AnnouncementEditor({
             aria-label={fieldLabels[key]}
           >
             <h3>{fieldLabels[key]}</h3>
-            <dl>
-              <dt>{t('management.announcements.detail.yourVersion')}</dt>
-              <dd className="announcement-conflict__value">{displayField(key, draft)}</dd>
-              <dt>{t('management.announcements.detail.latestVersion')}</dt>
-              <dd className="announcement-conflict__value">{displayField(key, base.draft)}</dd>
+            <dl className="announcement-conflict__versions">
+              <div>
+                <dt>{t('management.announcements.detail.yourVersion')}</dt>
+                <dd>
+                  <div className="announcement-conflict__value">{displayField(key, draft)}</div>
+                  <Button onClick={() => setConflicts(conflicts.filter((field) => field !== key))}>
+                    {t('management.announcements.detail.keepMine')}
+                  </Button>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('management.announcements.detail.latestVersion')}</dt>
+                <dd>
+                  <div className="announcement-conflict__value">
+                    {displayField(key, base.draft)}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      update(key, base.draft[key]);
+                      setConflicts(conflicts.filter((field) => field !== key));
+                    }}
+                  >
+                    {t('management.announcements.detail.useLatest')}
+                  </Button>
+                </dd>
+              </div>
             </dl>
-            <FormActions>
-              <Button onClick={() => setConflicts(conflicts.filter((field) => field !== key))}>
-                {t('management.announcements.detail.keepMine')}
-              </Button>
-              <Button
-                onClick={() => {
-                  update(key, base.draft[key]);
-                  setConflicts(conflicts.filter((field) => field !== key));
-                }}
-              >
-                {t('management.announcements.detail.useLatest')}
-              </Button>
-            </FormActions>
           </section>
         ))}
         <fieldset disabled={writeLocked}>

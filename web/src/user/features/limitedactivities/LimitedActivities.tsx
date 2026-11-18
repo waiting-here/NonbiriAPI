@@ -177,12 +177,8 @@ function ExchangePanel({
     queryFn: () => economySessionRequest(client, getWallet, account),
   });
   const operation = useRetainedOperation(
-    async (input: ExchangeInput, key: string, context) => {
-      const result = await economySessionRequest(client, () => exchange(input, key), account);
-      // The receipt may be a replay. Apply its wallet before reconciling the current balance.
-      context.commit(() => client.setQueryData(limitedActivityKeys.wallet(account), result.wallet));
-      return result;
-    },
+    (input: ExchangeInput, key: string) =>
+      economySessionRequest(client, () => exchange(input, key), account),
     async (_input, error) => {
       if (!error || responseOutcomeUnknown(error)) {
         await Promise.all([
@@ -304,11 +300,9 @@ function ExchangePanel({
           </form>
           {receipt ? (
             <Note tone="ok">
-              <span role="status">
-                {text('common.exchanged')} <ExactCount value={receipt.receipt.quantity} />{' '}
-                {currencyLabel(receipt.receipt.asset, text)} ·{' '}
-                {text('common.generalCreditsCharged')} <ExactCredits value={receipt.receipt.cost} />
-              </span>
+              {text('common.exchanged')} <ExactCount value={receipt.receipt.quantity} />{' '}
+              {currencyLabel(receipt.receipt.asset, text)} · {text('common.generalCreditsCharged')}{' '}
+              <ExactCredits value={receipt.receipt.cost} />
             </Note>
           ) : null}
         </div>
