@@ -1910,6 +1910,7 @@
       "noLongerPending": "此捐赠已完成审核，请返回待处理队列。"
     },
     "bindingGuide": {
+      "pausedHelp": "所选服务目前无法承接该模型的接口。可在捐赠密钥详情查看原因，或添加支持这些接口的可用来源。",
       "required": "请为这个来源选择至少一项上游服务，再保存绑定。",
       "checkHealth": "{{count}} 项已选服务当前不可用",
       "servesDirect": "直连接口 · {{interfaces}}",

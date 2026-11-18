@@ -44,6 +44,7 @@ it('shows a paused direct service before it is selected and keeps the configured
   expect(onChange).toHaveBeenCalledWith(['chat_completions', 'responses']);
   view.rerender(editor(['chat_completions']));
   expect(screen.getByText('Review service health (1)')).toBeVisible();
+  expect(screen.getByText(/Check the donated key for the cause/)).toBeVisible();
   view.rerender(editor([]));
   expect(screen.getByRole('alert')).toHaveTextContent('Select an upstream service');
 });

@@ -5,7 +5,7 @@ import { MODEL_TYPE_LABEL_KEYS, MODEL_TYPE_PATHS } from '@shared/modelTypes';
 import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 import { NativeServicesField } from '../NativeServicesField';
 import { serviceStateLabel } from '@shared/operations/resourceHealth';
-import { Fold } from '../ui';
+import { Fold, StatusBadge } from '../ui';
 import './binding-routes.css';
 
 function conversionHelp(route: Pick<ServiceRoute, 'operation' | 'native_service'>) {
@@ -109,6 +109,12 @@ export function BindingServiceEditor({
   const affected = guide.services.filter(
     (item) => value.includes(item.native_service) && item.state && item.state !== 'available',
   );
+  const selectedRoutes = guide.routes.filter((route) => value.includes(route.native_service));
+  const needsAnotherSource =
+    selectedRoutes.length > 0 &&
+    selectedRoutes.every((route) =>
+      affected.some((item) => item.native_service === route.native_service),
+    );
   return (
     <Fold
       plain
@@ -131,13 +137,17 @@ export function BindingServiceEditor({
         onChange={onChange}
         disabled={disabled}
         error={required}
-        help={t('common.bindingGuide.chooseHelp')}
+        help={t(
+          needsAnotherSource ? 'common.bindingGuide.pausedHelp' : 'common.bindingGuide.chooseHelp',
+        )}
         describeService={(service) => {
           const state = guide.services.find((item) => item.native_service === service)?.state;
           const routes = guide.routes.filter((route) => route.native_service === service);
           return (
             <span className="binding-service-description">
-              {state && state !== 'available' && <strong>{t(serviceStateLabel(state))}</strong>}
+              {state && state !== 'available' && (
+                <StatusBadge tone="warn">{t(serviceStateLabel(state))}</StatusBadge>
+              )}
               {routes.length ? (
                 (['native', 'converted'] as const).map((mode) => {
                   const names = routes

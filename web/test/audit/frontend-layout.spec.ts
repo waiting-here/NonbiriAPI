@@ -82,9 +82,10 @@ async function api(
 }
 async function openFold(scope: Page | Locator, title: string) {
   const fold = scope
-    .locator('details')
-    .filter({ has: scope.getByText(title, { exact: true }) })
-    .last();
+    .locator('details > summary')
+    .getByText(title, { exact: true })
+    .last()
+    .locator('xpath=ancestor::details[1]');
   if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
   return fold;
 }

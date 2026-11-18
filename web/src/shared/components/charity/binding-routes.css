@@ -2,8 +2,8 @@
   display: grid;
   gap: var(--nb-space-1);
 }
-.binding-service-description strong {
-  color: var(--nb-color-text);
+.binding-service-description .nb-badge {
+  justify-self: start;
 }
 .binding-coverage,
 .binding-routes {
