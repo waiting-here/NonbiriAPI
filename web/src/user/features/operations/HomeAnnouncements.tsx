@@ -1,3 +1,4 @@
+import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import {
   CancelledError,
   notifyManager,
@@ -112,14 +113,20 @@ function AnnouncementCard({
   busy,
   onRetry,
   onDismiss,
+  origin,
 }: {
   summary: HomeAnnouncementSummary;
+  origin: ReturnType<typeof useAnnouncementReturn>;
   detail: UseQueryResult<AnnouncementDetail, Error> | undefined;
   busy: boolean;
   onRetry: () => void;
   onDismiss: (summary: HomeAnnouncementSummary) => void;
 }) {
   const { t } = useCoreCopy();
+  const linkProps = {
+    state: { returnTo: '/', announcementSource: origin.announcementSource },
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => origin.remember(event.currentTarget),
+  };
   const title = `/announcements/${encodeURIComponent(summary.id)}`;
   return (
     <li className={`nb-row home-announcement-card home-announcement-card--${summary.severity}`}>
@@ -144,7 +151,7 @@ function AnnouncementCard({
         </div>
       </div>
       <h3 className="home-announcement-card__title">
-        <Link to={title}>{summary.title}</Link>
+        <Link {...linkProps} id={`home-title-${summary.id}`} to={title}>{summary.title}</Link>
       </h3>
       <div className="home-announcement-preview">
         {detail?.isSuccess ? (
@@ -166,7 +173,7 @@ function AnnouncementCard({
         </div>
       ) : null}
       <div className="home-announcement-card__actions">
-        <Link className="nb-btn nb-btn--secondary" to={title}>
+        <Link {...linkProps} id={`home-read-${summary.id}`} className="nb-btn nb-btn--secondary" to={title}>
           {t('home.announcement.viewFull')}
         </Link>
         {summary.dismissible ? (
@@ -276,6 +283,9 @@ export function HomeAnnouncements({
     })),
   });
 
+  const origin = useAnnouncementReturn(
+    active && announcementQuery.isSuccess && !detailQueries.some((query) => query.isFetching),
+  );
   if (!active) return null;
   if (capability.state === 'available' && announcementQuery.isSuccess && summaries.length === 0)
     return null;
@@ -326,6 +336,7 @@ export function HomeAnnouncements({
             <AnnouncementCard
               key={`${summary.epoch}:${summary.id}:${summary.revision}`}
               summary={summary}
+              origin={origin}
               detail={detailQueries[index]}
               busy={announcementQuery.isFetching || detailQueries[index]?.isFetching === true}
               onRetry={() => void retryDetail(summary, index)}

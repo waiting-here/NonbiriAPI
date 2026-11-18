@@ -37,6 +37,7 @@ function nodeToReact(node: Node, key: string): ReactNode {
   if (node.attributes.length !== 0) {
     throw new ApiError('invalid_response', 'The announcement renderer returned unsupported attributes.', 200);
   }
+  if (node.tagName === 'BR') return createElement('br', { key });
   return createElement(node.tagName.toLowerCase(), { key }, children);
 }
 

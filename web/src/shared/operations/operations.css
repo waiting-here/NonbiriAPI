@@ -265,9 +265,22 @@ fieldset.ops-field-grid {
   overflow-wrap: anywhere;
 }
 
-.ops-announcement-body a {
+.ops-announcement-body,
+.announcement-list .card,
+.announcement-preview section,
+.announcement-conflict {
+  min-inline-size: 0;
   overflow-wrap: anywhere;
 }
+
+.announcement-conflict__value {
+  white-space: pre-wrap;
+}
+
+.announcement-preview h2 {
+  scroll-margin-block-start: var(--nb-space-5);
+}
+
 
 .ops-announcement-body pre {
   overflow: auto;

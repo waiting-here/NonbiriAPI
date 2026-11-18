@@ -1,3 +1,4 @@
+import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import { DataTable } from '@shared/components/ui/DataTable';
 import { Field } from '@shared/components/ui/Field';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
@@ -140,6 +141,7 @@ export function AnnouncementManagement({
   const enBodyBytes = new TextEncoder().encode(draft.body_en).byteLength;
   const pageData = list.data;
   const busy = list.isFetching;
+  const { announcementSource, remember } = useAnnouncementReturn(Boolean(pageData) && !busy);
   const returnParams = new URLSearchParams(location.search);
   returnParams.set('page', pageData?.pagination.page ?? pager.page);
   returnParams.set('page_size', String(pager.pageSize));
@@ -510,11 +512,11 @@ export function AnnouncementManagement({
                           variant="secondary"
                           size="sm"
                           type="button"
-                          onClick={() =>
-                            navigate(detailPath(item.id), {
-                              state: { returnTo },
-                            })
-                          }
+                          id={`edit-${item.id}`}
+                          onClick={(event) => {
+                            remember(event.currentTarget);
+                            navigate(detailPath(item.id), { state: { returnTo, announcementSource } });
+                          }}
                         >
                           {t('management.announcements.edit')}
                         </Button>
