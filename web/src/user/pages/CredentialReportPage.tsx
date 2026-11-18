@@ -1,4 +1,4 @@
-import { Field, Fields, FormActions, Note } from '@shared/components/ui';
+import { Field, Fields, FormActions } from '@shared/components/ui';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
@@ -35,7 +35,8 @@ function validBaseURL(value: string): boolean {
       (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
       Boolean(parsed.hostname) &&
       !parsed.username &&
-      !parsed.password
+      !parsed.password &&
+      !/[?#]/.test(value)
     );
   } catch {
     return false;
@@ -54,6 +55,7 @@ export function CredentialReportPage() {
   const [state, setState] = useState<'idle' | 'submitting' | 'accepted'>('idle');
   const [error, setError] = useState<unknown>(null);
   const [validation, setValidation] = useState(false);
+  const submitting = state === 'submitting';
 
   useEffect(() => {
     const clear = () => {
@@ -73,6 +75,17 @@ export function CredentialReportPage() {
     }),
     [baseURL, connector, note, secret],
   );
+  const fields = {
+    baseURL: !validBaseURL(payload.base_url) ? 'user.report.invalidUrl' : undefined,
+    secret:
+      !secret || new TextEncoder().encode(secret).byteLength > 65_536
+        ? 'user.report.invalidSecret'
+        : undefined,
+    note:
+      Array.from(note).length > 2_048 || /\p{Cc}/u.test(note)
+        ? 'user.report.invalidNote'
+        : undefined,
+  };
 
   const clearForm = () => {
     intentKey.current = null;
@@ -84,20 +97,18 @@ export function CredentialReportPage() {
     setState('idle');
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setValidation(false);
+    if (submitting || config.data?.maintenanceMode) return;
     setError(null);
-    if (config.data?.maintenanceMode) return;
-    if (
-      !validBaseURL(payload.base_url) ||
-      !secret ||
-      new TextEncoder().encode(secret).byteLength > 65_536 ||
-      Array.from(note).length > 2_048
-    ) {
+    const firstInvalid = Object.entries(fields).find(([, message]) => message);
+    if (firstInvalid) {
       setValidation(true);
+      const field = event.currentTarget.elements.namedItem(firstInvalid[0]);
+      if (field instanceof HTMLElement) field.focus();
       return;
     }
+    setValidation(false);
     const currentIntent = intentKey.current ?? operationKey();
     intentKey.current = currentIntent;
     setState('submitting');
@@ -149,12 +160,13 @@ export function CredentialReportPage() {
               </button>
             </div>
           ) : (
-            <form className="ops-stack" onSubmit={submit}>
+            <form className="ops-stack" noValidate onSubmit={submit} aria-busy={submitting}>
               <Fields>
                 <Field label={t('user.report.connectorLabel')}>
                   {(props) => (
                     <select
                       {...props}
+                      disabled={submitting}
                       value={connector}
                       onChange={(event) => {
                         intentKey.current = null;
@@ -201,14 +213,18 @@ export function CredentialReportPage() {
                     </select>
                   )}
                 </Field>
-                <Field label={t('user.report.baseUrlLabel')}>
+                <Field
+                  label={t('user.report.baseUrlLabel')}
+                  error={validation && fields.baseURL && t(fields.baseURL)}
+                >
                   {(props) => (
                     <input
                       {...props}
+                      name="baseURL"
+                      readOnly={submitting}
                       type="url"
                       placeholder="https://api.example.com/v1"
                       required
-                      maxLength={4096}
                       value={baseURL}
                       onChange={(event) => {
                         intentKey.current = null;
@@ -218,10 +234,16 @@ export function CredentialReportPage() {
                     />
                   )}
                 </Field>
-                <Field label={t('user.report.secretLabel')} span>
+                <Field
+                  label={t('user.report.secretLabel')}
+                  span
+                  error={validation && fields.secret && t(fields.secret)}
+                >
                   {(props) => (
                     <textarea
                       {...props}
+                      name="secret"
+                      readOnly={submitting}
                       className="ops-secret"
                       required
                       rows={4}
@@ -235,12 +257,18 @@ export function CredentialReportPage() {
                     />
                   )}
                 </Field>
-                <Field label={t('user.report.noteLabel')} span>
+                <Field
+                  label={t('user.report.noteLabel')}
+                  span
+                  help={t('user.report.noteWarning')}
+                  error={validation && fields.note && t(fields.note)}
+                >
                   {(props) => (
                     <textarea
                       {...props}
-                      rows={5}
-                      maxLength={2048}
+                      name="note"
+                      readOnly={submitting}
+                      rows={3}
                       value={note}
                       onChange={(event) => {
                         intentKey.current = null;
@@ -250,12 +278,6 @@ export function CredentialReportPage() {
                   )}
                 </Field>
               </Fields>
-              <Note tone="warn">{t('user.report.noteWarning')}</Note>
-              {validation ? (
-                <p className="field-error" role="alert">
-                  {t('user.report.validationError')}
-                </p>
-              ) : null}
               {error ? <ErrorState error={error} /> : null}
               <FormActions>
                 <button
@@ -265,7 +287,12 @@ export function CredentialReportPage() {
                 >
                   {state === 'submitting' ? t('user.report.submitting') : t('user.report.submit')}
                 </button>
-                <button className="nb-btn nb-btn--secondary" type="button" onClick={clearForm}>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  disabled={submitting}
+                  onClick={clearForm}
+                >
                   {t('user.report.cancelAndClear')}
                 </button>
               </FormActions>

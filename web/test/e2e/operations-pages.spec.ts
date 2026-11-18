@@ -315,11 +315,17 @@ test('anonymous credential report keeps its secret request-only and accepts the 
   await anonymousSession;
   await page.waitForTimeout(50);
   setup.consoleGuard = collectConsoleViolations(page);
-  await page.getByLabel('Service address (URL)').fill('https://reported.example.test/v1');
+  const serviceURL = page.getByLabel('Service address (URL)');
+  await serviceURL.fill('ftp://reported.example.test/v1');
   await page.getByLabel('Suspected leaked key or credential').fill(REPORT_SECRET);
   await page
     .getByLabel('Additional note (optional)')
     .fill('Synthetic reporter context without credentials.');
+  await page.getByRole('button', { name: 'Submit report' }).click();
+  await expect(serviceURL).toBeFocused();
+  await expect(serviceURL).toHaveAttribute('aria-invalid', 'true');
+  expect(observation.count).toBe(0);
+  await serviceURL.fill('https://reported.example.test/v1');
   await page.getByRole('button', { name: 'Submit report' }).click();
 
   await expect(page.getByRole('heading', { name: 'Report accepted' })).toBeVisible();

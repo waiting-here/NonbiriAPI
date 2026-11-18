@@ -155,6 +155,21 @@ describe('user issues page', () => {
     },
   );
 
+  it('opens the model referenced by a routing issue', async () => {
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/session', body: session() },
+      {
+        method: 'GET', path: '/api/issues?state=current&page=1&page_size=20',
+        body: page([issue('M', {
+          source: 'routing_projection', resource_kind: 'model', summary_code: 'no_routable_binding',
+          deep_link: { route_id: 'models', resource_id: '42' },
+        })]),
+      },
+    ]);
+    await renderWithProviders(<IssuesPage />, { station: 'user', role: 'user', locale: 'zh' });
+    expect(await screen.findByRole('link', { name: '查看当前资源' })).toHaveAttribute('href', '/models?model_id=42');
+  });
+
   it('shows the session authorization failure without requesting private issues', async () => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: {}, status: 401 },

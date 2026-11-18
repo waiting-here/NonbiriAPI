@@ -1592,7 +1592,7 @@ export function EndpointDetail({
     typeof donorReturn === 'string' && /^\/charity(?:\/donations\/[1-9]\d*)?$/.test(donorReturn)
       ? donorReturn
       : null;
-  const returnTo = donationReturnTo ?? listReturnPath(location.state, '/endpoints');
+  const returnTo = donationReturnTo ?? listReturnPath(location.state, '/endpoints', '/issues');
   type Intent =
     { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
   const retryAllowed = useRef(false);
@@ -1762,7 +1762,9 @@ export function EndpointDetail({
                       ? 'user.charity.backToDonations'
                       : 'user.charity.backToDonation',
                   )
-                : t('endpoints.title')}
+                : returnTo.split('?')[0] === '/issues'
+                  ? text('user.records.issues')
+                  : t('endpoints.title')}
             </Link>
           }
           actions={

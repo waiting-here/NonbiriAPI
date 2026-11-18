@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGE_STORAGE_KEY, prepareLanguage } from '@shared/i18n';
-import { ApiError } from '@shared/query/http';
+import { ApiError, isForbidden } from '@shared/query/http';
 import { useTheme } from '@shared/theme/useTheme';
 import type { AppearanceIntensity, Density, FontSize, Theme } from '@shared/theme/context';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -102,14 +102,12 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
       if (!error) return;
       const refreshed = await me.refetch();
       context.assertCurrent();
-      const restored = refreshed.data
-        ? currentExplicitLanguage(refreshed.data.user, i18n.resolvedLanguage)
-        : original;
-      if (isOutcomeUnknown(error) && refreshed.data && restored === intent) {
+      const confirmed = !refreshed.error ? refreshed.data?.user.lang : undefined;
+      if (isOutcomeUnknown(error) && confirmed === intent) {
         await applyLanguage(intent, context);
         return { operationConfirmed: true };
       }
-      context.commit(() => setLanguage(restored));
+      context.commit(() => setLanguage(confirmed ?? user.lang));
     },
     ['user', 'core'],
     { clearSecrets: () => setLanguage(user.lang === '' ? '' : original) },
@@ -279,6 +277,7 @@ export function AccountLifecyclePanel({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const tokenRef = useRef('');
+  const exportHeading = useRef<HTMLHeadingElement>(null);
   const [intent, setIntent] = useState<LifecycleIntent | null>(null);
   const [dialog, setDialog] = useState(false);
   const clearCapability = () => {
@@ -366,6 +365,10 @@ export function AccountLifecyclePanel({
       return;
     context.commit(() => {
       setIntent(returnedIntent);
+      if (returnedIntent === 'export') {
+        exportHeading.current?.focus({ preventScroll: true });
+        exportHeading.current?.scrollIntoView?.({ block: 'center' });
+      }
       void execute
         .run(returnedIntent === 'delete' ? 'confirm-delete' : 'export', token)
         .catch(() => undefined);
@@ -391,19 +394,32 @@ export function AccountLifecyclePanel({
     <>
       <section className="core-card">
         <div className="core-card__header">
-          <h2>{t('account.exportTitle')}</h2>
+          <h2 ref={exportHeading} tabIndex={-1}>
+            {t('account.exportTitle')}
+          </h2>
         </div>
         <p>{t('accountPresentation.exportBody')}</p>
         {!adapter.capabilities.exportAccount ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
         {intent === 'export' && (failed || elevation.isError) ? (
-          <p className="core-inline-error">
-            {t(elevation.isError ? 'account.elevationFailed' : 'common.errorBody')}
+          <p className="core-inline-error" role="alert">
+            {t(
+              elevation.isError
+                ? 'account.elevationFailed'
+                : isForbidden(execute.error)
+                  ? 'account.exportReauthorize'
+                  : 'account.exportFailed',
+            )}
           </p>
         ) : null}
         {intent === 'export' && unknown ? (
-          <p className="core-inline-warning">{t('account.exportUnknown')}</p>
+          <p className="core-inline-warning" role="status">
+            {t('account.exportUnknown')}
+          </p>
+        ) : null}
+        {intent === 'export' && execute.isSuccess ? (
+          <p role="status">{t('account.exportDownloaded')}</p>
         ) : null}
         <div className="core-row-actions">
           {execute.isPending && intent === 'export' ? (

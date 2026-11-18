@@ -1,7 +1,7 @@
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Panel, PanelBody, StatusBadge, Tabs } from '@shared/components/ui';
 import { RecordsHeader } from '../components/RecordsHeader';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
@@ -45,6 +45,7 @@ const DETAIL_LABEL_KEYS: Readonly<Record<string, string>> = {
 
 export function IssuesPage() {
   const { t } = useTranslation();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchState();
   const state: IssueState = searchParams.get(ISSUE_STATE_PARAM) === 'closed' ? 'closed' : 'current';
   const session = useUserAuthority();
@@ -176,8 +177,9 @@ export function IssuesPage() {
                             to={
                               issue.deep_link.route_id === 'endpoint-detail'
                                 ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`
-                                : '/models'
+                                : `/models?model_id=${encodeURIComponent(issue.deep_link.resource_id)}`
                             }
+                            state={{ returnTo: location.pathname + location.search }}
                           >
                             {t('user.issues.openResource')}
                           </Link>

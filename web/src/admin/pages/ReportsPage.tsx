@@ -28,10 +28,8 @@ import { reportPageKeys, useReportsPage } from '../features/operations/reportPag
 import '@shared/operations/operations.css';
 import './reports.css';
 
-function selectedStatus(values: string[]): string {
-  return values.length === 1 && REPORT_STATUSES.includes(values[0] as ReportStatus)
-    ? values[0]
-    : '';
+function selectedStatus(values: string[]): ReportStatus | '' {
+  return values.length === 1 ? REPORT_STATUSES.find((status) => status === values[0]) ?? '' : '';
 }
 
 export function ReportsPage() {
@@ -204,7 +202,9 @@ export function ReportsPage() {
               {reports.data.data.length === 0 ? (
                 <EmptyState
                   title={t('admin.reports.empty.title')}
-                  body={t('admin.reports.empty.body')}
+                  body={status
+                    ? t('admin.reports.empty.filtered', { status: statusLabels[status] })
+                    : t('admin.reports.empty.body')}
                 />
               ) : (
                 <DataTable
@@ -310,7 +310,9 @@ export function ReportsPage() {
                             ),
                           }}
                         >
-                          {t('admin.reports.table.review')}
+                          {item.status === 'pending_review'
+                            ? t('admin.reports.table.review')
+                            : t('admin.reports.table.view')}
                         </Link>
                       ),
                     },

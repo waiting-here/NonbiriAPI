@@ -291,8 +291,9 @@ export function getReportTargetDonationsPage(
 export const reportPageKeys = {
   root: ['admin', 'operations', 'reports'] as const,
   badge: (accountId: string) => [...reportPageKeys.root, 'badge', accountId] as const,
+  lists: (accountId: string) => [...reportPageKeys.root, 'page', accountId] as const,
   list: (accountId: string, status: string, page: string, pageSize: PageSize) =>
-    [...reportPageKeys.root, 'page', accountId, status, page, pageSize] as const,
+    [...reportPageKeys.lists(accountId), status, page, pageSize] as const,
   detail: (accountId: string, id: string, page: string, pageSize: PageSize) =>
     [...reportPageKeys.root, 'detail-page', accountId, id, page, pageSize] as const,
   targets: (accountId: string, id: string, page: string, pageSize: PageSize) =>
@@ -325,7 +326,7 @@ export function useReportsPage(
   pageSize: PageSize,
   enabled = true,
 ): UseQueryResult<NumberedReportPage<ReturnType<typeof normalizeReportSummary>>, Error> {
-  const prefix = [...reportPageKeys.root, 'page', accountId, status] as const;
+  const prefix = [...reportPageKeys.lists(accountId), status] as const;
   return useQuery<NumberedReportPage<ReturnType<typeof normalizeReportSummary>>, Error>({
     queryKey: reportPageKeys.list(accountId, status, page, pageSize),
     queryFn: ({ signal }) => getReportPage(status, page, pageSize, signal),

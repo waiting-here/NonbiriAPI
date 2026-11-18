@@ -137,7 +137,8 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
       effectiveLineageTargetId
         ? targetDonations.refetch({ cancelRefetch: false })
         : Promise.resolve(),
-      client.invalidateQueries({ queryKey: reportPageKeys.badge(accountId || 'anonymous') }),
+      client.invalidateQueries({ queryKey: reportPageKeys.badge(accountId) }),
+      client.invalidateQueries({ queryKey: reportPageKeys.lists(accountId) }),
     ]);
   };
   const retryAuthority = async () => {

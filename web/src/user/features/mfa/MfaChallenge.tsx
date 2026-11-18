@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { Button, Field, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import { ApiError, isApiError } from '@shared/query/http';
+import { conflictOrUnknown } from '@shared/operations/api';
 import { getMfa, setupMfa, submitMfa, type MfaSetup, type MfaStatus } from '@shared/operations/mfa';
 import { formatDateTime } from '@shared/utils/datetime';
 import './mfa.css';
@@ -20,6 +21,8 @@ function MfaQr({ uri }: { uri: string }) {
       .then(async ({ toCanvas }) => {
         if (!active) return;
         await toCanvas(target, uri, { width: 224, margin: 3, errorCorrectionLevel: 'M' });
+        target.style.removeProperty('width');
+        target.style.removeProperty('height');
         if (!active) {
           target.width = 0;
           target.height = 0;
@@ -75,16 +78,18 @@ export function MfaChallenge({
   const [busy, setBusy] = useState(true);
   const lifetime = useRef<AbortController | null>(null);
   const form = useRef<HTMLFormElement>(null);
+  const codeInput = useRef<HTMLInputElement>(null);
   const onSuccessRef = useRef(onSuccess);
   useEffect(() => {
     onSuccessRef.current = onSuccess;
   }, [onSuccess]);
   const load = useCallback(
-    async (signal: AbortSignal) => {
+    async (signal: AbortSignal, currentSetup?: MfaSetup | null) => {
       try {
         const next = await getMfa(signal);
         if (signal.aborted) return;
         setStatus(next);
+        if (next.enrolled) setSetup(null);
         if (mode === 'disable') {
           if (!next.enrolled) await onSuccessRef.current(next);
         } else if (
@@ -92,7 +97,10 @@ export function MfaChallenge({
           (!next.enrolled && !next.required && mode !== 'enable')
         ) {
           await onSuccessRef.current(next);
-        } else if (!next.enrolled) {
+        } else if (
+          !next.enrolled &&
+          (!currentSetup || currentSetup.expires_at * 1000 <= Date.now())
+        ) {
           const material = await setupMfa(signal);
           if (!signal.aborted) setSetup(material);
         }
@@ -145,10 +153,21 @@ export function MfaChallenge({
       if (signal.aborted) return;
       if (isApiError(failure) && failure.code === 'mfa_setup_expired') setSetup(null);
       setError(failure);
+      if (
+        conflictOrUnknown(failure) &&
+        !(isApiError(failure) && failure.code === 'mfa_setup_expired')
+      ) {
+        // Read the enrollment before asking for another one-time code.
+        await load(signal, setup);
+      }
     } finally {
       if (!signal.aborted) setBusy(false);
     }
   };
+  const invalidCode = isApiError(error) && error.code === 'mfa_invalid_code';
+  useEffect(() => {
+    if (!busy && invalidCode) codeInput.current?.focus();
+  }, [busy, invalidCode]);
   const disabling = mode === 'disable';
   const title = t(
     disabling ? 'mfa.disableTitle' : status?.enrolled ? 'mfa.verifyTitle' : 'mfa.setupTitle',
@@ -169,7 +188,7 @@ export function MfaChallenge({
   const fields = (
     <>
       {busy && !status ? <LoadingState /> : null}
-      {error ? <MfaError error={error} disabling={disabling} /> : null}
+      {error && !invalidCode ? <MfaError error={error} disabling={disabling} /> : null}
       {setup ? (
         <div className="mfa-setup">
           <MfaQr uri={setup.otpauth_uri} />
@@ -201,10 +220,15 @@ export function MfaChallenge({
             void submit();
           }}
         >
-          <Field label={t('mfa.code')} help={t(disabling ? 'mfa.freshCodeHelp' : 'mfa.codeHelp')}>
+          <Field
+            label={t('mfa.code')}
+            help={t(disabling ? 'mfa.freshCodeHelp' : 'mfa.codeHelp')}
+            error={invalidCode && t('mfa.invalidCode')}
+          >
             {(props) => (
               <input
                 {...props}
+                ref={codeInput}
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -219,7 +243,7 @@ export function MfaChallenge({
           <button type="submit" hidden disabled={busy} aria-hidden="true" tabIndex={-1} />
         </form>
       ) : null}
-      {error && (!status || (!status.enrolled && !setup)) ? (
+      {error && (!status || (!status.enrolled && !setup) || conflictOrUnknown(error)) ? (
         <Button
           type="button"
           disabled={busy}
@@ -229,8 +253,7 @@ export function MfaChallenge({
               setBusy(true);
               setError(null);
               setCode('');
-              setSetup(null);
-              void load(signal);
+              void load(signal, setup);
             }
           }}
         >

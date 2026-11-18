@@ -383,7 +383,7 @@ function ModelDetail({
 export function ModelsWorkspace({ user }: { user: UserProfile }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const returnTo = listReturnPath(location.state, '/models');
+  const returnTo = listReturnPath(location.state, '/models', '/issues');
   const { t } = useCoreCopy();
   const textModel = useModelText();
   const [sourceFocusId, setSourceFocusId] = useState<string | null>(null);

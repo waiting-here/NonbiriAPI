@@ -31,6 +31,7 @@ const (
 	BrowserReasonDiscordGate
 	BrowserReasonDiscordIdentity
 	BrowserReasonWrongStation
+	BrowserReasonElevationCanceled
 )
 
 //go:embed browser/page.html
@@ -238,6 +239,11 @@ func browserPageFor(code string, reason BrowserReason, options BrowserPageOption
 			page.Body = browserCopy{"暂时无法确认 Discord 账号资料。请重新登录；如问题持续，请稍后再试。", "Your Discord account details could not be verified. Sign in again, or try later if the problem continues."}
 		}
 		page.Action, page.ActionURL = browserCopy{"重新使用 Discord 登录", "Sign in with Discord again"}, "/api/auth/discord/start"
+	}
+	if code == CodeInvalidRequest && reason == BrowserReasonElevationCanceled {
+		page.Title = browserCopy{"已取消身份验证", "Identity verification canceled"}
+		page.Body = browserCopy{"你可以返回账户，准备好后再继续操作。", "Return to your account and continue when you are ready."}
+		page.Action, page.ActionURL = browserCopy{"返回账户", "Return to account"}, "/account"
 	}
 	if code == CodeUnauthorized && reason == BrowserReasonDiscordGate {
 		page.Title = browserCopy{"暂未满足 Discord 访问条件", "Discord access requirements were not met"}

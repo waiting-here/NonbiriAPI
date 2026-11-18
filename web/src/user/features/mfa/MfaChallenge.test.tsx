@@ -50,6 +50,7 @@ describe('account authenticator challenge', () => {
     await view.user.click(screen.getByRole('button', { name: 'Finish setup' }));
     await screen.findByText('That code is incorrect or has already been used. Try the next code.');
     expect(screen.getByLabelText('Authenticator code')).toHaveValue('');
+    expect(screen.getByLabelText('Authenticator code')).toHaveFocus();
     expect(onSuccess).not.toHaveBeenCalled();
     await view.user.type(screen.getByLabelText('Authenticator code'), '654321');
     await view.user.click(screen.getByRole('button', { name: 'Finish setup' }));
@@ -61,6 +62,49 @@ describe('account authenticator challenge', () => {
         .map((request) => request.body),
     ).toEqual([{ code: '123456' }, { code: '654321' }]);
   });
+
+  it.each(['enable', 'disable'] as const)(
+    'checks the saved state when the %s response is lost',
+    async (mode) => {
+      let enrolled = mode === 'disable';
+      let submissions = 0;
+      const onSuccess = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string) => {
+          if (input.endsWith('/setup'))
+            return json({
+              secret,
+              otpauth_uri: `otpauth://totp/Fixture?secret=${secret}`,
+              expires_at: Math.ceil(Date.now() / 1000) + 600,
+            });
+          if (input === '/api/auth/mfa')
+            return json({
+              ...status,
+              required: false,
+              enrolled,
+              verified: enrolled,
+            });
+          submissions++;
+          enrolled = mode === 'enable';
+          throw new TypeError('The response was lost');
+        }),
+      );
+      const view = await renderWithProviders(<MfaChallenge mode={mode} onSuccess={onSuccess} />, {
+        station: 'user',
+      });
+      await view.user.type(await screen.findByLabelText('Authenticator code'), '123456');
+      await view.user.click(
+        screen.getByRole('button', {
+          name: mode === 'enable' ? 'Finish setup' : 'Turn off authenticator',
+        }),
+      );
+      await waitFor(() =>
+        expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ enrolled })),
+      );
+      expect(submissions).toBe(1);
+    },
+  );
 
   it('removes expired setup material and provides a fresh setup path', async () => {
     let setups = 0;

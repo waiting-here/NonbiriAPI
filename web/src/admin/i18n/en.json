@@ -1420,7 +1420,8 @@
         "title": "Report case"
       },
       "empty": {
-        "body": "No report cases match the current filters.",
+        "body": "New reports will appear here.",
+        "filtered": "There are no reports marked “{{status}}”. Reset the filter to see other cases.",
         "title": "No report cases"
       },
       "filter": {
@@ -1458,6 +1459,7 @@
         "progress": "Progress",
         "retry": "retry {{count}}",
         "review": "Review",
+        "view": "View details",
         "status": "Status",
         "targets": "targets {{count}}"
       },
