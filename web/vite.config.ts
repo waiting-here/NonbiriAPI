@@ -53,6 +53,21 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
       outDir: fileURLToPath(new URL(`./dist/${station.distDir}`, import.meta.url)),
       emptyOutDir: true,
       sourcemap: false,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'station-shell',
+                // Every visit uses this entry and its static dependencies. Keep lazy pages
+                // and the inactive locale behind their own import boundaries.
+                test: /[\\/]src[\\/](?:admin|user)[\\/]main\.tsx$/,
+                includeDependenciesRecursively: true,
+              },
+            ],
+          },
+        },
+      },
     },
   };
 });
