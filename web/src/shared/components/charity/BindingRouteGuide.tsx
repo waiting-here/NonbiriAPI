@@ -94,6 +94,8 @@ export function BindingServiceEditor({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  const required =
+    options.length > 0 && value.length === 0 ? t('common.bindingGuide.required') : undefined;
   if (!guide)
     return (
       <NativeServicesField
@@ -101,13 +103,22 @@ export function BindingServiceEditor({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        error={required}
       />
     );
+  const affected = guide.services.filter(
+    (item) => value.includes(item.native_service) && item.state && item.state !== 'available',
+  );
   return (
     <Fold
       plain
       lazy
       title={t('common.bindingGuide.editServices')}
+      meta={
+        affected.length
+          ? t('common.bindingGuide.checkHealth', { count: affected.length })
+          : undefined
+      }
       summary={
         value.length
           ? value.map((service) => t(NATIVE_SERVICE_LABEL_KEYS[service])).join(' · ')
@@ -119,7 +130,38 @@ export function BindingServiceEditor({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        error={required}
         help={t('common.bindingGuide.chooseHelp')}
+        describeService={(service) => {
+          const state = guide.services.find((item) => item.native_service === service)?.state;
+          const routes = guide.routes.filter((route) => route.native_service === service);
+          return (
+            <span className="binding-service-description">
+              {state && state !== 'available' && <strong>{t(serviceStateLabel(state))}</strong>}
+              {routes.length ? (
+                (['native', 'converted'] as const).map((mode) => {
+                  const names = routes
+                    .filter((route) => route.mode === mode)
+                    .map((route) => t(MODEL_TYPE_LABEL_KEYS[route.operation]));
+                  return (
+                    names.length > 0 && (
+                      <span key={mode}>
+                        {t(
+                          mode === 'native'
+                            ? 'common.bindingGuide.servesDirect'
+                            : 'common.bindingGuide.servesConverted',
+                          { interfaces: names.join(' · ') },
+                        )}
+                      </span>
+                    )
+                  );
+                })
+              ) : (
+                <span>{t('common.bindingGuide.noInterface')}</span>
+              )}
+            </span>
+          );
+        }}
       />
       <BindingRouteGuide guide={guide} selected={value} />
     </Fold>

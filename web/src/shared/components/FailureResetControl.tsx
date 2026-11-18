@@ -20,7 +20,7 @@ import {
 import { FailureResetRun } from '@shared/operations/failureResetRun';
 import { ErrorState } from './States';
 import './FailureResetControl.css';
-import { Fold } from './ui';
+import { ChoiceRow, Fold } from './ui';
 import { FailureResetDetails } from './FailureResetDetails';
 
 export interface FailureResetChoice {
@@ -162,22 +162,20 @@ export function FailureResetControl({
           </div>
           <div className="failure-reset-choices">
             {choices.map((choice) => (
-              <label key={choice.id}>
-                <input
-                  type="checkbox"
-                  disabled={disabled}
-                  checked={chosen.has(choice.id)}
-                  onChange={(event) =>
-                    setChosen((previous) => {
-                      const next = new Map(previous);
-                      if (event.target.checked) next.set(choice.id, choice);
-                      else next.delete(choice.id);
-                      return next;
-                    })
-                  }
-                />
-                <span>{choice.label}</span>
-              </label>
+              <ChoiceRow
+                key={choice.id}
+                label={choice.label}
+                checked={chosen.has(choice.id)}
+                disabled={disabled}
+                onChange={(checked) =>
+                  setChosen((previous) => {
+                    const next = new Map(previous);
+                    if (checked) next.set(choice.id, choice);
+                    else next.delete(choice.id);
+                    return next;
+                  })
+                }
+              />
             ))}
           </div>
           <div className="form-actions">

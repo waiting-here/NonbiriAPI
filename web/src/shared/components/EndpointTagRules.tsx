@@ -17,7 +17,17 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { isStewardPermissionDenied, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { StewardPermissionNotice } from './StewardPermissionNotice';
-import { Button, DataTable, Field, Fields, FilterBar, FormActions, Note, Segmented } from './ui';
+import {
+  Button,
+  ChoiceRow,
+  DataTable,
+  Field,
+  Fields,
+  FilterBar,
+  FormActions,
+  Note,
+  Segmented,
+} from './ui';
 import { endpointTagBadgeClass, endpointTagKeys } from './endpointTagLabels';
 
 type RuleMutation =
@@ -209,22 +219,19 @@ export function EndpointTagRules({
                   <legend>{t('management.endpoints.rules.chooseTags')}</legend>
                   <div className="endpoint-rule-tags__options">
                     {ENDPOINT_TAGS.map((tag) => (
-                      <Field label={label(tag)} key={tag} size="short">
-                        {(props) => (
-                          <input
-                            {...props}
-                            type="checkbox"
-                            checked={editor.rule.tags.includes(tag)}
-                            onChange={(event) =>
-                              update({
-                                tags: event.target.checked
-                                  ? [...editor.rule.tags, tag]
-                                  : editor.rule.tags.filter((value) => value !== tag),
-                              })
-                            }
-                          />
-                        )}
-                      </Field>
+                      <ChoiceRow
+                        key={tag}
+                        label={label(tag)}
+                        checked={editor.rule.tags.includes(tag)}
+                        disabled={busy}
+                        onChange={(checked) =>
+                          update({
+                            tags: checked
+                              ? [...editor.rule.tags, tag]
+                              : editor.rule.tags.filter((value) => value !== tag),
+                          })
+                        }
+                      />
                     ))}
                   </div>
                   {editor.rule.tags.includes('mainstream') ? (

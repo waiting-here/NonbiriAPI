@@ -241,7 +241,28 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
       exact: true,
     });
     await expect(chatService).toBeChecked();
-    await chatService.uncheck();
+    const card = chatService.locator('..');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      const bounds = (await card.boundingBox())!;
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      await card.click({
+        position: { x: Math.floor(bounds.width) - 8, y: Math.floor(bounds.height) - 8 },
+      });
+      await expect(chatService).not.toBeChecked();
+      await chatService.press('Space');
+      await expect(chatService).toBeChecked();
+    }
+    await card
+      .getByText(
+        common.common.bindingGuide.servesDirect.replace(
+          '{{interfaces}}',
+          common.common.modelTypes.chat_completions,
+        ),
+        { exact: true },
+      )
+      .click();
+    await expect(chatService).not.toBeChecked();
     await expect(
       serviceEditor.getByText(common.common.bindingGuide.uncovered, { exact: true }).first(),
     ).toBeVisible();

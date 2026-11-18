@@ -10,7 +10,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './ModelTypesField.css';
-import { Field } from './ui';
+import { ChoiceRow } from './ui';
 
 // Most services only need these; the rest stay one click away under “More APIs”.
 const COMMON_MODEL_TYPES: ReadonlySet<ModelType> = new Set<ModelType>([
@@ -43,20 +43,14 @@ export function ModelTypesField({
     if (selectedOther) setMoreOpen(true);
   }
   const choice = (type: ModelType) => (
-    <Field
+    <ChoiceRow
       key={type}
       label={t(MODEL_TYPE_GROUP_LABEL_KEYS[modelTypeGroup(type)])}
-      help={<code>{modelTypeGroupPath(type)}</code>}
-    >
-      {(props) => (
-        <input
-          {...props}
-          type="checkbox"
-          checked={value.some((item) => modelTypeGroup(item) === type)}
-          onChange={(event) => onChange(setModelTypeGroup(value, type, event.target.checked))}
-        />
-      )}
-    </Field>
+      description={<code>{modelTypeGroupPath(type)}</code>}
+      checked={value.some((item) => modelTypeGroup(item) === type)}
+      disabled={disabled}
+      onChange={(checked) => onChange(setModelTypeGroup(value, type, checked))}
+    />
   );
   return (
     <fieldset className="model-types-field" disabled={disabled}>

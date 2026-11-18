@@ -441,6 +441,20 @@ test('administrator forms keep basic fields, discounts, session rules and credit
     await expect(
       dialog.getByText(common.common.connections.bindingEditScope, { exact: true }),
     ).toBeVisible();
+    const serviceEditor = await openFold(dialog, common.common.bindingGuide.editServices);
+    const service = serviceEditor.getByRole('checkbox').first();
+    const card = service.locator('..');
+    const saved = await service.isChecked();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      const bounds = (await card.boundingBox())!;
+      await card.click({
+        position: { x: Math.floor(bounds.width) - 8, y: Math.floor(bounds.height) - 8 },
+      });
+      await expect(service).toBeChecked({ checked: !saved });
+      await service.press('Space');
+      await expect(service).toBeChecked({ checked: saved });
+    }
     await visuals(page, 'admin-charity-edit-connection', dialog);
     await dialog
       .getByRole('button', { name: common.common.connections.returnToBindings, exact: true })
@@ -489,7 +503,7 @@ test('personal model sheets preserve dismissed drafts and create two fresh model
       'personal-model-all-interfaces',
       dialog.locator('.model-types-field'),
       async (width) => {
-        const options = dialog.locator('.model-types-field__choices > .nb-field');
+        const options = dialog.locator('.model-types-field__choices > label');
         expect(await options.count()).toBeGreaterThan(4);
         const boxes = await options.evaluateAll((nodes) =>
           nodes.map((node) => {
@@ -499,6 +513,13 @@ test('personal model sheets preserve dismissed drafts and create two fresh model
         );
         expect(boxes.every((box) => box.width > 150)).toBe(true);
         if (width === 390) expect(new Set(boxes.map((box) => Math.round(box.x))).size).toBe(1);
+        const option = options.first();
+        const checkbox = option.getByRole('checkbox');
+        const original = await checkbox.isChecked();
+        await option.locator('code').click();
+        await expect(checkbox).toBeChecked({ checked: !original });
+        await checkbox.press('Space');
+        await expect(checkbox).toBeChecked({ checked: original });
       },
     );
     const ids: string[] = [];

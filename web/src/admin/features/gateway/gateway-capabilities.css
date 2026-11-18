@@ -13,6 +13,11 @@
   padding: 0;
   border: 0;
 }
+.gateway-effort-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: var(--nb-space-2);
+}
 .gateway-capability-group > legend {
   padding: 0;
   margin-bottom: var(--nb-space-3);

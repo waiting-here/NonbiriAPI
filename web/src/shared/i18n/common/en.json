@@ -1910,6 +1910,11 @@
       "noLongerPending": "This donation has already been reviewed. Return to the pending queue."
     },
     "bindingGuide": {
+      "required": "Select an upstream service for this source before saving.",
+      "checkHealth": "Review service health ({{count}})",
+      "servesDirect": "Direct for {{interfaces}}",
+      "servesConverted": "Via conversion for {{interfaces}}",
+      "noInterface": "This service covers none of the model’s current interfaces.",
       "reviewSelected": "Review selections ({{count}})",
       "fixedSelectionHelp": "Selections are kept when you search or change pages.",
       "keyDetails": "Key limits and notes",

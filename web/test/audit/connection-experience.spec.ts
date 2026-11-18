@@ -1998,7 +1998,7 @@ test('connection lists return to the requested page and mainstream mappings use 
           { options: await firstSelection.getByRole('checkbox').count() },
         );
         const boxes = await firstSelection
-          .locator('.model-types-field__choices > .nb-field')
+          .locator('.model-types-field__choices > label')
           .evaluateAll((nodes) =>
             nodes.map((node) => {
               const { x, y, width, height } = node.getBoundingClientRect();

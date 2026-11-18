@@ -1,3 +1,10 @@
+.binding-service-description {
+  display: grid;
+  gap: var(--nb-space-1);
+}
+.binding-service-description strong {
+  color: var(--nb-color-text);
+}
 .binding-coverage,
 .binding-routes {
   display: grid;

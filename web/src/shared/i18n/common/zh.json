@@ -1910,6 +1910,11 @@
       "noLongerPending": "此捐赠已完成审核，请返回待处理队列。"
     },
     "bindingGuide": {
+      "required": "请为这个来源选择至少一项上游服务，再保存绑定。",
+      "checkHealth": "{{count}} 项已选服务当前不可用",
+      "servesDirect": "直连接口 · {{interfaces}}",
+      "servesConverted": "经转换承接 · {{interfaces}}",
+      "noInterface": "此服务不支持该模型当前开放的接口。",
       "reviewSelected": "查看已选（{{count}}）",
       "fixedSelectionHelp": "搜索或翻页时，已选模型会保留。",
       "keyDetails": "密钥限额与备注",

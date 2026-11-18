@@ -10,7 +10,7 @@ import {
   type DiscountPeriod,
   type RecurringDiscount,
 } from '@shared/operations/recurringDiscount';
-import { Button, Field, Fields, FormActions, Note, Toggle } from '../ui';
+import { Button, ChoiceRow, Field, Fields, FormActions, Note, Toggle } from '../ui';
 import { ErrorState } from '../States';
 
 export function RecurringDiscountFields({
@@ -50,7 +50,11 @@ export function RecurringDiscountFields({
       }),
     });
   return (
-    <div className="nb-form nb-recurring-discount">
+    <fieldset
+      className="nb-form nb-recurring-discount"
+      aria-label={t('common.recurringDiscount.title')}
+      disabled={disabled}
+    >
       <Toggle
         disabled={disabled}
         label={t('common.recurringDiscount.enabled')}
@@ -108,46 +112,33 @@ export function RecurringDiscountFields({
             <fieldset className="nb-recurring-discount__weekdays">
               <legend>{t('common.recurringDiscount.weekdays')}</legend>
               {weekdayKeys.map((key, day) => (
-                <Field label={t(key)} size="short" key={key}>
-                  {(field) => (
-                    <input
-                      {...field}
-                      type="checkbox"
-                      checked={row.weekdays.includes(day + 1)}
-                      onChange={(event) =>
-                        update(index, {
-                          weekdays: (event.target.checked
-                            ? [...row.weekdays, day + 1]
-                            : row.weekdays.filter((value) => value !== day + 1)
-                          ).sort((a, b) => a - b),
-                        })
-                      }
-                    />
-                  )}
-                </Field>
+                <ChoiceRow
+                  key={key}
+                  label={t(key)}
+                  checked={row.weekdays.includes(day + 1)}
+                  onChange={(checked) =>
+                    update(index, {
+                      weekdays: (checked
+                        ? [...row.weekdays, day + 1]
+                        : row.weekdays.filter((value) => value !== day + 1)
+                      ).sort((a, b) => a - b),
+                    })
+                  }
+                />
               ))}
             </fieldset>
-            <Field label={t('common.recurringDiscount.allDay')} size="short">
-              {(field) => (
-                <input
-                  {...field}
-                  type="checkbox"
-                  checked={allDay}
-                  onChange={(event) => {
-                    if (event.target.checked)
-                      update(index, { start_time: '00:00', end_time: '24:00' }, true);
-                    else
-                      update(
-                        index,
-                        previousTimes.current.get(row) ?? {
-                          start_time: '09:00',
-                          end_time: '18:00',
-                        },
-                      );
-                  }}
-                />
-              )}
-            </Field>
+            <ChoiceRow
+              label={t('common.recurringDiscount.allDay')}
+              checked={allDay}
+              onChange={(checked) => {
+                if (checked) update(index, { start_time: '00:00', end_time: '24:00' }, true);
+                else
+                  update(
+                    index,
+                    previousTimes.current.get(row) ?? { start_time: '09:00', end_time: '18:00' },
+                  );
+              }}
+            />
             <Fields>
               <Field label={t('common.recurringDiscount.start')}>
                 {(props) => (
@@ -173,18 +164,13 @@ export function RecurringDiscountFields({
                       aria-invalid={!validPeriodTime(row.end_time, true)}
                       onChange={(event) => update(index, { end_time: event.target.value })}
                     />
-                    <Field label={t('common.recurringDiscount.endOfDay')} size="short">
-                      {(checkbox) => (
-                        <input
-                          {...checkbox}
-                          type="checkbox"
-                          checked={row.end_time === '24:00'}
-                          onChange={(event) =>
-                            update(index, { end_time: event.target.checked ? '24:00' : '23:59' })
-                          }
-                        />
-                      )}
-                    </Field>
+                    <ChoiceRow
+                      label={t('common.recurringDiscount.endOfDay')}
+                      checked={row.end_time === '24:00'}
+                      onChange={(checked) =>
+                        update(index, { end_time: checked ? '24:00' : '23:59' })
+                      }
+                    />
                   </div>
                 )}
               </Field>
@@ -235,6 +221,6 @@ export function RecurringDiscountFields({
           {t('common.recurringDiscount.add')}
         </Button>
       </FormActions>
-    </div>
+    </fieldset>
   );
 }
