@@ -936,7 +936,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await expect(flatten).toBeChecked();
   const picker = page.locator('.ops-binding-picker');
   await picker.getByRole('button', { name: /https:\/\/shared.example.test\/v1/ }).click();
-  await expect(picker.locator('.ops-picker-context')).toContainText(
+  await expect(picker.locator('.binding-current-source')).toContainText(
     'https://shared.example.test/v1',
   );
   await picker.getByRole('button', { name: /Reviewed key note/ }).click();

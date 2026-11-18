@@ -208,7 +208,7 @@ it('marks every target of an existing multi-target binding as bound', async () =
   });
   await view.user.click(await screen.findByRole('button', { name: /Endpoint 11/ }));
   await view.user.click(await screen.findByRole('button', { name: 'Key 112 · sk-…112' }));
-  expect(
-    await screen.findByRole('checkbox', { name: /shared-model.*Already bound/ }),
-  ).toBeDisabled();
+  const boundTarget = await screen.findByRole('checkbox', { name: 'shared-model' });
+  expect(boundTarget).toBeDisabled();
+  expect(boundTarget).toHaveAccessibleDescription(/Already bound/);
 });

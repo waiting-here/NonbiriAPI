@@ -84,7 +84,7 @@
   flex-wrap: wrap;
   gap: var(--nb-space-2);
 }
-.charity-management .ops-model-level-options .nb-field {
+.charity-management .ops-model-level-options .nb-choice-row {
   flex: 1 1 5rem;
   min-width: 4rem;
 }

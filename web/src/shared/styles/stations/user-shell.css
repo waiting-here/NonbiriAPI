@@ -24,6 +24,10 @@
   max-width: var(--nb-content-wide);
   margin-inline: auto;
 }
+.nb-user-shell__main > .page--workspace {
+  max-width: var(--nb-content-workspace);
+}
+.nb-user-shell__main > .page--detail,
 .nb-user-shell__main > .legal-copy {
   max-width: var(--nb-content-readable);
 }

@@ -44,11 +44,8 @@
 .rank-empty p {
   margin: 0;
 }
-.rank-empty__art {
+.rank-empty .rank-empty__art {
   width: 4.5rem;
-  height: 4.5rem;
-  display: grid;
-  place-items: center;
 }
 .rank-empty__title {
   font-weight: var(--nb-font-weight-semibold);

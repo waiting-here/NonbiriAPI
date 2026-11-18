@@ -37,7 +37,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
   const valid = validDonationID(donationID);
   const donation = useDonation(valid ? donationID : undefined, valid);
   return (
-    <div className="page economy-page economy-charity-page">
+    <div className="page page--detail economy-page economy-charity-page">
       <PageHeader
         title={t('user.charity.donationDetailTitle')}
         description={t('user.charity.donationDetailDescription')}
@@ -122,7 +122,9 @@ function CharityContent() {
     : publicConfig.data?.charityDonationNoticeEn;
 
   return (
-    <div className="page economy-page economy-charity-page">
+    <div
+      className={`page economy-page economy-charity-page ${tab === 'donate' ? 'page--detail' : 'page--wide'}`}
+    >
       <PageHeader
         title={t('user.charity.title')}
         description={t('user.charity.description')}

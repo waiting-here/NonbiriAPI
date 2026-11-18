@@ -452,7 +452,9 @@ describe('ModelsWorkspace numbered pagination', () => {
       expect(calls.some((url) => url.searchParams.get('q') === 'gpt')).toBe(true),
     );
     await within(results).findByText('gpt-1');
-    await rendered.user.click(within(results).getByRole('checkbox', { name: /^gpt-1 Fetched/ }));
+    const firstTarget = within(results).getByRole('checkbox', { name: 'gpt-1' });
+    expect(firstTarget).toHaveAccessibleDescription(/Fetched/);
+    await rendered.user.click(firstTarget);
     await rendered.user.click(screen.getByRole('button', { name: 'Change endpoint' }));
     await rendered.user.click(
       within(screen.getByRole('region', { name: 'Endpoints' })).getByRole('button', {
@@ -460,7 +462,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       }),
     );
     await rendered.user.click((await screen.findByText('endpoint-21')).closest('button')!);
-    await rendered.user.click(await within(results).findByRole('checkbox', { name: /^gpt-11 / }));
+    await rendered.user.click(await within(results).findByRole('checkbox', { name: 'gpt-11', exact: true }));
     await waitFor(() =>
       expect(
         calls.some(
@@ -774,7 +776,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     const rendered = await renderWorkspace('/models?model_id=81');
-    await rendered.user.click(await screen.findByRole('checkbox', { name: /^write-candidate / }));
+    await rendered.user.click(await screen.findByRole('checkbox', { name: 'write-candidate', exact: true }));
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
 
     expect(writes).toHaveLength(1);
@@ -945,7 +947,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       }),
     );
     const view = await renderWorkspace('/models?model_id=91');
-    await view.user.click(await screen.findByRole('checkbox', { name: /^private-first / }));
+    await view.user.click(await screen.findByRole('checkbox', { name: 'private-first', exact: true }));
     await view.user.type(
       screen.getByRole('searchbox', { name: "Search this key's models" }),
       'private-search',
@@ -1103,7 +1105,7 @@ describe('ModelsWorkspace numbered pagination', () => {
           'false',
         ),
       );
-      const candidate = await screen.findByRole('checkbox', { name: /^typed-model / });
+      const candidate = await screen.findByRole('checkbox', { name: 'typed-model', exact: true });
       await waitFor(() => expect(candidate).toBeEnabled());
       await view.user.click(candidate);
       expect(candidate).toBeChecked();

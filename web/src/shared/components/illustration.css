@@ -1,6 +1,7 @@
 .nb-illustration {
   display: block;
   width: 7.5rem;
+  max-inline-size: 100%;
   height: auto;
   overflow: visible;
 }

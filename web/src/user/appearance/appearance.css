@@ -249,7 +249,7 @@ html:is(
     [data-appearance='tomorrow']
   )
   .nb-user-shell:not([data-layout='game'])
-  > :is(.nb-user-shell__main, .nb-shell-status) {
+  > :is(.nb-user-shell__main:not(:has(> .page--wide)), .nb-shell-status) {
   max-width: clamp(72rem, 60vw, 76rem);
   margin-inline: auto;
 }
@@ -501,7 +501,14 @@ html:is(
     [data-appearance='tomorrow']
   )
   :is(
-    :is(.page, .nb-page) > :is(h2, .field-help, .time-context-notice, .game-privacy-control, [role='status']:not(.nb-note)),
+    :is(.page, .nb-page)
+      > :is(
+        h2,
+        .field-help,
+        .time-context-notice,
+        .game-privacy-control,
+        [role='status']:not(.nb-note)
+      ),
     :is(.page, .nb-page) > section > :is(h2, .nb-section-head, .field-help, .time-context-notice),
     :is(.page, .nb-page) > .nb-section-head,
     .home-checkins > .nb-section-head,
@@ -527,7 +534,8 @@ html:is(
     [data-appearance='heart-thief'],
     [data-appearance='tomorrow']
   )
-  :is(.page, .nb-page) > .nb-note {
+  :is(.page, .nb-page)
+  > .nb-note {
   backdrop-filter: blur(12px);
 }
 

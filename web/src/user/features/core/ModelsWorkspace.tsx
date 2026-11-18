@@ -174,21 +174,21 @@ function ModelDetail({
 
   if (accessLossError)
     return (
-      <div className="page core-page core-stack models-workspace">
+      <div className="page page--detail core-page core-stack models-workspace">
         <PageHeader title={t('models.detailTitle')} back={back} />
         <CoreErrorPanel error={accessLossError} />
       </div>
     );
   if (model.isPending && !model.data)
     return (
-      <div className="page core-page core-stack models-workspace">
+      <div className="page page--detail core-page core-stack models-workspace">
         <PageHeader title={t('models.detailTitle')} back={back} />
         <CoreLoading />
       </div>
     );
   if (!model.data)
     return (
-      <div className="page core-page core-stack models-workspace">
+      <div className="page page--detail core-page core-stack models-workspace">
         <PageHeader title={t('models.detailTitle')} back={back} />
         <CoreErrorPanel
           error={model.error ?? new Error('The model details are unavailable.')}
@@ -198,7 +198,7 @@ function ModelDetail({
     );
 
   return (
-    <div className="page core-page core-stack models-workspace">
+    <div className="page page--detail core-page core-stack models-workspace">
       <PageHeader
         className="model-detail-heading"
         title={model.data.full_name}
@@ -531,7 +531,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
   ];
   if (!scopeReady) {
     return (
-      <div className="page core-page models-workspace">
+      <div className="page page--workspace core-page models-workspace">
         {session.error ? <CoreErrorPanel error={session.error} /> : <CoreLoading />}
       </div>
     );
@@ -560,7 +560,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
 
   if (accessLossError) {
     return (
-      <div className="page core-page core-stack models-workspace">
+      <div className="page page--workspace core-page core-stack models-workspace">
         <PageHeader
           icon="models"
           title={t('models.title')}
@@ -572,7 +572,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
   }
 
   return (
-    <div className="page core-page core-stack models-workspace">
+    <div className="page page--workspace core-page core-stack models-workspace">
       <PageHeader
         icon="models"
         title={t('models.title')}

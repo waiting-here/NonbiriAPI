@@ -174,19 +174,6 @@ const dynamicCopyKeys = [
       'Reviewer role is constrained to the admin/steward union before translation.',
     ),
   ),
-  // Common charity source types are finite.
-  ...[
-    'common.operations.charity.sourceType.automatic',
-    'common.operations.charity.sourceType.manual',
-  ].map((key) =>
-    entry(
-      'common',
-      key,
-      'src/shared/components/CharityBindingPicker.tsx',
-      't(sourceTypeKey(source))',
-      'Source type is constrained to the automatic/manual union.',
-    ),
-  ),
   // Common charity validation messages are a finite validator-code union.
   ...[
     'common.operations.charity.validation.priceLimit',

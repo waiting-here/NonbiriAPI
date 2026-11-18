@@ -167,6 +167,7 @@
 
   /* Layout and layering */
   --nb-content-readable: 62rem;
+  --nb-content-workspace: 70rem;
   --nb-content-wide: 88rem;
   --nb-shell-breakpoint: 70rem;
   --nb-z-base: 0;

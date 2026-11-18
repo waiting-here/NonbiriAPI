@@ -1,3 +1,4 @@
+import { ChoiceRow } from '@shared/components/ui/ChoiceRow';
 import { keyQueueDraft, keyQueueInput } from '@shared/operations/keyQueue';
 import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import {
@@ -962,37 +963,32 @@ export function DonationResourcePicker({
                           key={choice.key.id}
                           className={unavailable ? 'is-unavailable' : undefined}
                         >
-                          <Field
+                          <ChoiceRow
                             label={
-                              <span className="donation-resource-picker__key">
-                                <strong>{choice.key.note || choiceDisplayKey(choice)}</strong>
+                              <>
+                                {choice.key.note && <>{choice.key.note} · </>}
                                 <code>{choiceDisplayKey(choice)}</code>
-                                <small>
-                                  <KeyLimitSummary
-                                    concurrency={choice.key.maxConcurrency}
-                                    rpm={choice.key.maxRPM}
-                                    queue={choice.key.queue}
-                                  />
-                                </small>
-                                {!choice.key.enabled ? (
-                                  <small>{t('user.charity.resourcePicker.physicalDisabled')}</small>
-                                ) : null}
-                                {unavailable ? (
-                                  <small>{t(eligibilityCopyKey(choice.eligibility))}</small>
-                                ) : null}
-                              </span>
+                              </>
                             }
-                          >
-                            {(field) => (
-                              <input
-                                {...field}
-                                type="checkbox"
-                                checked={selectedHere}
-                                disabled={!enabled || rowDisabled}
-                                onChange={(event) => chooseKey(choice, event.target.checked)}
-                              />
-                            )}
-                          </Field>
+                            checked={selectedHere}
+                            disabled={!enabled || rowDisabled}
+                            onChange={(checked) => chooseKey(choice, checked)}
+                            description={
+                              <>
+                                <KeyLimitSummary
+                                  concurrency={choice.key.maxConcurrency}
+                                  rpm={choice.key.maxRPM}
+                                  queue={choice.key.queue}
+                                />
+                                {!choice.key.enabled && (
+                                  <span>{t('user.charity.resourcePicker.physicalDisabled')}</span>
+                                )}
+                                {unavailable && (
+                                  <span>{t(eligibilityCopyKey(choice.eligibility))}</span>
+                                )}
+                              </>
+                            }
+                          />
                         </li>
                       );
                     })}

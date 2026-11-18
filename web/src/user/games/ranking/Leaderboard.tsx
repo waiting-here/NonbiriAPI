@@ -202,9 +202,7 @@ function RankingPanel({
         data.rebuildStatus !== 'publishing' &&
         data.rebuildStatus !== 'pending' && (
           <div className="rank-empty">
-            <span className="rank-empty__art" aria-hidden="true">
-              <Illustration name="empty" />
-            </span>
+            <Illustration name="empty" className="rank-empty__art" />
             <p className="rank-empty__title">{text('ranking.noQualifyingRankingsYet')}</p>
             <p className="nb-small nb-muted">
               {t(

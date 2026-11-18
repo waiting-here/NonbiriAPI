@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Field, FilterBar, Fold, Note, Segmented } from '@shared/components/ui';
+import { ChoiceRow, Field, FilterBar, Fold, Note, Segmented } from '@shared/components/ui';
 import { ConnectionUnavailable } from '@shared/components/ConnectionUnavailable';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
@@ -508,46 +508,35 @@ export function PersonalBindingPicker({
                     const alreadyBound = bound.has(identity);
                     return (
                       <li key={identity} className="personal-binding-picker__model">
-                        <Field
-                          label={
-                            <span className="nb-stack nb-stack--sm">
-                              <strong>{row.upstream_model_id}</strong>{' '}
-                              <span className="nb-small nb-muted">
-                                {alreadyBound
-                                  ? copy.bound
-                                  : row.source_types
-                                      .map((type) =>
-                                        type === 'automatic' ? copy.automatic : copy.manual,
-                                      )
-                                      .join(' + ')}
-                              </span>
-                            </span>
+                        <ChoiceRow
+                          label={row.upstream_model_id}
+                          description={
+                            alreadyBound
+                              ? copy.bound
+                              : row.source_types
+                                  .map((type) =>
+                                    type === 'automatic' ? copy.automatic : copy.manual,
+                                  )
+                                  .join(' + ')
                           }
-                        >
-                          {(props) => (
-                            <input
-                              {...props}
-                              type="checkbox"
-                              checked={selected.has(identity)}
-                              disabled={
-                                locked ||
-                                candidates.isFetching ||
-                                alreadyBound ||
-                                !row.capabilities.can_bind
-                              }
-                              onChange={() =>
-                                onToggle({
-                                  ...row,
-                                  endpoint_note:
-                                    endpoint.connection_name &&
-                                    endpoint.connection_name !== row.endpoint_note
-                                      ? `${endpoint.connection_name} · ${row.endpoint_note || endpoint.base_url}`
-                                      : row.endpoint_note,
-                                })
-                              }
-                            />
-                          )}
-                        </Field>
+                          checked={selected.has(identity)}
+                          disabled={
+                            locked ||
+                            candidates.isFetching ||
+                            alreadyBound ||
+                            !row.capabilities.can_bind
+                          }
+                          onChange={() =>
+                            onToggle({
+                              ...row,
+                              endpoint_note:
+                                endpoint.connection_name &&
+                                endpoint.connection_name !== row.endpoint_note
+                                  ? `${endpoint.connection_name} · ${row.endpoint_note || endpoint.base_url}`
+                                  : row.endpoint_note,
+                            })
+                          }
+                        />
                         {!row.capabilities.can_bind && row.capabilities.unavailable_reason ? (
                           <ConnectionUnavailable reason={row.capabilities.unavailable_reason} />
                         ) : null}

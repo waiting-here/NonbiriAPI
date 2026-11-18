@@ -1,3 +1,4 @@
+import { ChoiceRow } from '../ui/ChoiceRow';
 import { ModelBindingCoverage, BindingRouteGuide } from './BindingRouteGuide';
 import { CharityTargets } from './CharityTargets';
 import { BindingHealth } from '../ResourceHealth';
@@ -494,31 +495,22 @@ function ModelForm({
               </div>
               <div className="ops-model-level-options">
                 {MODEL_LEVELS.map((level) => (
-                  <Field
-                    label={t('common.operations.charity.levelLabel', { level })}
-                    size="short"
+                  <ChoiceRow
                     key={level}
-                  >
-                    {(field) => (
-                      <input
-                        {...field}
-                        type="checkbox"
-                        checked={draft.allowedLevels.includes(level)}
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            allowedLevels: event.target.checked
-                              ? MODEL_LEVELS.filter(
-                                  (candidate) =>
-                                    candidate === level ||
-                                    current.allowedLevels.includes(candidate),
-                                )
-                              : current.allowedLevels.filter((candidate) => candidate !== level),
-                          }))
-                        }
-                      />
-                    )}
-                  </Field>
+                    label={t('common.operations.charity.levelLabel', { level })}
+                    checked={draft.allowedLevels.includes(level)}
+                    onChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        allowedLevels: checked
+                          ? MODEL_LEVELS.filter(
+                              (candidate) =>
+                                candidate === level || current.allowedLevels.includes(candidate),
+                            )
+                          : current.allowedLevels.filter((candidate) => candidate !== level),
+                      }))
+                    }
+                  />
                 ))}
               </div>
               {draft.allowedLevels.length === 0 ? (

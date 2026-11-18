@@ -1435,11 +1435,15 @@ test('charity settings keep grouped controls, readable model sources, and action
         .getByRole('button', { name: /Binding browser key 1/ })
         .click();
       await capture('sources', async () => {
-        const row = picker.locator('.nb-choice-list__items .nb-field').first();
+        const row = picker.locator('.nb-choice-list__items .nb-choice-row').first();
         await row.scrollIntoViewIfNeeded();
         const placement = await row.evaluate((node) => {
-          const label = node.querySelector('label')!.getBoundingClientRect();
-          const source = node.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          const label = node
+            .querySelector('.nb-choice-row__content > strong')!
+            .getBoundingClientRect();
+          const source = node
+            .querySelector('.nb-choice-row__content > span')!
+            .getBoundingClientRect();
           return {
             labelX: label.x,
             sourceX: source.x,

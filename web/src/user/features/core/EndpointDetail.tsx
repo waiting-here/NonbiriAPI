@@ -1688,7 +1688,7 @@ export function EndpointDetail({
 
   if (endpoint.isPending && !endpoint.data)
     return (
-      <div className="page core-page">
+      <div className="page page--detail core-page">
         <CoreLoading />
       </div>
     );
@@ -1702,7 +1702,7 @@ export function EndpointDetail({
     (isNotFoundError(keys.error) && replayAttempt?.kind !== 'delete')
   )
     return (
-      <div className="page core-page">
+      <div className="page page--detail core-page">
         <CoreErrorPanel
           error={endpoint.error ?? keys.error ?? new Error('The endpoint details are unavailable.')}
           onRetry={() => void endpoint.refetch()}
@@ -1730,7 +1730,7 @@ export function EndpointDetail({
 
   return (
     <div
-      className={`${embedded ? '' : 'page core-page'} core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
+      className={`${embedded ? '' : 'page page--detail core-page'} core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
     >
       {embedded ? (
         <SectionHead

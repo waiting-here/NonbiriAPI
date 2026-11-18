@@ -1017,7 +1017,7 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(picker.getByRole('button', { name: /Choose key/ }));
     await view.user.click(await picker.findByRole('button', { name: /Second shared key/ }));
     await view.user.click(await picker.findByRole('checkbox', { name: /model-one/ }));
-    expect(picker.getByRole('heading', { name: '3 service connection(s) selected' })).toBeVisible();
+    expect(picker.getByRole('heading', { name: 'Selected connections (3)' })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Add 3 connections' }));
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]).toEqual({

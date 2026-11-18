@@ -1,6 +1,5 @@
 .nb-workflow-id,
-.ops-binding-picker .charity-binding-selection strong,
-.ops-binding-picker .ops-picker-choice span {
+.ops-binding-picker .charity-binding-selection strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }

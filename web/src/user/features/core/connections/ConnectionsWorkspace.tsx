@@ -99,7 +99,7 @@ export function ConnectionsWorkspace({ user }: { user: UserProfile }) {
     </button>
   );
   return (
-    <div className="page core-page core-stack services-page">
+    <div className="page page--workspace core-page core-stack services-page">
       <PageHeader icon="resources" title={t('common.connections.title')} actions={createButton} />
       <SectionTabs group="own" />
       <Sheet
@@ -199,7 +199,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   const back = '/endpoints' + (backParams.size ? '?' + backParams.toString() : '');
   if (connection.isPending)
     return (
-      <div className="page core-page core-stack">
+      <div className="page page--detail core-page core-stack">
         <PageHeader
           title={t('common.connections.title')}
           back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
@@ -209,7 +209,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
     );
   if (connection.error || !connection.data)
     return (
-      <div className="page core-page core-stack">
+      <div className="page page--detail core-page core-stack">
         <PageHeader
           title={t('common.connections.title')}
           back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
@@ -223,7 +223,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
     { value: 'settings', label: t('common.connections.editConnection') },
   ] as const;
   return (
-    <div className="page core-page core-stack services-detail">
+    <div className="page page--detail core-page core-stack services-detail">
       <PageHeader
         title={connection.data.display_name}
         description={connection.data.note}

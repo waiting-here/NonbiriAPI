@@ -1356,7 +1356,9 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'My models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
-    await rendered.user.click(await screen.findByRole('checkbox', { name: /^claude-3 / }));
+    await rendered.user.click(
+      await screen.findByRole('checkbox', { name: 'claude-3', exact: true }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch-receipt')).toEqual({

@@ -75,6 +75,7 @@ export const designTokens = {
   },
   layout: {
     readable: '--nb-content-readable',
+    workspace: '--nb-content-workspace',
     wide: '--nb-content-wide',
     shellBreakpoint: '--nb-shell-breakpoint',
   },

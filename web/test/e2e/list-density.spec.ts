@@ -1341,18 +1341,22 @@ for (const role of ['admin', 'steward'] as const)
       .click();
     const picker = page.locator('.ops-binding-picker');
     const currentPage = picker.getByRole('navigation', { name: 'Pagination', exact: true }).first();
-    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
+    await expect(picker.locator('button[data-binding-choice]')).toHaveCount(50);
     await picker.getByRole('button', { name: /endpoint-1\.example\.test/ }).click();
-    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
-    await picker.getByRole('button', { name: /^Reviewed key 1 —/ }).click();
+    await expect(picker.locator('button[data-binding-choice]')).toHaveCount(50);
+    await picker.getByRole('button', { name: /^Reviewed key 1\s/ }).click();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       const placement = await picker
-        .locator('.nb-choice-list__items .nb-field')
+        .locator('.nb-choice-list__items .nb-choice-row')
         .first()
         .evaluate((field) => {
-          const label = field.querySelector('label')!.getBoundingClientRect();
-          const source = field.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          const label = field
+            .querySelector('.nb-choice-row__content > strong')!
+            .getBoundingClientRect();
+          const source = field
+            .querySelector('.nb-choice-row__content > span')!
+            .getBoundingClientRect();
           return {
             labelX: label.x,
             labelWidth: label.width,
@@ -1370,9 +1374,9 @@ for (const role of ['admin', 'steward'] as const)
     await picker.getByRole('button', { name: '1 · Choose source', exact: true }).click();
     await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
     await picker.getByRole('button', { name: /endpoint-61\.example\.test/ }).click();
-    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
+    await expect(picker.locator('button[data-binding-choice]')).toHaveCount(50);
     await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
-    await picker.getByRole('button', { name: /^Reviewed key 61 —/ }).click();
+    await picker.getByRole('button', { name: /^Reviewed key 61\s/ }).click();
     await expect(currentPage.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
     await picker.getByRole('checkbox', { name: /shared-model-2-/ }).check();
     await expect(picker.locator('.charity-binding-selection li')).toHaveCount(3);
