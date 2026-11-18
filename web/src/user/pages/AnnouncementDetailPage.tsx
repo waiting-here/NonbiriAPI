@@ -28,7 +28,8 @@ const LANGUAGE_LABEL_KEYS = {
 export function AnnouncementDetailPage() {
   const { announcementId } = useParams();
   const location = useLocation();
-  const backTo = listReturnPath(location.state, '/announcements');
+  const fromHome = location.state?.returnTo === '/';
+  const backTo = fromHome ? '/' : listReturnPath(location.state, '/announcements');
   const { t } = useTranslation();
   const announcement = useAnnouncement(announcementId);
   return (
@@ -36,7 +37,11 @@ export function AnnouncementDetailPage() {
       <PageHeader
         eyebrow={announcement.data ? t('user.announcements.eyebrow') : undefined}
         title={announcement.data?.title ?? t('user.announcements.title')}
-        back={<Link to={backTo}>{t('user.announcements.backToList')}</Link>}
+        back={
+          <Link to={backTo} state={{ announcementSource: location.state?.announcementSource }}>
+            {t(fromHome ? 'common.backHome' : 'user.announcements.backToList')}
+          </Link>
+        }
       />
       {announcement.isPending ? (
         <LoadingState />

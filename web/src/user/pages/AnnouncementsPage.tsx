@@ -1,3 +1,4 @@
+import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { StatusBadge } from '@shared/components/ui';
 import { Link, useLocation } from 'react-router';
@@ -75,6 +76,7 @@ export function AnnouncementsPage() {
   );
   const pageData = announcements.data;
   const busy = announcements.isFetching;
+  const { announcementSource, remember } = useAnnouncementReturn(Boolean(pageData) && !busy);
   const returnParams = new URLSearchParams(location.search);
   returnParams.set('page', pageData?.pagination.page ?? pager.page);
   returnParams.set('page_size', String(pager.pageSize));
@@ -131,7 +133,9 @@ export function AnnouncementsPage() {
                       <Link
                         className="nb-btn nb-btn--secondary"
                         to={`/announcements/${encodeURIComponent(item.id)}`}
-                        state={{ returnTo }}
+                        id={`read-${item.id}`}
+                        state={{ returnTo, announcementSource }}
+                        onClick={(event) => remember(event.currentTarget)}
                       >
                         {t('user.announcements.readMore')}
                       </Link>
