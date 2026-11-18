@@ -11,6 +11,7 @@ import { Link } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { DEFAULT_PAGE } from '@shared/operations/usePagePager';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { formatDateTime } from '@shared/utils/datetime';
 import { UserPageGate } from '../components/UserPageGate';
@@ -25,6 +26,7 @@ import {
   type HistoryPage,
 } from '../features/credits/data';
 import { useCreditCopy } from '../features/credits/copy';
+import { creditHistoryKeys } from '../features/credits/queries';
 import { useCreditHistoryUrl } from '../features/credits/url';
 import '../features/credits/credits.css';
 
@@ -56,8 +58,9 @@ function CreditHistory({
       active = false;
     };
   }, [url.filter.from, url.filter.to]);
+  const historyScope = creditHistoryKeys.account(accountID);
   const history = useQuery<HistoryPage, Error>({
-    queryKey: ['user', 'credit-history', accountID, url.filter, url.refreshRevision],
+    queryKey: [...historyScope, url.filter],
     queryFn: async ({ signal }) => {
       if (!coreSessionMatchesAccount(client, accountID)) throw new CancelledError();
       const page = await loadHistory(
@@ -76,10 +79,19 @@ function CreditHistory({
     enabled: Boolean(accountID),
     retry: false,
   });
-  const data = useRetainedQueryData(history, ['user', 'credit-history', accountID]);
+  const data = useRetainedQueryData(history, historyScope);
   const busy = history.isFetching;
   const timeReady =
     timeDraftValue(fromTimeDraft) !== undefined && timeDraftValue(toTimeDraft) !== undefined;
+  const refresh = () => {
+    // Mark cached pages stale before returning to the first page without its old anchor.
+    void client.invalidateQueries({ queryKey: historyScope, refetchType: 'none' });
+    if (url.filter.page === DEFAULT_PAGE && url.filter.anchor === undefined) {
+      void history.refetch();
+    }
+    url.refresh();
+    void wallet.refetch();
+  };
   const reset = () => {
     setValidation(null);
     setFromTimeDraft(createTimeDraft(null));
@@ -124,7 +136,7 @@ function CreditHistory({
             type="button"
             className="nb-btn nb-btn--secondary"
             disabled={busy}
-            onClick={url.refresh}
+            onClick={refresh}
           >
             {copy.refresh}
           </button>

@@ -16,6 +16,7 @@ import {
   stationSessionMatches,
 } from '@shared/charityManagement';
 import { ApiError, isApiError, isUnauthorized } from '@shared/query/http';
+import { creditHistoryKeys } from '../credits/queries';
 import {
   claimWelfare,
   contributeThursday,
@@ -24,6 +25,7 @@ import {
   getActivities,
   getCharityCapability,
   getDonation,
+  isResponseUnknown,
   terminateDonation,
   withdrawDonation,
   type CreateDonationInput,
@@ -364,31 +366,41 @@ async function reconcileActivities(
   return snapshot;
 }
 
-export function useClaimWelfare() {
+export function useClaimWelfare(account: string) {
   const queryClient = useQueryClient();
   const reconciliation = useAuthoritativeReconciliation();
   const mutation = useMutation({
-    mutationFn: () => economySessionRequest(queryClient, claimWelfare),
+    mutationFn: () => economySessionRequest(queryClient, claimWelfare, account),
     retry: false,
-    onSettled: (_data, error) =>
-      isStationBoundaryError(error)
-        ? undefined
-        : reconciliation.runReconcile(() => reconcileActivities(queryClient)),
+    onSettled: (_data, error) => {
+      if (isStationBoundaryError(error)) return;
+      if (!error || isResponseUnknown(error)) {
+        void queryClient.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
+      }
+      return reconciliation.runReconcile(() => reconcileActivities(queryClient));
+    },
   });
   return { ...mutation, ...reconciliation };
 }
 
-export function useContributeThursday() {
+export function useContributeThursday(account: string) {
   const queryClient = useQueryClient();
   const reconciliation = useAuthoritativeReconciliation();
   const mutation = useMutation({
     mutationFn: ({ periodId, expectedRevision }: { periodId: string; expectedRevision: string }) =>
-      economySessionRequest(queryClient, () => contributeThursday(periodId, expectedRevision)),
+      economySessionRequest(
+        queryClient,
+        () => contributeThursday(periodId, expectedRevision),
+        account,
+      ),
     retry: false,
-    onSettled: (_data, error) =>
-      isStationBoundaryError(error)
-        ? undefined
-        : reconciliation.runReconcile(() => reconcileActivities(queryClient)),
+    onSettled: (_data, error) => {
+      if (isStationBoundaryError(error)) return;
+      if (!error || isResponseUnknown(error)) {
+        void queryClient.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
+      }
+      return reconciliation.runReconcile(() => reconcileActivities(queryClient));
+    },
   });
   return { ...mutation, ...reconciliation };
 }

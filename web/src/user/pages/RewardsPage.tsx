@@ -24,6 +24,8 @@ import {
   type Redemption,
 } from '@shared/rewards/api';
 import { useUserSession } from '../data';
+import { creditHistoryKeys } from '../features/credits/queries';
+import { limitedActivityKeys } from '../features/limitedactivities/queries';
 import { stationSessionWrite } from '@shared/charityManagement';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import '@shared/rewards/rewards.css';
@@ -67,6 +69,10 @@ function RewardsContent({ account }: { account: string }) {
     queryKey: [...rewardKeys.user(account), 'history', cursor],
     queryFn: ({ signal }) => getReceipts(cursor, signal),
   });
+  const invalidateBalances = () => {
+    void client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
+    void client.invalidateQueries({ queryKey: limitedActivityKeys.wallet(account) });
+  };
   async function redeem() {
     if (sending.current) return;
     sending.current = true;
@@ -96,13 +102,14 @@ function RewardsContent({ account }: { account: string }) {
       } else {
         setResult(out);
         setCode('');
-        await client.invalidateQueries({ queryKey: rewardKeys.user(account) });
+        invalidateBalances();
         void client.invalidateQueries({ queryKey: ['user', 'session'] });
-        void client.invalidateQueries({ queryKey: ['user', 'credits'] });
+        await client.invalidateQueries({ queryKey: rewardKeys.user(account) });
       }
     } catch (e) {
       const unresolved = responseOutcomeUnknown(e);
-      if (!unresolved) pending.current = null;
+      if (unresolved) invalidateBalances();
+      else pending.current = null;
       setUnknownCode(unresolved ? operation.code : null);
       setError(e);
     } finally {
@@ -126,7 +133,11 @@ function RewardsContent({ account }: { account: string }) {
               void redeem();
             }}
           >
-            <Field label={t('common.rewards.codeText')} help={t('common.rewards.userCodeHelp')} span>
+            <Field
+              label={t('common.rewards.codeText')}
+              help={t('common.rewards.userCodeHelp')}
+              span
+            >
               {(p) => (
                 <div className="reward-form__controls">
                   <input

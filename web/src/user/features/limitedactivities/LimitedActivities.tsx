@@ -29,6 +29,7 @@ import { formatDateTime } from '@shared/utils/datetime';
 import { useUserSession } from '../../data';
 import { UserPageGate } from '../../components/UserPageGate';
 import { economySessionRequest } from '../economy/queries';
+import { creditHistoryKeys } from '../credits/queries';
 import { ExactCredits, ExactCount } from '../core/components';
 import '@shared/limitedactivities/limited.css';
 import pictureBookCover from '@shared/limitedactivities/picture-book-cover.webp';
@@ -176,13 +177,17 @@ function ExchangePanel({
     queryFn: () => economySessionRequest(client, getWallet, account),
   });
   const operation = useRetainedOperation(
-    (input: ExchangeInput, key: string) =>
-      economySessionRequest(client, () => exchange(input, key), account),
+    async (input: ExchangeInput, key: string, context) => {
+      const result = await economySessionRequest(client, () => exchange(input, key), account);
+      // The receipt may be a replay. Apply its wallet before reconciling the current balance.
+      context.commit(() => client.setQueryData(limitedActivityKeys.wallet(account), result.wallet));
+      return result;
+    },
     async (_input, error) => {
-      if (!error) {
+      if (!error || responseOutcomeUnknown(error)) {
         await Promise.all([
           client.invalidateQueries({ queryKey: limitedActivityKeys.root(account) }),
-          client.invalidateQueries({ queryKey: ['user', 'credits'] }),
+          client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) }),
         ]);
       }
     },
@@ -199,10 +204,7 @@ function ExchangePanel({
     const input = uncertain && operation.variables ? operation.variables : { asset, quantity };
     if (operation.isPending || (!uncertain && (cost === null || detail.status !== 'open'))) return;
     operation.mutate(input, {
-      onSuccess: (value) => {
-        setReceipt(value);
-        client.setQueryData(limitedActivityKeys.wallet(account), value.wallet);
-      },
+      onSuccess: setReceipt,
     });
   };
   return (
@@ -304,8 +306,8 @@ function ExchangePanel({
             <Note tone="ok">
               <span role="status">
                 {text('common.exchanged')} {receipt.receipt.quantity}{' '}
-                {currencyLabel(receipt.receipt.asset, text)} · {text('common.generalCreditsCharged')}{' '}
-                {receipt.receipt.cost}
+                {currencyLabel(receipt.receipt.asset, text)} ·{' '}
+                {text('common.generalCreditsCharged')} {receipt.receipt.cost}
               </span>
             </Note>
           ) : null}

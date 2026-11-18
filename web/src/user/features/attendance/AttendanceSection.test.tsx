@@ -10,6 +10,8 @@ import {
 import { ApiError } from '@shared/query/http';
 import { attendanceKeys, type SignInResult } from '@shared/attendance/api';
 import { AttendanceSection } from './AttendanceSection';
+import { creditHistoryKeys } from '../credits/queries';
+import { limitedActivityKeys } from '../limitedactivities/queries';
 
 const api = vi.hoisted(() => ({ list: vi.fn(), sign: vi.fn() }));
 vi.mock('@shared/attendance/api', async (load) => ({
@@ -115,8 +117,16 @@ it('retries the original date and key after an uncertain sign-in across midnight
     .mockImplementation(async () => result({ already_signed: true }));
   const view = await renderWithProviders(<AttendanceSection account="7" />, { station: 'user' });
   view.queryClient.setQueryData(['user', 'session'], attendanceAccount);
+  const historyKey = [...creditHistoryKeys.account('7'), { page: '1' }];
+  const walletKey = limitedActivityKeys.wallet('7');
+  const otherKey = [...creditHistoryKeys.account('8'), { page: '1' }];
+  for (const key of [historyKey, walletKey, otherKey]) view.queryClient.setQueryData(key, {});
   await view.user.click(await screen.findByRole('button', { name: 'Sign in today' }));
   await screen.findByRole('button', { name: 'Retry this sign-in' });
+  expect(view.queryClient.getQueryState(historyKey)?.isInvalidated).toBe(true);
+  expect(view.queryClient.getQueryState(walletKey)?.isInvalidated).toBe(true);
+  expect(view.queryClient.getQueryState(otherKey)?.isInvalidated).toBe(false);
+  expect(api.sign).toHaveBeenCalledTimes(1);
   page.items[0] = { ...page.items[0], site_date: '2026-11-04' };
   view.queryClient.setQueriesData(
     { queryKey: attendanceKeys.root(false, '7') },

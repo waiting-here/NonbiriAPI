@@ -94,7 +94,10 @@ function ActivitiesContent() {
               onRetry={() => void stream.retry()}
             />
             <ActivitiesMasterNotice snapshot={activities.data} />
-            <section className="economy-activities-grid" aria-label={t('user.activities.cardsLabel')}>
+            <section
+              className="economy-activities-grid"
+              aria-label={t('user.activities.cardsLabel')}
+            >
               <LoanCard
                 key={`loan:${accountID}`}
                 account={accountID ?? ''}
@@ -108,6 +111,7 @@ function ActivitiesContent() {
               >
                 <WelfareCard
                   key={`welfare:${accountID}`}
+                  account={accountID ?? ''}
                   welfare={activities.data.welfare}
                   masterAvailable={activities.data.master.available}
                 />
@@ -118,6 +122,7 @@ function ActivitiesContent() {
               >
                 <ThursdayCard
                   key={`thursday:${accountID}`}
+                  account={accountID ?? ''}
                   thursday={activities.data.thursday}
                   masterAvailable={activities.data.master.available}
                 />

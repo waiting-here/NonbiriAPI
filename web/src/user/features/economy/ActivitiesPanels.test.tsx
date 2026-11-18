@@ -182,6 +182,7 @@ describe('activity cards', () => {
     async (locale) => {
       const view = await renderWithProviders(
         <ThursdayCard
+          account="7"
           thursday={{ ...thursday, current: { ...thursday.current!, myCount: '3' } }}
           masterAvailable
         />,
@@ -197,7 +198,7 @@ describe('activity cards', () => {
   );
 
   it('disables a zero welfare award without consuming an intent', async () => {
-    await renderWithProviders(<WelfareCard welfare={welfare} masterAvailable />, {
+    await renderWithProviders(<WelfareCard account="7" welfare={welfare} masterAvailable />, {
       station: 'user',
       role: 'user',
     });
@@ -222,7 +223,7 @@ describe('activity cards', () => {
       },
     };
     vi.mocked(economyQueries.useClaimWelfare).mockReturnValue(claimMutation as never);
-    await renderWithProviders(<WelfareCard welfare={welfare} masterAvailable />, {
+    await renderWithProviders(<WelfareCard account="7" welfare={welfare} masterAvailable />, {
       station: 'user',
       role: 'user',
     });
@@ -232,7 +233,7 @@ describe('activity cards', () => {
 
   it('renders literature Markdown with inert HTML, exposes one fixed action, and hides internal ids', async () => {
     const rendered = await renderWithProviders(
-      <ThursdayCard thursday={thursday} masterAvailable />,
+      <ThursdayCard account="7" thursday={thursday} masterAvailable />,
       { station: 'user', role: 'user' },
     );
     expect(screen.getByText('not markdown', { selector: 'strong' })).toBeInTheDocument();
@@ -262,6 +263,7 @@ describe('activity cards', () => {
       };
       const view = await renderWithProviders(
         <ThursdayCard
+          account="7"
           thursday={{
             ...thursday,
             state: withCurrent ? 'open' : 'not_open',
@@ -305,7 +307,7 @@ describe('activity cards', () => {
     };
     vi.mocked(economyQueries.useContributeThursday).mockReturnValue(contributionMutation as never);
     const rendered = await renderWithProviders(
-      <ThursdayCard thursday={thursday} masterAvailable />,
+      <ThursdayCard account="7" thursday={thursday} masterAvailable />,
       { station: 'user', role: 'user' },
     );
     const button = screen.getByRole('button');
@@ -315,6 +317,7 @@ describe('activity cards', () => {
     expect(contributionMutation.mutateAsync).toHaveBeenCalledTimes(1);
     rendered.rerender(
       <ThursdayCard
+        account="7"
         thursday={{
           ...thursday,
           current: thursday.current
@@ -336,7 +339,7 @@ describe('activity cards', () => {
     expect(contributionMutation.mutateAsync).toHaveBeenCalledTimes(1);
     contributionMutation.reconcileGeneration = 1;
     contributionMutation.reconcileError = null;
-    rendered.rerender(<ThursdayCard thursday={thursday} masterAvailable />);
+    rendered.rerender(<ThursdayCard account="7" thursday={thursday} masterAvailable />);
     expect(
       screen.getByRole('button', { name: activityCopy.thursday.contributeOnce }),
     ).toBeEnabled();
@@ -362,15 +365,18 @@ describe('activity cards', () => {
       poolBalance: '10',
     };
     const rendered = await renderWithProviders(
-      <WelfareCard welfare={available} masterAvailable />,
+      <WelfareCard account="7" welfare={available} masterAvailable />,
       { station: 'user', role: 'user' },
     );
     await rendered.user.click(screen.getByRole('button'));
     expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
-    rendered.rerender(<WelfareCard welfare={{ ...available, poolBalance: '9' }} masterAvailable />);
+    rendered.rerender(
+      <WelfareCard account="7" welfare={{ ...available, poolBalance: '9' }} masterAvailable />,
+    );
     expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
     rendered.rerender(
       <WelfareCard
+        account="7"
         welfare={{ ...available, siteDay: '2026-09-01', poolBalance: '9' }}
         masterAvailable
       />,
@@ -381,7 +387,7 @@ describe('activity cards', () => {
     expect(claimMutation.mutateAsync).toHaveBeenCalledTimes(1);
     claimMutation.reconcileGeneration = 1;
     claimMutation.reconcileError = null;
-    rendered.rerender(<WelfareCard welfare={available} masterAvailable />);
+    rendered.rerender(<WelfareCard account="7" welfare={available} masterAvailable />);
     expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeEnabled();
     expect(screen.getByText(activityCopy.mutationReconciled)).toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: activityCopy.welfare.claim }));
@@ -398,6 +404,7 @@ describe('activity cards', () => {
     } as const;
     const rendered = await renderWithProviders(
       <ThursdayCard
+        account="7"
         thursday={{ ...thursday, state: 'ended', current: null, lastResult }}
         masterAvailable
       />,
@@ -406,6 +413,7 @@ describe('activity cards', () => {
     expect(screen.getByText(activityCopy.thursday.lastResultTitle)).toBeInTheDocument();
     rendered.rerender(
       <ThursdayCard
+        account="7"
         thursday={{
           ...thursday,
           state: 'settling',
@@ -417,7 +425,11 @@ describe('activity cards', () => {
     );
     expect(screen.queryByText(activityCopy.thursday.lastResultTitle)).toBeNull();
     rendered.rerender(
-      <ThursdayCard thursday={{ ...thursday, state: 'open', lastResult }} masterAvailable />,
+      <ThursdayCard
+        account="7"
+        thursday={{ ...thursday, state: 'open', lastResult }}
+        masterAvailable
+      />,
     );
     expect(screen.queryByText(activityCopy.thursday.lastResultTitle)).toBeNull();
   });

@@ -113,14 +113,16 @@ export function ActivityConnectionNotice({
 }
 
 export function WelfareCard({
+  account,
   welfare,
   masterAvailable,
 }: {
+  account: string;
   welfare: WelfareView;
   masterAvailable: boolean;
 }) {
   const { t } = useTranslation();
-  const mutation = useClaimWelfare();
+  const mutation = useClaimWelfare(account);
   const [blockedAuthority, setBlockedAuthority] = useState<{
     baselineGeneration: number;
   } | null>(null);
@@ -278,14 +280,16 @@ function ThursdayResult({ thursday }: { thursday: ThursdayView }) {
 }
 
 export function ThursdayCard({
+  account,
   thursday,
   masterAvailable,
 }: {
+  account: string;
   thursday: ThursdayView;
   masterAvailable: boolean;
 }) {
   const { t } = useTranslation();
-  const mutation = useContributeThursday();
+  const mutation = useContributeThursday(account);
   const current = thursday.current;
   const [blockedAuthority, setBlockedAuthority] = useState<{
     baselineGeneration: number;

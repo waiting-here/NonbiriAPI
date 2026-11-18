@@ -23,6 +23,7 @@ import {
   ExactCredits,
 } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
+import { creditHistoryKeys } from '../features/credits/queries';
 import { CapabilityUnavailableError, productionHomeAdapters } from '../features/core/adapters';
 import {
   coreKeys,
@@ -403,6 +404,7 @@ function CheckinCard({
         queryKey: coreKeys.home(accountId, asset === 'game' ? 'checkin' : 'game-checkin'),
       }),
       queryClient.invalidateQueries({ queryKey: coreKeys.me(accountId) }),
+      queryClient.invalidateQueries({ queryKey: creditHistoryKeys.account(accountId) }),
     ]);
     return ownStatus;
   };

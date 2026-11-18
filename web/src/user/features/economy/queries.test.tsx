@@ -379,7 +379,7 @@ describe('activity query authority recovery', () => {
     const rejected = new ApiError('feature_disabled', 'closed', 403);
     mocks.claimWelfare.mockRejectedValue(rejected);
     mocks.getActivities.mockResolvedValue(OLD_SNAPSHOT);
-    const rendered = renderHook(() => useClaimWelfare(), { wrapper });
+    const rendered = renderHook(() => useClaimWelfare(OWNER_ACCOUNT_ID), { wrapper });
     let caught: unknown;
     await act(async () => {
       try {
@@ -404,7 +404,7 @@ describe('activity query authority recovery', () => {
     async (_name, rejected) => {
       mocks.claimWelfare.mockRejectedValue(rejected);
       mocks.getActivities.mockResolvedValue(NEW_SNAPSHOT);
-      const rendered = renderHook(() => useClaimWelfare(), { wrapper });
+      const rendered = renderHook(() => useClaimWelfare(OWNER_ACCOUNT_ID), { wrapper });
       await act(async () => {
         await expect(rendered.result.current.mutateAsync()).rejects.toBe(rejected);
       });
@@ -479,7 +479,7 @@ describe('activity query authority recovery', () => {
     const refreshFailure = new ApiError('network_error', 'refresh failed', 0);
     mocks.claimWelfare.mockRejectedValue(rejected);
     mocks.getActivities.mockRejectedValueOnce(refreshFailure).mockResolvedValueOnce(OLD_SNAPSHOT);
-    const rendered = renderHook(() => useClaimWelfare(), { wrapper });
+    const rendered = renderHook(() => useClaimWelfare(OWNER_ACCOUNT_ID), { wrapper });
     await act(async () => {
       await expect(rendered.result.current.mutateAsync()).rejects.toBe(rejected);
     });
@@ -499,7 +499,7 @@ describe('activity query authority recovery', () => {
     const rejected = new ApiError('network_error', 'response lost', 0);
     mocks.contributeThursday.mockRejectedValue(rejected);
     mocks.getActivities.mockResolvedValue(OLD_SNAPSHOT);
-    const rendered = renderHook(() => useContributeThursday(), { wrapper });
+    const rendered = renderHook(() => useContributeThursday(OWNER_ACCOUNT_ID), { wrapper });
     await act(async () => {
       await expect(
         rendered.result.current.mutateAsync({
@@ -665,7 +665,7 @@ describe('activity query authority recovery', () => {
     const rejected = new ApiError('unauthorized', 'closed', 401);
     mocks.claimWelfare.mockRejectedValue(rejected);
     queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT);
-    const rendered = renderHook(() => useClaimWelfare(), { wrapper });
+    const rendered = renderHook(() => useClaimWelfare(OWNER_ACCOUNT_ID), { wrapper });
     let caught: unknown;
     await act(async () => {
       try {

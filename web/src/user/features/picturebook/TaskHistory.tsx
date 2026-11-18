@@ -5,6 +5,7 @@ import { SimplePager } from '@shared/operations/SimplePager';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { limitedActivityKeys } from '../limitedactivities/queries';
+import { creditHistoryKeys } from '../credits/queries';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { taskErrorLabel, taskStatusLabel, usePictureBookText } from '@shared/picturebook/copy';
 import { cancelTask } from '@shared/picturebook/publicApi';
@@ -26,6 +27,7 @@ export function TaskDetail({ id, account }: { readonly id: string; readonly acco
   useEffect(() => {
     if (taskID && billing && billing !== 'reserved') {
       void client.invalidateQueries({ queryKey: limitedActivityKeys.wallet(account) });
+      void client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
     }
   }, [account, billing, client, taskID]);
   return (
