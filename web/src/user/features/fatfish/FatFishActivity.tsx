@@ -28,6 +28,7 @@ import { cleanupLocalFishSessions, freshKey, localPlaySupportError } from '@shar
 import { PublicGameIdentity } from '../../games/common/PublicGameIdentity';
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
+import { creditHistoryKeys } from '../credits/queries';
 import './fatfish.css';
 const root = ['user', 'fat-fish'] as const;
 const challengeStateKeys: Record<FatFishChallenge['state'], string> = {
@@ -231,7 +232,7 @@ function Content({ account }: { account: string }) {
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: root }),
-      client.invalidateQueries({ queryKey: ['user', 'credits'] }),
+      client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) }),
     ]);
   };
   const doUnlock = async () => {

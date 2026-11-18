@@ -1,18 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SectionHead, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
-import {
-  Button,
-  Note,
-  OutcomeNote,
-  Panel,
-  StatusBadge,
-} from '@shared/components/ui';
+import { Button, Note, OutcomeNote, Panel, StatusBadge } from '@shared/components/ui';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { responseOutcomeUnknown } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { formatCount } from '@shared/utils/formatNumber';
 import { formatOffset } from '@shared/time';
+import { creditHistoryKeys } from '../credits/queries';
+import { limitedActivityKeys } from '../limitedactivities/queries';
 import { RewardSummary } from '@shared/rewards/RewardSummary';
 import { getAssets, rewardKeys, type Asset } from '@shared/rewards/api';
 import {
@@ -76,14 +73,15 @@ function AttendanceCard({
       return result;
     },
     async (_input, error, context) => {
+      context.assertCurrent();
+      if (!error || responseOutcomeUnknown(error)) {
+        void client.invalidateQueries({ queryKey: ['user', 'session'] });
+        void client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
+        void client.invalidateQueries({ queryKey: rewardKeys.user(account) });
+        void client.invalidateQueries({ queryKey: limitedActivityKeys.root(account) });
+      }
       await client.invalidateQueries({ queryKey: root });
       context.assertCurrent();
-      if (!error) {
-        void client.invalidateQueries({ queryKey: ['user', 'session'] });
-        void client.invalidateQueries({ queryKey: ['user', 'credits'] });
-        void client.invalidateQueries({ queryKey: rewardKeys.user(account) });
-        void client.invalidateQueries({ queryKey: ['user', 'limited-activities', account] });
-      }
     },
     root,
   );
@@ -313,8 +311,7 @@ export function AttendanceSection({ account }: { account: string }) {
   });
   const items = query.data?.items ?? [];
   const paused = query.data?.available === false;
-  const showPager =
-    !!query.data && (query.data.total > query.data.page_size || pager.page !== '1');
+  const showPager = !!query.data && (query.data.total > query.data.page_size || pager.page !== '1');
   return (
     <section className="attendance-section" aria-label={t('user.attendance.title')}>
       <SectionHead title={t('user.attendance.title')} description={t('user.attendance.intro')} />

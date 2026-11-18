@@ -17,6 +17,7 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { ApiError } from '@shared/query/http';
 import { economyKeys, economySessionRequest } from './queries';
+import { creditHistoryKeys } from '../credits/queries';
 import './loanPromo.css';
 import { formatCredits } from '../../games/common/strict';
 
@@ -63,7 +64,7 @@ export function LoanCard({
       await Promise.all([
         client.invalidateQueries({ queryKey: economyKeys.activities }),
         client.invalidateQueries({ queryKey: ['user', 'games'] }),
-        client.invalidateQueries({ queryKey: ['user', 'credits'] }),
+        client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) }),
         client.invalidateQueries({ queryKey: ['user', 'loans'] }),
       ]);
     },

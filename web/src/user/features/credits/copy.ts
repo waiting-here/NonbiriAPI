@@ -42,7 +42,7 @@ const en = {
   invalidPage: 'Enter a page number within the available range.',
   records: 'records',
   note: 'Funds set aside for calls, games and image generation appear as outflows. Refunds appear as separate entries. Each asset is shown separately.',
-  checkin: 'Check-in',
+  checkin: 'Daily check-in',
   welfare: 'Welfare pool',
   thursday: 'Thursday pool',
   fishing: 'Pond fishing',
@@ -56,7 +56,7 @@ const en = {
   api: 'Own API calls',
   charity: 'Charity calls',
   donation: 'Donation rewards',
-  admin: 'Administrator adjustments',
+  admin: 'Admin adjustments & rewards',
   penalty: 'Short-request penalties',
 };
 const zh: typeof en = {
@@ -99,7 +99,7 @@ const zh: typeof en = {
   invalidPage: '请输入有效范围内的页码。',
   records: '条记录',
   note: '调用、游戏和图像生成预扣的积分或活动币会先记为支出，退款另列记录。各种资产分别显示。',
-  checkin: '签到',
+  checkin: '每日签到',
   welfare: '低保池',
   thursday: '疯狂星期四',
   fishing: '池塘垂钓',
@@ -113,7 +113,7 @@ const zh: typeof en = {
   api: '自有 API 调用',
   charity: '公益调用',
   donation: '捐赠回馈',
-  admin: '管理员调整',
+  admin: '管理员调整与奖励发放',
   penalty: '过短请求惩罚',
 };
 const reasons: Record<Exclude<HistoryKind, 'lake_entry' | 'lake_exchange'>, [string, string]> = {

@@ -3,6 +3,7 @@ import { getModels, getQueue, getTask, getTasks } from '@shared/picturebook/publ
 import { activeTask } from '@shared/picturebook/publicTypes';
 import { economySessionRequest } from '../economy/queries';
 import { limitedActivityKeys } from '../limitedactivities/queries';
+import { creditHistoryKeys } from '../credits/queries';
 
 export const pictureBookKeys = {
   root: (account: string) => ['user', 'picture-book', account] as const,
@@ -60,6 +61,7 @@ export function useImageReconcile(account: string) {
     await Promise.all([
       client.invalidateQueries({ queryKey: pictureBookKeys.root(account) }),
       client.invalidateQueries({ queryKey: limitedActivityKeys.root(account) }),
+      client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) }),
     ]);
   };
 }
