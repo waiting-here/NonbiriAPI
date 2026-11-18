@@ -2062,9 +2062,11 @@ model does not exhaust another. Counters begin at configuration or the first new
 reservation and continue even when limits are removed. Unknown input/output
 breakdowns remain unattributed rather than being estimated. Dispatch replaces
 its own reservation under current limits; settlement and release apply once in
-the existing accounting transaction. Existing pre-upgrade in-flight work keeps
-its original whole-key scope. Owner export 35 includes `model_limits` with
-current model counters and recurring rules; account/key deletion and existing
+the existing accounting transaction. The schema 54 upgrade restores outstanding
+model call and credit reservations from receipts for the exact key and model.
+Reservations without a recorded model keep their original key scope.
+Owner export 37 includes `model_limits` with current model counters, recurring
+rules and the partial-history flag. Account and key deletion and existing
 terminal retention govern these records.
 
 ### 7.6 Duel history and bulk export
