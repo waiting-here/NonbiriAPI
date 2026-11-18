@@ -305,9 +305,9 @@ function ExchangePanel({
           {receipt ? (
             <Note tone="ok">
               <span role="status">
-                {text('common.exchanged')} {receipt.receipt.quantity}{' '}
+                {text('common.exchanged')} <ExactCount value={receipt.receipt.quantity} />{' '}
                 {currencyLabel(receipt.receipt.asset, text)} ·{' '}
-                {text('common.generalCreditsCharged')} {receipt.receipt.cost}
+                {text('common.generalCreditsCharged')} <ExactCredits value={receipt.receipt.cost} />
               </span>
             </Note>
           ) : null}

@@ -567,14 +567,24 @@ export function AnnouncementEditor({
           <p>{t('management.announcements.detail.previewScope')}</p>
           <div className="ops-grid">
             {preview.data.rendered_zh ? (
-              <section>
-                <h3 lang="zh">{draft.title_zh}</h3>
+              <section lang="zh">
+                {preview.data.rendered_en && (
+                  <p className="nb-small nb-muted" lang={i18n.resolvedLanguage}>
+                    {t('management.announcements.detail.chinese')}
+                  </p>
+                )}
+                <h3>{draft.title_zh}</h3>
                 <SafeAnnouncementBody html={preview.data.rendered_zh} />
               </section>
             ) : null}
             {preview.data.rendered_en ? (
-              <section>
-                <h3 lang="en">{draft.title_en}</h3>
+              <section lang="en">
+                {preview.data.rendered_zh && (
+                  <p className="nb-small nb-muted" lang={i18n.resolvedLanguage}>
+                    {t('management.announcements.detail.english')}
+                  </p>
+                )}
+                <h3>{draft.title_en}</h3>
                 <SafeAnnouncementBody html={preview.data.rendered_en} />
               </section>
             ) : null}
