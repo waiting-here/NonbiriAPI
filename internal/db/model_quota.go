@@ -32,6 +32,12 @@ const LakeExchangeDailyIndexSQL = `
 CREATE INDEX idx_lake_exchange_daily_source ON lake_notes_exchange_receipts(user_id,direction,created_at,source_amount_mag);
 `
 
+// DonationExpiryIndexSQL bounds the due-work probe to active keys with an expiry time.
+const DonationExpiryIndexSQL = `
+CREATE INDEX idx_donation_keys_due_expiry ON donation_keys(expires_at,donation_id)
+WHERE ended_at IS NULL AND expires_at IS NOT NULL;
+`
+
 // ModelConsumptionSQL extends the existing exact-model aggregate in place.
 const ModelConsumptionSQL = `
 ALTER TABLE donation_model_quotas ADD COLUMN call_limit_mag BLOB CHECK(call_limit_mag IS NULL OR (typeof(call_limit_mag)='blob' AND length(call_limit_mag)=16));

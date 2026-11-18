@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -429,9 +430,7 @@ func (s *Service) MaterializeDueExpiriesTx(ctx context.Context, tx *sql.Tx, deci
 
 func materializeDueExpiriesTx(ctx context.Context, tx *sql.Tx, now int64, limit int) error {
 	rows, err := tx.QueryContext(ctx, `SELECT dk.donation_id
-FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
-WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
- AND dk.expires_at IS NOT NULL AND dk.expires_at<=?
+`+donationstate.DueExpiryFrom+`
 GROUP BY dk.donation_id ORDER BY MIN(dk.expires_at),dk.donation_id LIMIT ?`, now, limit)
 	if err != nil {
 		return fmt.Errorf("donation: read due expiries: %w", err)
@@ -460,9 +459,7 @@ func (s *Service) MaterializeExpiries(ctx context.Context, decisionNow int64, li
 	}
 	defer func() { finish(resultErr) }()
 	rows, err := tx.QueryContext(ctx, `SELECT dk.donation_id
-FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
-WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
- AND dk.expires_at IS NOT NULL AND dk.expires_at<=?
+`+donationstate.DueExpiryFrom+`
 GROUP BY dk.donation_id ORDER BY MIN(dk.expires_at),dk.donation_id LIMIT ?`, decisionNow, limit)
 	if err != nil {
 		return 0, fmt.Errorf("donation: list expiry work: %w", err)

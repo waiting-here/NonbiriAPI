@@ -142,6 +142,7 @@ func mustExec(t *testing.T, source *sql.DB, q string, args ...any) {
 
 func restoreSourceLayout(t *testing.T, source *sql.DB) {
 	t.Helper()
+	mustExec(t, source, "DROP INDEX idx_donation_keys_due_expiry")
 	for _, column := range []string{"historical_costs_partial", "price_reserved_mag", "calls_reserved", "price_used_mag", "calls_used", "price_limit_mag", "call_limit_mag"} {
 		mustExec(t, source, "ALTER TABLE donation_model_quotas DROP COLUMN "+column)
 	}

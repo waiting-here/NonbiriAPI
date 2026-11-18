@@ -291,6 +291,9 @@ func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
 	}
 	// Recreate the exact prior layout around a real dispatched attempt, including
 	// its frozen receipt, response-start marker, ledger hold and token counters.
+	if _, err := e.store.DB().Exec("DROP INDEX idx_donation_keys_due_expiry"); err != nil {
+		t.Fatal(err)
+	}
 	for _, column := range []string{"historical_costs_partial", "price_reserved_mag", "calls_reserved", "price_used_mag", "calls_used", "price_limit_mag", "call_limit_mag"} {
 		if _, err := e.store.DB().Exec("ALTER TABLE donation_model_quotas DROP COLUMN " + column); err != nil {
 			t.Fatal(err)

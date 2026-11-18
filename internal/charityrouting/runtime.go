@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
@@ -303,11 +304,32 @@ func (s *Service) SnapshotForCaller(ctx context.Context, userID, modelID, decisi
 	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, operation, userID)
 }
 
+// Most snapshots only read. Check due work in the same WAL snapshot as routing.
+// When expiry is due, release the reader and make all routing and access
+// decisions inside the writer transaction that owns expiry materialization.
+func (s *Service) beginRoutingSnapshot(ctx context.Context, now int64) (*sql.Tx, func(error), bool, error) {
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.readDB, &sql.TxOptions{ReadOnly: true}, "charity_snapshot")
+	if err != nil {
+		return nil, nil, false, err
+	}
+	var due bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 `+donationstate.DueExpiryFrom+`)`, now).Scan(&due)
+	if err == nil && !due {
+		return tx, finish, false, nil
+	}
+	finish(err)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	tx, finish, err = observability.BeginMeasuredTx(ctx, s.db, nil, "charity_snapshot_expiry")
+	return tx, finish, true, err
+}
+
 func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, operation connectorcontract.Operation, callers ...int64) (_ RuntimeSnapshot, resultErr error) {
-	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
+	if s == nil || s.readDB == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
-	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "charity_snapshot")
+	tx, finish, expiryDue, err := s.beginRoutingSnapshot(ctx, decisionNow)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
 	}
@@ -331,8 +353,10 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 	if admissionErr != nil && !errors.Is(admissionErr, ErrUnavailable) {
 		return RuntimeSnapshot{}, admissionErr
 	}
-	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
-		return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
+	if expiryDue {
+		if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
+			return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit runtime snapshot: %w", err)
