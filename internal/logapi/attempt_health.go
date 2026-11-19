@@ -7,8 +7,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
-// AttemptHealthImpact describes the outcome at dispatch time. In particular,
-// later manual releases must not change a recorded retry deadline or count.
+// AttemptHealthImpact retains the effects of this call, including an ordered
+// settlement that finishes after the response. Later releases preserve them.
 type AttemptHealthImpact struct {
 	StreakEffect string          `json:"streak_effect"`
 	StreakBefore string          `json:"streak_before,omitempty"`

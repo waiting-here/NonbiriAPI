@@ -422,7 +422,8 @@ effect cannot be established return `unknown`.
 
 An optional `health_impact.backoff` records the reason for a wait this call
 started or extended, its `scope` (`key`, `service` or `model`), and the
-original `retry_at` Unix second. The attempt's `native_service` and
+original `retry_at` Unix second. The `retry_header` reason covers a valid
+`Retry-After` or `X-Retry-After` response header. The attempt's `native_service` and
 `upstream_model_id` identify the affected service and model when available.
 Quota and trial backoffs can also specify a `period`. A migrated wait with
 `observed_only: true` preserves the suggested retry time. Its reason may be

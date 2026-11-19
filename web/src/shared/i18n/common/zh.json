@@ -540,7 +540,7 @@
           "backoff": {
             "triggered": "此次调用触发等待",
             "observed": "当时记录的等待建议",
-            "retryHeader": "上游 Retry-After 响应头",
+            "retryHeader": "上游响应头指定了重试时间",
             "smartTrial": "试用请求失败",
             "reasonUnknown": "未记录等待原因",
             "retryAt": "当时预计可重试时间",

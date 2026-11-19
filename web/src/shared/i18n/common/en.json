@@ -540,7 +540,7 @@
           "backoff": {
             "triggered": "Wait triggered",
             "observed": "Recorded retry guidance",
-            "retryHeader": "Upstream Retry-After header",
+            "retryHeader": "Retry time supplied by the upstream response headers",
             "smartTrial": "Trial request failed",
             "reasonUnknown": "Wait reason not recorded",
             "retryAt": "Estimated retry time",
