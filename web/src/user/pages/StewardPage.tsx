@@ -11,13 +11,17 @@ import { StewardPermissionNotice } from '@shared/components/StewardPermissionNot
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { OperatorLogWorkspace } from '@shared/observability/OperatorLogWorkspace';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { Tabs } from '@shared/components/ui';
 import { TimeContextProvider } from '@shared/components/TimeContext';
 import { useUserAuthority } from '../features/operations/data';
 import '@shared/operations/operations.css';
 
+const OperatorLogWorkspace = lazy(() =>
+  import('@shared/observability/OperatorLogWorkspace').then(({ OperatorLogWorkspace }) => ({
+    default: OperatorLogWorkspace,
+  })),
+);
 const UserManagement = lazy(() =>
   import('@shared/components/UserManagement').then((module) => ({
     default: module.UserManagement,
