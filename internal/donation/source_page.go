@@ -159,7 +159,7 @@ func sourceUsableSQL() string {
 JOIN charity_model_access a ON a.model_id=cm.id
 
  WHERE target.donation_key_id=dk.id AND cm.enabled=1 AND a.allowed_level_mask<>0
- AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", clock) + `
+ AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", "target.upstream_model_id", clock) + `
  AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", clock, price, "dk.token_reserve") + `) AS price_reserve
  FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
  LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id

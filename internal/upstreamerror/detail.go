@@ -26,11 +26,12 @@ const redacted = "[redacted]"
 // Detail can only be populated through the extraction boundary. Its zero
 // value requests the caller's ordinary generic error message.
 type Detail struct {
-	message   string
-	code      string
-	backoff   smartbackoff.Classification
-	temporary TemporaryBackoff
-	caller    CallerFault
+	message        string
+	code           string
+	backoff        smartbackoff.Classification
+	temporary      TemporaryBackoff
+	caller         CallerFault
+	providerReason string
 }
 
 func (d Detail) Message() string                      { return d.message }
@@ -38,6 +39,7 @@ func (d Detail) Code() string                         { return d.code }
 func (d Detail) Backoff() smartbackoff.Classification { return d.backoff }
 func (d Detail) TemporaryBackoff() TemporaryBackoff   { return d.temporary }
 func (d Detail) CallerFault() CallerFault             { return d.caller }
+func (d Detail) ProviderReason() string               { return d.providerReason }
 
 // Context holds source identifiers and an exact secret detector backed by
 // the connector's fingerprints, never by retained plaintext credentials.
@@ -59,6 +61,7 @@ type Context struct {
 	// requests independently of caller-field rewriting.
 	InputLengthErrors bool
 	responseStatus    int
+	googleHTTPStatus  int
 }
 
 func (Context) String() string         { return "[redacted error context]" }
@@ -105,6 +108,7 @@ func (c Context) Parse(body []byte) Detail {
 	var classified smartbackoff.Classification
 	var temporary TemporaryBackoff
 	var caller CallerFault
+	var providerReason string
 	if body[0] == '{' {
 		if strictjson.ValidateObject(body) != nil {
 			return Detail{}
@@ -134,10 +138,17 @@ func (c Context) Parse(body []byte) Detail {
 		}
 		if raw, ok := root["error"]; ok {
 			var errorFields map[string]json.RawMessage
-			if c.CharityCall && json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
-				classified = smartbackoff.Classify(errorFields, c.Rules...)
-				temporary = c.temporaryBackoff(errorFields)
-				caller = c.callerFault(errorFields)
+			if json.Unmarshal(raw, &errorFields) == nil && errorFields != nil {
+				if c.CharityCall || c.googleHTTPStatus != 0 {
+					temporary = c.temporaryBackoff(errorFields)
+					providerReason, temporary = c.googleEvidence(errorFields, temporary)
+				}
+				if c.CharityCall {
+					classified = smartbackoff.Classify(errorFields, c.Rules...)
+					caller = c.callerFault(errorFields)
+				} else {
+					temporary = TemporaryBackoff{}
+				}
 			}
 		}
 	} else {
@@ -161,7 +172,7 @@ func (c Context) Parse(body []byte) Detail {
 	if !caller.Matches(c.responseStatus, cleanCode) {
 		caller = CallerFault{}
 	}
-	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified, temporary: temporary, caller: caller}
+	return Detail{message: boundUTF8(message, 1024), code: cleanCode, backoff: classified, temporary: temporary, caller: caller, providerReason: providerReason}
 }
 
 // IsEvent reports an explicit error envelope without interpreting an ordinary

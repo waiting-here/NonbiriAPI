@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
@@ -31,7 +32,11 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	if err != nil {
 		return nil, err
 	}
-	available, err := availableServiceUsesTx(ctx, tx, keys, now)
+	targetIDs := make([]int64, 0, len(candidates))
+	for _, item := range candidates {
+		targetIDs = append(targetIDs, item.candidate.Authorization.TargetID)
+	}
+	available, err := availableServiceTargetsTx(ctx, tx, targetIDs, now)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +57,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	result := make([]RuntimeCandidate, 0, len(candidates))
 	groups := make(map[int64]bool)
 	sawAvailableOperation := false
+	sawModelQuota := false
 	for _, item := range candidates {
 		var approvedMask int64
 		var unsupported connectorcontract.NativeService
@@ -67,12 +73,13 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				return nil, ErrInvariant
 			}
 			approvedMask |= services.Mask()
-			state, present := available[use.UseID]
-			if !present || state != "" {
-				if state == "" {
-					state = "unavailable"
+			state, present := available[serviceTarget{use.UseID, candidate.Authorization.TargetID}]
+			modelLimited := state.modelRetryAt > now && strings.HasPrefix(state.reason, "google_")
+			if !present || (state.reason != "" && !modelLimited) {
+				if state.reason == "" {
+					state.reason = "unavailable"
 				}
-				requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, state, "", "")
+				requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, state.reason, "", "")
 				continue
 			}
 			matchedOperation := false
@@ -86,7 +93,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 					return nil, ErrInvariant
 				}
 				if len(routes) > 0 {
-					sawAvailableOperation = true
+					sawAvailableOperation = sawAvailableOperation || !modelLimited
 					matchedOperation = true
 				}
 				for _, route := range routes {
@@ -106,6 +113,11 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				} else if unsupported == "" {
 					unsupported = use.NativeService
 				}
+				continue
+			}
+			if modelLimited {
+				requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, state.reason, "", "")
+				sawModelQuota = true
 				continue
 			}
 			candidate.NativeServices = services
@@ -129,6 +141,9 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	if len(groups) > MaxRuntimeCandidates {
 		return nil, ErrResourceLimit
 	}
+	if len(result) == 0 && sawModelQuota {
+		return nil, donationquota.ErrLimited
+	}
 	if len(result) == 0 && sawAvailableOperation {
 		return nil, errors.Join(ErrInvalidRequest, &connectorcontract.RequestRejection{
 			Field: "request", Reason: "no connector supports the required request features",
@@ -139,33 +154,40 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	return result, nil
 }
 
-func availableServiceUsesTx(ctx context.Context, tx *sql.Tx, keys []int64, now int64) (map[int64]string, error) {
-	if len(keys) == 0 || len(keys) > maxBindingBatch {
+type serviceTarget struct{ useID, targetID int64 }
+type serviceTargetState struct {
+	reason       string
+	modelRetryAt int64
+}
+
+func availableServiceTargetsTx(ctx context.Context, tx *sql.Tx, targetIDs []int64, now int64) (map[serviceTarget]serviceTargetState, error) {
+	if len(targetIDs) == 0 || len(targetIDs) > maxBindingBatch {
 		return nil, ErrInvalidRequest
 	}
-	args := make([]any, 1, len(keys)+1)
-	args[0] = now
-	for _, key := range keys {
-		args = append(args, key)
+	args := []any{now, now}
+	for _, target := range targetIDs {
+		args = append(args, target)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT a.use_id,CASE WHEN h.failure_disabled=1 THEN 'failure_disabled'
-WHEN `+smartbackoff.ServiceUntilSQL("h")+`>? THEN 'cooldown' ELSE '' END FROM charity_use_availability a
+	rows, err := tx.QueryContext(ctx, `SELECT a.use_id,t.id,CASE WHEN h.failure_disabled=1 THEN 'failure_disabled'
+WHEN `+smartbackoff.ServiceUntilSQL("h")+`>? THEN 'cooldown' WHEN mc.retry_at>? THEN mc.reason ELSE '' END,COALESCE(mc.retry_at,0)
+FROM charity_binding_targets t JOIN charity_use_availability a ON a.donation_key_id=t.donation_key_id AND (a.native_service_bit & t.native_service_mask)<>0
 JOIN donation_keys dk ON dk.id=a.donation_key_id
 LEFT JOIN donation_service_health h ON h.use_id=a.use_id AND h.endpoint_key_id=dk.endpoint_key_id
 AND h.native_service_bit=a.native_service_bit AND h.credential_version_id=a.credential_version_id
-WHERE a.donation_key_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")+`)`, args...)
+LEFT JOIN donation_service_model_cooldowns mc ON mc.health_id=h.id AND mc.upstream_model_id=t.upstream_model_id
+WHERE t.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(targetIDs)), ",")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := make(map[int64]string)
+	result := make(map[serviceTarget]serviceTargetState)
 	for rows.Next() {
-		var useID int64
-		var reason string
-		if err := rows.Scan(&useID, &reason); err != nil {
+		var key serviceTarget
+		var state serviceTargetState
+		if err := rows.Scan(&key.useID, &key.targetID, &state.reason, &state.modelRetryAt); err != nil {
 			return nil, err
 		}
-		result[useID] = reason
+		result[key] = state
 	}
 	return result, rows.Err()
 }

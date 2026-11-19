@@ -46,6 +46,9 @@ WHERE c.id=? AND c.state='claimed'`, input.ClaimID).Scan(&check.DonationKeyID, &
 	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.DispatchedAt {
 		return claim.ErrKeyRateLimited
 	}
+	if row.modelRetryAt > input.DispatchedAt {
+		return &claim.ModelQuotaLimit{Reason: row.modelQuotaReason, BindingID: a.BindingID, NativeService: a.NativeService}
+	}
 	reservation, err := readUsageReservation(ctx, tx, input.RequestID, input.ClaimID)
 	if err != nil {
 		return err

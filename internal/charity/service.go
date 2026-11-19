@@ -228,6 +228,8 @@ type keyReservation struct {
 	modelID, modelEnabled, keyEnabled, failureDisabled                   int64
 	endpointEnabled, physicalKeyEnabled                                  int64
 	expiresAt, rateLimitedUntil                                          sql.NullInt64
+	modelRetryAt                                                         int64
+	modelQuotaReason                                                     string
 	status, endedReason                                                  string
 	priceLimit, callLimit, tokenLimit                                    []byte
 	priceUsed, priceReserved, callsUsed, callsReserved                   []byte
@@ -284,6 +286,9 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 
 	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.ClaimedAt {
 		return claim.CharityReservation{}, claim.ErrKeyRateLimited
+	}
+	if row.modelRetryAt > input.ClaimedAt {
+		return claim.CharityReservation{}, &claim.ModelQuotaLimit{Reason: row.modelQuotaReason, BindingID: input.Authorization.BindingID, NativeService: input.Authorization.NativeService}
 	}
 
 	priceReserve := row.pricing.tokenReserve
@@ -448,7 +453,7 @@ cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-max(`+smartbackoff.EffectiveUntilSQL("dk.id")+`,`+smartbackoff.ServiceUntilSQL("h")+`)
+max(`+smartbackoff.EffectiveUntilSQL("dk.id")+`,`+smartbackoff.ServiceUntilSQL("h")+`),COALESCE(mc.retry_at,0),COALESCE(mc.reason,'')
 FROM charity_reservations cr
 JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN donation_keys dk ON dk.id=?
@@ -461,6 +466,7 @@ JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.id=?
 JOIN charity_binding_targets t ON t.binding_id=b.id AND t.id=? AND t.revision=? AND t.donation_key_id=dk.id
  AND t.upstream_model_id=? AND (t.native_service_mask & ?)<>0
 LEFT JOIN donation_service_health h ON h.use_id=? AND h.endpoint_key_id=k.id AND h.native_service_bit=? AND h.credential_version_id=?
+LEFT JOIN donation_service_model_cooldowns mc ON mc.health_id=h.id AND mc.upstream_model_id=t.upstream_model_id
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=? AND e.id=? AND k.id=?
 AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
 LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.UpstreamModelID, serviceSet.Mask(),
@@ -476,7 +482,7 @@ LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.
 		&row.pricing.mode, &row.pricing.discount, &row.pricing.requestUser, &row.pricing.requestReward,
 		&row.pricing.uncachedUser, &row.pricing.writeUser, &row.pricing.readUser, &row.pricing.outputUser,
 		&row.pricing.uncachedReward, &row.pricing.writeReward, &row.pricing.readReward, &row.pricing.outputReward,
-		&row.pricing.tokenReserve, &suspended, &row.rateLimitedUntil)
+		&row.pricing.tokenReserve, &suspended, &row.rateLimitedUntil, &row.modelRetryAt, &row.modelQuotaReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return keyReservation{}, claim.ErrNotFound
 	}

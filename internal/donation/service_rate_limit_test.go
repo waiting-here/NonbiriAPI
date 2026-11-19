@@ -29,6 +29,9 @@ func TestServiceRateLimitReleasePreservesStateAndReplays(t *testing.T) {
 			d := approvedResetDonation(t, e, owner, physical)
 			id, key := parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID)
 			useID, revision := seedResetHealth(t, e, key)
+			if _, err := e.store.DB().Exec("INSERT INTO donation_service_model_cooldowns SELECT id,'model-a','google_daily_requests',? FROM donation_service_health WHERE use_id=?", donationTestNow+900, useID); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := e.store.DB().Exec("UPDATE donation_keys SET enabled=0,expires_at=?,price_limit_mag=nbi_u128(100),call_limit_mag=nbi_u128(50),token_limit_mag=nbi_u128(1000),token_reserve=7 WHERE id=?", donationTestNow+3600, key); err != nil {
 				t.Fatal(err)
 			}
@@ -87,6 +90,10 @@ func TestServiceRateLimitReleasePreservesStateAndReplays(t *testing.T) {
 			}
 			if snapshot() != before {
 				t.Fatal("release changed independent state")
+			}
+			var models int
+			if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_service_model_cooldowns mc JOIN donation_service_health h ON h.id=mc.health_id WHERE h.use_id=?", useID).Scan(&models); err != nil || models != 0 {
+				t.Fatal("model wait after service release", models, err)
 			}
 			var generation, episode, serviceGeneration, cooldowns int
 			query := "SELECT generation,episode,(SELECT backoff_generation FROM donation_service_health WHERE use_id=?),(SELECT count(*) FROM donation_key_cooldowns WHERE donation_key_id=?) FROM donation_key_backoffs WHERE donation_key_id=?"

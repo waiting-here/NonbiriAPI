@@ -43,6 +43,11 @@ type charityTestEnv struct {
 
 func newCharityTestEnv(t *testing.T, captureReview ...bool) *charityTestEnv {
 	t.Helper()
+	return newCharityTestEnvAt(t, "https://charity.example.test/v1", captureReview...)
+}
+
+func newCharityTestEnvAt(t *testing.T, baseURL string, captureReview ...bool) *charityTestEnv {
+	t.Helper()
 	master := bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes)
 	vault, err := secret.New(master)
 	clear(master)
@@ -92,7 +97,7 @@ VALUES('charity_token_reserve_milli','5',?) ON CONFLICT(key) DO UPDATE SET value
 	}
 	environment.donorID = environment.seedUser(t, "charity-donor")
 	environment.callerID = environment.seedUser(t, "charity-caller")
-	environment.seedDonationRoute(t, review)
+	environment.seedDonationRoute(t, baseURL, review)
 	environment.requestModel = environment.seedModel(t, "request", "per_request")
 	environment.tokenModel = environment.seedModel(t, "token", "per_token")
 	return environment
@@ -113,9 +118,8 @@ revision,created_at,updated_at) VALUES(?,?,0,?,?,?,?,?,?,?,?,?,?)`, discord, dis
 	return id
 }
 
-func (environment *charityTestEnv) seedDonationRoute(t *testing.T, review *secret.DonationReview) {
+func (environment *charityTestEnv) seedDonationRoute(t *testing.T, baseURL string, review *secret.DonationReview) {
 	t.Helper()
-	baseURL := "https://charity.example.test/v1"
 	tx := beginTestTx(t, environment.store.DB())
 	endpointID, err := testseed.InsertEndpointTx(t.Context(), tx, testseed.EndpointInput{OwnerUserID: environment.donorID, Type: connectorcontract.TypeOpenAICompatible, BaseURL: baseURL, Note: "private endpoint", At: charityTestNow})
 	if err != nil {

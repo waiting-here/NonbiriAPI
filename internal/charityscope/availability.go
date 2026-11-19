@@ -49,12 +49,13 @@ func buildServiceOperationCases() string {
 
 // AvailableUseSQL accepts repository-owned expressions only. Domain quotas,
 // donor eligibility and legacy failure gates remain in the caller's query.
-func AvailableUseSQL(memberID, targetMask, modelTypes, now string) string {
+func AvailableUseSQL(memberID, targetMask, modelTypes, model, now string) string {
 	operations := `(CASE ag.configured_type` + strings.ReplaceAll(serviceOperationCases, "SERVICE_BIT", "av.native_service_bit") + ` ELSE 0 END)`
 	return `EXISTS(SELECT 1 FROM charity_use_availability av
 JOIN endpoint_grant_authorizations ag ON ag.grant_revision_id=av.grant_revision_id
 LEFT JOIN donation_service_health service_health ON service_health.use_id=av.use_id AND service_health.endpoint_key_id=ag.endpoint_key_id AND service_health.native_service_bit=av.native_service_bit AND service_health.credential_version_id=av.credential_version_id
 WHERE av.donation_key_id=` + memberID + ` AND (av.native_service_bit&(` + targetMask + `))<>0
 AND (` + operations + `&(` + modelTypes + `))<>0 AND COALESCE(service_health.failure_disabled,0)=0
-AND ` + smartbackoff.ServiceUntilSQL("service_health") + `<=` + now + `)`
+AND ` + smartbackoff.ServiceUntilSQL("service_health") + `<=` + now + `
+AND ` + smartbackoff.ModelUntilSQL("service_health", model) + `<=` + now + `)`
 }

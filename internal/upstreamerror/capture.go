@@ -102,6 +102,7 @@ func (c Context) readResponse(ctx context.Context, response *http.Response, insp
 	if media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type")); err == nil && media == "application/json" {
 		c.responseStatus = response.StatusCode
 	}
+	c.googleHTTPStatus = response.StatusCode
 	return c.Parse(body)
 }
 

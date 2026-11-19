@@ -20,6 +20,12 @@ func releaseUseRateLimitTx(ctx context.Context, tx *sql.Tx, useID, now int64) er
 		return ErrConflict
 	}
 	if states[0].id != 0 {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM donation_service_model_cooldowns WHERE health_id=?", states[0].id); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE dispatch_retry_after_observations SET pending_health_id=NULL WHERE pending_health_id=?", states[0].id); err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE donation_service_health SET retry_after_until=NULL,
 backoff_generation=backoff_generation+1,backoff_episode=0,backoff_period=NULL,backoff_source=NULL,backoff_stage=0,backoff_retry_at=NULL,trial_claim_id=NULL,updated_at=?
 WHERE id=? AND backoff_generation<9223372036854775807`, now, states[0].id)

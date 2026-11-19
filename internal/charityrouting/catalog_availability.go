@@ -64,7 +64,7 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
  AND ` + donorAvailableSQL("cx.decision_now") + `
  AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
  AND ` + smartbackoff.EffectiveUntilSQL("dk.id") + `<=cx.decision_now
- AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", "cx.decision_now") + `
+ AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", "target.upstream_model_id", "cx.decision_now") + `
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
  AND (dk.expires_at IS NULL OR dk.expires_at>cx.decision_now)
  AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>nbi_u128(0)
