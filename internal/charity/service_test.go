@@ -879,6 +879,13 @@ WHERE kind='donation_failure_disabled'`).Scan(&alerts); err != nil {
 	if disabled != 1 || alerts != 1 {
 		t.Fatalf("disabled/alerts = %d/%d, want 1/1", disabled, alerts)
 	}
+	var before string
+	var trigger sql.NullString
+	if err := environment.store.DB().QueryRow(`SELECT
+(SELECT json_extract(value,'$.value') FROM json_each(context_json,'$.occurred_facts') WHERE json_extract(value,'$.key')='failure_streak_before'),
+json_extract(context_json,'$.trigger_attempt') FROM admin_alerts WHERE kind='donation_failure_disabled'`).Scan(&before, &trigger); err != nil || before != "9" || trigger.Valid {
+		t.Fatalf("missing-attempt fold before=%q, trigger=%v, err=%v", before, trigger, err)
+	}
 }
 
 func TestCapacityBoundaryExpiryAndTerminalCleanup(t *testing.T) {
