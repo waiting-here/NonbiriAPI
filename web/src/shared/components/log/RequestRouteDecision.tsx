@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
+import { failureReasonKey, isGoogleModelQuotaReason } from '@shared/observability/failure';
 import { type RouteDecision } from './routeDecision';
 
 const reasonLabels: Record<string, string> = {
@@ -64,7 +65,15 @@ export function RequestRouteDecision({ decision }: { decision: RouteDecision }) 
                 )}
               </div>
               <p>
-                {Object.hasOwn(reasonLabels, reason) ? t(reasonLabels[reason]) : reason}
+                {isGoogleModelQuotaReason(reason)
+                  ? t('logs.routing.googleQuotaCooldown', {
+                      reason: t(
+                        failureReasonKey(reason) ?? 'common.failure.reason.google_model_quota',
+                      ),
+                    })
+                  : Object.hasOwn(reasonLabels, reason)
+                    ? t(reasonLabels[reason])
+                    : reason}
                 {field && (
                   <>
                     {' '}

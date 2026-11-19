@@ -1,6 +1,12 @@
 import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
 import { normalizeRouteDecision, type RouteDecision } from './routeDecision';
 import {
+  normalizeFailureDisablement,
+  normalizeFailureSummary,
+  type FailureDisablement,
+  type FailureGroup,
+} from './managementFailures';
+import {
   normalizeFailure,
   normalizeDelivery,
   type FailureDiagnostics,
@@ -207,12 +213,14 @@ export interface UserLogAttempt extends LogAttemptCommon {
 }
 
 export interface AdminLogAttempt extends LogAttemptCommon {
+  failure_disablement?: FailureDisablement;
   donation_id?: string | null;
   donation_key_id?: string | null;
   role: 'admin';
   usage_total_mismatch: boolean;
 }
 export interface StewardLogAttempt extends LogAttemptCommon {
+  failure_disablement?: FailureDisablement;
   donation_id?: string | null;
   donation_key_id?: string | null;
   role: 'steward';
@@ -225,12 +233,14 @@ export type UserLogDetail = { delivery?: DeliveryDiagnostics | null } & (
   | { kind: 'charity'; request: UserCharityLogRow; caller_safe_result: { class: LogResultClass } }
 );
 export interface AdminLogDetail {
+  failure_summary?: FailureGroup[];
   route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: AdminLogRow;
   attempts: CursorPage<AdminLogAttempt>;
 }
 export interface StewardLogDetail {
+  failure_summary?: FailureGroup[];
   route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: StewardLogRow;
@@ -726,7 +736,9 @@ function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCom
   const completedAt = unixSecond(root.completed_at, 'attempt completion time');
   if (completedAt < startedAt) invalidResponse('attempt completion time');
   return {
-    error_diagnostics: normalizeFailure(root.error_diagnostics),
+    error_diagnostics: normalizeFailure(root.error_diagnostics, {
+      includeProviderReason: !redactedDisplay,
+    }),
     attempt_seq: decimal(root.attempt_seq, 'attempt sequence', { positive: true }),
     result_kind: resultKind,
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, 'endpoint key id'),
@@ -784,6 +796,7 @@ export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
       'donation_id',
       'donation_key_id',
       'error_diagnostics',
+      'failure_disablement',
     ],
     'administrator log attempt',
     [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
@@ -791,6 +804,7 @@ export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
   return {
     ...commonAttempt(root),
     ...managementAttemptTarget(root),
+    failure_disablement: normalizeFailureDisablement(root.failure_disablement),
     role: 'admin',
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
   };
@@ -805,6 +819,7 @@ export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
       'donation_id',
       'donation_key_id',
       'error_diagnostics',
+      'failure_disablement',
     ],
     'steward log attempt',
     [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
@@ -812,6 +827,7 @@ export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
   return {
     ...commonAttempt(root),
     ...managementAttemptTarget(root),
+    failure_disablement: normalizeFailureDisablement(root.failure_disablement),
     role: 'steward',
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
   };
@@ -855,12 +871,13 @@ export function normalizeUserLogDetail(value: unknown): UserLogDetail {
 export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
   const root = record(
     value,
-    ['request', 'attempts', 'delivery', 'route_decision'],
+    ['request', 'attempts', 'delivery', 'route_decision', 'failure_summary'],
     'administrator log detail',
     ['request', 'attempts'],
   );
   return {
     route_decision: normalizeRouteDecision(root.route_decision),
+    failure_summary: normalizeFailureSummary(root.failure_summary),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeAdminLogRow(root.request),
     attempts: page(root.attempts, 'administrator log attempts', normalizeAdminLogAttempt),
@@ -870,12 +887,13 @@ export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
 export function normalizeStewardLogDetail(value: unknown): StewardLogDetail {
   const root = record(
     value,
-    ['request', 'attempts', 'delivery', 'route_decision'],
+    ['request', 'attempts', 'delivery', 'route_decision', 'failure_summary'],
     'steward log detail',
     ['request', 'attempts'],
   );
   return {
     route_decision: normalizeRouteDecision(root.route_decision),
+    failure_summary: normalizeFailureSummary(root.failure_summary),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts: page(root.attempts, 'steward log attempts', normalizeStewardLogAttempt),

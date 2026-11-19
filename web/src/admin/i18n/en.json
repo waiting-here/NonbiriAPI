@@ -930,6 +930,11 @@
         "worker": "Background task checkpoint failed",
         "deletionSnapshot": "Balances before deletion"
       },
+      "triggerAttempt": {
+        "title": "Attempt that triggered disablement",
+        "view": "View triggering attempt",
+        "unavailable": "This attempt is no longer available in request logs."
+      },
       "kindDescription": {
         "returnDetected": "A request carried a valid site outbound marker. Review its source; processing continued without an automatic penalty.",
         "fetchFailed": "Could not fetch the model list. Check the service address and key.",

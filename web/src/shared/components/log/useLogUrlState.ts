@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { isLogOperation, validLogDiscordID, validLogResourceID } from './data';
+import { ATTEMPT_SEQ_PARAM } from './managementFailures';
 
 // URL-backed state for the shared log screens. Page, page size, text filters,
 // and the unix-second time range live in the query string so a filtered view
@@ -121,6 +122,7 @@ export function useLogUrlState(
             params.delete('request_id');
             params.delete('attempt_page');
             params.delete('attempt_page_size');
+            params.delete(ATTEMPT_SEQ_PARAM);
           }
           return params;
         },

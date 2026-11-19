@@ -41,6 +41,67 @@ export const FAILURE_PHASES = [
   'transport',
 ] as const;
 
+const GOOGLE_MODEL_QUOTA_REASON_KEYS = {
+  google_daily_requests: 'common.failure.reason.google_daily_requests',
+  google_minute_input_tokens: 'common.failure.reason.google_minute_input_tokens',
+  google_minute_requests: 'common.failure.reason.google_minute_requests',
+  google_daily_input_tokens: 'common.failure.reason.google_daily_input_tokens',
+  google_model_quota: 'common.failure.reason.google_model_quota',
+};
+
+const PROVIDER_REASON_KEYS = {
+  ...GOOGLE_MODEL_QUOTA_REASON_KEYS,
+  google_access_token_type_unsupported:
+    'common.failure.reason.google_access_token_type_unsupported',
+  google_api_key_invalid: 'common.failure.reason.google_api_key_invalid',
+  google_model_overloaded: 'common.failure.reason.google_model_overloaded',
+};
+
+const FAILURE_REASON_KEYS: Record<string, string> = {
+  ...PROVIDER_REASON_KEYS,
+  http_error: 'common.failure.reason.http_error',
+  attempt_failed: 'common.failure.reason.attempt_failed',
+  dns_timeout: 'common.failure.reason.dns_timeout',
+  dns_not_found: 'common.failure.reason.dns_not_found',
+  dns_failed: 'common.failure.reason.dns_failed',
+  tls_unknown_authority: 'common.failure.reason.tls_unknown_authority',
+  tls_hostname_mismatch: 'common.failure.reason.tls_hostname_mismatch',
+  tls_invalid_certificate: 'common.failure.reason.tls_invalid_certificate',
+  tls_record_invalid: 'common.failure.reason.tls_record_invalid',
+  canceled: 'common.failure.reason.canceled',
+  deadline_exceeded: 'common.failure.reason.deadline_exceeded',
+  network_timeout: 'common.failure.reason.network_timeout',
+  compression_header_invalid: 'common.failure.reason.compression_header_invalid',
+  compression_checksum_invalid: 'common.failure.reason.compression_checksum_invalid',
+  unexpected_eof: 'common.failure.reason.unexpected_eof',
+  connection_reset: 'common.failure.reason.connection_reset',
+  connection_refused: 'common.failure.reason.connection_refused',
+  connection_aborted: 'common.failure.reason.connection_aborted',
+  connection_closed: 'common.failure.reason.connection_closed',
+  broken_pipe: 'common.failure.reason.broken_pipe',
+  connect_failed: 'common.failure.reason.connect_failed',
+  read_failed: 'common.failure.reason.read_failed',
+  write_failed: 'common.failure.reason.write_failed',
+  invalid_json: 'common.failure.reason.invalid_json',
+  json_type_mismatch: 'common.failure.reason.json_type_mismatch',
+  invalid_response: 'common.failure.reason.invalid_response',
+  client_write_failed: 'common.failure.reason.client_write_failed',
+  response_limit: 'common.failure.reason.response_limit',
+  upstream_error: 'common.failure.reason.upstream_error',
+  network_error: 'common.failure.reason.network_error',
+  platform: 'common.failure.reason.platform',
+  recovery_unknown: 'common.failure.reason.recovery_unknown',
+  legacy_unknown: 'common.failure.reason.legacy_unknown',
+};
+
+export function failureReasonKey(code: string | undefined): string | undefined {
+  return code && Object.hasOwn(FAILURE_REASON_KEYS, code) ? FAILURE_REASON_KEYS[code] : undefined;
+}
+
+export function isGoogleModelQuotaReason(code: string): boolean {
+  return Object.hasOwn(GOOGLE_MODEL_QUOTA_REASON_KEYS, code);
+}
+
 export interface FailureCause {
   type?: string;
   code?: string;
@@ -50,6 +111,7 @@ export interface FailureDiagnostics {
   category?: string;
   phase?: string;
   code?: string;
+  provider_reason?: string;
   message?: string;
   causes: FailureCause[];
   secondary: FailureCause[];
@@ -102,7 +164,10 @@ function status(value: unknown): number | undefined {
 
 // A damaged observation is local to that field; it must not hide the request,
 // accounting result, or other independently readable observations.
-export function normalizeFailure(value: unknown): FailureDiagnostics | null | undefined {
+export function normalizeFailure(
+  value: unknown,
+  { includeProviderReason = false } = {},
+): FailureDiagnostics | null | undefined {
   if (value == null) return undefined;
   const raw = object(value);
   if (!raw) return null;
@@ -113,6 +178,13 @@ export function normalizeFailure(value: unknown): FailureDiagnostics | null | un
     timings: [],
     incomplete: false,
   };
+  if (
+    includeProviderReason &&
+    typeof raw.provider_reason === 'string' &&
+    Object.hasOwn(PROVIDER_REASON_KEYS, raw.provider_reason)
+  ) {
+    result.provider_reason = raw.provider_reason;
+  }
   for (const key of [
     'category',
     'phase',

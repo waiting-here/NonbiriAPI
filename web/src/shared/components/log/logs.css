@@ -88,6 +88,44 @@
 .log-attempt-facts {
   margin: var(--nb-space-3) 0 0;
 }
+.log-failure-summary h3 {
+  margin: 0 0 var(--nb-space-2);
+  font-size: var(--nb-font-size-lg);
+}
+.log-failure-summary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  column-gap: var(--nb-space-4);
+  margin: 0;
+}
+.log-failure-summary dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: var(--nb-space-3);
+  align-items: baseline;
+  padding-block: var(--nb-space-2);
+  border-top: 1px solid var(--nb-color-border);
+}
+.log-failure-summary dd {
+  margin: 0;
+  font-weight: var(--nb-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.log-attempt[aria-current='true'] {
+  border-color: var(--nb-color-accent);
+}
+.log-focused-attempt-heading,
+.log-attempt-heading h3[tabindex='-1'] {
+  scroll-margin-block-start: var(--nb-space-16);
+}
+.log-focused-attempt-heading:focus-visible,
+.log-attempt-heading h3[tabindex='-1']:focus-visible {
+  box-shadow: var(--nb-focus-ring);
+}
+.log-attempt-disablement {
+  margin-block-start: var(--nb-space-2);
+  overflow-wrap: anywhere;
+}
 .log-filters .nb-chip button {
   min-width: 2.5rem;
   min-height: 2.5rem;

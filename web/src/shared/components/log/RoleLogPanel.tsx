@@ -66,6 +66,13 @@ import { rejectionDescriptionKeys } from './rejectionDescriptions';
 import { TokenBuckets } from './TokenBuckets';
 import { HeaderFacts } from './HeaderFacts';
 import { useLogUrlState } from './useLogUrlState';
+import { ATTEMPT_SEQ_PARAM, logAttemptSequence } from './managementFailures';
+import {
+  AttemptFailureSummary,
+  AttemptReason,
+  AttemptService,
+  FailureStreak,
+} from './ManagementAttemptFailures';
 
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   openai_chat_completions: 'common.operations.logs.route.openaiChatCompletions',
@@ -197,6 +204,8 @@ function AttemptTable({
   onPageChange,
   onPageSizeChange,
   logReturnTo,
+  focusAttemptSeq,
+  locatingFocus,
 }: {
   logReturnTo: string;
   detail: NumberedRoleLogDetail;
@@ -207,27 +216,69 @@ function AttemptTable({
   busy: boolean;
   onPageChange: (page: string) => void;
   onPageSizeChange: (size: PageSize) => void;
+  focusAttemptSeq?: string;
+  locatingFocus: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const isDiscovery = detail.request.route_kind === 'model_discovery';
+  const [previousFocus, setPreviousFocus] = useState(focusAttemptSeq);
+  const [open, setOpen] = useState(isDiscovery || focusAttemptSeq !== undefined);
+  if (focusAttemptSeq !== previousFocus) {
+    setPreviousFocus(focusAttemptSeq);
+    if (focusAttemptSeq !== undefined) setOpen(true);
+  }
+  const focusTarget = useRef<HTMLElement | null>(null);
+  const registerFocusTarget = useCallback((target: HTMLElement | null) => {
+    focusTarget.current = target;
+  }, []);
+  useEffect(() => {
+    if (!open || focusAttemptSeq === undefined || locatingFocus) return;
+    // Let the containing detail panel finish its own initial focus and scroll.
+    const frame = requestAnimationFrame(() => {
+      focusTarget.current?.scrollIntoView?.({ block: 'start' });
+      focusTarget.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusAttemptSeq, locatingFocus, open]);
   if (!('attempts' in detail)) return null;
   const attempts = detail.attempts;
-  const isDiscovery = detail.request.route_kind === 'model_discovery';
-  return (
+  const focused = attempts.data.find((attempt) => attempt.attempt_seq === focusAttemptSeq);
+  const focusMissing = focusAttemptSeq !== undefined && !locatingFocus && focused === undefined;
+  const table = (
     <div className="ops-stack" aria-busy={busy}>
-      {attempts.data.length === 0 ? (
+      {focusMissing && (
+        <p
+          className="log-focused-attempt-heading"
+          ref={registerFocusTarget}
+          tabIndex={-1}
+          role="status"
+        >
+          {t('common.operations.logs.attemptUnavailable')}
+        </p>
+      )}
+      {locatingFocus ? (
+        <p role="status">{t('common.loading')}</p>
+      ) : attempts.data.length === 0 ? (
         <p>{t('common.operations.logs.noAttempts')}</p>
       ) : (
         <ol className="log-attempts">
           {attempts.data.map((attempt) => (
-            <li className="log-attempt" key={attempt.attempt_seq}>
+            <li
+              className="log-attempt"
+              key={attempt.attempt_seq}
+              aria-current={attempt === focused || undefined}
+            >
               <div className="log-attempt-heading">
                 {endpointKeyID && attempt.endpoint_key_id === endpointKeyID ? (
                   <StatusBadge tone="accent">
                     {t('common.operations.logs.matchedKeyAttempt')}
                   </StatusBadge>
                 ) : null}
-                <h3>
+                <h3
+                  ref={attempt === focused ? registerFocusTarget : undefined}
+                  tabIndex={attempt === focused ? -1 : undefined}
+                >
                   {t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}
                 </h3>
                 <StatusBadge tone={attempt.result_kind === 'synthetic' ? 'neutral' : 'info'}>
@@ -243,6 +294,18 @@ function AttemptTable({
                   <UsageMismatchBadge visible={attempt.usage_total_mismatch} />
                 ) : null}
               </div>
+              {attempt.role !== 'user' && attempt.failure_disablement && (
+                <div className="log-attempt-disablement">
+                  <Note tone="warn" title={t('common.operations.logs.failureDisablement')}>
+                    <p>
+                      <AttemptService observation={attempt.failure_disablement} />
+                    </p>
+                    <p>
+                      <FailureStreak observation={attempt.failure_disablement} />
+                    </p>
+                  </Note>
+                </div>
+              )}
               {attempt.result_kind === 'synthetic' ? (
                 <p className="log-attempt-notice">
                   {t(
@@ -253,6 +316,16 @@ function AttemptTable({
                 </p>
               ) : null}
               <dl className="nb-facts log-attempt-facts">
+                {attempt.role !== 'user' && attempt.error_diagnostics?.provider_reason && (
+                  <div>
+                    <dt>{t('common.operations.logs.failureReason')}</dt>
+                    <dd>
+                      <AttemptReason
+                        failure={{ reason: attempt.error_diagnostics.provider_reason }}
+                      />
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>{t('logs.endpointBaseUrl')}</dt>
                   <dd className="mono">{attempt.endpoint_base_url}</dd>
@@ -358,14 +431,27 @@ function AttemptTable({
           ))}
         </ol>
       )}
-      <PagePagination
-        metadata={detail.attempt_pagination}
-        requestedPage={page}
-        busy={busy}
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-      />
+      {!locatingFocus && (
+        <PagePagination
+          metadata={detail.attempt_pagination}
+          requestedPage={focusAttemptSeq === undefined ? page : undefined}
+          busy={busy}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
     </div>
+  );
+  return (
+    <Fold
+      plain
+      open={open}
+      onOpenChange={setOpen}
+      title={t('common.operations.logs.attempts')}
+      summary={'attempt_count' in detail.request ? detail.request.attempt_count : undefined}
+    >
+      {table}
+    </Fold>
   );
 }
 
@@ -516,7 +602,16 @@ function ScopedRoleLogPanel({
     scopeReady,
     pageParam: 'attempt_page',
     pageSizeParam: 'attempt_page_size',
+    clearOnWindowChange: ATTEMPT_SEQ_PARAM,
   });
+  const attemptSeqValues = searchParams.getAll(ATTEMPT_SEQ_PARAM);
+  const focusAttemptSeq =
+    role !== 'user' &&
+    selectedID !== null &&
+    selectedID === urlRequestID &&
+    attemptSeqValues.length === 1
+      ? logAttemptSequence(attemptSeqValues[0])
+      : undefined;
   const [revoked, setRevoked] = useState(false);
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
@@ -530,6 +625,7 @@ function ScopedRoleLogPanel({
     attemptPager.page,
     attemptPager.pageSize,
     observerEnabled,
+    focusAttemptSeq,
   );
   const authorityError = isFinalAuthorityError(sessionError)
     ? sessionError
@@ -693,6 +789,7 @@ function ScopedRoleLogPanel({
         next.delete('request_id');
         next.delete('attempt_page');
         next.delete('attempt_page_size');
+        next.delete(ATTEMPT_SEQ_PARAM);
         const actualPage = logs.data?.pagination.page;
         if (actualPage !== undefined) next.set('page', actualPage);
         next.set('page_size', String(pager.pageSize));
@@ -716,6 +813,7 @@ function ScopedRoleLogPanel({
       next.set('page_size', String(pager.pageSize));
       next.delete('attempt_page');
       next.delete('attempt_page_size');
+      next.delete(ATTEMPT_SEQ_PARAM);
       return next;
     });
   };
@@ -925,7 +1023,13 @@ function ScopedRoleLogPanel({
     detailBody =
       isApiError(detail.error) && detail.error.code === 'not_found' ? (
         <p role="status">
-          {t(role === 'user' ? 'common.operations.logs.requestUnavailable' : 'logs.lookupMissing')}
+          {t(
+            role === 'user'
+              ? 'common.operations.logs.requestUnavailable'
+              : focusAttemptSeq !== undefined
+                ? 'common.operations.logs.attemptUnavailable'
+                : 'logs.lookupMissing',
+          )}
         </p>
       ) : (
         <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
@@ -1068,27 +1172,20 @@ function ScopedRoleLogPanel({
                   label: t('common.operations.logs.attempts'),
                   wide: true,
                   value: (
-                    <Fold
+                    <AttemptTable
                       key={detailRequest.id}
-                      plain
-                      defaultOpen={detailRequest.route_kind === 'model_discovery'}
-                      title={t('common.operations.logs.attempts')}
-                      summary={
-                        'attempt_count' in detailRequest ? detailRequest.attempt_count : undefined
-                      }
-                    >
-                      <AttemptTable
-                        detail={detailData}
-                        logReturnTo={logReturnTo}
-                        role={role}
-                        accountID={accountID}
-                        endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
-                        page={attemptPager.page}
-                        busy={detail.isFetching}
-                        onPageChange={attemptPager.setPage}
-                        onPageSizeChange={attemptPager.setPageSize}
-                      />
-                    </Fold>
+                      detail={detailData}
+                      logReturnTo={logReturnTo}
+                      role={role}
+                      accountID={accountID}
+                      endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
+                      page={attemptPager.page}
+                      busy={detail.isFetching}
+                      focusAttemptSeq={focusAttemptSeq}
+                      locatingFocus={focusAttemptSeq !== undefined && detail.isPlaceholderData}
+                      onPageChange={attemptPager.setPage}
+                      onPageSizeChange={attemptPager.setPageSize}
+                    />
                   ),
                 },
               ]
@@ -1320,6 +1417,9 @@ function ScopedRoleLogPanel({
                   resultHint(detailRequest)
                 )}
               </Note>
+              {role !== 'user' && detailData && 'failure_summary' in detailData && (
+                <AttemptFailureSummary groups={detailData.failure_summary} />
+              )}
               {detailData && 'route_decision' in detailData && detailData.route_decision && (
                 <RequestRouteDecision decision={detailData.route_decision} />
               )}

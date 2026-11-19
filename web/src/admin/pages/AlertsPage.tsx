@@ -10,6 +10,13 @@ import { DataTable, Field, FilterBar, Fold, StatusBadge } from '@shared/componen
 import './alerts.css';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { queryPath } from '@shared/operations/api';
+import {
+  AttemptReason,
+  AttemptService,
+  FailureStreak,
+} from '@shared/components/log/ManagementAttemptFailures';
+import { ATTEMPT_SEQ_PARAM } from '@shared/components/log/managementFailures';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
@@ -32,6 +39,7 @@ import {
   useAdminAlertDetail,
   useAdminTargetDiagnostic,
   validAlertID,
+  type AlertTriggerAttempt,
   type AlertTarget,
   type DiagnosticTargetKind,
 } from '../features/operations/alertDetail';
@@ -105,6 +113,47 @@ function targetPath(target: AlertTarget, targets: AlertTarget[]): string | null 
     default:
       return null;
   }
+}
+
+function TriggerAttempt({ attempt }: { attempt: AlertTriggerAttempt }) {
+  const { t } = useTranslation();
+  return (
+    <section className="nb-stack nb-stack--sm" aria-label={t('admin.alerts.triggerAttempt.title')}>
+      <h3>{t('admin.alerts.triggerAttempt.title')}</h3>
+      <dl className="nb-facts nb-facts--inline">
+        <div>
+          <dt>{t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}</dt>
+          <dd>
+            <AttemptService observation={attempt} />
+          </dd>
+        </div>
+        <div>
+          <dt>{t('common.operations.logs.failureReason')}</dt>
+          <dd>
+            <AttemptReason failure={attempt} />
+          </dd>
+        </div>
+      </dl>
+      <p className="alert-trigger-streak">
+        <FailureStreak observation={attempt} />
+      </p>
+      {attempt.available ? (
+        <div className="nb-actions">
+          <Link
+            className="nb-btn nb-btn--secondary"
+            to={queryPath('/logs', {
+              request_id: attempt.request_id,
+              [ATTEMPT_SEQ_PARAM]: attempt.attempt_seq,
+            })}
+          >
+            {t('admin.alerts.triggerAttempt.view')}
+          </Link>
+        </div>
+      ) : (
+        <p className="nb-muted">{t('admin.alerts.triggerAttempt.unavailable')}</p>
+      )}
+    </section>
+  );
 }
 
 export function AlertsPage() {
@@ -438,6 +487,9 @@ export function AlertsPage() {
                   </dd>
                 </div>
               </dl>
+              {detail.data.trigger_attempt && (
+                <TriggerAttempt attempt={detail.data.trigger_attempt} />
+              )}
               <h3>{copy.facts}</h3>
               {detail.data.occurred_facts.length === 0 ? (
                 <p className="nb-muted">{copy.noFacts}</p>

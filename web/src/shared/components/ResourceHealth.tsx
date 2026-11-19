@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
+import { failureReasonKey } from '@shared/observability/failure';
 import {
   serviceStateLabel,
   type BindingAvailability,
@@ -58,6 +59,7 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
   const { t } = useTranslation();
   const formatDateTime = useDateTimeFormatter();
   const backoff = status.smart_backoff;
+  const modelQuotaReason = failureReasonKey(status.model_quota_reason);
   const until = Math.max(
     status.retry_after_until ?? 0,
     backoff?.state === 'waiting' ? backoff.retry_at : 0,
@@ -90,6 +92,7 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
           })}
         </p>
       ) : null}
+      {modelQuotaReason && <p>{t(modelQuotaReason)}</p>}
       {until > 0 ? (
         <p>{t('common.resourceHealth.retryAt', { time: formatDateTime(until) })}</p>
       ) : null}

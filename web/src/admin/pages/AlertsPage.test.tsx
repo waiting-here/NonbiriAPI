@@ -168,7 +168,67 @@ describe('administrator alerts page', () => {
       }),
     ).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
     expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'View triggering attempt' })).not.toBeInTheDocument();
   });
+
+  it.each([true, false])(
+    'shows retained trigger facts with attempt availability %s',
+    async (available) => {
+      const donationAlert = alert('7', false, { kind: 'donation_failure_disabled' });
+      const requestID = `req_${'A'.repeat(21)}Q`;
+      installJsonFetchFixtures([
+        { method: 'GET', path: '/admin/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+          body: page([donationAlert]),
+        },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts/7',
+          body: {
+            alert: donationAlert,
+            context_version: 1,
+            occurred_facts: [],
+            targets: [],
+            current_state: [],
+            related_logs: null,
+            resolution_kind: '',
+            trigger_attempt: {
+              request_id: requestID,
+              attempt_seq: '23',
+              connector_type: 'google-gemini',
+              native_service: 'gemini_generate_content',
+              reason: 'google_access_token_type_unsupported',
+              status_code: 401,
+              streak_before: '9',
+              streak_after: '10',
+              threshold: '10',
+              available,
+            },
+          },
+        },
+      ]);
+      await renderWithProviders(<AlertsPage />, {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route: '/alerts?resolved=false&page=1&page_size=20&alert_id=7',
+      });
+      const trigger = await screen.findByRole('region', {
+        name: 'Attempt that triggered disablement',
+      });
+      expect(trigger).toHaveTextContent('Google rejected the access token type · HTTP 401');
+      expect(trigger).toHaveTextContent('Consecutive failures rose from 9 to 10');
+      const link = within(trigger).queryByRole('link', { name: 'View triggering attempt' });
+      if (available) {
+        expect(link).toHaveAttribute('href', `/logs?request_id=${requestID}&attempt_seq=23`);
+      } else {
+        expect(link).not.toBeInTheDocument();
+        expect(trigger).toHaveTextContent('This attempt is no longer available in request logs.');
+      }
+    },
+  );
 
   it('confirms the administrator session before requesting private alerts', async () => {
     const fetchMock = installJsonFetchFixtures([

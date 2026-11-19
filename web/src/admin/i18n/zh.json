@@ -930,6 +930,11 @@
         "worker": "后台任务检查点失败",
         "deletionSnapshot": "删除前余额"
       },
+      "triggerAttempt": {
+        "title": "触发停用的调用",
+        "view": "查看触发停用的调用",
+        "unavailable": "请求日志中已无法查看这次调用。"
+      },
       "kindDescription": {
         "returnDetected": "发现带有本站出站标记的请求。请核查来源；请求照常处理，未自动处罚。",
         "fetchFailed": "模型列表获取失败，请检查服务地址和密钥。",
