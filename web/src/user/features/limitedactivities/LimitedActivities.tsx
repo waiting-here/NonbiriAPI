@@ -67,7 +67,7 @@ export function LimitedActivitiesSection({
       {query.data?.length === 0 && !children ? (
         <EmptyState title={text('common.noLimitedTimeActivitiesAreListed')} body="" />
       ) : null}
-      {(query.data?.length ?? 0) > 0 || children ? (
+      {(query.data?.length ?? 0) > 0 ? (
         <div className="limited-grid">
           {query.data?.map((activity) => {
             const isBook = activity.key === 'picture-book';
@@ -132,9 +132,9 @@ export function LimitedActivitiesSection({
               </Link>
             );
           })}
-          {children}
         </div>
       ) : null}
+      {children && <div className="limited-grid">{children}</div>}
     </section>
   );
 }
