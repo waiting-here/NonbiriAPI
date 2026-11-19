@@ -1,4 +1,4 @@
-import { SimplePager } from '@shared/operations/SimplePager';
+import { PagePagination } from '@shared/operations/PagePagination';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -617,26 +617,35 @@ const Catalog = forwardRef<
             </div>
           ) : null}
           <div className="picturebook-actions">
-            <SimplePager
-              page={filter.page}
-              hasMore={Boolean(models.data && filter.page * filter.page_size < models.data.total)}
-              disabled={locked || models.isFetching}
-              onPrev={() =>
-                setFilter((current) => ({
-                  ...current,
-                  page: current.page - 1,
-                  catalog_revision: models.data?.revision,
-                }))
-              }
-              onNext={() =>
-                setFilter((current) => ({
-                  ...current,
-                  page: current.page + 1,
-                  catalog_revision: models.data?.revision,
-                }))
-              }
-              labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
-            />
+            {models.data && (
+              <PagePagination
+                metadata={{
+                  page: String(filter.page),
+                  page_size: filter.page_size,
+                  total_items: String(models.data.total),
+                  total_pages: String(Math.max(1, Math.ceil(models.data.total / filter.page_size))),
+                }}
+                busy={locked || models.isFetching}
+                maxPage={1000n}
+                pageSizes={[20, 50, 100]}
+                onPageChange={(page) =>
+                  setFilter((current) => ({
+                    ...current,
+                    page: Number(page),
+                    catalog_revision: models.data?.revision,
+                  }))
+                }
+                onPageSizeChange={(size) => {
+                  if (size !== 10)
+                    setFilter((current) => ({
+                      ...current,
+                      page: 1,
+                      page_size: size,
+                      catalog_revision: models.data?.revision,
+                    }));
+                }}
+              />
+            )}
             {selected ? (
               <button
                 className="nb-btn nb-btn--secondary"

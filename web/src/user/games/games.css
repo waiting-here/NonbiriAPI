@@ -767,12 +767,16 @@
 .game-toolbar__label {
   display: none;
 }
-.game-toolbar .nb-more__menu :is(button, a) {
+.game-toolbar__menu {
+  color: var(--nb-color-text);
+}
+.game-toolbar__menu [role^='menuitem'] {
   display: flex;
   align-items: center;
   gap: var(--nb-space-2);
+  min-height: 2.75rem;
 }
-.game-toolbar .nb-more__menu [aria-checked='true'] {
+.game-toolbar__menu [aria-checked='true'] {
   color: var(--nb-color-accent);
   background: var(--nb-color-accent-quiet);
 }

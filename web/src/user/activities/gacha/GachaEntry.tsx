@@ -105,27 +105,29 @@ function GachaPoolBanner({ pool, english }: { pool: GachaPoolEntry; english: boo
         : `显示 R-18 封面：${name}`;
   return (
     <article className="card limited-entry gacha-pool-entry gacha-pool-entry--rated">
-      <button
-        type="button"
-        className="limited-entry__cover gacha-pool-entry__toggle"
-        aria-label={label}
-        aria-pressed={visible}
-        disabled={!allowed}
-        onClick={() => setRevealed((current) => !current)}
-      >
-        {cover}
-        {allowed ? (
-          <span className="gacha-pool-entry__hint">
-            {english
-              ? visible
-                ? 'R-18 · Click to blur cover'
-                : 'R-18 · Click to reveal cover'
-              : visible
-                ? 'R-18 · 点击模糊封面'
-                : 'R-18 · 点击显示封面'}
-          </span>
-        ) : null}
-      </button>
+      <div className="limited-entry__cover">
+        <button
+          type="button"
+          className="gacha-pool-entry__toggle"
+          aria-label={label}
+          aria-pressed={visible}
+          disabled={!allowed}
+          onClick={() => setRevealed((current) => !current)}
+        >
+          {cover}
+          {allowed ? (
+            <span className="gacha-pool-entry__hint">
+              {english
+                ? visible
+                  ? 'R-18 · Click to blur cover'
+                  : 'R-18 · Click to reveal cover'
+                : visible
+                  ? 'R-18 · 点击模糊封面'
+                  : 'R-18 · 点击显示封面'}
+            </span>
+          ) : null}
+        </button>
+      </div>
       <Link className="limited-entry__copy gacha-pool-entry__link" to={href}>
         {copy}
       </Link>

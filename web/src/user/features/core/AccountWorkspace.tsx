@@ -1,3 +1,4 @@
+import { AutomaticRestrictions } from '@shared/components/AutomaticRestrictions';
 import { OutcomeNote, Segmented } from '@shared/components/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -534,6 +535,7 @@ export function AccountWorkspace({
           </Link>
         }
       />
+      <AutomaticRestrictions restrictions={user.automatic_restrictions} />
       <div className="account-profile">
         <section className="core-card">
           <div className="core-card__header">

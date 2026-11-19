@@ -23,6 +23,7 @@ import {
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { routePath } from '@shared/routing/routeRegistry';
+import { useStationTitle } from '@shared/routing/useStationTitle';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useUserSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
@@ -58,7 +59,6 @@ function SignedInLanguageControl({ accountId }: { accountId: string }) {
 }
 
 const USER_ACCOUNT_PATH = routePath('user', 'account');
-const USER_STEWARD_PATH = routePath('user', 'steward');
 const USER_PRIVACY_PATH = routePath('user', 'privacy');
 const USER_TERMS_PATH = routePath('user', 'terms');
 const USER_REPORT_PATH = routePath('user', 'credential-report');
@@ -103,9 +103,7 @@ export function UserLayout() {
     },
   });
 
-  useEffect(() => {
-    document.title = `${siteName} · ${t('user.shell.title')}`;
-  }, [t, siteName]);
+  useStationTitle('user', siteName, Boolean(session.data) && !logoutRequested);
 
   useBrandFavicon(siteLogoURL);
 
@@ -340,43 +338,6 @@ export function UserLayout() {
                   </li>
                 ))}
               </ul>
-              {signedIn && menuOpen ? (
-                <div className="nb-user-drawer-actions">
-                  <div className="nb-user-drawer-actions__identity">{displayName}</div>
-                  <Link
-                    className="nb-btn nb-btn--ghost nb-btn--sm"
-                    to={USER_ACCOUNT_PATH}
-                    onClick={closeMenu}
-                  >
-                    <Icon name="account" />
-                    {t('user.account.nav')}
-                  </Link>
-                  {showStewardEntry ? (
-                    <Link
-                      className="nb-btn nb-btn--ghost nb-btn--sm"
-                      to={USER_STEWARD_PATH}
-                      onClick={closeMenu}
-                    >
-                      <Icon name="steward" />
-                      {t('user.steward.nav')}
-                    </Link>
-                  ) : null}
-                  <AppearanceButton />
-                  <ThemeToggle />
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--secondary"
-                    onClick={() => {
-                      closeMenu();
-                      logout.mutate();
-                    }}
-                    disabled={logout.isPending}
-                  >
-                    <Icon name="logout" />
-                    {logout.isPending ? t('common.working') : t('common.signOut')}
-                  </button>
-                </div>
-              ) : null}
               {menuOpen && (
                 <button
                   type="button"

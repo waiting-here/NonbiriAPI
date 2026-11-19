@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   captureStationSession,
   clearStationSession,
@@ -26,7 +26,7 @@ import { collectHomeAnnouncementSummaries } from './homeAnnouncementsData';
 import { CoreErrorPanel, CoreLoading, CoreTime, CoreUnavailable } from '../core/components';
 import { useCoreCopy } from '../core/copy';
 import { coreSessionMatchesAccount } from '../core/queries';
-import { coreRequest } from '../core/request';
+import { createHomeBodyLoader } from './homeAnnouncementBodies';
 import type {
   AccountLanguage,
   HomeAnnouncementCapability,
@@ -72,21 +72,6 @@ async function readForAccount<T>(
     if (isUnauthorized(error)) clearStationSession(queryClient, 'steward');
     throw error;
   }
-}
-
-async function loadAnnouncementDetail(
-  id: string,
-  signal?: AbortSignal,
-): Promise<AnnouncementDetail> {
-  const response = await coreRequest(`/api/announcements/${encodeURIComponent(id)}`, { signal });
-  if (response.status !== 200) {
-    throw new ApiError(
-      'invalid_response',
-      'The server returned an invalid announcement status.',
-      response.status,
-    );
-  }
-  return normalizeAnnouncementDetail(response.payload);
 }
 
 function sameSummary(a: HomeAnnouncementSummary, b: HomeAnnouncementSummary): boolean {
@@ -249,7 +234,8 @@ export function HomeAnnouncements({
     retry: false,
   });
   const summaries = active ? (announcementQuery.data ?? []) : [];
-  const detailLoader = loadDetail ?? loadAnnouncementDetail;
+  const batchLoader = useMemo(() => createHomeBodyLoader(() => identity !== '' && sessionIdentity() === identity), [identity, sessionIdentity]);
+  const detailLoader = loadDetail ?? batchLoader;
   const detailQueries = useQueries({
     queries: summaries.map((summary) => ({
       queryKey: [
@@ -288,7 +274,7 @@ export function HomeAnnouncements({
   );
   if (!active) return null;
   if (capability.state === 'available' && announcementQuery.isSuccess && summaries.length === 0)
-    return null;
+    return <Link className="nb-btn nb-btn--ghost home-announcements__archive" to="/announcements">{t('home.announcement.viewAll')}</Link>;
 
   const dismiss = (summary: HomeAnnouncementSummary) => {
     if (sessionIdentity() !== identity) return;

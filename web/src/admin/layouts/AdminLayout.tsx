@@ -18,6 +18,7 @@ import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useAdminSession } from '../data';
 import { useAdminBranding } from '../branding';
+import { useStationTitle } from '@shared/routing/useStationTitle';
 import { clearManagementSession } from '@shared/charityManagement';
 import { AdminNavigation } from './AdminNavigation';
 
@@ -147,6 +148,7 @@ export function AdminLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const [logoutError, setLogoutError] = useState<unknown>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const toastIdentity = logoutRequested
@@ -172,9 +174,21 @@ export function AdminLayout() {
     requestAnimationFrame(restoreMenuFocus);
   }, [restoreMenuFocus]);
 
+  useStationTitle('admin', siteName, Boolean(session.data) && !logoutRequested);
+  const shellReady = Boolean(session.data && config.data) && !logoutRequested;
   useEffect(() => {
-    document.title = `${siteName} · ${t('admin.shell.title')}`;
-  }, [t, siteName]);
+    const header = headerRef.current;
+    if (!shellReady || !header || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement.style;
+    const measure = () => root.setProperty('--nb-admin-header-height', `${header.offsetHeight}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      root.removeProperty('--nb-admin-header-height');
+    };
+  }, [shellReady]);
 
   useEffect(() => {
     if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity)
@@ -283,7 +297,7 @@ export function AdminLayout() {
       <a className="skip-link" href="#main">
         {t('shell.skipToContent')}
       </a>
-      <header className="site-header nb-admin-header">
+      <header className="site-header nb-admin-header" ref={headerRef}>
         <Brand
           siteName={siteName}
           siteLogoURL={siteLogoURL}
@@ -307,6 +321,7 @@ export function AdminLayout() {
           <Icon name={menuOpen ? 'close' : 'menu'} />
         </button>
         <div className="site-actions nb-admin-header__actions">
+          <ThemeToggle />
           <AccountMenu
             displayName={session.data.admin.username}
             signOutLabel={t('common.signOut')}

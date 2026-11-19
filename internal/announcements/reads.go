@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -119,43 +120,78 @@ func (service *Service) GetUser(ctx context.Context, userID int64, id string) (A
 	if service == nil || service.repository == nil || userID <= 0 || !dbAnnouncementID(id) {
 		return AnnouncementDetail{}, ErrNotFound
 	}
+	details, err := service.userDetails(ctx, userID, []string{id})
+	if err != nil {
+		return AnnouncementDetail{}, err
+	}
+	if len(details) == 0 {
+		return AnnouncementDetail{}, ErrNotFound
+	}
+	return details[0], nil
+}
+
+// The home page displays at most three notices. A withdrawn or expired notice
+// can disappear between the list and detail reads without hiding the others.
+func (service *Service) userDetails(ctx context.Context, userID int64, ids []string) ([]AnnouncementDetail, error) {
+	if ctx == nil || service == nil || service.repository == nil || userID <= 0 || len(ids) == 0 || len(ids) > 3 {
+		return nil, ErrInvalidRequest
+	}
+	seen := make(map[string]bool, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	for _, id := range ids {
+		if !dbAnnouncementID(id) || seen[id] {
+			return nil, ErrInvalidRequest
+		}
+		seen[id] = true
+		args = append(args, id)
+	}
 	repository := service.repository
 	now, err := repository.nowUnix()
 	if err != nil {
-		return AnnouncementDetail{}, err
+		return nil, err
 	}
 	if _, err := repository.ExpireDue(ctx, maxPageLimit); err != nil {
-		return AnnouncementDetail{}, err
+		return nil, err
 	}
 	tx, err := beginTx(ctx, repository.readDB)
 	if err != nil {
-		return AnnouncementDetail{}, err
+		return nil, err
 	}
 	defer tx.Rollback()
 	language, err := readUserLanguage(ctx, tx, userID)
 	if err != nil {
-		return AnnouncementDetail{}, err
+		return nil, err
 	}
 	epoch, err := readEpoch(ctx, tx)
 	if err != nil {
-		return AnnouncementDetail{}, err
+		return nil, err
 	}
-	row, err := scanAnnouncement(tx.QueryRowContext(ctx, `SELECT `+announcementSelectColumns+`
-FROM announcements WHERE id=? AND state='published' AND (expires_at IS NULL OR expires_at>?)`, id, now))
-	if errors.Is(err, sql.ErrNoRows) {
-		return AnnouncementDetail{}, ErrNotFound
-	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	rows, err := tx.QueryContext(ctx, `SELECT `+announcementSelectColumns+`
+FROM announcements WHERE id IN (`+marks+`) AND state='published' AND (expires_at IS NULL OR expires_at>?)`, append(args, now)...)
 	if err != nil {
-		return AnnouncementDetail{}, fmt.Errorf("announcements: read user announcement: %w", err)
+		return nil, fmt.Errorf("announcements: read selected notices: %w", err)
 	}
-	detail, err := repository.userDetail(row, epoch, language)
-	if err != nil {
-		return AnnouncementDetail{}, err
+	defer rows.Close()
+	details := make([]AnnouncementDetail, 0, len(ids))
+	for rows.Next() {
+		row, err := scanAnnouncement(rows)
+		if err != nil {
+			return nil, err
+		}
+		detail, err := repository.userDetail(row, epoch, language)
+		if err != nil {
+			return nil, err
+		}
+		details = append(details, detail)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return AnnouncementDetail{}, fmt.Errorf("announcements: commit user detail read: %w", err)
+		return nil, fmt.Errorf("announcements: commit selected notices: %w", err)
 	}
-	return detail, nil
+	return details, nil
 }
 
 func (service *Service) ListAdmin(ctx context.Context, adminID int64, query AdminListQuery) (Page[AdminAnnouncement], error) {

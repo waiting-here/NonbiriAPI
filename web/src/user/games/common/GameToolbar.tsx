@@ -122,6 +122,7 @@ export function GameToolbar({
                 key={id}
                 label={soundLabel}
                 triggerClassName="game-toolbar__button"
+                menuClassName="game-toolbar__menu"
                 trigger={
                   <>
                     <Icon name={sound?.enabled || music?.enabled ? 'sound' : 'sound-off'} />
@@ -150,6 +151,7 @@ export function GameToolbar({
           <MoreMenu
             label={moreLabel}
             triggerClassName="game-toolbar__button"
+            menuClassName="game-toolbar__menu"
             trigger={
               <>
                 <Icon name="more" />

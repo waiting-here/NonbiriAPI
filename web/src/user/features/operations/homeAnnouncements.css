@@ -86,3 +86,6 @@
 .home-announcement-card__actions {
   justify-content: flex-start;
 }
+.home-announcements__archive {
+  justify-self: start;
+}

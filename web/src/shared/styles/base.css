@@ -26,6 +26,10 @@ html:lang(zh) {
   box-sizing: border-box;
 }
 
+[hidden]:not([hidden='until-found' i]) {
+  display: none !important;
+}
+
 html,
 body,
 #root {

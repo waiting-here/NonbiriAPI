@@ -116,6 +116,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'steward-agent',
+    labelKey: 'common.agent.title',
     path: '/steward/ai',
     access: 'user',
     layout: 'wide',
@@ -123,6 +124,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'endpoint-policies',
+    labelKey: 'common.endpointPolicies.title',
     path: '/endpoint-policies',
     access: 'user',
     layout: 'wide',
@@ -172,6 +174,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'picture-book',
+    labelKey: 'common.limitedActivities.common.pictureBook',
     path: '/activities/picture-book',
     access: 'user',
     layout: 'wide',
@@ -179,6 +182,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-lake-notes',
+    labelKey: 'user.games.copy.center.lakenotes.title',
     path: '/games/lake-notes',
     access: 'user',
     layout: 'game',
@@ -193,6 +197,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-fishing',
+    labelKey: 'user.games.copy.center.fishing.title',
     path: '/games/fishing',
     access: 'user',
     layout: 'game',
@@ -200,6 +205,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-linklink',
+    labelKey: 'user.games.copy.center.linklink.title',
     path: '/games/linklink',
     access: 'user',
     layout: 'game',
@@ -207,6 +213,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-rps',
+    labelKey: 'user.games.copy.center.rps.title',
     path: '/games/rps',
     access: 'user',
     layout: 'game',
@@ -214,6 +221,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-bidding',
+    labelKey: 'user.games.copy.center.bidding.title',
     path: '/games/bidding',
     access: 'user',
     layout: 'game',
@@ -221,6 +229,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-likes',
+    labelKey: 'user.games.copy.center.likes.title',
     path: '/games/likes',
     access: 'user',
     layout: 'game',
@@ -228,6 +237,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-steady-catch',
+    labelKey: 'user.games.copy.center.steadycatch.title',
     path: '/games/steady-catch',
     access: 'user',
     layout: 'game',
@@ -235,6 +245,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-gwent',
+    labelKey: 'user.games.copy.center.gwent.title',
     path: '/games/gwent',
     access: 'user',
     layout: 'game',
@@ -242,6 +253,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'game-blackjack',
+    labelKey: 'user.games.copy.center.blackjack.title',
     path: '/games/blackjack',
     access: 'user',
     layout: 'game',
@@ -261,6 +273,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'debug',
+    labelKey: 'user.debug.nav',
     path: '/debug',
     access: 'user',
     layout: 'wide',
@@ -269,6 +282,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'credits',
+    labelKey: 'user.records.credits',
     path: '/credits',
     access: 'user',
     layout: 'wide',
@@ -277,6 +291,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'issues',
+    labelKey: 'user.records.issues',
     path: '/issues',
     access: 'user',
     layout: 'readable',
@@ -285,6 +300,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'credential-report',
+    labelKey: 'user.report.nav',
     path: '/report',
     access: 'public',
     layout: 'readable',
@@ -292,6 +308,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'announcements',
+    labelKey: 'user.announcements.nav',
     path: '/announcements',
     access: 'user',
     layout: 'wide',
@@ -299,6 +316,7 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({
     id: 'announcement-detail',
+    labelKey: 'user.announcements.nav',
     path: '/announcements/:announcementId',
     access: 'user',
     layout: 'readable',
@@ -322,7 +340,14 @@ export const USER_ROUTE_DESCRIPTORS = [
     icon: 'steward',
     labelKey: 'user.steward.nav',
   }),
-  user({ id: 'privacy', path: '/privacy', access: 'public', layout: 'readable', registered: true }),
+  user({
+    id: 'privacy',
+    labelKey: 'user.legal.privacy.nav',
+    path: '/privacy',
+    access: 'public',
+    layout: 'readable',
+    registered: true,
+  }),
   user({
     id: 'access-denied',
     path: '/access-denied',
@@ -330,7 +355,14 @@ export const USER_ROUTE_DESCRIPTORS = [
     layout: 'notice',
     registered: true,
   }),
-  user({ id: 'terms', path: '/terms', access: 'public', layout: 'readable', registered: true }),
+  user({
+    id: 'terms',
+    labelKey: 'user.legal.terms.nav',
+    path: '/terms',
+    access: 'public',
+    layout: 'readable',
+    registered: true,
+  }),
   user({
     id: 'maintenance',
     path: '/maintenance',
@@ -624,6 +656,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
   }),
   admin({
     id: 'admin-report-detail',
+    labelKey: 'admin.reports.detail.title',
     path: '/reports/:caseId',
     access: 'admin',
     layout: 'readable',
@@ -643,6 +676,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
   }),
   admin({
     id: 'admin-announcement-detail',
+    labelKey: 'management.announcements.nav',
     path: '/announcements/:announcementId',
     access: 'admin',
     layout: 'readable',

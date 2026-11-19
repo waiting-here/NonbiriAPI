@@ -1353,6 +1353,7 @@ Indexing searches live endpoint keys first, then donation tombstones whose irrev
 | --- | --- |
 | `GET /api/announcements` | Legacy `cursor,limit` or numbered `page,page_size`; published summary page with numbered `pagination`. |
 | `GET /api/announcements/{id}` | Localized rendered detail using the fixed safe Markdown profile. |
+| `GET /api/announcements/selected?ids=id1,id2,id3` | Accepts one to three distinct announcement IDs. Returns `{data:[...]}` with the same localized published details as the single-ID route, omitting unavailable notices. Consumers match by ID and revision. |
 | `GET /api/activities` | Complete safe activity snapshot with site totals and the caller's state. |
 | `POST /api/activities/welfare/claims` | Idempotency key; one admitted daily welfare claim. |
 | `GET /api/activities/thursday` | Current Thursday view. |
