@@ -55,7 +55,7 @@ func TestAnnouncementHTTPRoutesStrictBodiesAndPreviewIsReadOnly(t *testing.T) {
 	if err := RegisterRoutes(routes, routes, environment.service); err != nil {
 		t.Fatalf("RegisterRoutes: %v", err)
 	}
-	if len(routes.users) != 2 || len(routes.admins) != 8 {
+	if len(routes.users) != 3 || len(routes.admins) != 8 {
 		t.Fatalf("registered routes: users=%d admins=%d", len(routes.users), len(routes.admins))
 	}
 
@@ -137,6 +137,32 @@ func TestAnnouncementHTTPRoutesStrictBodiesAndPreviewIsReadOnly(t *testing.T) {
 	list(recorder, request, UserPrincipal{UserID: userID})
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"title":"Edited"`) {
 		t.Fatalf("user list status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	selected := routes.users[http.MethodGet+" "+routeUserAnnouncements+"/selected"]
+	missing := "ann_" + strings.Repeat("A", 22)
+	for _, sample := range []struct {
+		ids    string
+		status int
+	}{
+		{receipt.ID + "," + missing, http.StatusOK},
+		{receipt.ID + "," + receipt.ID, http.StatusBadRequest},
+		{"bad", http.StatusBadRequest},
+		{strings.Repeat(receipt.ID+",", 3) + missing, http.StatusBadRequest},
+	} {
+		recorder = httptest.NewRecorder()
+		request = httptest.NewRequest(http.MethodGet, routeUserAnnouncements+"/selected?ids="+sample.ids, nil)
+		selected(recorder, request, UserPrincipal{UserID: userID})
+		if recorder.Code != sample.status {
+			t.Fatalf("selected status=%d, want %d", recorder.Code, sample.status)
+		}
+		if sample.status == http.StatusOK {
+			var response struct {
+				Data []AnnouncementDetail `json:"data"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || len(response.Data) != 1 || response.Data[0].ID != receipt.ID || response.Data[0].Title != "Edited" {
+				t.Fatalf("selected published projection: %s", recorder.Body.String())
+			}
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httpapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -30,6 +31,7 @@ func RegisterRoutes(users UserRouteRegistrar, admins AdminRouteRegistrar, servic
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, routeUserAnnouncements, api.listUser},
+		{http.MethodGet, routeUserAnnouncements + "/selected", api.selectedUser},
 		{http.MethodGet, routeUserAnnouncement, api.getUser},
 	}
 	for _, route := range userRoutes {
@@ -158,6 +160,23 @@ func (api *httpAPI) listUser(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	writeJSON(writer, http.StatusOK, response)
+}
+
+func (api *httpAPI) selectedUser(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !requireNoBody(writer, request) {
+		return
+	}
+	query, ok := strictQuery(writer, request, "ids")
+	if !ok {
+		return
+	}
+	ids := strings.Split(query.Get("ids"), ",")
+	details, err := api.service.userDetails(request.Context(), principal.UserID, ids)
+	if err != nil {
+		writeError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"data": details})
 }
 
 func (api *httpAPI) getUser(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {

@@ -141,20 +141,6 @@
   min-width: 0;
 }
 
-.nb-user-drawer-actions {
-  display: none;
-  gap: var(--nb-space-3);
-  margin-top: var(--nb-space-4);
-  border-top: 1px solid var(--nb-color-border);
-  padding-top: var(--nb-space-4);
-}
-
-.nb-user-drawer-actions__identity {
-  color: var(--nb-color-text-muted);
-  font-size: var(--nb-font-size-sm);
-  overflow-wrap: anywhere;
-}
-
 .nb-user-drawer-overlay {
   position: fixed;
   inset: 0;
@@ -244,10 +230,6 @@
     grid-template-columns: 1fr;
     justify-content: stretch;
     gap: var(--nb-space-1);
-  }
-
-  .nb-user-drawer-actions {
-    display: grid;
   }
 
   .nb-user-header .nb-user-header__nav-link {

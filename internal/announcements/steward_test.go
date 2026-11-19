@@ -31,7 +31,7 @@ func TestStewardAnnouncementCrossRoleLifecycleAndAuthority(t *testing.T) {
 	if err := RegisterStewardRoutes(routes, e.service); err != nil {
 		t.Fatal(err)
 	}
-	if len(routes.admins) != 16 || len(routes.users) != 2 {
+	if len(routes.admins) != 16 || len(routes.users) != 3 {
 		t.Fatalf("route counts %d %d", len(routes.admins), len(routes.users))
 	}
 	request := func(role managementRole, actor int64, method, pattern, id, body, key string) *httptest.ResponseRecorder {

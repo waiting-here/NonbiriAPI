@@ -10,7 +10,7 @@
 .nb-admin-shell {
   display: grid;
   grid-template-columns: 16rem minmax(0, 1fr);
-  min-height: calc(100dvh - 4.25rem);
+  min-height: calc(100dvh - var(--nb-admin-header-height, 4.25rem));
   background: var(--nb-color-bg);
 }
 
@@ -59,9 +59,9 @@
 
 .nb-admin-sidebar {
   position: sticky;
-  top: 4.25rem;
+  top: var(--nb-admin-header-height, 4.25rem);
   align-self: start;
-  height: calc(100dvh - 4.25rem);
+  height: calc(100dvh - var(--nb-admin-header-height, 4.25rem));
   overflow-y: auto;
   border-right: 1px solid color-mix(in srgb, var(--nb-color-border) 80%, transparent);
   background: var(--nb-color-sidebar);
@@ -294,7 +294,7 @@
 
 .nb-admin-content {
   min-width: 0;
-  overflow: hidden;
+  overflow-x: clip;
   padding: clamp(1.3rem, 3vw, 2.6rem) clamp(1rem, 4vw, 3rem) 4rem;
 }
 

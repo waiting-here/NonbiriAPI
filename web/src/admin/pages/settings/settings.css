@@ -33,7 +33,9 @@
 }
 .nb-settings__nav {
   position: sticky;
-  top: var(--nb-space-5);
+  top: calc(var(--nb-admin-header-height, 4.25rem) + var(--nb-space-3));
+  max-height: calc(100dvh - var(--nb-admin-header-height, 4.25rem) - 2 * var(--nb-space-3));
+  overflow-y: auto;
   display: grid;
   gap: var(--nb-space-4);
   min-width: 0;
@@ -181,6 +183,7 @@
   }
   .nb-settings__nav {
     position: static;
+    max-height: none;
     display: grid;
     overflow: visible;
     gap: var(--nb-space-3);

@@ -3,6 +3,8 @@ import { retainQueryScope } from '@shared/query/retain';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { TimeInput } from '@shared/components/TimeInput';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { PageHeader, ErrorState, LoadingState, EmptyState } from '@shared/components/States';
 import {
   Button,
@@ -111,10 +113,13 @@ function readFilter(params: URLSearchParams): Filter {
   }
   return filter;
 }
-function localDate(value?: number) {
-  if (!value) return '';
-  const date = new Date(value);
-  return new Date(value - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function timeFilterDraft(value?: number) {
+  return createTimeDraft(value ? Math.floor(value / 1000) : null, 'second');
+}
+function timeFilterMillis(draft: TimeDraft, original?: number) {
+  if (draft.text === draft.originalText && !draft.invalidInput) return original ?? null;
+  const instant = timeDraftValue(draft);
+  return typeof instant === 'number' ? instant * 1000 : instant;
 }
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const { t } = useTranslation();
@@ -212,16 +217,18 @@ function ActionTitle({
   );
 }
 
+function textFields(filter: Filter): Record<string, string> {
+  return Object.fromEntries(
+    filterFields
+      .filter((key) => key !== 'time_from' && key !== 'time_to')
+      .map((key) => [key, filter[key] ?? '']),
+  );
+}
 function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter) => void }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      filterFields.map((key) => [
-        key,
-        key === 'time_from' || key === 'time_to' ? localDate(filter[key]) : (filter[key] ?? ''),
-      ]),
-    ),
-  );
+  const [draft, setDraft] = useState<Record<string, string>>(() => textFields(filter));
+  const [from, setFrom] = useState(() => timeFilterDraft(filter.time_from));
+  const [to, setTo] = useState(() => timeFilterDraft(filter.time_to));
   const textSeed = JSON.stringify(
     filterFields
       .filter((key) => !['source', 'outcome', 'domain'].includes(key))
@@ -232,14 +239,9 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
   if (seededFor !== textSeed) {
     setSeededFor(textSeed);
     setInvalidRange(false);
-    setDraft(
-      Object.fromEntries(
-        filterFields.map((key) => [
-          key,
-          key === 'time_from' || key === 'time_to' ? localDate(filter[key]) : (filter[key] ?? ''),
-        ]),
-      ),
-    );
+    setDraft(textFields(filter));
+    setFrom(timeFilterDraft(filter.time_from));
+    setTo(timeFilterDraft(filter.time_to));
   }
   const field = (name: string, type = 'text') => (
     <Field label={t(`admin.managementHistory.fields.${name}`)} key={name}>
@@ -260,7 +262,6 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
           {...props}
           value={filter[name as keyof Filter] ?? ''}
           onChange={(event) => {
-            setDraft((old) => ({ ...old, [name]: event.target.value }));
             onApply({ ...filter, [name]: event.target.value || undefined });
           }}
         >
@@ -279,13 +280,12 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
       <FilterBar
         ariaLabel={t('admin.managementHistory.fields.search')}
         activeCount={
-          filterFields.filter(
-            (key) =>
-              draft[key] && !['search', 'source', 'outcome', 'domain', 'group_key'].includes(key),
-          ).length
+          filterFields.filter((key) => filter[key] !== undefined && filter[key] !== '').length
         }
         onReset={() => {
           setDraft({});
+          setFrom(timeFilterDraft());
+          setTo(timeFilterDraft());
           setInvalidRange(false);
           onApply({});
         }}
@@ -293,10 +293,20 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
           const next: Filter = {};
           for (const key of filterFields) {
             if (key === 'group_key') continue;
-            const value = draft[key]?.trim();
+            if (key === 'time_from' || key === 'time_to') {
+              const value = timeFilterMillis(key === 'time_from' ? from : to, filter[key]);
+              if (value === undefined) {
+                setInvalidRange(true);
+                return;
+              }
+              if (value !== null) next[key] = value;
+              continue;
+            }
+            const value = ['source', 'outcome', 'domain'].includes(key)
+              ? filter[key]
+              : draft[key]?.trim();
             if (!value) continue;
-            if (key === 'time_from' || key === 'time_to') next[key] = new Date(value).getTime();
-            else next[key] = value;
+            next[key] = value;
           }
           if (next.time_from && next.time_to && next.time_from >= next.time_to) {
             setInvalidRange(true);
@@ -325,8 +335,18 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
         }
         secondary={
           <>
-            {field('time_from', 'datetime-local')}
-            {field('time_to', 'datetime-local')}
+            <TimeInput
+              label={t('admin.managementHistory.fields.time_from')}
+              station="admin"
+              draft={from}
+              onChange={setFrom}
+            />
+            <TimeInput
+              label={t('admin.managementHistory.fields.time_to')}
+              station="admin"
+              draft={to}
+              onChange={setTo}
+            />
             {field('actor_id')}
             {field('authorizer_id')}
             {field('action')}

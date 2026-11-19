@@ -43,6 +43,7 @@ export function AccountMenu({
         type="button"
         ref={triggerRef}
         className="nb-account-trigger"
+        aria-label={`${t('shell.accountMenu')} · ${displayName}`}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={menuId}
@@ -72,7 +73,7 @@ export function AccountMenu({
           <div className="nb-account-menu__identity">{displayName}</div>
           <div className="nb-account-menu__actions">
             {languageControl}
-            <ThemeToggle />
+            {station === 'user' ? <ThemeToggle /> : null}
             <Link
               className="nb-btn nb-btn--ghost nb-btn--sm"
               to={accountHref}

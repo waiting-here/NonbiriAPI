@@ -60,8 +60,7 @@
   }
 }
 
-.gacha-pool-entry--rated > .gacha-pool-entry__toggle {
-  position: relative;
+.gacha-pool-entry__toggle {
   display: block;
   width: 100%;
   min-width: 0;
