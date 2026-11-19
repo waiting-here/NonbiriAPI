@@ -1110,7 +1110,7 @@ WHERE donation_key_id=? AND streak_generation=? AND claim_seq>=? ORDER BY claim_
 	if err != nil {
 		return fmt.Errorf("charity: read streak results: %w", err)
 	}
-	folded, err := foldFailureRows(rows, next, streak, threshold, failureDisabled)
+	folded, err := foldFailureRows(ctx, tx, rows, next, streak, threshold, failureDisabled)
 	if err != nil {
 		return err
 	}

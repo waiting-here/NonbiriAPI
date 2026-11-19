@@ -129,6 +129,9 @@ func TestRetryAfterPreservesFailureOriginAndBillingThroughRecovery(t *testing.T)
 				want := int64(2)
 				if status == 200 {
 					want = 0
+					assertAttemptStreak(t, e.store.DB(), handle.ClaimID(), "reset", "2", "0")
+				} else {
+					assertAttemptStreak(t, e.store.DB(), handle.ClaimID(), "unchanged", "2", "2")
 				}
 				assertU128(t, streak, want, "header outcome")
 				if disabled {
@@ -260,6 +263,7 @@ func TestRetryAfterDeletedKeyCannotBeResurrectedAndFactsCascade(t *testing.T) {
 		if _, err := rail.CompleteAttempt(ctx, handle, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 503, StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamResponse}); err != nil {
 			t.Fatal(err)
 		}
+		assertAttemptStreak(t, e.store.DB(), handle.ClaimID(), "unchanged", "", "")
 		if _, err := e.store.DB().Exec("DELETE FROM dispatch_claims WHERE id=?", handle.ClaimID()); err != nil {
 			t.Fatal(err)
 		}

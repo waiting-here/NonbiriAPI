@@ -13,30 +13,30 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
-func foldFailureOutcome(streak db.U128, disabled int, threshold db.U128, state string, success sql.NullInt64, disposition, origin sql.NullString, apply bool) (db.U128, int, bool, error) {
+func foldFailureOutcome(streak db.U128, disabled int, threshold db.U128, state string, success sql.NullInt64, disposition, origin sql.NullString, apply bool) (db.U128, int, string, error) {
 	if !disposition.Valid || !origin.Valid || !contract.ValidOutcome(contract.StreakDisposition(disposition.String), contract.FailureOrigin(origin.String)) || (state != "committed" && state != "released") {
-		return streak, disabled, false, claim.ErrInvariant
+		return streak, disabled, "", claim.ErrInvariant
 	}
 	if disposition.String != "success" && disposition.String != "upstream_failure" {
-		return streak, disabled, false, nil
+		return streak, disabled, "unchanged", nil
 	}
 	if state != "committed" || !success.Valid || (disposition.String == "upstream_failure" && success.Int64 != 0) {
-		return streak, disabled, false, claim.ErrInvariant
+		return streak, disabled, "", claim.ErrInvariant
 	}
 	if !apply {
-		return streak, disabled, false, nil
+		return streak, disabled, "", nil
 	}
 	if disposition.String == "success" {
-		return db.U128{}, disabled, false, nil
+		return db.U128{}, disabled, "reset", nil
 	}
 	next, err := addU128(streak, big.NewInt(1))
 	if err != nil {
-		return streak, disabled, false, err
+		return streak, disabled, "", err
 	}
 	if disabled == 0 && threshold != (db.U128{}) && next.Big().Cmp(threshold.Big()) >= 0 {
-		return next, 1, true, nil
+		disabled = 1
 	}
-	return next, disabled, false, nil
+	return next, disabled, "incremented", nil
 }
 
 func foldServiceStreak(ctx context.Context, tx *sql.Tx, claimID string, at int64) error {
@@ -49,7 +49,14 @@ FROM dispatch_service_health m JOIN donation_service_health h ON h.id=m.health_i
 JOIN donation_uses u ON u.id=h.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id
 WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &donationID, &keyID, &endpointKeyID, &currentGeneration, &eventGeneration, &nextBlob, &streakBlob, &disabled, &thresholdText)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+		// A detached service marker or ended member can no longer fold.
+		// Unmarked reservations still belong to their physical key's cursor.
+		_, err = tx.ExecContext(ctx, `UPDATE request_attempts SET streak_effect='unchanged'
+WHERE claim_id=? AND streak_effect='pending' AND (
+ EXISTS(SELECT 1 FROM dispatch_service_health m WHERE m.claim_id=request_attempts.claim_id)
+ OR NOT EXISTS(SELECT 1 FROM donation_usage_reservations r JOIN donation_keys k ON k.id=r.donation_key_id
+ WHERE r.claim_id=request_attempts.claim_id AND r.streak_generation=k.streak_generation))`, claimID)
+		return err
 	}
 	if err != nil {
 		return err
@@ -63,7 +70,8 @@ WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &d
 		return err
 	}
 	if generation != event {
-		return nil
+		_, err := tx.ExecContext(ctx, "UPDATE request_attempts SET streak_effect='unchanged' WHERE claim_id=? AND streak_effect='pending'", claimID)
+		return err
 	}
 	next, err := decodeU128(nextBlob)
 	if err != nil {
@@ -84,7 +92,7 @@ WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER 
 	if err != nil {
 		return err
 	}
-	folded, err := foldFailureRows(rows, next, streak, threshold, disabled)
+	folded, err := foldFailureRows(ctx, tx, rows, next, streak, threshold, disabled)
 	if err != nil {
 		return err
 	}

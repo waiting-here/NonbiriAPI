@@ -1,6 +1,7 @@
 package charity
 
 import (
+	"context"
 	"database/sql"
 	"math/big"
 
@@ -17,7 +18,7 @@ type failureFold struct {
 // Consume exactly the contiguous terminal prefix. A missing or reserved result
 // stops both reducers, even when later results have already completed. Rows are
 // closed before the caller updates its cursor in the same transaction.
-func foldFailureRows(rows *sql.Rows, next, streak, threshold db.U128, disabled int) (failureFold, error) {
+func foldFailureRows(ctx context.Context, tx *sql.Tx, rows *sql.Rows, next, streak, threshold db.U128, disabled int) (failureFold, error) {
 	out := failureFold{next: next, streak: streak, disabled: disabled}
 	defer rows.Close()
 	for rows.Next() {
@@ -36,13 +37,22 @@ func foldFailureRows(rows *sql.Rows, next, streak, threshold db.U128, disabled i
 		if sequenceNumber != out.next || state == "reserved" {
 			break
 		}
-		var justDisabled bool
-		before := out.streak
-		out.streak, out.disabled, justDisabled, err = foldFailureOutcome(out.streak, out.disabled, threshold, state, success, disposition, origin, apply)
+		before, wasDisabled := out.streak, out.disabled
+		var effect string
+		out.streak, out.disabled, effect, err = foldFailureOutcome(before, wasDisabled, threshold, state, success, disposition, origin, apply)
 		if err != nil {
 			return out, err
 		}
-		if justDisabled {
+		// Only the authoritative cursor writes the receipt. A service attempt
+		// also advances its physical key cursor, without applying to that key.
+		if apply && state == "committed" {
+			_, err = tx.ExecContext(ctx, `UPDATE request_attempts SET streak_effect=?,streak_before=?,streak_after=?
+WHERE claim_id=? AND streak_effect='pending'`, effect, before.Decimal(), out.streak.Decimal(), claimID)
+			if err != nil {
+				return out, err
+			}
+		}
+		if wasDisabled == 0 && out.disabled == 1 {
 			out.crossing = &adminalerts.FailureCrossing{ClaimID: claimID, Fold: out.next, Before: before, After: out.streak, Threshold: threshold}
 		}
 		out.next, err = addU128(out.next, big.NewInt(1))

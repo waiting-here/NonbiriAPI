@@ -286,6 +286,29 @@ func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
 	if err := rail.MarkResponseStarted(t.Context(), h); err != nil {
 		t.Fatal(err)
 	}
+	rail = reopenAfterOfflineUpgrade(t, e)
+	restored := e.modelUsage(t, "upstream-model")
+	if !restored.HistoricalCostsPartial || restored.Reserved.Calls != "1" || restored.Reserved.Credits != "3" || restored.Reserved.Tokens != "5" {
+		t.Fatal(restored)
+	}
+	if err := e.service.ValidateRecurringState(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, err := rail.RecoverNonterminal(t.Context(), 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settled := e.modelUsage(t, "upstream-model")
+	if !settled.HistoricalCostsPartial || settled.Reserved.Calls != "0" || settled.Reserved.Credits != "0" || settled.Used.Calls != "1" || settled.Used.Credits != "3" || settled.Used.Tokens != "5" {
+		t.Fatal(settled)
+	}
+	e.billingBalance(t, e.callerID, 7600)
+	e.billingBalance(t, e.donorID, 10000)
+}
+
+func reopenAfterOfflineUpgrade(t *testing.T, e *charityTestEnv) *claim.Service {
+	t.Helper()
 	var path string
 	if err := e.store.DB().QueryRow("SELECT file FROM pragma_database_list WHERE name='main'").Scan(&path); err != nil {
 		t.Fatal(err)
@@ -300,7 +323,7 @@ func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer vault.Close()
+	t.Cleanup(func() { _ = vault.Close() })
 	if _, err := upgrade.Run(t.Context(), path, vault, upgrade.Options{Apply: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +331,7 @@ func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer e.store.Close()
+	t.Cleanup(func() { _ = e.store.Close() })
 	clock := func() time.Time { return time.Unix(charityTestNow+30, 0) }
 	e.donation, err = donation.New(donation.Config{Store: e.store, Now: clock})
 	if err != nil {
@@ -318,26 +341,9 @@ func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rail, err = claim.New(claim.Dependencies{DB: e.store.DB(), Secrets: vault, Charity: e.service, Accounting: claim.NewLedgerAccounting(), Acceptance: billingAcceptance{}, Now: clock})
+	rail, err := claim.New(claim.Dependencies{DB: e.store.DB(), Secrets: vault, Charity: e.service, Accounting: claim.NewLedgerAccounting(), Acceptance: billingAcceptance{}, Now: clock})
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored := e.modelUsage(t, "upstream-model")
-	if !restored.HistoricalCostsPartial || restored.Reserved.Calls != "1" || restored.Reserved.Credits != "3" || restored.Reserved.Tokens != "5" {
-		t.Fatal(restored)
-	}
-	if err = e.service.ValidateRecurringState(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	for range 2 {
-		if _, err = rail.RecoverNonterminal(t.Context(), 100); err != nil {
-			t.Fatal(err)
-		}
-	}
-	settled := e.modelUsage(t, "upstream-model")
-	if !settled.HistoricalCostsPartial || settled.Reserved.Calls != "0" || settled.Reserved.Credits != "0" || settled.Used.Calls != "1" || settled.Used.Credits != "3" || settled.Used.Tokens != "5" {
-		t.Fatal(settled)
-	}
-	e.billingBalance(t, e.callerID, 7600)
-	e.billingBalance(t, e.donorID, 10000)
+	return rail
 }

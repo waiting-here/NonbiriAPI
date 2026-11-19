@@ -477,15 +477,15 @@ func (s *Service) completeAttemptTx(
 claim_id,request_log_id,attempt_seq,endpoint_id_snapshot,endpoint_key_id_snapshot,
 connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,upstream_code,diag,
 input_tokens,cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,
-usage_total_mismatch,usage_details,started_at,completed_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+usage_total_mismatch,usage_details,started_at,completed_at,streak_effect)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='charity' THEN 'pending' END)`,
 			record.claimID, record.requestLogID, record.attemptSeq,
 			nullableSQLInt64(snapshot.endpointID), nullableSQLInt64(snapshot.endpointKeyID),
 			snapshot.connectorType, snapshot.baseURL, snapshot.upstreamModel, outcome.Kind,
 			status, code, diag, outcome.Usage.UncachedInputTokens, outcome.Usage.CacheWriteInputTokens,
 			outcome.Usage.CacheReadInputTokens, outcome.Usage.OutputTokens, usageUnknown,
 			boolInt(outcome.Usage.TotalMismatch), usageinfo.Encode(outcome.Usage),
-			record.dispatchedAt.Int64, at)
+			record.dispatchedAt.Int64, at, record.purpose)
 		if err != nil {
 			return fmt.Errorf("claim: persist request attempt: %w", err)
 		}
