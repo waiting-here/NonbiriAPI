@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { artSourceSet } from '../activities/gacha/art-resolution';
+import { useStageSize } from './stage-size';
+import { useBackgroundSources } from './sources';
 import { heartThiefStance } from '../activities/gacha/romance/heart-thief-stance';
 import {
   romanceAppearancePlacement,
@@ -8,12 +8,8 @@ import {
 } from '../activities/gacha/romance/layout';
 
 export function RomanceStill({ theme, dark }: { theme: RomanceTheme; dark: boolean }) {
-  const [size, setSize] = useState(() => [innerWidth, innerHeight]);
-  useEffect(() => {
-    const resize = () => setSize([innerWidth, innerHeight]);
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
-  }, []);
+  const size = useStageSize();
+  const artSourceSet = useBackgroundSources();
   const mode = dark ? 'dark' : 'light';
   const id = theme === 'elopement' ? 'p-claude' : 'q-glm';
   const src = `/assets/gacha/appearances/${theme}-${mode}.webp`;

@@ -38,9 +38,9 @@ for (const mode of ['light', 'dark'])
       await expect(root).toHaveAttribute('data-appearance-intensity', 'focus');
       await account.getByText('鲜明', { exact: true }).click();
       await expect(root).toHaveAttribute('data-appearance-intensity', 'vivid');
-      if (width === 390) await page.getByRole('button', { name: '打开导航', exact: true }).click();
-      await page.getByRole('button', { name: '外观', exact: true }).click();
-      const dialog = page.getByRole('alertdialog');
+
+      await page.getByRole('button', { name: '装扮', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '装扮', exact: true });
       const controls = dialog.getByRole('radiogroup', { name: '装扮强度' });
       await expect(controls.getByRole('radio', { name: '鲜明', exact: true })).toBeChecked();
       await controls.getByText('专注阅读', { exact: true }).click();
@@ -66,6 +66,7 @@ for (const mode of ['light', 'dark'])
       );
       expect(parseFloat(veil)).toBeGreaterThan(0);
       const trigger = page.getByRole('button', { name: '欣赏背景', exact: true });
+      if (width === 390) await page.getByRole('button', { name: '装扮', exact: true }).click();
       await trigger.click();
       const view = page.getByRole('dialog', { name: '欣赏背景', exact: true });
       await expect(view).toBeVisible();

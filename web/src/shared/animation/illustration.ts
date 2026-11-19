@@ -32,11 +32,13 @@ export class PaintCadence {
   constructor(
     private readonly interval = 1000 / 60,
     private readonly ambient = false,
+    private readonly everyRefresh = false,
   ) {}
   reset() {
     this.next = -Infinity;
   }
   due(now: number): boolean {
+    if (this.everyRefresh) return true;
     if (now + 0.5 < this.next) return false;
     const step = this.ambient && userBusy(now) ? this.interval * 4 : this.interval;
     if (!Number.isFinite(this.next) || now - this.next > step * 2) this.next = now + step;

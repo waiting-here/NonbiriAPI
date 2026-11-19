@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { Sheet } from '@shared/components/ui/Sheet';
+import { BackgroundViewButton } from './BackgroundViewButton';
+import { useBackgroundPlayback } from './playback-context';
+import { MomentPicker } from './MomentPicker';
+import { cardById } from '../activities/gacha/catalog';
 import { Button } from '@shared/components/ui/Button';
 import { Segmented } from '@shared/components/ui/Segmented';
 import { Icon } from '@shared/components/Icon';
@@ -18,9 +22,22 @@ export function AppearanceButton() {
   const appearance = useOptionalAppearance();
   const policy = useArtworkPolicy();
   const [open, setOpen] = useState(false);
+  const [requestedScene, setRequestedScene] = useState<string>();
+  const returnFocus = useRef(false);
+  const viewButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open && returnFocus.current) {
+      returnFocus.current = false;
+      viewButton.current?.focus({ preventScroll: true });
+    }
+  }, [open]);
   const [choice, setChoice] = useState('default');
   const [error, setError] = useState<unknown>(null);
   const { intensity, setIntensity } = useTheme();
+  const { playback, motion, quality, setMotion, setQuality, animated, retry } =
+    useBackgroundPlayback();
+  const status = useSyncExternalStore(playback.subscribe, playback.getStatus);
+  const hint = useId();
   if (!appearance) return null;
   const english = i18n.language.startsWith('en');
   const moment = momentByKey.get(appearance.state.moment ?? '') ?? defaultMoment;
@@ -40,31 +57,86 @@ export function AppearanceButton() {
           setOpen(true);
         }}
       >
-        <Icon name="spark" />
+        <Icon name="palette" />
         <span className="nb-appearance-control__label">{t('user.appearance.title')}</span>
       </Button>
-      <ConfirmDialog
+      <Sheet
         open={open}
         title={t('user.appearance.title')}
         description={t('user.appearance.description')}
-        confirmLabel={t('user.appearance.apply')}
-        cancelLabel={t('common.close')}
-        confirmDisabled={!available || appearance.pending || !!appearance.error}
+        closeLabel={t('common.close')}
         busy={appearance.saving}
-        onCancel={() => setOpen(false)}
-        onConfirm={() => {
-          setError(null);
-          void appearance.select(choice).then(() => setOpen(false), setError);
-        }}
+        onClose={() => setOpen(false)}
+        footer={
+          choice !== 'heart-moment' && (
+            <Button
+              variant="primary"
+              disabled={!available || appearance.pending || !!appearance.error || appearance.saving}
+              onClick={() => {
+                setError(null);
+                void appearance.select(choice).then(() => setOpen(false), setError);
+              }}
+            >
+              {t('user.appearance.apply')}
+            </Button>
+          )
+        }
       >
         <ThemeToggle />
+        {animated && status === 'failed' && (
+          <div role="status">
+            {t('user.appearance.staticFallback')}{' '}
+            <Button onClick={retry}>{t('user.appearance.retryMotion')}</Button>
+          </div>
+        )}
+        {appearance.state.selected !== 'default' &&
+          policy.allowed('appearance:' + appearance.state.selected) && (
+            <Button
+              ref={viewButton}
+              className="nb-background-view-in-sheet"
+              onClick={() => {
+                setRequestedScene(
+                  appearance.state.selected + '/' + (appearance.state.moment ?? ''),
+                );
+                setOpen(false);
+              }}
+            >
+              <Icon name="image" />
+              {t('user.appearance.viewBackground')}
+            </Button>
+          )}
+        <div className="nb-appearance-setting">
+          <strong>{t('user.appearance.motion')}</strong>
+          <Segmented
+            label={t('user.appearance.motion')}
+            value={motion}
+            onChange={setMotion}
+            options={[
+              { value: 'system', label: t('user.appearance.system') },
+              { value: 'full', label: t('user.appearance.full') },
+              { value: 'static', label: t('user.appearance.static') },
+            ]}
+          />
+        </div>
+        <div className="nb-appearance-setting">
+          <strong>{t('user.appearance.quality')}</strong>
+          <Segmented
+            label={t('user.appearance.quality')}
+            value={quality}
+            onChange={setQuality}
+            options={[
+              { value: 'auto', label: t('user.appearance.auto') },
+              { value: 'highest', label: t('user.appearance.highest') },
+            ]}
+          />
+        </div>
         <div className="nb-appearance-intensity">
-          <span id="nb-appearance-intensity-hint" className="nb-small nb-muted">
+          <span id={hint} className="nb-small nb-muted">
             {t('user.appearance.intensityHint')}
           </span>
           <Segmented<AppearanceIntensity>
             label={t('user.appearance.intensity')}
-            describedBy="nb-appearance-intensity-hint"
+            describedBy={hint}
             value={intensity}
             onChange={setIntensity}
             options={[
@@ -95,6 +167,7 @@ export function AppearanceButton() {
               return (
                 <label
                   key={item.id}
+                  data-preview={item.id}
                   className="nb-appearance-option"
                   data-selected={choice === item.id}
                   data-locked={!unlocked}
@@ -109,23 +182,13 @@ export function AppearanceButton() {
                     onChange={() => setChoice(item.id)}
                   />
                   <span className="nb-appearance-option__image" data-design={item.id}>
-                    {'light' in item && (
-                      <>
-                        <ArtworkImage
-                          artworkKey={keys(item.id)}
-                          className="nb-appearance-light"
-                          src={item.light}
-                          alt=""
-                          loading="lazy"
-                        />
-                        <ArtworkImage
-                          artworkKey={keys(item.id)}
-                          className="nb-appearance-dark"
-                          src={item.dark}
-                          alt=""
-                          loading="lazy"
-                        />
-                      </>
+                    {'card' in item && item.card && (
+                      <ArtworkImage
+                        artworkKey={keys(item.id)}
+                        src={cardById[item.card].thumb}
+                        alt=""
+                        loading="lazy"
+                      />
                     )}
                     {item.id === 'heart-moment' && (
                       <ArtworkImage
@@ -158,7 +221,16 @@ export function AppearanceButton() {
               );
             })}
         </div>
-      </ConfirmDialog>
+        {choice === 'heart-moment' && <MomentPicker />}
+      </Sheet>
+      <BackgroundViewButton
+        requestedScene={requestedScene}
+        onReturn={() => {
+          returnFocus.current = true;
+          setRequestedScene(undefined);
+          setOpen(true);
+        }}
+      />
     </div>
   );
 }

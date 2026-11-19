@@ -13,6 +13,7 @@ export function createScene(
     signal?: AbortSignal;
   },
 ): Promise<{
+  backgroundSize: [number, number];
   paintCharacter(
     canvas: HTMLCanvasElement,
     dark?: boolean,

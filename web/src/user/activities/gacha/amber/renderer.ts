@@ -1,3 +1,10 @@
+import {
+  artworkActivity,
+  displayDensity,
+  graphicsLimit,
+  layerDensity,
+  type ArtworkPlayback,
+} from '@shared/animation/artwork-playback';
 import { expandMomentView, momentReferenceSize, type MomentFrame } from '../moment-frame';
 import { blinkAt, PaintCadence, eyelidProfileWidth } from '@shared/animation/illustration';
 import { highResolutionArt } from '../art-resolution';
@@ -20,6 +27,7 @@ type Options = {
   backgroundOnly?: boolean;
   frozenTime?: number;
   paused?: () => boolean;
+  playback?: ArtworkPlayback;
   signal?: AbortSignal;
   /** Page background: paint less often while the user types or scrolls. */
   ambient?: boolean;
@@ -53,6 +61,7 @@ function image(src: string, signal?: AbortSignal) {
 }
 
 export async function renderAmber(canvas: HTMLCanvasElement, options: Options = {}) {
+  const activity = artworkActivity(options.playback);
   const eyelids = options.polished ? polishedAmberEyelids : amberEyelids;
   const base = '/assets/gacha/motion/o-claude/';
   const source = (name: string) => {
@@ -90,6 +99,7 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     materials?.dispose();
     throw new Error('renderer-unavailable');
   }
+  const limits = options.playback?.highest ? graphicsLimit(gl) : undefined;
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [];
   const programs: WebGLProgram[] = [],
@@ -99,14 +109,20 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
     time = 0,
     last = performance.now(),
     painted = false;
+  function lost(event: Event) {
+    event.preventDefault();
+    options.playback?.setFailed(true);
+    dispose();
+  }
   const observer = new ResizeObserver(() => resize());
-  const cadence = new PaintCadence(undefined, options.ambient);
+  const cadence = new PaintCadence(undefined, options.ambient, options.playback?.highest);
   const dispose = () => {
     if (stopped) return;
     stopped = true;
     cancelAnimationFrame(raf);
     observer.disconnect();
-    document.removeEventListener('visibilitychange', visibility);
+    activity.unlisten(visibility);
+    layer.removeEventListener('webglcontextlost', lost);
     options.signal?.removeEventListener('abort', dispose);
     textures.forEach((texture) => gl.deleteTexture(texture));
     shaders.forEach((shader) => gl.deleteShader(shader));
@@ -260,25 +276,6 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
             : 1.5);
     const momentFrame = options.characterOnly ? options.momentFrame : undefined;
     const reference = momentReferenceSize(width, height, momentFrame);
-    const density = options.exportSize
-      ? 1
-      : Math.min(
-          window.devicePixelRatio || 1,
-          (options.landscape
-            ? 3840
-            : momentFrame
-              ? (2560 * momentFrame.canvas[0]) / momentFrame.originalRegion.width
-              : 2560) / width,
-        );
-    canvas.width = Math.round(width * density);
-    canvas.height = Math.round(height * density);
-    const sampleCap =
-      2048 * (momentFrame ? momentFrame.canvas[0] / momentFrame.originalRegion.width : 1);
-    const sampling =
-      options.polished && !options.exportSize ? Math.min(2, sampleCap / canvas.width) : 1;
-    layer.width = Math.round(canvas.width * sampling);
-    layer.height = Math.round(canvas.height * sampling);
-    gl.viewport(0, 0, layer.width, layer.height);
     const { view, heroBox } = options.characterPlate
       ? { view: [0, 0, 1, 1], heroBox: [0, 0, 1, 1516 / 1560] }
       : amberLayout(
@@ -289,6 +286,39 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
           options.variant === 'appearance',
         );
     const projectedView = expandMomentView(view, momentFrame);
+    const native = Math.max(
+      layerDensity(background, width / projectedView[2], height / projectedView[3]),
+      layerDensity(
+        hero,
+        (width * heroBox[2]) / projectedView[2],
+        (height * heroBox[3]) / projectedView[3],
+      ),
+    );
+    const density = options.playback?.highest
+      ? displayDensity(width, height, native, limits)
+      : options.exportSize
+        ? 1
+        : Math.min(
+            window.devicePixelRatio || 1,
+            (options.landscape
+              ? 3840
+              : momentFrame
+                ? (2560 * momentFrame.canvas[0]) / momentFrame.originalRegion.width
+                : 2560) / width,
+          );
+    canvas.width = Math.round(width * density);
+    canvas.height = Math.round(height * density);
+    const sampleCap =
+      2048 * (momentFrame ? momentFrame.canvas[0] / momentFrame.originalRegion.width : 1);
+    const sampling = options.playback?.highest
+      ? displayDensity(canvas.width, canvas.height, native / density, limits, 2)
+      : options.polished && !options.exportSize
+        ? Math.min(2, sampleCap / canvas.width)
+        : 1;
+    layer.width = Math.round(canvas.width * sampling);
+    layer.height = Math.round(canvas.height * sampling);
+    gl.viewport(0, 0, layer.width, layer.height);
+
     materials?.setResolution(
       (layer.width * heroBox[2]) / projectedView[2],
       (layer.height * heroBox[3]) / projectedView[3],
@@ -357,18 +387,19 @@ export async function renderAmber(canvas: HTMLCanvasElement, options: Options = 
       canvas.dataset.time = t.toFixed(3);
       canvas.dataset.blink = (options.blink ?? blinkAt(t)).toFixed(3);
     }
-    if (options.frozenTime === undefined && !document.hidden) raf = requestAnimationFrame(frame);
+    if (options.frozenTime === undefined && !activity.hidden) raf = requestAnimationFrame(frame);
   }
   function visibility() {
     cancelAnimationFrame(raf);
-    if (!document.hidden && !stopped && options.frozenTime === undefined) {
+    if (!activity.hidden && !stopped && options.frozenTime === undefined) {
       last = performance.now();
       cadence.reset();
       raf = requestAnimationFrame(frame);
     }
   }
   observer.observe(canvas);
-  document.addEventListener('visibilitychange', visibility);
+  activity.listen(visibility);
+  layer.addEventListener('webglcontextlost', lost);
   options.signal?.addEventListener('abort', dispose, { once: true });
   resize();
   if (options.frozenTime === undefined) frame(last);

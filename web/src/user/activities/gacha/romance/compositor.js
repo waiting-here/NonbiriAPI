@@ -444,6 +444,7 @@ export async function createScene(id, polished = false, options = {}) {
     canvas.dataset.scene = id;
   }
   return {
+    backgroundSize: [images.background.naturalWidth, images.background.naturalHeight],
     paint,
     paintCharacter,
     dispose() {

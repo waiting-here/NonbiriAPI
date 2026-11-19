@@ -1,3 +1,10 @@
+import {
+  artworkActivity,
+  displayDensity,
+  graphicsLimit,
+  layerDensity,
+  type ArtworkPlayback,
+} from '@shared/animation/artwork-playback';
 import { blinkAt, eyelidProfileWidth, PaintCadence } from '@shared/animation/illustration';
 import { tomorrowAssets, refinedTomorrowAssets, walkingTomorrowAssets } from './assets';
 import { tomorrowEyelids } from './eyelids';
@@ -26,6 +33,7 @@ export type TomorrowOptions = {
   frozenTime?: number;
   blink?: number;
   paused?: () => boolean;
+  playback?: ArtworkPlayback;
   signal?: AbortSignal;
   ambient?: boolean;
   exportSize?: boolean;
@@ -59,6 +67,7 @@ function loadImage(src: string, signal?: AbortSignal) {
 }
 
 export async function renderTomorrow(canvas: HTMLCanvasElement, options: TomorrowOptions = {}) {
+  const activity = artworkActivity(options.playback);
   if (options.signal?.aborted) return () => {};
   const walking = !!options.walking;
   const refined = !walking && options.refined && (options.variant ?? 'card') === 'card';
@@ -127,12 +136,18 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
   let program: WebGLProgram | null = null,
     buffer: WebGLBuffer | null = null;
   let walkingTexture: WebGLTexture | null = null;
+  const limits = options.playback?.highest ? graphicsLimit(gl) : undefined;
   let request = 0,
     elapsed = options.frozenTime ?? 0,
     previous = 0,
     stopped = false,
     painted = false;
-  const cadence = new PaintCadence(undefined, options.ambient);
+  const cadence = new PaintCadence(undefined, options.ambient, options.playback?.highest);
+  function lost(event: Event) {
+    event.preventDefault();
+    options.playback?.setFailed(true);
+    dispose();
+  }
   const observer = new ResizeObserver(() => {
     measure();
     paint();
@@ -142,7 +157,8 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
     stopped = true;
     cancelAnimationFrame(request);
     observer.disconnect();
-    document.removeEventListener('visibilitychange', visibility);
+    activity.unlisten(visibility);
+    layer.removeEventListener('webglcontextlost', lost);
     options.signal?.removeEventListener('abort', dispose);
     textures.forEach((value) => gl!.deleteTexture(value));
     shaders.forEach((value) => gl!.deleteShader(value));
@@ -282,7 +298,14 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
       const width = Math.max(1, rect.width || 768),
         height = Math.max(1, rect.height || width * 1.5);
       const cap = options.highResolution ? (options.landscape ? 3840 : 2560) : 1600;
-      const density = Math.min(window.devicePixelRatio || 1, cap / width);
+      const camera = tomorrowLayout(width, height, options.variant ?? 'card', refined, walking);
+      const native = Math.max(
+        layerDensity(background, width / camera.view[2], height / camera.view[3]),
+        layerDensity(hero, width * camera.hero[2], height * camera.hero[3]),
+      );
+      const density = options.playback?.highest
+        ? displayDensity(width, height, native, limits)
+        : Math.min(window.devicePixelRatio || 1, cap / width);
       canvas.width = Math.round(width * density);
       canvas.height = Math.round(height * density);
     }
@@ -347,20 +370,21 @@ export async function renderTomorrow(canvas: HTMLCanvasElement, options: Tomorro
       if (cadence.due(now)) paint();
     } else if (!painted) paint();
     previous = now;
-    if (!document.hidden) request = requestAnimationFrame(tick);
+    if (!activity.hidden) request = requestAnimationFrame(tick);
   }
   function visibility() {
     cancelAnimationFrame(request);
     previous = 0;
     cadence.reset();
-    if (!document.hidden && !stopped && options.frozenTime === undefined)
+    if (!activity.hidden && !stopped && options.frozenTime === undefined)
       request = requestAnimationFrame(tick);
   }
   measure();
   paint();
   observer.observe(canvas);
+  layer.addEventListener('webglcontextlost', lost);
   options.signal?.addEventListener('abort', dispose, { once: true });
-  document.addEventListener('visibilitychange', visibility);
-  if (options.frozenTime === undefined && !document.hidden) request = requestAnimationFrame(tick);
+  activity.listen(visibility);
+  if (options.frozenTime === undefined && !activity.hidden) request = requestAnimationFrame(tick);
   return dispose;
 }
