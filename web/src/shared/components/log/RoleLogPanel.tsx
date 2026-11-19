@@ -1005,8 +1005,11 @@ function ScopedRoleLogPanel({
       )
     ) : null;
 
-  const resultHint = (row: RoleLogRow) => {
+  const resultHint = (row: RoleLogRow, hasFailureSummary: boolean) => {
     const result = logResult(row);
+    if (!result.hint) return null;
+    if (hasFailureSummary && ['keyHint', 'rateHint', 'retryHint'].includes(result.hint))
+      return null;
     const hintKeys = {
       creditsHint: 'common.operations.logs.presentation.creditsHint',
       keyHint: 'common.operations.logs.presentation.keyHint',
@@ -1014,7 +1017,7 @@ function ScopedRoleLogPanel({
       retryHint: 'common.operations.logs.presentation.retryHint',
       discoveryAcceptedHint: 'common.operations.logs.discoveryAcceptedHint',
     } as const;
-    return result.hint ? t(hintKeys[result.hint]) : null;
+    return t(hintKeys[result.hint]);
   };
 
   let detailBody: ReactNode = null;
@@ -1037,6 +1040,10 @@ function ScopedRoleLogPanel({
 
   const detailData = detail.error ? undefined : detail.data;
   const detailRequest = detailData ? requestFrom(detailData) : null;
+  const failureGroups =
+    role !== 'user' && detailData && 'failure_summary' in detailData
+      ? detailData.failure_summary
+      : undefined;
   const detailFields =
     detailData && detailRequest
       ? [
@@ -1414,12 +1421,10 @@ function ScopedRoleLogPanel({
                     <p>{rejectionDescription(detailRequest.rejection_detail.suggestion)}</p>
                   </div>
                 ) : (
-                  resultHint(detailRequest)
+                  resultHint(detailRequest, Boolean(failureGroups?.length))
                 )}
               </Note>
-              {role !== 'user' && detailData && 'failure_summary' in detailData && (
-                <AttemptFailureSummary groups={detailData.failure_summary} />
-              )}
+              {Boolean(failureGroups?.length) && <AttemptFailureSummary groups={failureGroups} />}
               {detailData && 'route_decision' in detailData && detailData.route_decision && (
                 <RequestRouteDecision decision={detailData.route_decision} />
               )}

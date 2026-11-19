@@ -108,15 +108,19 @@
 }
 .log-failure-summary dd {
   margin: 0;
+  font-size: var(--nb-font-size-sm);
   font-weight: var(--nb-font-weight-semibold);
   font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
 }
 .log-attempt[aria-current='true'] {
   border-color: var(--nb-color-accent);
 }
 .log-focused-attempt-heading,
 .log-attempt-heading h3[tabindex='-1'] {
-  scroll-margin-block-start: var(--nb-space-16);
+  /* Leave space below the stations' sticky header. */
+  scroll-margin-block-start: calc(4.25rem + var(--nb-space-6));
 }
 .log-focused-attempt-heading:focus-visible,
 .log-attempt-heading h3[tabindex='-1']:focus-visible {

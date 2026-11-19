@@ -5,6 +5,7 @@ import { renderHistoricalLogs } from '../../../../test/unit/logSupport';
 import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 import { RoleLogPanel } from './RoleLogPanel';
 import { logManagementReturnPath } from './managementNavigation';
+import type { FailureGroup } from './managementFailures';
 
 installNativeDialog();
 
@@ -66,10 +67,30 @@ function LocationProbe() {
   );
 }
 
-function fixtures(role: 'admin' | 'steward' | 'user', available = true) {
-  const managedRequest = { ...request, charity_model_id: available ? '31' : null };
+function fixtures(
+  role: 'admin' | 'steward' | 'user',
+  available = true,
+  failure?: { summary: FailureGroup[]; suggestion?: string },
+) {
+  const failedResult = failure
+    ? {
+        caller_result_class: 'failed',
+        caller_status: 400,
+        caller_error_code: 'upstream',
+        ...(failure.suggestion
+          ? {
+              rejection_detail: {
+                field: 'model',
+                reason: 'Upstream rejected the model',
+                suggestion: failure.suggestion,
+              },
+            }
+          : {}),
+      }
+    : {};
+  const managedRequest = { ...request, ...failedResult, charity_model_id: available ? '31' : null };
   const row: Record<string, unknown> =
-    role === 'user' ? { ...request, model: 'public model' } : managedRequest;
+    role === 'user' ? { ...request, ...failedResult, model: 'public model' } : managedRequest;
   if (role === 'user') delete row.attempt_count;
   const root =
     role === 'admin' ? '/admin/api/logs' : role === 'steward' ? '/api/steward/logs' : '/api/logs';
@@ -89,9 +110,14 @@ function fixtures(role: 'admin' | 'steward' | 'user', available = true) {
           ? { data: [row], next_cursor: null, pagination }
           : url.pathname === `${root}/${requestID}`
             ? role === 'user'
-              ? { request: row, caller_safe_result: { class: 'success' } }
+              ? {
+                  request: row,
+                  caller_safe_result: { class: row.caller_result_class },
+                  failure_summary: failure?.summary,
+                }
               : {
                   request: row,
+                  failure_summary: failure?.summary,
                   attempts: {
                     data: [
                       attempt(1),
@@ -178,6 +204,49 @@ it('explains missing historic targets and keeps ordinary charity logs free of ma
   expect(await screen.findByText('public model', { selector: '.mono' })).toBeVisible();
   expect(screen.queryByRole('link', { name: /Manage charity/ })).not.toBeInTheDocument();
 });
+
+const authFailures = [
+  { reason: 'google_access_token_type_unsupported', status_code: 401, count: 8 },
+];
+const quotaFailures = [{ reason: 'google_daily_requests', status_code: 429, count: 5 }];
+const preciseSuggestion = 'Review authorization for the selected upstream model.';
+const retryHint = 'Retry later, or add a second source to the model.';
+
+it.each([
+  { role: 'admin', summary: [...authFailures, ...quotaFailures], expectedHint: null },
+  {
+    role: 'admin',
+    summary: authFailures,
+    suggestion: preciseSuggestion,
+    expectedHint: preciseSuggestion,
+  },
+  { role: 'admin', summary: [], expectedHint: retryHint },
+  { role: 'user', summary: authFailures, expectedHint: retryHint },
+] as const)(
+  'shows scoped failure guidance for $role with $expectedHint',
+  async ({ role, summary, expectedHint, ...details }) => {
+    fixtures(role, true, { summary: [...summary], ...details });
+    await renderHistoricalLogs(<RoleLogPanel role={role} accountId="viewer" />, {
+      station: role === 'admin' ? 'admin' : 'user',
+      role,
+      route: `/logs?page=2&request_id=${requestID}`,
+    });
+    const panel = await screen.findByRole('region', { name: /Log details/ });
+    await within(panel).findByText(/Provider error/);
+    if (expectedHint) expect(within(panel).getByText(expectedHint)).toBeVisible();
+    if (expectedHint !== retryHint) {
+      expect(within(panel).queryByText(retryHint)).not.toBeInTheDocument();
+    }
+    if (role === 'admin' && summary.length > 0) {
+      const grouping = within(panel).getByRole('region', { name: 'Failures across all attempts' });
+      expect(within(grouping).getByText('8 attempts')).toBeVisible();
+    } else {
+      expect(
+        within(panel).queryByRole('region', { name: 'Failures across all attempts' }),
+      ).not.toBeInTheDocument();
+    }
+  },
+);
 
 it('accepts only matching station log return paths', () => {
   expect(logManagementReturnPath({ logReturnTo: '/logs?page=2' }, 'admin')).toBe('/logs?page=2');

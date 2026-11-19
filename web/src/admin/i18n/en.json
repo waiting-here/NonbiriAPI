@@ -903,7 +903,7 @@
         "forwardError": "Forward error",
         "registrationRejected": "Registration rejected",
         "maintenanceEnabled": "Maintenance enabled",
-        "donationFailureDisabled": "Donation disabled after failures",
+        "donationFailureDisabled": "Disabled after failures",
         "issueProjectionIncomplete": "Incomplete alert information",
         "reportRetryExhausted": "Report retries exhausted",
         "fishingRetryExhausted": "Fishing recovery retries exhausted",
@@ -935,13 +935,17 @@
         "view": "View triggering attempt",
         "unavailable": "This attempt is no longer available in request logs."
       },
+      "disablement": {
+        "service": "A donated service was automatically disabled after consecutive failures.",
+        "key": "The donated key was automatically disabled after consecutive failures."
+      },
       "kindDescription": {
         "returnDetected": "A request carried a valid site outbound marker. Review its source; processing continued without an automatic penalty.",
         "fetchFailed": "Could not fetch the model list. Check the service address and key.",
         "forwardError": "An upstream request did not complete. Open the details for failure information.",
         "registrationRejected": "A registration request did not meet the site access requirements.",
         "maintenanceEnabled": "The site entered maintenance mode.",
-        "donationFailureDisabled": "A donated key was disabled after repeated failures.",
+        "donationFailureDisabled": "Consecutive failures triggered automatic disablement.",
         "issueProjectionIncomplete": "Issue records could not be fully summarized. Open the details.",
         "reportRetryExhausted": "Report processing did not complete after repeated retries and needs review.",
         "fishingRetryExhausted": "Fishing processing did not complete after repeated retries and needs review.",

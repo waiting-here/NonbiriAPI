@@ -903,7 +903,7 @@
         "forwardError": "转发错误",
         "registrationRejected": "注册被拒绝",
         "maintenanceEnabled": "维护模式已开启",
-        "donationFailureDisabled": "捐赠因连续失败停用",
+        "donationFailureDisabled": "连续失败触发停用",
         "issueProjectionIncomplete": "告警信息不全",
         "reportRetryExhausted": "举报重试已耗尽",
         "fishingRetryExhausted": "钓鱼恢复重试已耗尽",
@@ -935,13 +935,17 @@
         "view": "查看触发停用的调用",
         "unavailable": "请求日志中已无法查看这次调用。"
       },
+      "disablement": {
+        "service": "捐赠服务因连续失败已自动停用。",
+        "key": "捐赠密钥因连续失败已自动停用。"
+      },
       "kindDescription": {
         "returnDetected": "发现带有本站出站标记的请求。请核查来源；请求照常处理，未自动处罚。",
         "fetchFailed": "模型列表获取失败，请检查服务地址和密钥。",
         "forwardError": "上游调用未完成，可在详情中查看失败信息。",
         "registrationRejected": "一次注册请求未通过站点准入条件。",
         "maintenanceEnabled": "站点已进入维护状态。",
-        "donationFailureDisabled": "捐赠密钥因连续失败已自动停用。",
+        "donationFailureDisabled": "连续失败触发了自动停用。",
         "issueProjectionIncomplete": "问题记录尚未完整汇总，请查看详情。",
         "reportRetryExhausted": "举报处理多次重试后仍未完成，需要检查。",
         "fishingRetryExhausted": "垂钓处理多次重试后仍未完成，需要检查。",

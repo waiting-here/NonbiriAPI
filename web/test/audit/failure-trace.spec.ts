@@ -38,7 +38,8 @@ for (const [language, width, theme] of [
     } = fixture.failure_trace;
     const common = (language === 'zh' ? zh : en).common;
     const labels = common.operations.logs;
-    const alert = (language === 'zh' ? zhAdmin : enAdmin).admin.alerts.triggerAttempt;
+    const alertCopy = (language === 'zh' ? zhAdmin : enAdmin).admin.alerts;
+    const alert = alertCopy.triggerAttempt;
     const reasons = common.failure.reason;
     const streak = labels.failureStreak
       .replace('{{before}}', '9')
@@ -53,6 +54,7 @@ for (const [language, width, theme] of [
     const expectSummary = async (page: Page) => {
       const summary = page.getByRole('region', { name: labels.failureSummary });
       await expect(summary).toBeVisible();
+      await expect(page.getByText(labels.presentation.retryHint, { exact: true })).toHaveCount(0);
       for (const [reason, status, count] of [
         [reasons.google_access_token_type_unsupported, 401, '8'],
         [reasons.google_daily_requests, 429, '5'],
@@ -60,7 +62,9 @@ for (const [language, width, theme] of [
       ] as const) {
         const group = summary.locator('dl > div').filter({ hasText: reason });
         await expect(group.locator('dt')).toHaveText(`${reason} · HTTP ${status}`);
-        await expect(group.locator('dd')).toHaveText(count);
+        const label =
+          count === '1' ? labels.failureSummaryCount_one : labels.failureSummaryCount_other;
+        await expect(group.locator('dd')).toHaveText(label.replace('{{amount}}', count));
       }
       await expect(summary.locator('dl > div')).toHaveCount(3);
       return summary;
@@ -75,7 +79,26 @@ for (const [language, width, theme] of [
         exact: true,
       });
       await expect(heading).toBeFocused();
-      await expect(heading).toBeInViewport();
+      await expect
+        .poll(() =>
+          heading.evaluate((element) => {
+            const header = document.querySelector('header.site-header')?.getBoundingClientRect();
+            const title = element.getBoundingClientRect();
+            return (
+              header !== undefined &&
+              title.top >= header.bottom + 8 &&
+              title.bottom <= innerHeight &&
+              element.contains(document.elementFromPoint(title.left + 1, title.top + 1)) &&
+              element.contains(
+                document.elementFromPoint(
+                  title.left + title.width / 2,
+                  title.top + title.height / 2,
+                ),
+              )
+            );
+          }),
+        )
+        .toBe(true);
       await expect(target.getByText(labels.failureDisablement, { exact: true })).toBeVisible();
       await expect(target.getByText(streak, { exact: true })).toBeVisible();
       await expect(
@@ -140,19 +163,26 @@ for (const [language, width, theme] of [
           expect(detail).not.toHaveProperty('attempts');
           await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
           await expect(page.getByRole('region', { name: labels.failureSummary })).toHaveCount(0);
+          await expect(
+            page.getByText(labels.presentation.retryHint, { exact: true }),
+          ).toBeVisible();
           await expect(page.getByRole('link', { name: alert.view })).toHaveCount(0);
           continue;
         }
 
         if (role === 'admin') {
           await page.goto(origin + alertPath);
+          await expect(
+            page.getByText(alertCopy.disablement.service, { exact: true }),
+          ).toBeVisible();
+          await expect(page.locator('.alert-original-message')).toBeHidden();
           const trigger = page.getByRole('region', { name: alert.title });
           await expect(trigger).toContainText(streak);
           await expect(trigger).toContainText(common.nativeServices.gemini_generate_content);
           await expect(trigger).toContainText(reasons.google_access_token_type_unsupported);
           const viewAttempt = trigger.getByRole('link', { name: alert.view });
           await expect(viewAttempt).toHaveAttribute('href', '/logs?' + targetQuery);
-          await trigger.scrollIntoViewIfNeeded();
+          await expect(viewAttempt).toBeInViewport();
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);

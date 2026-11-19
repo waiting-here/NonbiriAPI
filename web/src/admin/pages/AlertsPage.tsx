@@ -39,6 +39,7 @@ import {
   useAdminAlertDetail,
   useAdminTargetDiagnostic,
   validAlertID,
+  type AdminAlertDetail,
   type AlertTriggerAttempt,
   type AlertTarget,
   type DiagnosticTargetKind,
@@ -113,6 +114,22 @@ function targetPath(target: AlertTarget, targets: AlertTarget[]): string | null 
     default:
       return null;
   }
+}
+
+function disablementDescriptionKey(detail: AdminAlertDetail): string {
+  if (detail.context_version > 0) {
+    if (detail.occurred_facts.some((fact) => fact.key === 'use_id' && validAlertID(fact.value))) {
+      return 'admin.alerts.disablement.service';
+    }
+    if (
+      /^donation-key:[1-9]\d*:(?:generation:[1-9]\d*:fold:[1-9]\d*|policy:[1-9]\d*)$/.test(
+        detail.alert.ref ?? '',
+      )
+    ) {
+      return 'admin.alerts.disablement.key';
+    }
+  }
+  return 'admin.alerts.kindDescription.donationFailureDisabled';
 }
 
 function TriggerAttempt({ attempt }: { attempt: AlertTriggerAttempt }) {
@@ -399,6 +416,31 @@ export function AlertsPage() {
     invariant_violation: t('admin.alerts.kindDescription.invariantViolation'),
     account_deleted: t('admin.alerts.kindDescription.accountDeleted'),
   };
+  const disablement =
+    detail.data?.alert.kind === 'donation_failure_disabled' ? detail.data : undefined;
+  const trigger = disablement?.trigger_attempt;
+  const structuredDisablement =
+    disablement !== undefined &&
+    (trigger !== undefined ||
+      (disablement.context_version > 0 && disablement.occurred_facts.length > 0));
+  const eventFacts =
+    detail.data?.occurred_facts.filter(
+      (fact) =>
+        !trigger ||
+        !(
+          (fact.key === 'failure_streak' && fact.value === trigger.streak_after) ||
+          (fact.key === 'failure_threshold' && fact.value === trigger.threshold)
+        ),
+    ) ?? [];
+  const originalMessage = <p className="alert-original-message">{detail.data?.alert.message}</p>;
+  const technicalReference = (
+    <div>
+      <dt>{copy.technicalReference}</dt>
+      <dd>
+        <code className="alert-technical-reference">{detail.data?.alert.ref ?? '—'}</code>
+      </dd>
+    </div>
+  );
   const pageData = result.data;
   const busy = session.isFetching || result.isFetching;
   const actionDisabled = busy || result.isPlaceholderData || mutation.isPending || bulk.isPending;
@@ -462,11 +504,14 @@ export function AlertsPage() {
           ) : detail.data ? (
             <div className="ops-stack">
               <p>
-                {detail.data.alert.subtype === 'return_detected'
-                  ? `${t('admin.alerts.kindValue.returnDetected')} · ${t('admin.alerts.kindDescription.returnDetected')}`
-                  : `${kindLabels[detail.data.alert.kind]} · ${kindDescriptions[detail.data.alert.kind]}`}
+                {disablement
+                  ? t(disablementDescriptionKey(disablement))
+                  : detail.data.alert.subtype === 'return_detected'
+                    ? `${t('admin.alerts.kindValue.returnDetected')} · ${t('admin.alerts.kindDescription.returnDetected')}`
+                    : `${kindLabels[detail.data.alert.kind]} · ${kindDescriptions[detail.data.alert.kind]}`}
               </p>
-              <p className="alert-original-message">{detail.data.alert.message}</p>
+              {trigger && <TriggerAttempt attempt={trigger} />}
+              {!structuredDisablement && originalMessage}
               <dl className="nb-facts nb-facts--inline">
                 <div>
                   <dt>{copy.occurred}</dt>
@@ -480,42 +525,39 @@ export function AlertsPage() {
                       : copy.unresolved}
                   </dd>
                 </div>
-                <div>
-                  <dt>{copy.technicalReference}</dt>
-                  <dd>
-                    <code>{detail.data.alert.ref ?? '—'}</code>
-                  </dd>
-                </div>
+                {!structuredDisablement && technicalReference}
               </dl>
-              {detail.data.trigger_attempt && (
-                <TriggerAttempt attempt={detail.data.trigger_attempt} />
-              )}
-              <h3>{copy.facts}</h3>
-              {detail.data.occurred_facts.length === 0 ? (
-                <p className="nb-muted">{copy.noFacts}</p>
-              ) : (
-                <dl className="nb-facts nb-facts--inline">
-                  {detail.data.occurred_facts.map((fact, index) => (
-                    <div key={`${fact.key}:${index}`}>
-                      <dt>
-                        {detail.data.alert.subtype === 'return_detected'
-                          ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, {
-                              defaultValue: fact.key,
-                            })
-                          : (copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key)}
-                      </dt>
-                      <dd>
-                        {detail.data.alert.subtype === 'return_detected' && fact.key === 'subtype'
-                          ? t('admin.alerts.kindValue.returnDetected')
-                          : detail.data.alert.subtype === 'return_detected' &&
-                              fact.key === 'marker_issued_at'
-                            ? formatDateTime(Number(fact.value))
-                            : fact.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+              {eventFacts.length > 0 ? (
+                <>
+                  <h3>{copy.facts}</h3>
+                  <dl className="nb-facts nb-facts--inline">
+                    {eventFacts.map((fact, index) => (
+                      <div key={`${fact.key}:${index}`}>
+                        <dt>
+                          {detail.data.alert.subtype === 'return_detected'
+                            ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, {
+                                defaultValue: fact.key,
+                              })
+                            : (copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key)}
+                        </dt>
+                        <dd>
+                          {detail.data.alert.subtype === 'return_detected' && fact.key === 'subtype'
+                            ? t('admin.alerts.kindValue.returnDetected')
+                            : detail.data.alert.subtype === 'return_detected' &&
+                                fact.key === 'marker_issued_at'
+                              ? formatDateTime(Number(fact.value))
+                              : fact.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : !trigger ? (
+                <>
+                  <h3>{copy.facts}</h3>
+                  <p className="nb-muted">{copy.noFacts}</p>
+                </>
+              ) : null}
               <h3>{copy.targets}</h3>
               {detail.data.targets.length === 0 ? (
                 <p className="nb-muted">{copy.noTarget}</p>
@@ -655,6 +697,16 @@ export function AlertsPage() {
                   )}
                 </>
               ) : null}
+              {structuredDisablement && (
+                <Fold
+                  key={detail.data.alert.id}
+                  plain
+                  title={t('common.operations.logs.presentation.technical')}
+                >
+                  {originalMessage}
+                  <dl className="nb-facts nb-facts--inline">{technicalReference}</dl>
+                </Fold>
+              )}
             </div>
           ) : null}
         </Card>

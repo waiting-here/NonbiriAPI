@@ -12,7 +12,7 @@ export function AttemptReason({ failure }: { failure: AttemptFailureReason }) {
     <>
       {t(failureReasonKey(failure.reason) ?? 'common.failure.reason.attempt_failed')}
       {failure.status_code !== undefined && (
-        <span className="nb-muted"> · HTTP {failure.status_code}</span>
+        <span className="nb-muted"> ·&nbsp;HTTP&nbsp;{failure.status_code}</span>
       )}
     </>
   );
@@ -55,7 +55,14 @@ export function AttemptFailureSummary({ groups }: { groups?: FailureGroup[] }) {
             <dt>
               <AttemptReason failure={group} />
             </dt>
-            <dd>{formatCount(group.count).display}</dd>
+            <dd>
+              {t(
+                group.count === 1
+                  ? 'common.operations.logs.failureSummaryCount_one'
+                  : 'common.operations.logs.failureSummaryCount_other',
+                { amount: formatCount(group.count).display },
+              )}
+            </dd>
           </div>
         ))}
       </dl>
