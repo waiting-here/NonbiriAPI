@@ -1,17 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import type { DiagnosticQuery } from './IndependentDiagnostics';
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RoleLogPanel } from '@shared/components/log/RoleLogPanel';
 import { LoadingState } from '@shared/components/States';
 import { Tabs } from '@shared/components/ui/Tabs';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { LazyIndependentDiagnostics } from './LazyIndependentDiagnostics';
-
-const Requests = lazy(() =>
-  import('@shared/components/log/RoleLogPanel').then(({ RoleLogPanel }) => ({
-    default: RoleLogPanel,
-  })),
-);
 
 interface Props {
   role: 'admin' | 'steward';
@@ -62,7 +57,7 @@ export function OperatorLogWorkspace({
           }
         />
       ) : (
-        <Requests
+        <RoleLogPanel
           role={role}
           canReadModels={canReadModels}
           canReadUsers={canReadUsers}
