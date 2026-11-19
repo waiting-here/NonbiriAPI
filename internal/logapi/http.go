@@ -281,6 +281,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	filter := ListFilter{}
 	allowed := map[string]bool{
 		"operation":  true,
+		"outcome":    true,
 		"phase":      true,
 		"error_code": true, "status": true, "from": true, "to": true,
 	}
@@ -321,6 +322,11 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 			if !validLogOperation(filter.Operation) {
 				return ListFilter{}, ErrInvalid
 			}
+		case "outcome":
+			if !validOutcome(role, value) || value == "" {
+				return ListFilter{}, ErrInvalid
+			}
+			filter.Outcome = value
 		case "phase":
 			if value != "pre_handler" && value != "handler" {
 				return ListFilter{}, ErrInvalid

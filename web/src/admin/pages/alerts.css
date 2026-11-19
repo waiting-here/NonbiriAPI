@@ -52,3 +52,28 @@
     white-space: normal;
   }
 }
+
+.alerts-page th.is-select .nb-table-check > span {
+  display: none;
+}
+@media (width <= 48rem) {
+  .alerts-page .nb-table:has(th.is-select) thead {
+    display: block;
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+  .alerts-page .nb-table:has(th.is-select) thead th:not(.is-select) {
+    position: absolute;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .alerts-page th.is-select .nb-table-check > span {
+    display: inline;
+    white-space: normal;
+  }
+}

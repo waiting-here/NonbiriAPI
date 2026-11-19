@@ -156,7 +156,7 @@ test('charity request and attempt shortcuts preserve the log window for administ
         attempt_page_size: '20',
       });
       await page.goto(origin + (role === 'admin' ? '/logs?' : '/steward?') + search);
-      const panel = page.locator('.nb-expandable-panel:not([hidden])');
+      const panel = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
       await expect(
         panel.getByRole('link', { name: common.common.operations.logs.manageCharityModel }),
       ).toBeVisible();
@@ -1348,7 +1348,7 @@ test('complete headers stay lazy, preserve duplicates and physical responses, an
       await page.goto(
         origin + (role === 'admin' ? '/logs?request_id=' : '/steward?tab=logs&request_id=') + id,
       );
-      const detail = page.locator('.nb-expandable-panel:not([hidden])');
+      const detail = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
       await expect(detail).toBeVisible();
       const requestToggle = detail
         .locator('summary')

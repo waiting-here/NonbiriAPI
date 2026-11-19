@@ -912,7 +912,6 @@
         "accountDeleted": "Account deleted by user"
       },
       "filterKind": "Alert type",
-      "select": "Select",
       "selectPage": "Select unresolved alerts on this page",
       "selectAlert": "Select alert {{id}}",
       "resolveSelected": "Resolve selected ({{count}})",

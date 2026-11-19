@@ -261,6 +261,7 @@ export interface LogFiltersValue {
   operation?: LogOperation;
   error_category?: string;
   error_phase?: string;
+  outcome?: 'success' | 'failed' | 'before_dispatch' | 'actual_backoff';
   phase?: 'handler' | 'pre_handler';
   model?: string;
   user_id?: string;
@@ -982,8 +983,20 @@ export function validLogResourceID(value: string): boolean {
   return /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n;
 }
 
+export function isLogOutcome(
+  role: LogRole,
+  value: unknown,
+): value is NonNullable<LogFiltersValue['outcome']> {
+  return (
+    value === 'success' ||
+    value === 'failed' ||
+    (role !== 'user' && (value === 'before_dispatch' || value === 'actual_backoff'))
+  );
+}
+
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
   const result: LogFiltersValue = {};
+  if (isLogOutcome(role, raw.outcome)) result.outcome = raw.outcome;
   if (isLogOperation(raw.operation)) result.operation = raw.operation;
   if (raw.phase === 'handler' || raw.phase === 'pre_handler') result.phase = raw.phase;
   const assign = (key: keyof LogFiltersValue, max: number) => {

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { LogReadError, logAccessLost } from '@shared/observability/logReadAccess';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
@@ -57,6 +58,10 @@ function LoadedHeaderFacts({ role, accountID, requestID, attempt }: HeaderFactsP
     retry: false,
     refetchOnWindowFocus: false,
   });
+  const report = useContext(LogReadError);
+  useEffect(() => {
+    if (logAccessLost(query.error)) report(query.error);
+  }, [query.error, report]);
   if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data) return <LoadingState />;
   return <HeaderContent data={query.data} />;

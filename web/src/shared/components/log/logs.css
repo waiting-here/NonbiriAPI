@@ -358,3 +358,12 @@
 .log-filters .nb-filter__fields {
   padding-top: var(--nb-space-3);
 }
+
+.log-attempt-summary {
+  display: grid;
+  gap: var(--nb-space-2);
+  margin: 0;
+  padding-inline-start: var(--nb-space-5);
+  font-size: var(--nb-font-size-sm);
+  overflow-wrap: anywhere;
+}

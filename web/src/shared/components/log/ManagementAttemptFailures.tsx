@@ -1,3 +1,9 @@
+import {
+  backoffReasonKey,
+  continuedAfterAttempt,
+  SCOPE_KEYS,
+  STREAK_KEYS,
+} from './attemptHealthText';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
@@ -16,21 +22,6 @@ import type {
   FailureDisablement,
   FailureGroup,
 } from './managementFailures';
-
-const STREAK_KEYS: Record<AttemptHealthImpact['streak_effect'], string> = {
-  incremented: 'common.operations.logs.healthImpact.streak.incremented',
-  reset: 'common.operations.logs.healthImpact.streak.reset',
-  unchanged: 'common.operations.logs.healthImpact.streak.unchanged',
-  pending: 'common.operations.logs.healthImpact.streak.pending',
-  unknown: 'common.operations.logs.healthImpact.streak.unknown',
-};
-
-const SCOPE_KEYS: Record<AttemptBackoff['scope'], string> = {
-  key: 'common.operations.logs.healthImpact.backoff.scope.key',
-  service: 'common.operations.logs.healthImpact.backoff.scope.service',
-  model: 'common.operations.logs.healthImpact.backoff.scope.model',
-  unknown: 'common.operations.logs.healthImpact.backoff.scope.unknown',
-};
 
 export function AttemptReason({ failure }: { failure: AttemptFailureReason }) {
   const { t } = useTranslation();
@@ -73,10 +64,6 @@ function AttemptStreak({ impact }: { impact?: AttemptHealthImpact }) {
   const effect = impact?.streak_effect ?? 'unknown';
   const before = impact?.streak_before;
   const after = impact?.streak_after;
-  const didNotDisable =
-    effect === 'unchanged' ||
-    effect === 'reset' ||
-    (effect === 'incremented' && before !== undefined && after !== undefined);
   let counts: string | undefined;
   if (before !== undefined && after !== undefined) {
     counts = `${formatCount(before).exact} → ${formatCount(after).exact}`;
@@ -91,26 +78,11 @@ function AttemptStreak({ impact }: { impact?: AttemptHealthImpact }) {
     <p className="log-attempt-streak">
       <strong>{t(STREAK_KEYS[effect])}</strong>
       {counts && <span>{counts}</span>}
-      {didNotDisable && (
+      {continuedAfterAttempt(impact) && (
         <span className="nb-muted">{t('common.operations.logs.healthImpact.didNotDisable')}</span>
       )}
     </p>
   );
-}
-
-function backoffReasonKey({ reason, period }: AttemptBackoff): string {
-  switch (reason) {
-    case 'retry_header':
-      return 'common.operations.logs.healthImpact.backoff.retryHeader';
-    case 'smart_trial':
-      return 'common.operations.logs.healthImpact.backoff.smartTrial';
-    case 'smart_quota':
-      return `common.smartBackoff.reasons.${period ? `${period}_quota` : 'quota'}`;
-    default:
-      return (
-        failureReasonKey(reason) ?? 'common.operations.logs.healthImpact.backoff.reasonUnknown'
-      );
-  }
 }
 
 function AttemptRetryTime({ at }: { at: number }) {

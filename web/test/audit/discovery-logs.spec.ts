@@ -119,7 +119,7 @@ for (const [language, width, theme] of [
             'operation=model_discovery&request_id=' +
             requestID,
         );
-        const panel = page.locator('.nb-expandable-panel:not([hidden])');
+        const panel = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
         const accepted = panel.getByRole('status').filter({ hasText: copy.discoveryAccepted });
         await expect(accepted).toBeVisible();
         await expect(accepted).toContainText(copy.discoveryAcceptedHint);
@@ -222,7 +222,7 @@ for (const [language, width, theme] of [
       await expect(page.locator('.log-attempt-diagnostic')).toBeVisible();
       await expect(
         page
-          .locator('.nb-expandable-panel')
+          .locator('.inspection-dock, .nb-sheet:has(.log-detail-content)')
           .getByRole('status')
           .filter({ hasText: copy.discoveryAccepted }),
       ).toBeVisible();

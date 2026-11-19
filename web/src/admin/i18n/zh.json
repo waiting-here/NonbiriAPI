@@ -912,7 +912,6 @@
         "accountDeleted": "用户主动删号"
       },
       "filterKind": "告警类型",
-      "select": "选择",
       "selectPage": "选择本页未解决告警",
       "selectAlert": "选择告警 {{id}}",
       "resolveSelected": "标记已选 {{count}} 条为已解决",

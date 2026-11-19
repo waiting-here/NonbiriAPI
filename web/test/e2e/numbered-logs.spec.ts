@@ -275,7 +275,7 @@ test('complete header lists fetch lazily and remain usable in light and dark des
   });
   await page.goto(`${origin}/logs?from=&to=`);
   await page.getByRole('button', { name: 'Details', exact: true }).click();
-  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
   await expect(dialog.getByText('192.0.2.17', { exact: true })).toBeVisible();
   expect(requestReads).toBe(0);
   expect(responseReads).toBe(0);
@@ -417,7 +417,7 @@ for (const scenario of [
     });
     await page.goto(`${origin}${screenPath}?page=3&page_size=10&status=200`);
     await page.getByRole('button', { name: labels.details, exact: true }).click();
-    const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+    const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await dialog
       .locator('summary')
       .filter({ hasText: locale === 'zh' ? '服务调用记录' : 'Service call attempts' })
@@ -537,7 +537,7 @@ test('ordinary charity log detail exposes no attempt list or attempt pagination'
   });
   await page.goto(`${origin}/logs`);
   await page.getByRole('button', { name: 'Details', exact: true }).click();
-  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Success', { exact: true }).first()).toBeVisible();
   await expect(dialog.locator('.log-attempts')).toHaveCount(0);
@@ -672,7 +672,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await page.locator('.log-table tbody button').first().click();
-        const drawer = page.locator('.nb-expandable-panel:not([hidden])');
+        const drawer = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
         await expect(
           drawer.locator('summary').filter({ hasText: 'Technical information' }),
         ).toBeVisible();

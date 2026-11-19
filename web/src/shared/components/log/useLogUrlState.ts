@@ -53,6 +53,11 @@ function parseState(
     if (name === 'discord_id' && !validLogDiscordID(trimmed)) continue;
     if (name === 'operation' && !isLogOperation(raw)) continue;
     if (name === 'status' && !/^[1-5][0-9]{2}$/.test(trimmed)) continue;
+    if (
+      name === 'outcome' &&
+      !['success', 'failed', 'before_dispatch', 'actual_backoff'].includes(trimmed)
+    )
+      continue;
     if (name === 'phase' && trimmed !== 'handler' && trimmed !== 'pre_handler') continue;
     if (name === 'usage_total_mismatch' && trimmed !== 'true') continue;
     if (trimmed) filters[name] = trimmed;

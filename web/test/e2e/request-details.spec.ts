@@ -61,7 +61,7 @@ for (const station of ['user', 'admin'] as const) {
       `${origin}/logs${station === 'user' ? `?request_id=${detail.request.id}` : ''}`,
     );
     if (station === 'admin') await page.locator('.log-table tbody button').first().click();
-    const drawer = page.locator('.nb-expandable-panel:not([hidden])');
+    const drawer = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await expect(drawer).toBeVisible();
     await drawer.locator('summary').filter({ hasText: 'Service call attempts' }).click();
     await expect(drawer.locator('.log-attempt')).toHaveCount(2);
@@ -131,7 +131,7 @@ test('an expired or foreign request link stays unavailable in the current accoun
         }),
   );
   await page.goto(`${USER_ORIGIN}/logs?request_id=${id}`);
-  await expect(page.locator('.nb-expandable-panel:not([hidden])')).toContainText(
+  await expect(page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)')).toContainText(
     /no longer available|unavailable|expired/i,
   );
   await expect(page.locator('.log-attempt')).toHaveCount(0);
@@ -201,4 +201,68 @@ test('management diagnostics use shared buttons and recover without refreshing',
     expect(await section.evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
   }
   errors.assertNone();
+});
+
+test('switches requests in a wide dock and returns from a narrow sheet to the active row', async ({
+  page,
+}) => {
+  await mockRoleSession(page, 'admin', 'admin');
+  await mockPublicConfig(page, 'admin');
+  const base = fixtures.admin;
+  const ids = [base.request.id, 'req_' + 'B'.repeat(21) + 'Q'];
+  const rows = ids.map((id) => ({ ...base.request, id }));
+  const reads: string[] = [];
+  await page.route('**/admin/api/logs**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/admin/api/logs') {
+      expect(url.searchParams.get('outcome')).toBe('actual_backoff');
+      return route.fulfill({
+        json: {
+          data: rows,
+          next_cursor: null,
+          pagination: { page: '2', page_size: 10, total_items: '12', total_pages: '2' },
+        },
+      });
+    }
+    const id = url.pathname.split('/').pop();
+    if (id && ids.includes(id)) {
+      reads.push(id);
+      return route.fulfill({
+        json: {
+          ...base,
+          request: { ...base.request, id },
+          attempt_pagination: { page: '1', page_size: 20, total_items: '2', total_pages: '1' },
+        },
+      });
+    }
+    return route.fallback();
+  });
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await page.goto(ADMIN_ORIGIN + '/logs?outcome=actual_backoff&page=2&page_size=10');
+  const first = page.locator('[data-inspect-id="' + ids[0] + '"]');
+  const second = page.locator('[data-inspect-id="' + ids[1] + '"]');
+  await expect(first).toBeVisible();
+  expect(reads).toEqual([]);
+  await first.click();
+  const dock = page.locator('.inspection-dock');
+  await expect(dock.getByRole('heading', { name: 'Log details ' + ids[0] })).toBeFocused();
+  await second.click();
+  await expect(dock.getByRole('heading', { name: 'Log details ' + ids[1] })).toBeFocused();
+  await expect(
+    dock.getByRole('button', { name: 'Copy request summary for this page' }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sheet = page.getByRole('dialog', { name: 'Log details ' + ids[1] });
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press('Tab');
+  expect(await sheet.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(second).toBeFocused();
+  await expect(page).toHaveURL(
+    (url) =>
+      url.searchParams.get('page') === '2' &&
+      url.searchParams.get('outcome') === 'actual_backoff' &&
+      !url.searchParams.has('request_id'),
+  );
 });

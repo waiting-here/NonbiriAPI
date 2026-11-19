@@ -210,7 +210,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, 
     : f.json_body;
   const path = admin ? '/logs?' : '/steward?tab=logs&';
   await page.goto((admin ? f.admin_url : f.user_url) + path + 'request_id=' + f.request_ids[0]);
-  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
   await expect(dialog).toBeVisible();
   const source = dialog.getByRole('region', { name: 'Request source' });
   await expect(source).toContainText(f.source_ip);
@@ -732,7 +732,9 @@ for (const level of [5, 1] as const) {
         for (const key of ['effective_ip', 'user_agent', 'bytes_saved', 'source_json'])
           expect(wire).not.toContain('"' + key + '"');
         await page.goto(f.user_url + '/logs?request_id=' + f.request_ids[index]);
-        await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
+        await expect(
+          page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)'),
+        ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Upstream error details' })).toHaveCount(0);
         await expect(page.getByRole('region', { name: 'Request source' })).toHaveCount(0);
         await page.goto(f.user_url + '/steward?tab=logs');

@@ -386,7 +386,7 @@ test('administrator follows retained request identity through deletion history a
   try {
     const page = await context.newPage();
     await page.goto(state.admin_url + '/logs?request_id=' + state.management.request_ids[0]);
-    const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+    const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await expect(dialog).toContainText('Original account: ' + state.management.old_user_id);
     await expect(dialog).toContainText('Original account deleted');
     const history = dialog.getByRole('link', { name: 'View deletion history' });

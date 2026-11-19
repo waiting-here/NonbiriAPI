@@ -227,7 +227,6 @@ describe('shared log filters', () => {
       </LogSearch>,
       { station: 'user' },
     );
-    await view.user.click(screen.getByRole('tab', { name: 'Find by request ID' }));
     const id = screen.getByRole('textbox', { name: 'Request ID' });
     await view.user.click(id);
     await view.user.paste('req_partial');

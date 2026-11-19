@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router';
+import { logManagementReturnPath } from '@shared/components/log/managementNavigation';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   hasStewardPermission,
   canAccessStewardCharityManagement,
@@ -94,13 +95,15 @@ export function StewardPage() {
     sections.find((value) => value === requestedTab) ??
     sections.find((value) => access[value]) ??
     'logs';
+  const logReturnTo = logManagementReturnPath(location.state, 'steward');
   const announcement = searchParams.get('announcement') ?? '';
-  const setSection = useCallback(
-    (value: Section) => {
-      setSearchParams({ tab: value }, { replace: true });
-    },
-    [setSearchParams],
-  );
+  const tabQueries = useRef<Partial<Record<Section, string>>>({});
+  function setSection(value: Section) {
+    tabQueries.current[section] = searchParams.toString();
+    const next = new URLSearchParams(tabQueries.current[value]);
+    next.set('tab', value);
+    setSearchParams(next, { state: null });
+  }
   const [authorityRefreshing, setAuthorityRefreshing] = useState(false);
   const clearSensitiveQueries = useCallback(() => {
     const predicate = (query: { queryKey: readonly unknown[] }) =>
@@ -116,6 +119,7 @@ export function StewardPage() {
     return cancelled;
   }, [client]);
   const authorityLoss = useCallback(() => {
+    tabQueries.current = {};
     setAuthorityRefreshing(true);
     void clearSensitiveQueries();
     setSearchParams({}, { replace: true });
@@ -134,6 +138,9 @@ export function StewardPage() {
   const scopeChanged = clearedScope !== authorityScope;
   useEffect(() => {
     if (!scopeChanged) return;
+    tabQueries.current = {};
+    if (clearedScope && (location.search || location.state))
+      setSearchParams({}, { replace: true, state: null });
     let active = true;
     void clearSensitiveQueries().then(() => {
       if (active) setClearedScope(authorityScope);
@@ -141,7 +148,15 @@ export function StewardPage() {
     return () => {
       active = false;
     };
-  }, [authorityScope, scopeChanged, clearSensitiveQueries]);
+  }, [
+    authorityScope,
+    scopeChanged,
+    clearedScope,
+    clearSensitiveQueries,
+    setSearchParams,
+    location.search,
+    location.state,
+  ]);
   useEffect(() => {
     if (!authority.isPending && !allowed) void clearSensitiveQueries();
   }, [allowed, authority.isPending, clearSensitiveQueries]);
@@ -218,6 +233,9 @@ export function StewardPage() {
             </div>
           }
         />
+        {section === 'users' && logReturnTo && (
+          <Link to={logReturnTo}>{t('common.operations.logs.returnToLogs')}</Link>
+        )}
         <Tabs
           label={t('user.steward.sectionsLabel')}
           value={section}
@@ -234,8 +252,10 @@ export function StewardPage() {
               {section === 'logs' ? (
                 <OperatorLogWorkspace
                   role="steward"
-                  accountId={`${authority.data.id}:${authority.data.effective_level}`}
+                  accountId={authorityScope}
                   scopeReady={allowed}
+                  canReadModels={has('charity.read')}
+                  canReadUsers={has('users.read')}
                   canReadRequests={has('logs.read')}
                   canReadActivity={has('diagnostics.read')}
                   onAuthorityLoss={authorityLoss}

@@ -28,6 +28,7 @@ import {
   validLogResourceID,
   logRequestID,
   isLogOperation,
+  isLogOutcome,
   type AdminLogAttempt,
   type AdminLogDetail,
   type CallerIdentity,
@@ -87,7 +88,7 @@ const ROLE_PATHS: Record<LogRole, string> = {
 };
 
 const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
-  user: ['operation', 'model', 'error_code', 'status', 'from', 'to', 'phase'],
+  user: ['outcome', 'operation', 'model', 'error_code', 'status', 'from', 'to', 'phase'],
   steward: [
     'operation',
     'user_id',
@@ -102,6 +103,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'to',
     'phase',
     'usage_total_mismatch',
+    'outcome',
     'error_category',
     'error_phase',
   ],
@@ -119,6 +121,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'to',
     'phase',
     'usage_total_mismatch',
+    'outcome',
     'error_category',
     'error_phase',
   ],
@@ -166,6 +169,7 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
       result.usage_total_mismatch = true;
       continue;
     }
+    if (key === 'outcome' && !isLogOutcome(role, raw)) invalidRequest('log outcome filter');
     if (key === 'operation' && !isLogOperation(raw)) invalidRequest('log operation filter');
     const text = requestString(raw, `log ${key} filter`, key === 'status' ? 3 : 512);
     if (text === '') continue;
