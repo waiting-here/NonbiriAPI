@@ -48,7 +48,8 @@ export function FilterBar({
   chipsLabel?: string;
   onClearAll?: () => void;
   clearAllLabel?: string;
-  onSubmit: () => void;
+  /** Omit for local filters that update the results as the user types. */
+  onSubmit?: () => void;
   /**
    * When set, the bar renders its own Search and Reset buttons after the search slot, so
    * pages share one wording. Selects and toggles should still apply on change.
@@ -78,6 +79,7 @@ export function FilterBar({
         onKeyDown={(event) => {
           if (
             Tag === 'div' &&
+            onSubmit &&
             event.key === 'Enter' &&
             !event.defaultPrevented &&
             !event.nativeEvent.isComposing &&
@@ -93,7 +95,7 @@ export function FilterBar({
         aria-label={ariaLabel}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!submitDisabled) onSubmit();
+          if (!submitDisabled) onSubmit?.();
         }}
       >
         <div className="nb-filter__row">
@@ -101,13 +103,15 @@ export function FilterBar({
             {search}
             {onReset ? (
               <>
-                <Button
-                  type={Tag === 'form' ? 'submit' : 'button'}
-                  disabled={submitDisabled}
-                  onClick={Tag === 'div' ? onSubmit : undefined}
-                >
-                  {submitLabel ?? t('common.search')}
-                </Button>
+                {onSubmit && (
+                  <Button
+                    type={Tag === 'form' ? 'submit' : 'button'}
+                    disabled={submitDisabled}
+                    onClick={Tag === 'div' ? onSubmit : undefined}
+                  >
+                    {submitLabel ?? t('common.search')}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="secondary"

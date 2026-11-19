@@ -39,6 +39,7 @@ import type {
 } from './types';
 import './gacha.css';
 import { useOptionalAppearance } from '../../appearance/context';
+import { MomentFromCollection } from '../../appearance/MomentFromCollection';
 
 type Page = 'pools' | 'collection' | 'shop';
 type PendingAction = { input: Action; key: string; message: string };
@@ -544,7 +545,10 @@ export function GachaApp({
                   <div className="gacha-pool-single" id={'gacha-pool-tab-' + pool.id}>
                     <span>{english && pool.name_en ? pool.name_en : pool.name}</span>
                     <ArtworkBadge
-                      artworkKey={['cover:' + pool.cover, ...pool.featured.map((id) => 'card:' + id)]}
+                      artworkKey={[
+                        'cover:' + pool.cover,
+                        ...pool.featured.map((id) => 'card:' + id),
+                      ]}
                     />
                   </div>
                 ) : (
@@ -839,9 +843,7 @@ export function GachaApp({
                 </div>
                 <div className="gacha-home-bottom">
                   <div>
-                    <span className="gacha-eyebrow">
-                      {t('下一段旅程', 'YOUR NEXT CHAPTER')}
-                    </span>
+                    <span className="gacha-eyebrow">{t('下一段旅程', 'YOUR NEXT CHAPTER')}</span>
                     <h3>{t('有些美好，要一起才完整', 'Some memories need everyone')}</h3>
                     <p>
                       {t(
@@ -1014,6 +1016,9 @@ export function GachaApp({
               ))}
             </div>
           )}
+          {state.owned[card.id] && (
+            <MomentFromCollection key={card.id} artworkKey={'card:' + card.id} />
+          )}
         </GachaDialog>
       )}
       {group && (
@@ -1031,6 +1036,7 @@ export function GachaApp({
             alt={t(group.name + '主题插画', group.name_en + ' group memory')}
           />
           <p>{t(group.tagline, group.tagline_en)}</p>
+          <MomentFromCollection key={group.id} artworkKey={'illustration:' + group.id} />
         </GachaDialog>
       )}
       {dialog === 'buy' && (
