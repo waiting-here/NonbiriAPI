@@ -654,7 +654,9 @@ describe('authoritative site-config frontend', () => {
     form = textarea.closest<HTMLElement>('.nb-setting');
     fireEvent.change(textarea, { target: { value: 'x'.repeat(65_537) } });
     expect(within(form!).getByText('65537 / 65536 UTF-8 bytes')).toBeVisible();
-    expect(within(form!).getByRole('alert')).toHaveTextContent(/too long; shorten it/i);
+    expect(within(form!).getByRole('alert')).toHaveTextContent(
+      'This text is too long. Shorten it to 65536 UTF-8 bytes or fewer.',
+    );
     expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(server.patches).toHaveLength(1);
   });
@@ -1184,7 +1186,9 @@ describe('standalone Admin Games feature', () => {
     ).not.toBeInTheDocument();
     expect(treasures).toHaveAttribute('open');
     expect(worm).toBeVisible();
-    await rendered.user.click(within(fishing).getByRole('button', { name: 'Cancel' }));
+    await rendered.user.click(
+      within(fishing).getByRole('button', { name: /Discard edits made to/ }),
+    );
     expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('switch', { name: 'Enable Fishing' }));
     expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument();
@@ -1327,7 +1331,7 @@ describe('standalone Admin Games feature', () => {
     expect(within(rps).getByRole('alert')).toHaveTextContent(/must total less than 100%/i);
     expect(server.patches).toHaveLength(0);
     fireEvent.change(quickPlatform, { target: { value: '1' } });
-    await rendered.user.click(within(rps).getByRole('button', { name: 'Cancel' }));
+    await rendered.user.click(within(rps).getByRole('button', { name: /Discard edits made to/ }));
     await rendered.user.click(screen.getByRole('button', { name: 'Fishing Game settings' }));
     const fishing = screen.getByRole('region', { name: 'Fishing' });
     const save = within(fishing).getByRole('button', { name: 'Save all changes' });
@@ -1393,7 +1397,7 @@ describe('standalone Admin Games feature', () => {
     expect(screen.getByRole('button', { name: 'Three-player RPS Game settings' })).toBeDisabled();
     for (const input of within(fishing).getAllByRole('spinbutton')) expect(input).toBeDisabled();
     expect(within(fishing).getByRole('button', { name: 'Close' })).toBeDisabled();
-    expect(within(fishing).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(within(fishing).getByRole('button', { name: /Discard edits made to/ })).toBeDisabled();
     expect(within(fishing).getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save game configuration' })).toBeDisabled();
     expect(

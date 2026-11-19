@@ -1021,7 +1021,7 @@
         "boolean": "使用 true 或 false",
         "canonical": "请填写符合以下要求的{{type}}：{{detail}}。",
         "integerSyntax": "不包含空白、小数、指数或前导零",
-        "maxUtf8Bytes": "内容过长，请缩短至 {{maximum}} 个 UTF-8 字节以内",
+        "maxUtf8Bytes": "内容过长，请缩短至 {{maximum}} 个 UTF-8 字节以内。",
         "noControlCharacters": "不包含控制字符",
         "notNull": "不可为 null",
         "rangeStep": "处于 {{minimum}}–{{maximum}} 范围内且步长为 {{step}}",
@@ -1077,6 +1077,7 @@
       "saved": "游戏设置已保存。",
       "save": "保存游戏配置",
       "saveAllChanges": "保存全部更改",
+      "discardGameEdits": "撤销本次对「{{game}}」的编辑",
       "controls": {
         "settings": "游戏设置"
       },

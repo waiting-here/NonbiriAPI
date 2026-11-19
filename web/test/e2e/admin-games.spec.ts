@@ -470,7 +470,11 @@ for (const scenario of [
           .click();
         await expect(trigger).toBeFocused();
         await trigger.click();
-        await expect(amount).toHaveValue('2.5');
+        await expect(amount).toHaveValue('3.25');
+        await amount.fill('4');
+        await dialog.getByRole('button', { name: /撤销本次|Discard edits made to/ }).click();
+        await trigger.click();
+        await expect(amount).toHaveValue('3.25');
       }
       await dialog
         .getByRole('button', { name: scenario.locale === 'zh' ? '关闭' : 'Close', exact: true })

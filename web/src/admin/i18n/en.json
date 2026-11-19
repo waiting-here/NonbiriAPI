@@ -1021,7 +1021,7 @@
         "boolean": "uses true or false",
         "canonical": "Enter a {{type}} value that {{detail}}.",
         "integerSyntax": "contains no whitespace, fractions, exponents, or leading zeroes",
-        "maxUtf8Bytes": "is too long. Shorten the text to {{maximum}} UTF-8 bytes or fewer",
+        "maxUtf8Bytes": "This text is too long. Shorten it to {{maximum}} UTF-8 bytes or fewer.",
         "noControlCharacters": "contains no control characters",
         "notNull": "is not null",
         "rangeStep": "is within {{minimum}}–{{maximum}} at step {{step}}",
@@ -1077,6 +1077,7 @@
       "saved": "Game settings saved.",
       "save": "Save game configuration",
       "saveAllChanges": "Save all changes",
+      "discardGameEdits": "Discard edits made to {{game}} since opening",
       "controls": {
         "settings": "Game settings"
       },

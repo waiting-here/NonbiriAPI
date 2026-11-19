@@ -206,7 +206,10 @@ function parseSetting(
     const maximum = catalogInteger(entry.maximum);
     return maximum !== null && utf8Bytes(draft) <= maximum
       ? { value: draft, error: null }
-      : invalid(t('admin.settings.validation.maxUtf8Bytes', { maximum: String(entry.maximum) }));
+      : {
+          value: undefined,
+          error: t('admin.settings.validation.maxUtf8Bytes', { maximum: String(entry.maximum) }),
+        };
   }
   const min = catalogInteger(entry.minimum);
   const max = catalogInteger(entry.maximum);
