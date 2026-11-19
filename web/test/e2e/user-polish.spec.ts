@@ -95,9 +95,12 @@ for (const scenario of [
       await page.route('**/api/announcements?**', (route) =>
         route.fulfill({ json: { data: [announcement], next_cursor: null } }),
       );
-      await page.route('**/api/announcements/ann_*', (route) => {
+      await page.route('**/api/announcements/selected?**', (route) => {
+        expect(new URL(route.request().url()).searchParams.get('ids')).toBe(announcement.id);
         const { excerpt, ...detail } = announcement;
-        return route.fulfill({ json: { ...detail, rendered_body: '<p>' + excerpt + '</p>' } });
+        return route.fulfill({
+          json: { data: [{ ...detail, rendered_body: '<p>' + excerpt + '</p>' }] },
+        });
       });
       await page.route('**/api/issues?**', (route) =>
         route.fulfill({

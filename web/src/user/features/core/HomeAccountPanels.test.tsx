@@ -370,10 +370,14 @@ describe('home independent capability states', () => {
       'fetch',
       vi.fn(async (input: string | URL | Request) => {
         if (String(input) === '/api/me') return jsonResponse(envelope);
-        if (String(input) === `/api/announcements/${announcement.id}`)
+        if (String(input) === `/api/announcements/selected?ids=${announcement.id}`)
           return jsonResponse({
-            ...announcementDetail,
-            rendered_body: `<p>${excerpt}</p>`,
+            data: [
+              {
+                ...announcementDetail,
+                rendered_body: `<p>Confirmed maintenance window.</p><p>${excerpt}</p>`,
+              },
+            ],
           });
         throw new Error(`Unexpected request: ${String(input)}`);
       }),
@@ -403,12 +407,9 @@ describe('home independent capability states', () => {
     expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(screen.getByText('Could not load this section')).toBeVisible();
     expect(await screen.findByText('Planned maintenance')).toBeVisible();
-    expect(screen.getByText('A short confirmed summary.')).toBeVisible();
-    await waitFor(() =>
-      expect(
-        screen.getByText('A short confirmed summary.').closest('.ops-announcement-body'),
-      ).not.toBeNull(),
-    );
+    const body = await screen.findByText('Confirmed maintenance window.');
+    expect(body).toBeVisible();
+    expect(body.closest('.ops-announcement-body')).not.toBeNull();
   });
 
   it('hides successful empty game and announcement summaries', async () => {

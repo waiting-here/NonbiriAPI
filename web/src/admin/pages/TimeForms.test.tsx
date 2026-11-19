@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
@@ -257,7 +257,7 @@ describe('administrator time forms', () => {
     );
   });
 
-  it('retains the edited revision through refresh and freezes fields during the confirmed retry', async () => {
+  it('merges a refreshed expiry, preserves the edited title on conflict and locks the confirmed retry', async () => {
     let authority = announcementFixture();
     const revisions: string[] = [];
     let finishSave!: () => void;
@@ -275,11 +275,11 @@ describe('administrator time forms', () => {
         await pendingSave;
         authority = {
           ...authority,
-          revision: '9',
+          revision: '10',
           expires_at: body.expires_at,
           draft: { zh: { title: body.title_zh, body: 'Old body' }, en: null },
         };
-        return { id: announcementId, revision: '9' };
+        return { id: announcementId, revision: '10' };
       }
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
@@ -300,14 +300,25 @@ describe('administrator time forms', () => {
         queryKey: managedAnnouncementKeys.detail('admin', 'admin:fixture-admin', announcementId),
       });
     });
-    expect(dateTimeInput()).toHaveValue('2030-01-01T00:00');
+    await waitFor(() => expect(dateTimeInput()).toHaveValue('2030-01-01T00:02'));
+    expect(title).toHaveValue('My edit');
+    expect(revisions).toEqual([]);
+
+    authority = {
+      ...authority,
+      revision: '9',
+      draft: { zh: { title: 'Concurrent title', body: 'Old body' }, en: null },
+    };
     const save = screen.getByRole('button', { name: 'Save private draft' });
     await view.user.click(save);
-    await waitFor(() => expect(screen.getByText(/compare them with revision 8/)).toBeVisible());
-    expect(revisions).toEqual(['7']);
-    await waitFor(() => expect(save).toBeEnabled());
+    const choice = await screen.findByRole('region', { name: 'Chinese title' });
+    expect(choice).toHaveTextContent('Concurrent title');
+    expect(choice).toHaveTextContent('My edit');
+    expect(revisions).toEqual(['8']);
+    expect(save).toBeDisabled();
+    await view.user.click(within(choice).getByRole('button', { name: 'Use my version' }));
     await view.user.click(save);
-    await waitFor(() => expect(revisions).toEqual(['7', '8']));
+    await waitFor(() => expect(revisions).toEqual(['8', '9']));
     expect(title).toBeDisabled();
     expect(dateTimeInput()).toBeDisabled();
     await act(async () => {
@@ -315,7 +326,7 @@ describe('administrator time forms', () => {
       await pendingSave;
     });
     await waitFor(() => expect(title).toBeEnabled());
-    expect(authority.expires_at).toBe(originalAnnouncementExpiry);
+    expect(authority.expires_at).toBe(originalAnnouncementExpiry + 120);
     expect(title).toHaveValue('My edit');
   });
 });
