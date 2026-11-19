@@ -26,7 +26,15 @@ import {
   RPSFields,
 } from '../features/games/GameFields';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
-import { Note, Panel, PanelBody, PanelHead, SaveBar, StatusBadge, Toggle } from '@shared/components/ui';
+import {
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+  SaveBar,
+  StatusBadge,
+  Toggle,
+} from '@shared/components/ui';
 import '../features/games/configuration.css';
 import {
   BlackjackConfiguration,
@@ -415,6 +423,9 @@ function GamesEditor({
     setDraft(authority);
   };
   const close = () => {
+    if (!save.isPending) setActive(null);
+  };
+  const discardGame = () => {
     if (save.isPending) return;
     if (active && opening.current) {
       const original = opening.current[active];
@@ -459,7 +470,9 @@ function GamesEditor({
     if (game === 'fishing')
       return `${Object.values(draft.fishing.bait_prices)
         .map((price) => formatCredits(price))
-        .join(' / ')} ${text('积分', 'credits')} · ${text('抽成', 'fees')} ${Object.values(draft.fishing.rake_bp).reduce((a, b) => a + b, 0) / 100}%`;
+        .join(
+          ' / ',
+        )} ${text('积分', 'credits')} · ${text('抽成', 'fees')} ${Object.values(draft.fishing.rake_bp).reduce((a, b) => a + b, 0) / 100}%`;
     if (game === 'linklink') return enabledSummary(Object.values(draft.linklink.specs));
     if (game === 'rps') return enabledSummary(Object.values(draft.rps.modes));
     if (game === 'blackjack')
@@ -561,9 +574,9 @@ function GamesEditor({
               type="button"
               className="nb-btn nb-btn--secondary"
               disabled={save.isPending}
-              onClick={close}
+              onClick={discardGame}
             >
-              {t('common.cancel')}
+              {t('admin.games.discardGameEdits', { game: active ? label(active) : '' })}
             </button>
             <button
               type="button"
