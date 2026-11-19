@@ -238,6 +238,7 @@ export interface DiscoveryEvidence {
 }
 
 export interface CatalogEntry {
+  native_services?: NativeService[];
   id: string;
   source_type: CatalogSourceType;
   upstream_model_id: string;
@@ -299,6 +300,8 @@ export interface Binding extends BindingIdentity {
 }
 
 export interface BindingTargetInput {
+  catalog_entry_id?: string;
+  expected_pair_revision?: string;
   endpoint_key_id: string;
   upstream_model_id: string;
   native_services: NativeService[];

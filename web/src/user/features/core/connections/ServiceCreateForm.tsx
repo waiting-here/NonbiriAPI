@@ -8,6 +8,7 @@ import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
 import { useQueryClient } from '@tanstack/react-query';
 import { coreKeys, coreSessionMatchesAccount, useEndpointCreateOptions } from '../queries';
+import { validateEndpointSecret } from '../normalizers';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import type { ConnectorType, Endpoint, EndpointCreateInput, EndpointKey } from '../types';
 import type { Connection, Credential, DiscoverySource } from './types';
@@ -71,6 +72,7 @@ export function ServiceCreateForm({
   const [rpm, setRPM] = useState('0');
   const [queue, setQueue] = useState(() => keyQueueDraft());
   const activeSecret = useRef(0);
+  const [localError, setLocalError] = useState<Error>();
   const [busy, setBusy] = useState(false);
   const batching = useRef(false);
   const [saved, setSaved] = useState(() => setupProgress(connection));
@@ -214,6 +216,16 @@ export function ServiceCreateForm({
   };
   const save = async () => {
     if (locked || !ready) return;
+    try {
+      if (credentialMode === 'new' && !progress.current.credential) validateEndpointSecret(secret);
+      extraSecrets.forEach((value, index) => {
+        if (!progress.current.extraCredentials[String(index + 1)]) validateEndpointSecret(value);
+      });
+    } catch (error) {
+      setLocalError(error as Error);
+      return;
+    }
+    setLocalError(undefined);
     batching.current = true;
     setBusy(true);
     const requestSecret = secret;
@@ -796,6 +808,7 @@ export function ServiceCreateForm({
             </button>
           </div>
         ) : null}
+        {localError ? <CoreErrorPanel compact error={localError} /> : null}
         <ConnectionOperationNotice operation={operation} />
         {started && !complete ? <Note>{t('user.workflows.continueSetup')}</Note> : null}
         <form

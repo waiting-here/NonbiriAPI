@@ -5,6 +5,8 @@ import { Field, Fields, FormActions, Fold, Note, Segmented, Toggle } from '@shar
 import type { DiscoveryPreset } from '@shared/connections';
 import { supportsChatStoragePolicy } from '@shared/operations/connectorPolicy';
 import { KeyLimitFields } from '@shared/components/KeyRoutingLimits';
+import { validateEndpointSecret } from '../normalizers';
+import { CoreErrorPanel } from '../components';
 import type { Endpoint, EndpointKey } from '../types';
 import { credentialLabel, CredentialPicker } from './CredentialPicker';
 import { ConnectionOperationNotice } from './OperationNotice';
@@ -29,6 +31,7 @@ export function CredentialGrantForm({
   const [mode, setMode] = useState<'existing' | 'new'>('new');
   const [credential, setCredential] = useState<Credential | null>(null);
   const [secret, setSecret] = useState('');
+  const [localError, setLocalError] = useState<Error>();
   const [note, setNote] = useState('');
   const [concurrency, setConcurrency] = useState('0');
   const [rpm, setRPM] = useState('0');
@@ -101,6 +104,13 @@ export function CredentialGrantForm({
         onSubmit={(event) => {
           event.preventDefault();
           if (locked) return;
+          try {
+            if (mode === 'new') validateEndpointSecret(secret);
+          } catch (error) {
+            setLocalError(error as Error);
+            return;
+          }
+          setLocalError(undefined);
           void operation
             .run(
               {
@@ -183,6 +193,7 @@ export function CredentialGrantForm({
             ) : null}
           </Fold>
         </Fields>
+        {localError ? <CoreErrorPanel compact error={localError} /> : null}
         <ConnectionOperationNotice operation={operation} />
         <FormActions>
           <button

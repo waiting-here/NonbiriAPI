@@ -76,6 +76,11 @@ export interface DiscoverySource {
   updated_at: number;
 }
 export interface DiscoveryModel {
+  catalogEntry?: {
+    catalog_entry_id: string;
+    expected_pair_revision: string;
+    source: 'automatic' | 'manual';
+  };
   id: string;
   upstream_model_id: string;
   provider: string;

@@ -1200,10 +1200,6 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    await rendered.user.selectOptions(
-      await screen.findByRole('combobox', { name: 'Current key' }),
-      '4',
-    );
     await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(screen.queryByLabelText('Key')).toBeNull());
     const original = fetchMock.mock.calls.find(
@@ -1428,10 +1424,8 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'My models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
-    await rendered.user.click(
-      await screen.findByRole('button', { name: 'Source actions for gpt-a' }),
-    );
-    await rendered.user.click(await screen.findByRole('menuitem', { name: 'Move down' }));
+    const row = (await screen.findByText('gpt-a', { selector: 'strong' })).closest('li')!;
+    await rendered.user.click(within(row).getByRole('button', { name: 'Move down' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save complete order' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({

@@ -102,7 +102,21 @@ function CatalogFilters({
 }) {
   const { t } = useTranslation();
   const [queryDraft, setQueryDraft] = useState(filter.query);
+  const clear = () => {
+    setQueryDraft('');
+    onClear();
+  };
   const chips = [
+    ...(filter.query
+      ? [
+          {
+            key: 'query',
+            label: filter.query,
+            removeLabel: t('common.resetFilter'),
+            onRemove: () => onQuerySubmit(''),
+          },
+        ]
+      : []),
     ...(filter.modelType === 'all'
       ? []
       : [
@@ -172,10 +186,10 @@ function CatalogFilters({
             </Field>
           </>
         }
-        onReset={onClear}
+        onReset={clear}
         activeCount={chips.length}
         chips={chips}
-        onClearAll={onClear}
+        onClearAll={clear}
         clearAllLabel={t('common.resetFilter')}
         onSubmit={() => onQuerySubmit(queryDraft)}
         secondary={
@@ -324,6 +338,7 @@ export function CharityCatalogPanel({
   const changeModelType = (modelType: CatalogModelTypeFilter) => updateFilter({ modelType });
   const clearFilters = () =>
     updateFilter({
+      query: '',
       allowedForMe: 'all',
       currentlyAvailable: 'all',
       allowedLevel: 'all',
@@ -335,6 +350,7 @@ export function CharityCatalogPanel({
   };
   const priceCount = pageData?.models.length ?? 0;
   const hasCatalogFilters =
+    Boolean(filter.query) ||
     filter.allowedForMe !== 'all' ||
     filter.allowedLevel !== 'all' ||
     filter.currentlyAvailable !== 'all' ||

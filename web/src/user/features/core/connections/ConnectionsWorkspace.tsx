@@ -1,3 +1,4 @@
+import { listReturnPath } from '@shared/operations/listReturn';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { useId, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -34,6 +35,7 @@ function clearDetailScope(params: URLSearchParams) {
     'entry_id',
     'key_id',
     'focus_key_id',
+    'edit_key',
     'credential_id',
     'discovery_source_id',
     'quickstart',
@@ -196,13 +198,35 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
   const backParams = new URLSearchParams(params);
   backParams.delete('connection_id');
   clearDetailScope(backParams);
-  const back = '/endpoints' + (backParams.size ? '?' + backParams.toString() : '');
+  const location = useLocation();
+  const donationReturn = location.state?.donationReturnTo;
+  const listBack = '/endpoints' + (backParams.size ? '?' + backParams.toString() : '');
+  const back =
+    typeof donationReturn === 'string' &&
+    /^\/charity(?:\/donations\/[1-9]\d*)?$/.test(donationReturn)
+      ? donationReturn === '/charity'
+        ? listReturnPath(location.state, '/charity')
+        : donationReturn
+      : location.state?.returnTo
+        ? listReturnPath(location.state, '/endpoints', '/issues')
+        : listBack;
+  const backLabel = back.startsWith('/charity/donations/')
+    ? t('user.charity.backToDonation')
+    : back.startsWith('/charity')
+      ? t('user.charity.backToDonations')
+      : back.startsWith('/issues')
+        ? t('user.records.issues')
+        : t('common.connections.backToConnections');
   if (connection.isPending)
     return (
       <div className="page page--detail core-page core-stack">
         <PageHeader
           title={t('common.connections.title')}
-          back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
+          back={
+            <Link to={back} state={location.state}>
+              {backLabel}
+            </Link>
+          }
         />
         <CoreLoading />
       </div>
@@ -212,7 +236,11 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
       <div className="page page--detail core-page core-stack">
         <PageHeader
           title={t('common.connections.title')}
-          back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
+          back={
+            <Link to={back} state={location.state}>
+              {backLabel}
+            </Link>
+          }
         />
         <CoreErrorPanel error={connection.error} onRetry={() => void connection.refetch()} />
       </div>
@@ -227,7 +255,11 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
       <PageHeader
         title={connection.data.display_name}
         description={connection.data.note}
-        back={<Link to={back}>{t('common.connections.backToConnections')}</Link>}
+        back={
+          <Link to={back} state={location.state}>
+            {backLabel}
+          </Link>
+        }
         actions={
           view === 'entries' ? (
             <button

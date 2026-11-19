@@ -2,8 +2,12 @@ package resources
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
@@ -81,6 +85,20 @@ func (r *Repository) FilterEndpointsPage(ctx context.Context, userID int64, filt
 			return Page[Endpoint]{}, err
 		}
 		return result, nil
+	})
+}
+
+func (r *Repository) GetEndpointKeyDetail(ctx context.Context, userID, endpointID, keyID int64) (EndpointKey, error) {
+	if endpointID < 1 || keyID < 1 {
+		return EndpointKey{}, ErrInvalidRequest
+	}
+	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) (EndpointKey, error) {
+		key, err := getEndpointKeyTx(ctx, tx, userID, endpointID, keyID)
+		if err != nil {
+			return key, err
+		}
+		key.Browse, err = endpointKeyBrowseTx(ctx, tx, userID, endpointID, key)
+		return key, err
 	})
 }
 
@@ -208,7 +226,15 @@ func (r *Repository) BindingCandidatesPage(ctx context.Context, userID, modelID 
 }
 
 func (r *Repository) GetCatalogPage(ctx context.Context, userID, endpointID, keyID int64, source string, page pagination.Request) (CatalogView, error) {
-	if endpointID <= 0 || keyID <= 0 || (source != "" && source != "automatic" && source != "manual") {
+	return r.SearchCatalogPage(ctx, userID, endpointID, keyID, source, "", page)
+}
+
+func (r *Repository) SearchCatalogPage(ctx context.Context, userID, endpointID, keyID int64, source, search string, page pagination.Request) (CatalogView, error) {
+	return r.catalogPage(ctx, userID, endpointID, keyID, source, search, false, page)
+}
+
+func (r *Repository) catalogPage(ctx context.Context, userID, endpointID, keyID int64, source, search string, exact bool, page pagination.Request) (CatalogView, error) {
+	if endpointID <= 0 || keyID <= 0 || !validateSearchText(search) || (source != "" && source != "automatic" && source != "manual") {
 		return CatalogView{}, ErrInvalidRequest
 	}
 	return userPageRead(ctx, r, userID, page, func(ctx context.Context, tx *sql.Tx) (CatalogView, error) {
@@ -220,14 +246,24 @@ func (r *Repository) GetCatalogPage(ctx context.Context, userID, endpointID, key
 		if err != nil {
 			return CatalogView{}, err
 		}
-		query := `SELECT c.id,c.source_type,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision,c.created_at,c.updated_at
-FROM endpoint_key_catalog_entries c JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
-WHERE c.endpoint_key_id=? AND (?='' OR c.source_type=?)`
-		entries, err := readNumberedPage(ctx, tx, page, query, "c.id", "id", []any{keyID, source, source}, func(s pageScanner) (CatalogEntry, error) { return scanCatalogEntry(s) })
+		query, args := catalogDirectoryQuery(keyID, source, search, exact)
+		entries, err := readNumberedPage(ctx, tx, page, query, "c.id", "id", args, func(s pageScanner) (CatalogEntry, error) { return readCatalogEntry(s, true) })
 		if err != nil {
 			return CatalogView{}, err
 		}
 		view := CatalogView{Evidence: evidence, AutomaticEntries: []CatalogEntry{}, ManualEntries: []CatalogEntry{}, Pagination: entries.Pagination}
+		count, err := strconv.ParseInt(entries.Pagination.TotalItems, 10, 64)
+		if err != nil {
+			return CatalogView{}, err
+		}
+		if source != "" && !exact && count > int64(len(entries.Data)) && count <= maxBindingBatch {
+			var scope string
+			err := tx.QueryRowContext(ctx, "SELECT group_concat(id||':'||pair_revision, ',') FROM (SELECT c.id,c.pair_revision FROM ("+query+") c ORDER BY c.id)", args...).Scan(&scope)
+			if err != nil {
+				return CatalogView{}, err
+			}
+			view.SelectionRevision = catalogScopeRevision(scope)
+		}
 		for _, entry := range entries.Data {
 			if entry.SourceType == "automatic" {
 				view.AutomaticEntries = append(view.AutomaticEntries, entry)
@@ -236,6 +272,66 @@ WHERE c.endpoint_key_id=? AND (?='' OR c.source_type=?)`
 			}
 		}
 		return view, nil
+	})
+}
+
+func catalogDirectoryQuery(keyID int64, source, search string, exact bool) (string, []any) {
+	fields := "c.id,c.source_type,c.normalized_model_id,c.provider,c.source_revision,p.pair_revision,c.created_at,c.updated_at,c.native_service_mask"
+	if source == "automatic" {
+		fields = "MIN(c.id) AS id,c.source_type,c.normalized_model_id,MIN(c.provider) AS provider,MAX(c.source_revision) AS source_revision,p.pair_revision,MIN(c.created_at) AS created_at,MAX(c.updated_at) AS updated_at," + catalogServicesAggregate() + " AS native_service_mask"
+	}
+	query := "SELECT " + fields + `
+FROM endpoint_key_catalog_entries c JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
+WHERE c.endpoint_key_id=? AND (?='' OR c.source_type=?)`
+	args := []any{keyID, source, source}
+	if search != "" {
+		if exact {
+			query += " AND c.normalized_model_id=?"
+		} else {
+			query += " AND instr(lower(c.normalized_model_id),lower(?))>0"
+		}
+		args = append(args, search)
+	}
+	if source == "automatic" {
+		query += " GROUP BY c.normalized_model_id"
+	}
+	return "SELECT * FROM (" + query + ") AS c", args
+}
+
+func catalogScopeRevision(scope string) string {
+	sum := sha256.Sum256([]byte(scope))
+	return hex.EncodeToString(sum[:])
+}
+
+// Resolve the displayed scope in a single bounded, authorized snapshot.
+func (r *Repository) selectCatalogMatches(ctx context.Context, userID, endpointID, keyID int64, source, search, scope string, count, revision int64) ([]CatalogEntry, error) {
+	if (source != "automatic" && source != "manual") || !validateSearchText(search) || count < 1 || count > maxBindingBatch || revision < 1 || len(scope) != sha256.Size*2 {
+		return nil, ErrInvalidRequest
+	}
+	return userPageRead(ctx, r, userID, pagination.Default(), func(ctx context.Context, tx *sql.Tx) ([]CatalogEntry, error) {
+		owner, err := discoveryOwnerTx(ctx, tx, userID, endpointID, keyID)
+		if err != nil {
+			return nil, err
+		}
+		if owner.revision != revision {
+			return nil, ErrConflict
+		}
+		query, args := catalogDirectoryQuery(keyID, source, search, false)
+		items, err := queryread.Collect(ctx, tx, query+" ORDER BY c.id LIMIT ?", append(args, count+1), func(s pageScanner) (CatalogEntry, error) { return readCatalogEntry(s, true) })
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(items)) != count {
+			return nil, ErrConflict
+		}
+		parts := make([]string, len(items))
+		for i, item := range items {
+			parts[i] = item.ID + ":" + item.PairRevision
+		}
+		if catalogScopeRevision(strings.Join(parts, ",")) != scope {
+			return nil, ErrConflict
+		}
+		return items, nil
 	})
 }
 

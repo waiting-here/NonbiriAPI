@@ -1285,7 +1285,7 @@ export function normalizeCatalogEntry(value: unknown): CatalogEntry {
       'created_at',
       'updated_at',
     ],
-    [],
+    ['native_services'],
     'catalog entry',
   );
   const sourceType = catalogSource(record.source_type);
@@ -1293,6 +1293,9 @@ export function normalizeCatalogEntry(value: unknown): CatalogEntry {
   const updatedAt = unixTime(record.updated_at, 'catalog update time');
   if (updatedAt < createdAt) invalid('catalog update time');
   return {
+    ...(record.native_services === undefined
+      ? {}
+      : { native_services: normalizeNativeServices(record.native_services) }),
     id: id(record.id, 'catalog entry id'),
     source_type: sourceType,
     upstream_model_id: manualValue(record.upstream_model_id, false, 'upstream model id'),

@@ -27,7 +27,6 @@ import {
   Field,
   FilterBar,
   Fold,
-  MoreMenu,
   Panel,
   PanelBody,
   PanelHead,
@@ -472,10 +471,9 @@ function DonationSummary({
             {t('user.charity.openDonationDetail')}
           </Link>
         )}
-        <MoreMenu
-          label={t('user.charity.presentation.donationActions')}
-          items={[{ label: t('user.charity.ownerPages.keys'), disabled, onSelect: onOpenKeys }]}
-        />
+        <Button type="button" variant="secondary" disabled={disabled} onClick={onOpenKeys}>
+          {t('user.charity.ownerPages.keys')}
+        </Button>
       </div>
     </article>
   );

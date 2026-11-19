@@ -299,7 +299,7 @@ function successfulMutation(reconcileError: ApiError | null = null) {
       } else {
         mutation.reconcileGeneration += 1;
       }
-      return undefined;
+      return { id: '71', status: 'pending', keys: [] };
     }),
   };
   return mutation;
@@ -631,6 +631,26 @@ describe('donation composer recovery', () => {
     await waitFor(() => expect(description).toBeEnabled());
     expect(description).toHaveValue('draft kept while hidden');
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
+  });
+
+  it('asks for an explicit thanks decision even when ownership has already been authorized', async () => {
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const rendered = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="thanks-required" />, [choices[0]]),
+      { station: 'user', role: 'user' },
+    );
+    await rendered.user.click(screen.getByLabelText('Select resource key 61'));
+    await rendered.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Shared resource',
+    );
+    await rendered.user.click(screen.getByLabelText(charityCopy.ownershipAuthorization));
+    const radios = screen.getAllByRole('radio');
+    expect(radios.every((radio) => !(radio as HTMLInputElement).checked)).toBe(true);
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(radios.some((radio) => document.activeElement === radio)).toBe(true);
   });
 
   it('keeps a successful submit locked when reconciliation fails and retries only the read', async () => {

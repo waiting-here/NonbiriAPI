@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { OperationContext } from '@shared/operations/useRetainedOperation';
 import { useOperation } from '@shared/operations/useOperation';
 import { coreKeys } from '../queries';
 import { isOutcomeUnknown } from '../request';
@@ -19,6 +20,9 @@ export function useConnectionOperation(
 ) {
   const client = useQueryClient();
   const saved = useRef<ConnectionResult | null>(null);
+  const rechecked = useRef<{ status: ResourceStatus; context: OperationContext } | null>(null);
+  const [needsSecret, setNeedsSecret] = useState(false);
+  const retrying = useRef(false);
   const [receipt, setReceipt] = useState<ResourceStatus | null>(null);
   const operation = useOperation<ConnectionIntent, string, ConnectionResult>({
     authorityRoot: coreKeys.all,
@@ -26,6 +30,8 @@ export function useConnectionOperation(
     execute: async (intent, secret, key, context) => {
       context.commit(() => {
         saved.current = null;
+        rechecked.current = null;
+        setNeedsSecret(secret !== undefined);
         setReceipt(null);
         if (secret !== undefined) clearSecrets?.();
       });
@@ -41,6 +47,7 @@ export function useConnectionOperation(
         const status = await resourceStatus(context.operationKey, context.signal);
         context.commit(() => {
           setReceipt(status);
+          rechecked.current = { status, context };
         });
         result = await readConnectionResult(intent, status, context.signal);
       }
@@ -55,5 +62,23 @@ export function useConnectionOperation(
       }
     },
   });
-  return { ...operation, receipt };
+  const retryOriginal = async (secret?: string) => {
+    const intent = operation.variables;
+    if (retrying.current || !intent || operation.outcome !== 'unknown' || (needsSecret && !secret))
+      return;
+    retrying.current = true;
+    try {
+      rechecked.current = null;
+      await operation.check();
+      const latest = rechecked.current as {
+        status: ResourceStatus;
+        context: OperationContext;
+      } | null;
+      if (latest?.status.status !== 'not_recorded' || !latest.context.isCurrent()) return;
+      await operation.run(intent, needsSecret ? secret : undefined);
+    } finally {
+      retrying.current = false;
+    }
+  };
+  return { ...operation, receipt, needsSecret, retryOriginal };
 }

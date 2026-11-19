@@ -612,34 +612,32 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                         )}
                       </span>
                     ) : null}
+                    <div className="nb-actions">
+                      {([-1, 1] as const).map((step) => (
+                        <button
+                          key={step}
+                          type="button"
+                          className="nb-btn nb-btn--ghost nb-btn--sm"
+                          disabled={
+                            busy ||
+                            reconciliationRequired ||
+                            Boolean(replayAttempt) ||
+                            absoluteIndex + step < 0 ||
+                            absoluteIndex + step >= order.length
+                          }
+                          onClick={() =>
+                            setOrder((current) =>
+                              moveBinding(current, absoluteIndex, absoluteIndex + step),
+                            )
+                          }
+                        >
+                          {t(step === -1 ? 'models.moveUp' : 'models.moveDown')}
+                        </button>
+                      ))}
+                    </div>
                     <MoreMenu
                       label={textModel('moreSource', { name: binding.upstream_model_id })}
                       items={[
-                        {
-                          label: t('models.moveUp'),
-                          disabled:
-                            busy ||
-                            reconciliationRequired ||
-                            Boolean(replayAttempt) ||
-                            absoluteIndex === 0,
-                          onSelect: () =>
-                            setOrder((current) =>
-                              moveBinding(current, absoluteIndex, absoluteIndex - 1),
-                            ),
-                        },
-                        {
-                          label: t('models.moveDown'),
-                          disabled:
-                            busy ||
-                            reconciliationRequired ||
-                            Boolean(replayAttempt) ||
-                            absoluteIndex === order.length - 1,
-                          onSelect: () =>
-                            setOrder((current) =>
-                              moveBinding(current, absoluteIndex, absoluteIndex + 1),
-                            ),
-                        },
-                        'separator',
                         {
                           label: t('models.removeBinding'),
                           danger: true,

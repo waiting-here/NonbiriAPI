@@ -15,6 +15,7 @@ import { ApiError } from '@shared/query/http';
 import {
   normalizeBindingCandidatePage,
   normalizeCatalogView,
+  normalizeCatalogEntry,
   normalizeEndpointKeyPage,
   normalizeEndpointPage,
   normalizeModelPage,
@@ -184,10 +185,9 @@ function numberedCatalog(
   window: PageWindow,
   source: CatalogSourceType | undefined,
 ): NumberedCatalogView {
-  const record = responseRecord(
-    value,
-    ['evidence', 'automatic_entries', 'manual_entries', 'next_cursor', 'pagination'],
-    'catalog page',
+  const fields = ['evidence', 'automatic_entries', 'manual_entries', 'next_cursor', 'pagination'];
+  const record = responseFields(value, fields, [...fields, 'selection_revision'], () =>
+    invalidResponse('catalog page'),
   );
   if (record.next_cursor !== null) invalidResponse('catalog cursor');
   const pagination = normalizePageMetadata(record.pagination);
@@ -209,7 +209,15 @@ function numberedCatalog(
     catalog.automatic_entries.length + catalog.manual_entries.length,
     'catalog',
   );
-  return { ...catalog, next_cursor: null, pagination };
+  const scope = record.selection_revision;
+  if (scope !== undefined && (typeof scope !== 'string' || !/^[a-f0-9]{64}$/.test(scope)))
+    invalidResponse('catalog selection revision');
+  return {
+    ...catalog,
+    ...(typeof scope === 'string' ? { selection_revision: scope } : {}),
+    next_cursor: null,
+    pagination,
+  };
 }
 
 export async function listEndpointsPage(
@@ -271,6 +279,8 @@ export async function getCatalogPage(
   window: PageWindow,
   source?: CatalogSourceType,
   signal?: AbortSignal,
+  query = '',
+  exact = false,
 ): Promise<NumberedCatalogView> {
   const normalizedWindow = pageWindowInput(window);
   const normalizedSource = catalogSourceInput(source);
@@ -279,12 +289,48 @@ export async function getCatalogPage(
     page_size: String(normalizedWindow.pageSize),
   });
   if (normalizedSource !== undefined) params.set('source', normalizedSource);
+  if (exact) params.set('match', 'exact');
+  if (query) params.set('q', query);
   const response = await coreRequest(
     `/api/endpoints/${resourcePath(endpointId, 'endpoint id')}/keys/${resourcePath(keyId, 'endpoint key id')}/models?${params.toString()}`,
     { signal },
   );
   if (response.status !== 200) invalidResponse('catalog status');
   return numberedCatalog(response.payload, normalizedWindow, normalizedSource);
+}
+
+export async function getCatalogSelection(
+  endpointId: string,
+  keyId: string,
+  source: CatalogSourceType,
+  query: string,
+  count: string,
+  revision: string,
+  scope: string,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ source, count, revision, scope });
+  if (query) params.set('q', query);
+  const response = await coreRequest(
+    '/api/endpoints/' +
+      resourcePath(endpointId, 'endpoint id') +
+      '/keys/' +
+      resourcePath(keyId, 'key id') +
+      '/models/selection?' +
+      params,
+    { signal },
+  );
+  if (response.status !== 200 || !Array.isArray(response.payload))
+    invalidResponse('catalog selection');
+  const rows = response.payload.map(normalizeCatalogEntry);
+  if (
+    rows.length !== Number(count) ||
+    rows.length > 256 ||
+    rows.some((row) => row.source_type !== source) ||
+    new Set(rows.map((row) => row.upstream_model_id)).size !== rows.length
+  )
+    invalidResponse('catalog selection scope');
+  return rows;
 }
 
 export async function getBindingCandidatesPage(

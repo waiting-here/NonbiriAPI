@@ -459,6 +459,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           >
             {model.full_name}
           </button>
+          <CopyValue value={model.full_name} label={model.full_name} showValue={false} />
           <ModelTypesSummary value={model.model_types} />
           <span className="nb-sub">
             {textModel(

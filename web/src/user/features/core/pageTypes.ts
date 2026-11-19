@@ -13,6 +13,7 @@ export interface NumberedPage<T> {
 }
 
 export type NumberedCatalogView = Omit<CatalogView, 'next_cursor'> & {
+  selection_revision?: string;
   next_cursor: null;
   pagination: PageMetadata;
 };

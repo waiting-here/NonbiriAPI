@@ -64,11 +64,14 @@ func (api *httpAPI) getCatalog(writer http.ResponseWriter, request *http.Request
 	if !ok || !requireNoBody(writer, request) {
 		return
 	}
-	if serveNumberedPage(writer, request, []string{"source"}, func(ctx context.Context, values url.Values, page pagination.Request) (CatalogView, error) {
+	if serveNumberedPage(writer, request, []string{"source", "q", "match"}, func(ctx context.Context, values url.Values, page pagination.Request) (CatalogView, error) {
 		if entries, present := values["source"]; present && entries[0] != "automatic" && entries[0] != "manual" {
 			return CatalogView{}, ErrInvalidRequest
 		}
-		return api.repository.GetCatalogPage(ctx, principal.UserID, endpointID, keyID, values.Get("source"), page)
+		if entries, ok := values["match"]; ok && (entries[0] != "exact" || values.Get("q") == "") {
+			return CatalogView{}, ErrInvalidRequest
+		}
+		return api.repository.catalogPage(ctx, principal.UserID, endpointID, keyID, values.Get("source"), values.Get("q"), values.Get("match") == "exact", page)
 	}) {
 		return
 	}
@@ -82,6 +85,33 @@ func (api *httpAPI) getCatalog(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	writeJSON(writer, http.StatusOK, view)
+}
+
+func (api *httpAPI) getCatalogSelection(w http.ResponseWriter, req *http.Request, principal UserPrincipal) {
+	endpointID, ok := parsePathID(w, req, "id")
+	if !ok {
+		return
+	}
+	keyID, ok := parsePathID(w, req, "keyId")
+	if !ok || !requireNoBody(w, req) {
+		return
+	}
+	values, ok := requestQuery(w, req)
+	if !ok {
+		return
+	}
+	count, e1 := parseDecimalID(values.Get("count"))
+	revision, e2 := parseDecimalID(values.Get("revision"))
+	if !exactQuery(values, "q", "source", "count", "revision", "scope") || e1 != nil || e2 != nil {
+		writeResourceError(w, ErrInvalidRequest)
+		return
+	}
+	items, err := api.repository.selectCatalogMatches(req.Context(), principal.UserID, endpointID, keyID, values.Get("source"), values.Get("q"), values.Get("scope"), count, revision)
+	if err != nil {
+		writeResourceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (api *httpAPI) refreshDiscovery(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {

@@ -141,6 +141,18 @@ export function PersonalBindingPicker({
     searchInput.current?.focus();
     onSearchFocused?.();
   }, [focusSearch, locked, onSearchFocused]);
+  const chooseService = (next: Connection | null) => {
+    setService(next);
+    setManualSaved(false);
+    setEndpoint(null);
+    setEntryKey(null);
+    setEndpointQuery('');
+    setKeyQuery('');
+    setQueryDraft('');
+    setQuery('');
+    setStep('endpoints');
+    setSource('');
+  };
   const chooseEndpoint = (next: Endpoint) => {
     setManualSaved(false);
     setEndpoint(next);
@@ -210,7 +222,15 @@ export function PersonalBindingPicker({
         activeCount={service ? 1 : 0}
         secondaryAlwaysVisible
         onSubmit={() => undefined}
-        onReset={() => setServiceQuery('')}
+        onReset={
+          locked
+            ? undefined
+            : () => {
+                setServiceQuery('');
+                chooseService(null);
+                servicePager.reset();
+              }
+        }
         search={
           <Field label={copy.searchServices}>
             {(props) => (
@@ -237,15 +257,7 @@ export function PersonalBindingPicker({
                 onChange={(event) => {
                   const next =
                     services.data?.data.find((row) => row.id === event.target.value) ?? null;
-                  setService(next);
-                  setManualSaved(false);
-                  setEndpoint(null);
-                  setEntryKey(null);
-                  setEndpointQuery('');
-                  setKeyQuery('');
-                  setQueryDraft('');
-                  setQuery('');
-                  setStep('endpoints');
+                  chooseService(next);
                 }}
               >
                 <option value="">{copy.allServices}</option>

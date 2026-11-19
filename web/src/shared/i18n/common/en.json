@@ -3211,6 +3211,8 @@
       "unknownPhase": "Other recorded stage"
     },
     "modelLimits": {
+      "discardTotal": "Discard cumulative edits for this model",
+      "keyScope": "Donation key #{{key}} · Manage requests per minute, concurrency and queuing in the key settings.",
       "title": "Per-model quotas",
       "scope": "Choose an upstream model on this key. All charity bindings to that model share its limits. Each request also uses the key-wide budgets.",
       "model": "Upstream model",
@@ -3254,7 +3256,6 @@
       "conflict": "The settings changed while you were editing. Review the current limits before saving your edits.",
       "currentLimit": "Current {{metric}} limit · {{limit}}",
       "unknown": "The save response was lost. Retry the original save to confirm the result.",
-      "recurringHelp": "Set a budget for each period, or limit usage over a rolling window.",
       "noRules": "This model has no recurring limits.",
       "maxRules": "This model already has 16 recurring rules.",
       "recurringTitle": "Recurring limits for this model"

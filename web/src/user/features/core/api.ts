@@ -580,6 +580,26 @@ export async function listEndpointKeys(
   return page;
 }
 
+export async function getEndpointKey(
+  endpointId: string,
+  keyId: string,
+  signal?: AbortSignal,
+): Promise<EndpointKey> {
+  const response = await coreRequest(
+    '/api/endpoints/' +
+      pathID(endpointId, 'endpoint id') +
+      '/keys/' +
+      pathID(keyId, 'endpoint key id'),
+    { signal },
+  );
+  expectedStatus(response.status, 200, 'endpoint key');
+  const key = normalizeEndpointKey(response.payload);
+  if (key.id !== keyId || key.endpoint_id !== endpointId) {
+    throw new ApiError('invalid_response', 'The server returned a different endpoint key.', 200);
+  }
+  return key;
+}
+
 export async function createEndpointKey(
   endpointId: string,
   input: EndpointKeyCreateInput,
