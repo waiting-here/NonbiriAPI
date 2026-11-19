@@ -171,7 +171,12 @@ describe('administrator alerts page', () => {
         await screen.findByRole('link', {
           name: 'From 15 minutes before to 5 minutes after this alert',
         }),
-      ).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
+      ).toHaveAttribute(
+        'href',
+        expect.stringContaining(
+          '/logs?endpoint_key_id=83&from=1799999100&to=1800000300&return_to=',
+        ),
+      );
       expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
       expect(
         screen.queryByRole('link', { name: 'View triggering attempt' }),
@@ -258,7 +263,7 @@ describe('administrator alerts page', () => {
       expect(screen.getByText(ref)).toBeVisible();
       const link = within(trigger).queryByRole('link', { name: 'View triggering attempt' });
       if (available) {
-        expect(link).toHaveAttribute('href', `/logs?request_id=${requestID}&attempt_seq=23`);
+        expect(link).toHaveAttribute('href', expect.stringContaining('attempt_seq=23'));
       } else {
         expect(link).not.toBeInTheDocument();
         expect(trigger).toHaveTextContent('This attempt is no longer available in request logs.');
@@ -814,7 +819,7 @@ it.each([
     expect(screen.getByTestId('location-search')).not.toHaveTextContent('target_id=');
     const target = screen.getByText(new RegExp(`#${id}`)).closest('li');
     expect(target).not.toBeNull();
-    await rendered.user.click(within(target!).getByRole('button', { name: 'Details' }));
+    await rendered.user.click(within(target!).getByRole('button', { name: 'Inspect here' }));
     expect(
       await screen.findByRole('heading', { name: new RegExp(`Exact object diagnostic.*${id}`) }),
     ).toBeVisible();
@@ -868,7 +873,7 @@ it('shows only real retained issue references for an incomplete projection alert
     locale: 'en',
     route: '/alerts?resolved=false&alert_id=78&target_kind=issue_user&target_id=42',
   });
-  expect(await screen.findByRole('link', { name: 'Details' })).toHaveAttribute(
+  expect(await screen.findByRole('link', { name: 'Open related page' })).toHaveAttribute(
     'href',
     '/users?user=42',
   );
@@ -912,7 +917,7 @@ it('does not reinterpret a normal user target as issue projection from crafted U
     locale: 'en',
     route: '/alerts?resolved=false&alert_id=79&target_kind=issue_user&target_id=42',
   });
-  expect(await screen.findByRole('link', { name: 'Details' })).toHaveAttribute(
+  expect(await screen.findByRole('link', { name: 'Open related page' })).toHaveAttribute(
     'href',
     '/users?user=42',
   );

@@ -43,6 +43,35 @@ func rejectionFields(r commonLogRecord) RejectionFields {
 	}
 	return RejectionFields{RejectionDetail: r.rejectionDetail, RequestedStreaming: streaming, AutomaticActions: actions, Phase: phase, RejectionStage: textPointer(r.rejectionStage), RejectionReason: textPointer(r.rejectionReason), RequestMethod: textPointer(r.requestMethod), RequestPath: textPointer(r.requestPath)}
 }
+
+// Historical suggestions never prove that a scheduling gate was started or extended.
+// Start with the sparse receipt set; IN avoids multiplying a request by its attempts.
+const actualBackoffFilter = ` AND l.id IN (SELECT request_log_id FROM request_attempt_backoffs WHERE observed_only=0)`
+
+func validOutcome(role, value string) bool {
+	switch value {
+	case "", "failed", "success":
+		return true
+	case "before_dispatch", "actual_backoff":
+		return role == "admin" || role == "steward"
+	}
+	return false
+}
+
+func outcomeFilter(outcome string) string {
+	switch outcome {
+	case "failed":
+		return ` AND l.caller_result_class='failed'`
+	case "success":
+		return ` AND l.caller_result_class='success'`
+	case "before_dispatch":
+		return ` AND (l.rejection_stage IS NOT NULL OR (l.caller_result_class='failed' AND l.attempt_count=0 AND l.error_source='platform'))`
+	case "actual_backoff":
+		return actualBackoffFilter
+	}
+	return ""
+}
+
 func phaseFilter(phase string) string {
 	if phase == "pre_handler" {
 		return ` AND l.rejection_stage IS NOT NULL`

@@ -64,7 +64,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, filter.Operation)
 	}
-	query += phaseFilter(filter.Phase)
+	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.Model != nil {
 		query += ` AND l.model=?`
@@ -208,7 +208,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, filter.Operation)
 	}
-	query += phaseFilter(filter.Phase)
+	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`
@@ -364,7 +364,7 @@ func (repository *Repository) ListSteward(
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, filter.Operation)
 	}
-	query += phaseFilter(filter.Phase)
+	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`

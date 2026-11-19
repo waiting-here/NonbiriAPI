@@ -454,8 +454,9 @@ export function DebugPage() {
       </Card>
 
       {session.active ? (
-        <Card className="ops-danger-zone">
+        <Card>
           <h2>{t('user.debug.operations.title')}</h2>
+          <p className="nb-sub">{t('user.debug.confirm.liveBody')}</p>
           <div className="ops-debug-actions">
             {debug.observer === 'disconnected' ? (
               <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.connect}>

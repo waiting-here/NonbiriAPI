@@ -184,7 +184,7 @@ it.each(['admin', 'level6', 'level5'] as const)(
     const modelPath = `${role === 'admin' ? '/charity?' : '/steward?tab=charity&'}charity_section=models&charity_model=31`;
     const modelLinks = await screen.findAllByRole('link', { name: 'Manage charity model' });
     expect(modelLinks[0]).toHaveAttribute('href', modelPath);
-    const panel = await screen.findByRole('region', { name: /Log details/ });
+    const panel = await screen.findByRole('dialog', { name: /Log details/ });
     await view.user.click(within(panel).getByText('Service call attempts', { selector: 'strong' }));
     const keyLinks = await within(panel).findAllByRole('link', { name: 'Manage charity key' });
     expect(keyLinks[0]).toHaveAttribute('href', modelPath + '&managed_donation=8&managed_key=12');
@@ -265,7 +265,7 @@ it.each(['admin', 'steward'] as const)(
         route: `${role === 'admin' ? '/logs?' : '/steward?tab=logs&'}request_id=${requestID}`,
       },
     );
-    const panel = within(await screen.findByRole('region', { name: /Log details/ }));
+    const panel = within(await screen.findByRole('dialog', { name: /Log details/ }));
     await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
     const call = (number: number) =>
       within(panel.getByRole('heading', { name: `Attempt ${number}` }).closest('li')!);
@@ -321,7 +321,7 @@ it('refreshes a pending outcome in place when its earlier call settles', async (
     role: 'level5',
     route: `/steward?tab=logs&request_id=${requestID}`,
   });
-  const panel = within(await screen.findByRole('region', { name: /Log details/ }));
+  const panel = within(await screen.findByRole('dialog', { name: /Log details/ }));
   await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
   const refresh = panel.getByRole('button', { name: 'Refresh pending outcomes' });
   outcomes[0] = {
@@ -341,7 +341,7 @@ it('leaves charity health observations out of personal attempts in management lo
     role: 'admin',
     route: `/logs?request_id=${requestID}`,
   });
-  const panel = within(await screen.findByRole('region', { name: /Log details/ }));
+  const panel = within(await screen.findByRole('dialog', { name: /Log details/ }));
   await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
   expect(panel.getByRole('heading', { name: 'Attempt 1' })).toBeVisible();
   expect(panel.queryByText('Consecutive failures cleared')).not.toBeInTheDocument();
@@ -355,7 +355,7 @@ it('explains missing historic targets and keeps ordinary charity logs free of ma
     role: 'admin',
     route: `/logs?page=2&request_id=${requestID}`,
   });
-  const panel = await screen.findByRole('region', { name: /Log details/ });
+  const panel = await screen.findByRole('dialog', { name: /Log details/ });
   expect(
     await within(panel).findByText('This record has no link to a current charity model.'),
   ).toBeVisible();
@@ -404,7 +404,7 @@ it.each([
       role,
       route: `/logs?page=2&request_id=${requestID}`,
     });
-    const panel = await screen.findByRole('region', { name: /Log details/ });
+    const panel = await screen.findByRole('dialog', { name: /Log details/ });
     await within(panel).findByText(/Provider error/);
     if (expectedHint) expect(within(panel).getByText(expectedHint)).toBeVisible();
     if (expectedHint !== retryHint) {

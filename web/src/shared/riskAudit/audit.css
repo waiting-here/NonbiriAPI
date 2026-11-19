@@ -38,9 +38,6 @@
   max-width: 100%;
   white-space: normal;
 }
-.audit-page .ops-table {
-  min-width: 48rem;
-}
 @media (width <= 40rem) {
   .audit-page .ops-kv {
     grid-template-columns: minmax(0, 1fr);

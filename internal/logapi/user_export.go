@@ -30,7 +30,7 @@ func (r *Repository) ExportUser(ctx context.Context, user int64, filter ListFilt
 		return nil, err
 	}
 	defer tx.Rollback()
-	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)` + phaseFilter(filter.Phase)
+	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)` + phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	args := []any{user, now - requestLogRetentionSeconds}
 	if useOperationRange(filter) {
 		query += " AND " + logOperationSQL + "=?"

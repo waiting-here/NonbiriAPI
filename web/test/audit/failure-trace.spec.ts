@@ -58,7 +58,10 @@ for (const [language, width, theme] of [
       page.screenshot({ path: resolve(visual, `failure-trace-${name}-${width}-${theme}.png`) });
 
     const resultBanner = (page: Page) =>
-      page.locator('.nb-expandable-panel:not([hidden])').getByRole('alert').first();
+      page
+        .locator('.inspection-dock, .nb-sheet:has(.log-detail-content)')
+        .getByRole('alert')
+        .first();
 
     const expectSummary = async (page: Page) => {
       const summary = page.getByRole('region', { name: labels.failureSummary });
@@ -171,7 +174,9 @@ for (const [language, width, theme] of [
           expect(detail).not.toHaveProperty('failure_summary');
           expect(detail).not.toHaveProperty('attempts');
           expect(JSON.stringify(detail)).not.toContain('health_impact');
-          await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
+          await expect(
+            page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)'),
+          ).toBeVisible();
           await expect(page.getByRole('region', { name: labels.failureSummary })).toHaveCount(0);
           await expect(resultBanner(page)).toContainText(labels.presentation.charityUpstreamHint);
           await expect(page.getByRole('link', { name: alert.view })).toHaveCount(0);
@@ -189,14 +194,18 @@ for (const [language, width, theme] of [
           await expect(trigger).toContainText(common.nativeServices.gemini_generate_content);
           await expect(trigger).toContainText(reasons.google_access_token_type_unsupported);
           const viewAttempt = trigger.getByRole('link', { name: alert.view });
-          await expect(viewAttempt).toHaveAttribute('href', '/logs?' + targetQuery);
+          const href = new URL((await viewAttempt.getAttribute('href'))!, origin);
+          expect(href.pathname).toBe('/logs');
+          expect(href.searchParams.get('attempt_seq')).toBe(attempt);
+          expect(href.searchParams.get('request_id')).toBe(requestID);
+          expect(href.searchParams.get('return_to')).toBe(alertPath);
           await expect(viewAttempt).toBeInViewport();
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);
           await capture(page, 'alert');
           await viewAttempt.click();
-          await expect(page).toHaveURL(origin + '/logs?' + targetQuery);
+          await expect(page).toHaveURL(href.href);
         } else {
           await page.goto(origin + '/steward?tab=logs&' + targetQuery);
           await expect(page.getByRole('link', { name: alert.view })).toHaveCount(0);
@@ -225,6 +234,11 @@ for (const [language, width, theme] of [
           await expect(page.getByRole('link', { name: alert.view })).toBeVisible();
           await page.goForward();
           await expectExactAttempt(page);
+          await page
+            .getByRole('link', { name: (language === 'zh' ? zh : en).logs.returnToAlert })
+            .click();
+          await expect(page).toHaveURL(origin + alertPath);
+          await expect(page.getByRole('link', { name: alert.view })).toBeVisible();
         }
         if (role === 'steward' && width === 390 && theme === 'light') {
           await page.goto(origin + `/steward?tab=logs&request_id=${requestID}&attempt_seq=100`);

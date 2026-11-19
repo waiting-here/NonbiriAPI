@@ -742,7 +742,7 @@ test('administrator applies log filters, exports them and downloads retained dia
     await filters.getByRole('button', { name: commonEn.common.resetFilter, exact: true }).click();
     await expect(filters.getByLabel(commonEn.common.status, { exact: true })).toHaveValue('');
     await page.goto(state.admin_url + '/logs?request_id=' + state.request_ids[0]);
-    const detail = page.locator('.nb-expandable-panel:not([hidden])');
+    const detail = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();
     await detail.getByRole('button', { name: 'Upstream error details', exact: true }).click();
     const event = detail

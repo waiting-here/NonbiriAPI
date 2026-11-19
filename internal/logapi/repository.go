@@ -165,6 +165,9 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 	if role == "user" && (filter.ErrorCategory != "" || filter.ErrorPhase != "") {
 		return ListFilter{}, ErrInvalid
 	}
+	if !validOutcome(role, filter.Outcome) {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.Phase != "" && filter.Phase != "handler" && filter.Phase != "pre_handler" {
 		return ListFilter{}, ErrInvalid
 	}
@@ -396,6 +399,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	writePart(optionalBool(filter.UsageTotalMismatch))
 	writePart(optionalInt64(filter.From))
 	writePart(optionalInt64(filter.To))
+	if filter.Outcome != "" {
+		writePart("outcome=" + filter.Outcome)
+	}
 	if filter.Phase != "" {
 		writePart(filter.Phase)
 	}

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { installNativeDialog } from '../../../test/unit/nativeDialog';
-import { BlacklistPage } from './BlacklistPage';
+import { BlacklistManagement, BlacklistPage } from './BlacklistPage';
 import { validDiscordID } from '../features/operations/blacklist';
 
 installNativeDialog();
@@ -111,5 +111,86 @@ it.each([false, true])(
     expect(writes.every((entry) => /^[A-Za-z0-9_-]{22}$/.test(entry.key ?? ''))).toBe(true);
     expect(writes[0]?.key).not.toBe(writes[1]?.key);
     if (loseRemoveResponse) expect(writes[2]).toEqual(writes[1]);
+  },
+);
+
+it.each(['admin', 'steward'] as const)(
+  'keeps the %s event page and list page independent',
+  async (role) => {
+    const id = '123456789012345678';
+    const base = role === 'admin' ? '/admin/api/blacklist' : '/api/steward/blacklist';
+    const reads: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        );
+        const page = url.searchParams.get('page')!;
+        const size = Number(url.searchParams.get('page_size'));
+        reads.push(url.pathname + '?' + url.searchParams);
+        if (url.pathname === base)
+          return Response.json({
+            data: [
+              { discord_id: id, reason: 'Policy violation', created_at: 1800000000, user_id: null },
+            ],
+            next_cursor: null,
+            pagination: { page, page_size: size, total_items: '21', total_pages: '2' },
+          });
+        expect(url.pathname).toBe(base + '/' + id + '/events');
+        const length = Math.min(size, 75 - (Number(page) - 1) * size);
+        return Response.json({
+          data: Array.from({ length }, (_, i) => {
+            const seq = (Number(page) - 1) * size + i + 1;
+            return {
+              id: String(seq),
+              actor_kind: 'automatic',
+              actor_user_id: null,
+              safe_note: 'Event ' + seq,
+              reason_codes: [],
+              created_at: 1800000000,
+            };
+          }),
+          next_cursor: null,
+          pagination: {
+            page,
+            page_size: size,
+            total_items: '75',
+            total_pages: String(Math.ceil(75 / size)),
+          },
+        });
+      }),
+    );
+    const rendered = await renderWithProviders(
+      <BlacklistManagement
+        role={role}
+        accountID="reader"
+        sessionError={null}
+        sessionFetching={false}
+        refreshSession={() => {}}
+      />,
+      {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level5',
+        route:
+          '/blacklist?q=Policy&page=2&page_size=20&event_account=' +
+          id +
+          '&event_page=3&event_page_size=10',
+      },
+    );
+    const heading = await screen.findByRole('heading', { name: 'Events: ' + id });
+    const events = within(heading.closest('.card') as HTMLElement);
+    expect(await events.findByText('Event 21')).toBeVisible();
+    await rendered.user.selectOptions(
+      events.getByRole('combobox', { name: 'Items per page' }),
+      '50',
+    );
+    expect(await events.findByText('Event 50')).toBeVisible();
+    await rendered.user.click(events.getByRole('button', { name: 'Next' }));
+    expect(await events.findByText('Event 75')).toBeVisible();
+    expect(reads.filter((read) => read.startsWith(base + '?'))).toHaveLength(1);
+    expect(reads[0]).toContain('page=2');
+    expect(reads[0]).toContain('q=Policy');
   },
 );

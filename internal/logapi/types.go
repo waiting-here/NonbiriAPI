@@ -269,6 +269,7 @@ type ListFilter struct {
 	ErrorPhase         string
 	CharityModel       *string
 	Phase              string
+	Outcome            string
 	UserID             *int64
 	DiscordID          *string
 	EndpointKeyID      *int64

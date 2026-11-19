@@ -166,7 +166,7 @@ describe('steward caller identity', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(discordID));
     await waitFor(() => expect(copy).toHaveTextContent('Copied'));
 
-    const dialog = await screen.findByRole('region', { name: /Log details/ });
+    const dialog = await screen.findByRole('dialog', { name: /Log details/ });
     await waitFor(() =>
       expect(within(dialog).getByText('Ada Example', { exact: true })).toBeVisible(),
     );
@@ -313,7 +313,7 @@ describe('steward caller identity', () => {
       await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
       await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
       await view.user.click(screen.getByRole('button', { name: 'Details' }));
-      await screen.findByRole('region', { name: /Log details/ });
+      await screen.findByRole('dialog', { name: /Log details/ });
       if (role === 'admin') {
         expect(screen.getByText('Caller identity', { exact: true })).toBeVisible();
       } else {
@@ -335,7 +335,7 @@ for (const role of ['admin', 'steward'] as const) {
     });
     expect(await screen.findByText(model, { exact: true })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const drawer = await screen.findByRole('region', { name: /Log details/ });
+    const drawer = await screen.findByRole('dialog', { name: /Log details/ });
     expect(within(drawer).getByText('Called charity model')).toBeVisible();
     expect(within(drawer).getAllByText(model)[0]).toBeVisible();
     expect(drawer.querySelector('example')).toBeNull();
@@ -383,10 +383,9 @@ describe('preflight rejection details', () => {
       station: 'user',
       role: 'level5',
     });
-    await view.user.click(await screen.findByRole('tab', { name: 'Find by request ID' }));
     await view.user.type(screen.getByLabelText('Request ID'), requestID);
     await view.user.click(screen.getByRole('button', { name: 'Open request' }));
-    const panel = await screen.findByRole('region', { name: /Log details/ });
+    const panel = await screen.findByRole('dialog', { name: /Log details/ });
     expect(
       await within(panel).findByText(
         'The platform returned HTTP 400 before sending an upstream request.',
@@ -461,7 +460,7 @@ describe('preflight rejection details', () => {
         role: role === 'admin' ? 'admin' : 'level6',
       });
       await view.user.click(await screen.findByRole('button', { name: 'Details' }));
-      const drawer = await screen.findByRole('region', { name: /Log details/ });
+      const drawer = await screen.findByRole('dialog', { name: /Log details/ });
       expect(within(drawer).getByText('Rejection details')).toBeInTheDocument();
       expect(within(drawer).getByText('stream: <img src=x onerror=alert(1)>')).toBeInTheDocument();
       expect(drawer.querySelector('img')).toBeNull();
@@ -541,7 +540,7 @@ it.each(['admin', 'steward'] as const)(
     expect(await screen.findByText(mode)).toBeVisible();
     expect(screen.getByText(action)).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const dialog = await screen.findByRole('region', { name: /Log details/ });
+    const dialog = await screen.findByRole('dialog', { name: /Log details/ });
     expect(within(dialog).getByText(mode)).toBeVisible();
     expect(within(dialog).getByText(action)).toBeVisible();
   },
@@ -561,7 +560,7 @@ it('keeps an empty penalty history in the detail and distinguishes missing facts
   expect(within(table).queryByText(noActions)).toBeNull();
   await view.user.click(within(table).getByRole('button', { name: 'Details' }));
   expect(
-    await within(await screen.findByRole('region', { name: /Log details/ })).findByText(noActions),
+    await within(await screen.findByRole('dialog', { name: /Log details/ })).findByText(noActions),
   ).toBeVisible();
   view.unmount();
 

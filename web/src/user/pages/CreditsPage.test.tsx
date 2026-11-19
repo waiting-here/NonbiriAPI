@@ -232,7 +232,9 @@ describe('credit history numbered page controls', () => {
         }),
       ).not.toBeInTheDocument();
       await view.user.click(assets.getByRole('radio', { name: labels.paper }));
-      await view.user.click(screen.getByText(locale === 'zh' ? '更多筛选' : 'More filters'));
+      await view.user.click(
+        screen.getByText(locale === 'zh' ? /^更多筛选 · 1$/ : /^More filters · 1$/),
+      );
       await view.user.selectOptions(
         screen.getByRole('combobox', { name: labels.category }),
         'picture_book',

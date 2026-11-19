@@ -1,10 +1,15 @@
-import { Field, FilterBar } from '@shared/components/ui';
+import { Field, FilterBar, Fold } from '@shared/components/ui';
 import { FailureDetails } from './FailureDiagnostics';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CopyValue } from '@shared/components/CopyValue';
 import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import {
+  isForbidden,
+  isUnauthorized,
+  isStewardPermissionDenied,
+  isMfaRequired,
+} from '@shared/query/http';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { RawErrorViewer } from './RequestDiagnostics';
@@ -24,12 +29,14 @@ interface Props {
   scopeReady: boolean;
   enabled?: boolean;
   storage?: boolean;
+  initialQuery?: DiagnosticQuery;
+  remember?: (query?: DiagnosticQuery) => void;
 }
 interface DiagnosticPosition {
   page: number;
   cursors: (string | undefined)[];
 }
-interface DiagnosticQuery {
+export interface DiagnosticQuery {
   filter: IndependentFilter;
   position: DiagnosticPosition;
 }
@@ -40,6 +47,8 @@ export function IndependentDiagnostics(props: Props) {
       key={`${props.role}:${props.accountId}`}
       role={props.role}
       storage={props.storage}
+      initialQuery={props.initialQuery}
+      remember={props.remember}
     />
   );
 }
@@ -47,19 +56,32 @@ function useWords() {
   const { i18n } = useTranslation();
   return (en: string, zh: string) => (i18n.resolvedLanguage?.startsWith('zh') ? zh : en);
 }
-function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: boolean }) {
+function ScopedDiagnostics({
+  role,
+  storage,
+  initialQuery,
+  remember,
+}: Pick<Props, 'role' | 'storage' | 'initialQuery' | 'remember'>) {
   const formatDateTime = useDateTimeFormatter();
   const words = useWords();
-  const [kind, setKind] = useState<IndependentKind>('all');
-  const [user, setUser] = useState('');
-  const [subject, setSubject] = useState('');
-  const [hours, setHours] = useState(storage ? '720' : '24');
-  const [reason, setReason] = useState('missing');
+  const [kind, setKind] = useState<IndependentKind>(initialQuery?.filter.kind ?? 'all');
+  const [user, setUser] = useState(initialQuery?.filter.user_id ?? '');
+  const [subject, setSubject] = useState(initialQuery?.filter.subject_id ?? '');
+  const [hours, setHours] = useState(
+    initialQuery?.filter.to && initialQuery.filter.from
+      ? String((initialQuery.filter.to - initialQuery.filter.from) / 3600)
+      : storage
+        ? '720'
+        : '24',
+  );
+  const [reason, setReason] = useState(initialQuery?.filter.storage ?? 'missing');
   const [page, setPage] = useState<IndependentPage>();
-  const [applied, setApplied] = useState<IndependentFilter>();
-  const [position, setPosition] = useState<DiagnosticPosition>({ page: 1, cursors: [undefined] });
-  const lastQuery = useRef<DiagnosticQuery | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [applied, setApplied] = useState<IndependentFilter | undefined>(initialQuery?.filter);
+  const [position, setPosition] = useState<DiagnosticPosition>(
+    initialQuery?.position ?? { page: 1, cursors: [undefined] },
+  );
+  const lastQuery = useRef<DiagnosticQuery | null>(initialQuery ?? null);
+  const [busy, setBusy] = useState(Boolean(initialQuery));
   const [readerGeneration, setReaderGeneration] = useState(0);
   const [failure, setFailure] = useState<unknown>();
   const controller = useRef<AbortController | null>(null);
@@ -74,13 +96,33 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
   function fail(error: unknown) {
     setFailure(error);
     setPage(undefined);
-    if (isUnauthorized(error) || isForbidden(error)) {
+    if (
+      isUnauthorized(error) ||
+      isForbidden(error) ||
+      isStewardPermissionDenied(error) ||
+      isMfaRequired(error)
+    ) {
+      remember?.();
       setApplied(undefined);
       setPosition({ page: 1, cursors: [undefined] });
       lastQuery.current = null;
     }
   }
-  async function load(
+  function read(filter: IndependentFilter, request: AbortController) {
+    return getIndependentDiagnostics(role, filter, request.signal).then(
+      (result) => {
+        if (request.signal.aborted) return;
+        setPage(result);
+        setBusy(false);
+      },
+      (error: unknown) => {
+        if (request.signal.aborted) return;
+        fail(error);
+        setBusy(false);
+      },
+    );
+  }
+  function load(
     filter: IndependentFilter,
     target: DiagnosticPosition = { page: 1, cursors: [undefined] },
   ) {
@@ -88,21 +130,24 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
     const request = new AbortController();
     controller.current = request;
     lastQuery.current = { filter, position: target };
+    remember?.(lastQuery.current);
     // Keep list metadata visible, but discard sensitive body readers before refreshing.
     setReaderGeneration((generation) => generation + 1);
     setApplied(filter);
     setPosition(target);
     setBusy(true);
     setFailure(undefined);
-    try {
-      const result = await getIndependentDiagnostics(role, filter, request.signal);
-      if (!request.signal.aborted) setPage(result);
-    } catch (error) {
-      if (!request.signal.aborted) fail(error);
-    } finally {
-      if (!request.signal.aborted) setBusy(false);
-    }
+    return read(filter, request);
   }
+  const restore = useEffectEvent(() => {
+    if (!initialQuery) return;
+    const request = new AbortController();
+    controller.current = request;
+    void read(initialQuery.filter, request);
+  });
+  useEffect(() => {
+    restore();
+  }, []);
   function search(selection?: Partial<IndependentFilter>) {
     const to = Math.floor(Date.now() / 1000);
     void load({
@@ -291,23 +336,28 @@ function ScopedDiagnostics({ role, storage }: { role: DiagnosticRole; storage?: 
       )}
       <div key={readerGeneration} aria-busy={busy}>
         {page?.data.map((entry) => (
-          <details key={entry.id}>
-            <summary>
-              {labels[entry.kind]} · {entry.subject_id} · {words('User', '用户')} {entry.user_id} ·{' '}
-              {formatDateTime(entry.created_at)}
-              {' · '}
-              {words('Attempt', '尝试')} {entry.attempt_seq} / {entry.event_seq} · HTTP{' '}
-              {entry.http_status ?? '—'}
-              {entry.truncated ? words(' · truncated', ' · 已截断') : ''}
-              {entry.synthetic ? words(' · safe diagnostic', ' · 安全诊断') : ''}
-            </summary>
+          <Fold
+            key={entry.id}
+            plain
+            title={
+              <>
+                {labels[entry.kind]} · {entry.subject_id} · {words('User', '用户')} {entry.user_id}{' '}
+                · {formatDateTime(entry.created_at)}
+                {' · '}
+                {words('Attempt', '尝试')} {entry.attempt_seq} / {entry.event_seq} · HTTP{' '}
+                {entry.http_status ?? '—'}
+                {entry.truncated ? words(' · truncated', ' · 已截断') : ''}
+                {entry.synthetic ? words(' · safe diagnostic', ' · 安全诊断') : ''}
+              </>
+            }
+          >
             {entry.save_state !== 'saved' && (
               <OmittedBody state={entry.save_state} reason={entry.failure_reason} />
             )}
             {!busy ? (
               <Detail role={role} id={entry.id} synthetic={entry.synthetic} onReadFailure={fail} />
             ) : null}
-          </details>
+          </Fold>
         ))}
       </div>
       {applied && (

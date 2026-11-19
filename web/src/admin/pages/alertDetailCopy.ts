@@ -2,6 +2,8 @@ export const alertDetailCopy = {
   en: {
     details: 'Alert details',
     open: 'Details',
+    openObject: 'Open related page',
+    inspectObject: 'Inspect here',
     close: 'Close details',
     back: 'Return to previous page',
     facts: 'When it happened',
@@ -100,6 +102,8 @@ export const alertDetailCopy = {
   zh: {
     details: '告警详情',
     open: '详情',
+    openObject: '前往关联页面',
+    inspectObject: '在此查看诊断',
     close: '关闭详情',
     back: '返回原页面',
     facts: '发生时事实',

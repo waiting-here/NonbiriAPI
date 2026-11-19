@@ -233,7 +233,9 @@ for (const { role, width } of logExportScenarios) {
       });
     }
     await page.getByRole('button', { name: 'Details', exact: true }).click();
-    const detail = page.getByRole('region', { name: `Log details ${base.id}`, exact: true });
+    const detail = page
+      .locator('.inspection-dock, .nb-sheet:has(.log-detail-content)')
+      .filter({ hasText: base.id });
     await expect(detail.getByText('Rejected before a call', { exact: true })).toBeVisible();
     await expect(detail.getByText('POST /v1/chat/completions', { exact: true })).toBeVisible();
     guard.assertNone();

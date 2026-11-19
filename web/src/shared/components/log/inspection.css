@@ -1,0 +1,41 @@
+.inspection-workspace,
+.inspection-list {
+  display: grid;
+  align-content: start;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.inspection-workspace--docked {
+  grid-template-columns: minmax(42rem, 1.45fr) minmax(26rem, 1fr);
+  align-items: start;
+}
+.inspection-dock {
+  position: sticky;
+  top: calc(4rem + var(--nb-space-2));
+  max-height: calc(100dvh - 5rem);
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  background: var(--nb-color-surface);
+  padding: var(--nb-space-4);
+}
+.inspection-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--nb-space-2);
+  margin-bottom: var(--nb-space-3);
+}
+.inspection-head h2 {
+  margin: 0;
+  font-size: var(--nb-font-size-lg);
+}
+.inspection-list [aria-current='true'][data-inspect-trigger] {
+  border-color: var(--nb-color-accent);
+  background: var(--nb-color-accent-soft);
+}

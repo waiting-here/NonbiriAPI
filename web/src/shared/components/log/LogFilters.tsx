@@ -1,5 +1,5 @@
 import { SuggestInput } from '@shared/components/ui/SuggestInput';
-import { Button, Field, FilterBar, Tabs } from '@shared/components/ui';
+import { Button, Field, FilterBar } from '@shared/components/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TimeInput } from '@shared/components/TimeInput';
@@ -34,6 +34,7 @@ interface LogFiltersProps {
   state: FilterState;
   onApply: (next: FilterState, keepFilters?: readonly string[]) => void;
   linkErrors?: Record<string, string>;
+  onResetLookup?: () => void;
   toolbarActions?: ReactNode;
 }
 
@@ -43,6 +44,7 @@ export function LogFilters({
   state,
   onApply,
   linkErrors,
+  onResetLookup,
   toolbarActions,
 }: LogFiltersProps) {
   const { t } = useTranslation();
@@ -138,13 +140,14 @@ export function LogFilters({
     apply({ filters, fromUnix: from ?? undefined, toUnix: to ?? undefined });
   };
   const reset = () => {
+    onResetLookup?.();
     setDrafts({});
     setDraftFrom(createTimeDraft(null));
     setDraftTo(createTimeDraft(null));
     setSubmitted(false);
     apply({ filters: {}, fromUnix: undefined, toUnix: undefined });
   };
-  const primaryNames = ['operation', 'discord_id', 'model', 'charity_model'];
+  const primaryNames = ['outcome', 'operation', 'discord_id', 'model', 'charity_model'];
   const errors: Record<string, string> = submitted ? readDraft().errors : {};
   for (const [name, error] of Object.entries(linkErrors ?? {})) {
     if (!drafts[name]?.trim()) errors[name] = error;
@@ -363,64 +366,62 @@ export function LogFilters({
 export function LogSearch({
   onOpenRequest,
   children,
+  resetKey = 0,
 }: {
   onOpenRequest: (id: string) => void;
   children: ReactNode;
+  resetKey?: number;
 }) {
   const { t } = useTranslation();
-  const [searchMode, setSearchMode] = useState<'filters' | 'request'>('filters');
   const [lookup, setLookup] = useState('');
   const [lookupInvalid, setLookupInvalid] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const [previous, setPrevious] = useState(resetKey);
+  if (previous !== resetKey) {
+    setPrevious(resetKey);
+    setLookup('');
+    setLookupInvalid(false);
+  }
   return (
-    <Tabs
-      label={t('logs.findRequests')}
-      tabs={[
-        { value: 'filters', label: t('logs.filterRecords') },
-        { value: 'request', label: t('logs.openByID') },
-      ]}
-      value={searchMode}
-      onChange={setSearchMode}
-    >
-      <div hidden={searchMode !== 'filters'}>{children}</div>
-      {searchMode === 'request' && (
-        <form
-          className="log-lookup"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const id = logRequestID(lookup.trim());
-            setLookupInvalid(!id);
-            if (id) onOpenRequest(id);
-            else input.current?.focus();
-          }}
+    <>
+      <form
+        className="log-lookup"
+        data-inspect-trigger=""
+        onSubmit={(event) => {
+          event.preventDefault();
+          const id = logRequestID(lookup.trim());
+          setLookupInvalid(!id);
+          if (id) onOpenRequest(id);
+          else input.current?.focus();
+        }}
+      >
+        <Field
+          label={t('logs.lookupLabel')}
+          error={lookupInvalid ? t('logs.invalidLookup') : undefined}
         >
-          <Field
-            label={t('logs.lookupLabel')}
-            error={lookupInvalid ? t('logs.invalidLookup') : undefined}
-          >
-            {(props) => (
-              <input
-                {...props}
-                ref={input}
-                className="mono"
-                autoCapitalize="none"
-                autoComplete="off"
-                enterKeyHint="go"
-                value={lookup}
-                placeholder="req_…"
-                spellCheck={false}
-                onChange={(event) => {
-                  setLookup(event.target.value);
-                  setLookupInvalid(false);
-                }}
-              />
-            )}
-          </Field>
-          <Button type="submit" variant="primary">
-            {t('logs.openRequest')}
-          </Button>
-        </form>
-      )}
-    </Tabs>
+          {(props) => (
+            <input
+              {...props}
+              ref={input}
+              className="mono"
+              autoCapitalize="none"
+              autoComplete="off"
+              enterKeyHint="go"
+              value={lookup}
+              placeholder="req_…"
+              spellCheck={false}
+              onChange={(event) => {
+                setLookup(event.target.value);
+                setLookupInvalid(false);
+              }}
+            />
+          )}
+        </Field>
+        <Button type="submit" variant="primary">
+          {t('logs.openRequest')}
+        </Button>
+      </form>
+      {children}
+    </>
   );
 }

@@ -79,6 +79,7 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 	normalized, err := normalizeListFilter(ListFilter{
 		Operation: filter.Operation,
 		Phase:     filter.Phase,
+		Outcome:   filter.Outcome,
 		UserID:    filter.UserID, DiscordID: filter.DiscordID, EndpointKeyID: filter.EndpointKeyID, EndpointBaseURL: filter.EndpointBaseURL,
 		UpstreamModel: filter.UpstreamModel, CharityModel: filter.CharityModel, ErrorCode: filter.ErrorCode,
 		ErrorCategory: filter.ErrorCategory, ErrorPhase: filter.ErrorPhase,
@@ -99,7 +100,7 @@ func (repository *Repository) exportManagement(ctx context.Context, reader logRe
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, normalized.Operation)
 	}
-	query += phaseFilter(normalized.Phase)
+	query += phaseFilter(normalized.Phase) + outcomeFilter(normalized.Outcome)
 	query, args = diagnosisFilter(query, args, normalized)
 	if normalized.UserID != nil {
 		query += ` AND l.origin_user_id=?`

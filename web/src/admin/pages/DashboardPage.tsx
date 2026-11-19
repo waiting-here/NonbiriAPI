@@ -9,7 +9,9 @@ import {
   getAdminUsage,
 } from '../features/operations/core';
 import { adminPageKeys, getAdminEndpointsPage } from '../features/operations/adminPages';
-import { adminReportKeys, getReportBadge } from '../features/operations/reports';
+import { reportPageKeys } from '../features/operations/reportPages';
+import { useAdminAlertPage } from '../features/operations/alertPage';
+import { getReportBadge } from '../features/operations/reports';
 import { charityKeys, getDonationBadge } from '@shared/operations/charity';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
@@ -77,7 +79,8 @@ export function DashboardPage() {
     retry: false,
   });
   const reports = useQuery({
-    queryKey: adminReportKeys.badge,
+    queryKey: reportPageKeys.badge(account || 'anonymous'),
+    enabled: Boolean(account) && !session.error,
     queryFn: ({ signal }) => getReportBadge(signal),
     retry: false,
   });
@@ -99,9 +102,17 @@ export function DashboardPage() {
       to: '/endpoints',
     },
   ];
-  const reportBreakdown = reports.data
-    ? `${t('admin.dashboard.pendingIndexing')} ${formatCount(reports.data.by_status.pending_indexing).display} · ${t('admin.dashboard.pendingReview')} ${formatCount(reports.data.by_status.pending_review).display} · ${t('admin.dashboard.approvedProcessing')} ${formatCount(reports.data.by_status.approved_processing).display}`
-    : undefined;
+  const alerts = useAdminAlertPage(
+    account ? 'admin:' + account : undefined,
+    'false',
+    '1',
+    20,
+    Boolean(account) && !session.error,
+  );
+  const reportBreakdown =
+    !reports.error && reports.data
+      ? `${t('admin.dashboard.pendingIndexing')} ${formatCount(reports.data.by_status.pending_indexing).display} · ${t('admin.dashboard.pendingReview')} ${formatCount(reports.data.by_status.pending_review).display} · ${t('admin.dashboard.approvedProcessing')} ${formatCount(reports.data.by_status.approved_processing).display}`
+      : undefined;
   return (
     <div className="page ops-page admin-overview">
       <PageHeader title={t('admin.dashboard.title')} />
@@ -115,6 +126,12 @@ export function DashboardPage() {
             action={t('admin.dashboard.openDonations')}
           />
           <AttentionCard
+            label={t('admin.dashboard.unresolvedAlerts')}
+            count={alerts.error ? undefined : alerts.data?.pagination.total_items}
+            to="/alerts?resolved=false"
+            action={t('admin.dashboard.openAlerts')}
+          />
+          <AttentionCard
             label={t('admin.dashboard.nonTerminalReports')}
             count={reports.error ? undefined : reports.data?.total}
             detail={reportBreakdown}
@@ -122,6 +139,10 @@ export function DashboardPage() {
             action={t('admin.dashboard.openReportInbox')}
           />
         </div>
+        {alerts.error && <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} />}
+        {reports.error && (
+          <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
+        )}
         {donations.error ? (
           <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
         ) : null}
@@ -150,9 +171,7 @@ export function DashboardPage() {
           </div>
           <p className="overview-usage-note">
             {t('admin.dashboard.unknownUsage')}：
-            {!usage.data
-              ? '—'
-              : formatCount(usage.data.total_unknown_usage_requests).display}
+            {!usage.data ? '—' : formatCount(usage.data.total_unknown_usage_requests).display}
           </p>
           {usage.isPending || endpoints.isPending || reports.isPending ? <LoadingState /> : null}
           {usage.error ? (
@@ -163,9 +182,6 @@ export function DashboardPage() {
               error={endpointError}
               onRetry={() => void (session.error ? session.refetch() : endpoints.refetch())}
             />
-          ) : null}
-          {reports.error ? (
-            <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
           ) : null}
         </PanelBody>
       </Panel>

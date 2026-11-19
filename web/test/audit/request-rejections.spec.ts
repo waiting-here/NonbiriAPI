@@ -86,13 +86,12 @@ test('real rejection details show safe top-level positions and explain historica
           const listRoute =
             role === 'steward' ? '/steward?tab=logs&status=400' : '/logs?status=400';
           await page.goto(origin + listRoute);
-          await page.getByRole('tab', { name: '按请求 ID 查找' }).click();
           const lookup = page.getByLabel('请求 ID', { exact: true });
           const submit = page.getByRole('button', { name: '打开详情', exact: true });
           if (width === 1440 && theme === 'light') {
             await lookup.fill('req_' + 'A'.repeat(21) + 'Q');
             await submit.click();
-            const missing = page.locator('.nb-expandable-panel:not([hidden])');
+            const missing = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
             await expect(missing.getByRole('status')).toContainText(
               role === 'user' ? '已过期或不属于当前账号' : '没有找到这条记录',
             );
@@ -115,7 +114,9 @@ test('real rejection details show safe top-level positions and explain historica
               path: resolve(visual, `routing-${role}-${width}-${theme}.png`),
             });
           } else {
-            await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
+            await expect(
+              page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)'),
+            ).toBeVisible();
             await expect(routing).toHaveCount(0);
           }
           for (const sample of ['precise', 'historical'] as const) {
@@ -135,7 +136,7 @@ test('real rejection details show safe top-level positions and explain historica
               expect(JSON.stringify(detail)).not.toContain(marker);
             expect(detail).not.toHaveProperty('route_decision');
             await page.goto(origin + route + id);
-            const panel = page.locator('.nb-expandable-panel:not([hidden])');
+            const panel = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
             await expect(panel).toBeVisible();
             const label =
               sample === 'precise'
