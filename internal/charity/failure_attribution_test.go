@@ -1,6 +1,7 @@
 package charity
 
 import (
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -11,6 +12,18 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
+
+func assertAttemptStreak(t *testing.T, database *sql.DB, claimID, effect, before, after string) {
+	t.Helper()
+	var gotEffect, gotBefore, gotAfter string
+	if err := database.QueryRow(`SELECT COALESCE(streak_effect,''),COALESCE(streak_before,''),COALESCE(streak_after,'')
+FROM request_attempts WHERE claim_id=?`, claimID).Scan(&gotEffect, &gotBefore, &gotAfter); err != nil {
+		t.Fatal(err)
+	}
+	if effect != gotEffect || before != gotBefore || after != gotAfter {
+		t.Fatalf("attempt streak = %q %q → %q, want %q %q → %q", gotEffect, gotBefore, gotAfter, effect, before, after)
+	}
+}
 
 func TestFailureDisablementOnRetainedHTTPResultWithoutDiagnosis(t *testing.T) {
 	e := newCharityTestEnv(t)
@@ -83,6 +96,9 @@ func TestFailureDisablementIdentifiesCrossingAcrossRequests(t *testing.T) {
 	if t.Failed() {
 		t.FailNow()
 	}
+	for _, handle := range []claim.Handle{prior, trigger, later} {
+		assertAttemptStreak(t, e.store.DB(), handle.ClaimID(), "pending", "", "")
+	}
 	var alerts int
 	if err := e.store.DB().QueryRow("SELECT count(*) FROM admin_alerts WHERE kind='donation_failure_disabled'").Scan(&alerts); err != nil || alerts != 0 {
 		t.Fatalf("blocked fold produced %d alerts, %v", alerts, err)
@@ -90,6 +106,10 @@ func TestFailureDisablementIdentifiesCrossingAcrossRequests(t *testing.T) {
 	complete(oldest, httpFailure)
 	complete(trigger, transport)
 	complete(oldest, httpFailure)
+	assertAttemptStreak(t, e.store.DB(), oldest.ClaimID(), "incremented", "0", "1")
+	assertAttemptStreak(t, e.store.DB(), prior.ClaimID(), "incremented", "1", "2")
+	assertAttemptStreak(t, e.store.DB(), trigger.ClaimID(), "incremented", "2", "3")
+	assertAttemptStreak(t, e.store.DB(), later.ClaimID(), "incremented", "3", "4")
 	var body string
 	if err := e.store.DB().QueryRow("SELECT count(*),coalesce(max(context_json),'') FROM admin_alerts WHERE kind='donation_failure_disabled'").Scan(&alerts, &body); err != nil || alerts != 1 {
 		t.Fatalf("failure alerts=%d, %v", alerts, err)
@@ -116,5 +136,40 @@ func TestFailureDisablementIdentifiesCrossingAcrossRequests(t *testing.T) {
 	if f == nil || f.FailureDisablement == nil || *f.FailureDisablement != a.FailureDisablement ||
 		f.Code != "connection_reset" || f.Category != "network" || f.Phase != "transport" {
 		t.Fatalf("wrong attempt receipt: %+v", f)
+	}
+}
+
+func TestUndispatchedReleaseSettlesLegacyKeyReceipt(t *testing.T) {
+	e := newCharityTestEnv(t)
+	rail := e.billingRail(t)
+	first := e.billingRequest(t, rail, e.tokenModel, 5, 1)
+	firstClaim := e.claim(t, first.ID, 1, false)
+	second := e.billingRequest(t, rail, e.tokenModel, 5, 1)
+	secondClaim := e.claim(t, second.ID, 1, true)
+	// Older unmarked claims have only the physical key cursor. Model the
+	// retained attempt awaiting its predecessor across an upgrade.
+	if _, err := e.store.DB().Exec(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,
+connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,started_at,completed_at,streak_effect)
+SELECT ?,id,1,'openai-compatible','https://charity.example.test/v1','upstream-model','response',401,?,?,'pending'
+FROM request_logs WHERE logical_request_id=?`, secondClaim.id, charityTestNow+1, charityTestNow+2, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_disable_threshold='0',failure_streak=X'00000000000000010000000000000000' WHERE id=?", e.donationKey); err != nil {
+		t.Fatal(err)
+	}
+	e.completeAttempt(t, second.ID, secondClaim, claim.CharityAttemptInput{CompletedAt: charityTestNow + 2, UsageUnknown: true,
+		StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamResponse}, claim.RewardZero, claim.CharityActual{})
+	reopenAfterOfflineUpgrade(t, e)
+	assertAttemptStreak(t, e.store.DB(), secondClaim.id, "pending", "", "")
+	tx := beginTestTx(t, e.store.DB())
+	if err := e.service.ReleaseUndispatched(t.Context(), tx, claim.CharityRelease{RequestID: first.ID, ClaimID: firstClaim.id,
+		DonationKeyID: &e.donationKey, ReleasedAt: charityTestNow + 3}); err != nil {
+		t.Fatal(err)
+	}
+	commitTestTx(t, tx)
+	assertAttemptStreak(t, e.store.DB(), secondClaim.id, "incremented", "18446744073709551616", "18446744073709551617")
+	var attempts int
+	if err := e.store.DB().QueryRow("SELECT count(*) FROM request_attempts WHERE claim_id=?", firstClaim.id).Scan(&attempts); err != nil || attempts != 0 {
+		t.Fatalf("undispatched attempt rows=%d err=%v", attempts, err)
 	}
 }

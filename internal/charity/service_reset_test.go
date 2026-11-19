@@ -50,6 +50,7 @@ func TestServiceFailureResetIsolatesLateAttemptAndPreservesWaits(t *testing.T) {
 	}
 	commitTestTx(t, tx)
 	e.complete(t, old, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 503, StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamResponse})
+	assertAttemptStreak(t, e.store.DB(), old.ClaimID(), "unchanged", "", "")
 	var count, generation []byte
 	var disabled bool
 	var retry, backoff int64

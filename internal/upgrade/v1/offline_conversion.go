@@ -178,6 +178,9 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		if err := backfillModelConsumption(ctx, tx); err != nil {
 			return err
 		}
+		if err := backfillAttemptStreaks(ctx, tx); err != nil {
+			return err
+		}
 		updated, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", db.CurrentSchemaVersion, SourceSchemaVersion)
 		if err != nil {
 			return err
