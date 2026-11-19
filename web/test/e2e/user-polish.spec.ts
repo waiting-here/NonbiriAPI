@@ -232,27 +232,58 @@ for (const scenario of [
       ] as const) {
         await page.goto(USER_ORIGIN + path);
         await expect(page.locator('main')).toBeVisible();
-        if (name === 'home') await expect(page.locator('.home-announcement-preview')).toBeVisible();
-        if (name === 'report') await expect(page.locator('textarea').first()).toBeVisible();
+        if (name === 'home')
+          await expect(
+            page.locator('.home-announcement-preview .ops-announcement-body'),
+          ).toBeVisible();
+        if (name === 'report') {
+          const secretField = page.getByRole('textbox', {
+            name: zh ? '疑似泄露的密钥或凭据' : 'Suspected leaked key or credential',
+          });
+          await expect(secretField).toBeVisible();
+          await expect(secretField).toHaveJSProperty('required', true);
+          const note = page.getByRole('textbox', {
+            name: zh ? '补充说明（可选）' : 'Additional note (optional)',
+          });
+          await expect(note).toBeVisible();
+          await expect(note).toHaveAccessibleDescription(
+            zh
+              ? /2,048.*凭据只填在上方的密钥框/
+              : /2,048.*Enter the credential only in the credential field above/,
+          );
+        }
         if (name === 'issues') await expect(page.getByText('Future service reason')).toBeVisible();
         if (name === 'picturebook') {
           await expect(
             page.getByLabel(zh ? '精确尺寸' : 'Exact size', { exact: true }),
           ).toBeVisible();
           await page
+            .getByRole('article')
+            .filter({ hasText: zh ? '排队中' : 'Queued' })
             .getByRole('button', { name: zh ? '查看任务' : 'View task', exact: true })
-            .first()
             .click();
           await expect(
             page.getByRole('heading', { name: zh ? '任务详情' : 'Task details' }),
           ).toBeVisible();
         }
         if (name === 'account') {
-          // Language, theme, density, font size, appearance strength and music quality.
-          await expect(page.getByRole('radiogroup')).toHaveCount(6);
+          const preferences = page.locator('.core-account-preferences');
+          await expect(preferences.getByRole('radiogroup')).toHaveCount(6);
+          const intensity = zh ? '装扮强度' : 'Appearance strength';
+          const accountIntensity = preferences.getByRole('radiogroup', { name: intensity });
+          await expect(accountIntensity).toBeVisible();
+          const appearance = zh ? '装扮' : 'Appearance';
+          await page.getByRole('button', { name: appearance, exact: true }).click();
+          const sheet = page.getByRole('dialog', { name: appearance, exact: true });
+          const vivid = zh ? '鲜明' : 'Vivid';
+          await sheet
+            .getByRole('radiogroup', { name: intensity })
+            .getByText(vivid, { exact: true })
+            .click();
+          await sheet.getByRole('button', { name: zh ? '关闭' : 'Close', exact: true }).click();
           await expect(
-            page.getByRole('radiogroup', { name: zh ? '装扮强度' : 'Appearance strength' }),
-          ).toBeVisible();
+            accountIntensity.getByRole('radio', { name: vivid, exact: true }),
+          ).toBeChecked();
         }
         if (name === 'home') {
           await expect(
@@ -271,7 +302,6 @@ for (const scenario of [
               ),
           ).toBe(true);
         }
-        if (name === 'report') await expect(page.locator('.nb-note--warn')).toBeVisible();
         if (name === 'issues') {
           await expect(
             page.getByText(zh ? '服务密钥验证失败' : 'The service rejected the key.'),
@@ -285,18 +315,23 @@ for (const scenario of [
           await expect(
             page.locator('legend').filter({ hasText: zh ? /^尺寸$/ : /^Size$/ }),
           ).toHaveCount(0);
-          await expect(
-            page.locator('.picturebook-facts dd').filter({ hasText: '32,000' }),
-          ).toBeVisible();
-          await expect(page.getByText('1,001', { exact: true })).toBeVisible();
-          await page
-            .getByRole('button', { name: zh ? '查看任务' : 'View task', exact: true })
-            .last()
-            .click();
           const taskCard = page
             .locator('section.card')
             .filter({ has: page.getByRole('heading', { name: zh ? '任务详情' : 'Task details' }) });
-          await expect(taskCard.locator('dd').filter({ hasText: '8,000' })).toBeVisible();
+          const taskFact = (label: string) =>
+            taskCard.getByText(label, { exact: true }).locator('xpath=following-sibling::dd[1]');
+          const reserved = taskFact(zh ? '已预扣' : 'Reserved');
+          await expect(reserved).toContainText('32,000');
+          await expect(reserved).toContainText('4,000');
+          await expect(taskFact(zh ? '当前排队位置' : 'Queue position')).toHaveText('1,001');
+          await page
+            .getByRole('article')
+            .filter({ hasText: zh ? '已撤回' : 'Cancelled' })
+            .getByRole('button', { name: zh ? '查看任务' : 'View task', exact: true })
+            .click();
+          const refunded = taskFact(zh ? '已退款' : 'Refunded');
+          await expect(refunded).toContainText('8,000');
+          await expect(refunded).toContainText('1,000');
         }
         if (name === 'account') {
           for (const label of await page.locator('.nb-seg label').all()) {
