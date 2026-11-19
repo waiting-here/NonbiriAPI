@@ -69,7 +69,7 @@ const publicConfig = {
 };
 
 describe('level-five user shell navigation', () => {
-  test('keeps steward out of primary nav and exposes one drawer entry', async () => {
+  test('groups destinations in the drawer and exposes stewardship under the account', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: levelFiveSession },
       { method: 'GET', path: '/api/config', body: publicConfig },
@@ -88,11 +88,11 @@ describe('level-five user shell navigation', () => {
       if (state?.error) throw new Error(`session fixture failed: ${String(state.error)}`);
       expect(state?.data).toBeDefined();
     });
-    await screen.findByRole('button', { name: 'fixture-user' });
+    await screen.findByRole('button', { name: 'Account actions · fixture-user' });
     expect(screen.queryAllByRole('link', { name: 'Steward' })).toHaveLength(0);
 
     await rendered.user.click(screen.getByRole('button', { name: 'Open navigation' }));
-    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Steward' })).toHaveLength(1));
+    expect(within(screen.getByRole('dialog', { name: 'Main navigation' })).queryByRole('link', { name: 'Steward' })).toBeNull();
     const closeMenuButton = within(
       screen.getByRole('dialog', { name: 'Main navigation' }),
     ).getByRole('button', { name: 'Close navigation' });
@@ -100,7 +100,7 @@ describe('level-five user shell navigation', () => {
     await rendered.user.click(closeMenuButton);
     expect(screen.queryAllByRole('link', { name: 'Steward' })).toHaveLength(0);
 
-    await rendered.user.click(screen.getByRole('button', { name: 'fixture-user' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Account actions · fixture-user' }));
     expect(screen.getAllByRole('link', { name: 'Steward' })).toHaveLength(1);
   });
 });
@@ -120,7 +120,7 @@ test.each(['/logs', '/credits', '/debug', '/issues'])(
       </Routes>,
       { station: 'user', role: 'level5', route },
     );
-    await screen.findByRole('button', { name: 'fixture-user' });
+    await screen.findByRole('button', { name: 'Account actions · fixture-user' });
     expect(rendered.container.querySelector('#user-navigation a[href="/logs"]')).toHaveAttribute(
       'data-active',
       'true',
@@ -146,7 +146,7 @@ test.each(['/endpoints', '/endpoints/42', '/models'])(
       </Routes>,
       { station: 'user', role: 'level5', route },
     );
-    await screen.findByRole('button', { name: 'fixture-user' });
+    await screen.findByRole('button', { name: 'Account actions · fixture-user' });
     const links = [...rendered.container.querySelectorAll('#user-navigation > ul > li > a')];
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/',

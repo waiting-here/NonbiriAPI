@@ -3465,7 +3465,7 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<UserLayout />, { station: 'user', role: 'user' });
     await screen.findByText('fixture-user');
     rendered.queryClient.setQueryData(userKeys.models, [model]);
-    await rendered.user.click(screen.getByRole('button', { name: 'fixture-user' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Account actions · fixture-user' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Sign out' }));
     await expect(screen.findByText('logout refused')).resolves.toBeVisible();
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
