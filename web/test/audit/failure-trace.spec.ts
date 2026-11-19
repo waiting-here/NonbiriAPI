@@ -237,7 +237,10 @@ for (const [language, width, theme] of [
         }
 
         const healthURL = role === 'admin' ? '/logs?' : '/steward?tab=logs&';
-        await page.goto(origin + healthURL + 'request_id=' + fixture.failure_trace.health_request_id);
+        await page.goto(
+          origin + healthURL + 'request_id=' + fixture.failure_trace.health_request_id,
+        );
+        await page.locator('summary').getByText(labels.attempts, { exact: true }).click();
         const calls = page.locator('.log-attempts > li');
         await expect(calls).toHaveCount(3);
         const impact = labels.healthImpact;
@@ -259,10 +262,17 @@ for (const [language, width, theme] of [
         await expect(modelWait).toContainText(reasons.google_daily_requests);
         await expect(modelWait).toContainText(impact.backoff.scope.model);
         await expect(modelWait).toContainText('fixture-flash');
-        await expect(calls.nth(2).locator('.log-attempt-streak')).toContainText(impact.streak.reset);
+        await expect(calls.nth(2).locator('.log-attempt-streak')).toContainText(
+          impact.streak.reset,
+        );
         await expect(calls.nth(2).locator('.log-attempt-streak')).toContainText('4 → 0');
         await expect(calls.nth(2).locator('.log-attempt-backoff')).toHaveCount(0);
-        await overload.scrollIntoViewIfNeeded();
+        await expect(overload.getByText(common.failure.missing, { exact: true })).toHaveCount(0);
+        const callHeading = overload.getByRole('heading');
+        await callHeading.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+        await expect(callHeading).toBeInViewport();
+        await expect(streakLine).toBeInViewport();
+        await expect(wait.locator('time')).toBeInViewport();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );

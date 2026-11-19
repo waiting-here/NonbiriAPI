@@ -526,6 +526,7 @@
         "failureDisablement": "此次调用触发自动停用",
         "failureStreak": "连续失败次数从 {{before}} 次增至 {{after}} 次，停用阈值为 {{threshold}} 次。",
         "healthImpact": {
+          "refresh": "刷新待结算结果",
           "streak": {
             "incremented": "连续失败次数已增加",
             "reset": "连续失败次数已清零",

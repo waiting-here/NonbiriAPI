@@ -526,6 +526,7 @@
         "failureDisablement": "Triggered automatic disablement",
         "failureStreak": "Consecutive failures rose from {{before}} to {{after}} (disable threshold {{threshold}}).",
         "healthImpact": {
+          "refresh": "Refresh pending outcomes",
           "streak": {
             "incremented": "Consecutive failures increased",
             "reset": "Consecutive failures cleared",

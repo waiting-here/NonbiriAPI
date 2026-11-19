@@ -1,6 +1,7 @@
 package charity
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"strconv"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/logapi"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
@@ -69,6 +72,38 @@ func TestGoogleOverloadCooldownPreservesStreakAndRecovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertU128(t, streak, 0, "later upstream success resets streak")
+	// Reopen the management detail after recovery. It must describe both calls
+	// as they happened, regardless of today's availability and streak.
+	keys, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer keys.Close()
+	logs, err := logapi.NewRepository(e.store.DB(), keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(handle claim.Handle) *logapi.AttemptHealthImpact {
+		t.Helper()
+		detail, err := logs.GetAdmin(t.Context(), handle.RequestID(), logapi.AttemptFilter{})
+		if err != nil || len(detail.Attempts.Data) != 1 {
+			t.Fatalf("read settled attempt: %v, rows = %d", err, len(detail.Attempts.Data))
+		}
+		a := detail.Attempts.Data[0]
+		if a.HealthImpact == nil || a.FailureDisablement != nil {
+			t.Fatalf("health = %+v, disablement = %+v", a.HealthImpact, a.FailureDisablement)
+		}
+		return a.HealthImpact
+	}
+	old, success := read(h), read(pending)
+	if old.StreakEffect != "unchanged" || old.StreakBefore != "2" || old.StreakAfter != "2" ||
+		old.Backoff == nil || old.Backoff.Reason != "google_model_overloaded" || old.Backoff.Scope != "service" ||
+		old.Backoff.RetryAt != now+60 || old.Backoff.ObservedOnly {
+		t.Fatalf("original overload in management log: %+v, wait = %+v", old, old.Backoff)
+	}
+	if success.StreakEffect != "reset" || success.StreakBefore != "2" || success.StreakAfter != "0" || success.Backoff != nil {
+		t.Fatalf("subsequent success in management log: %+v", success)
+	}
 }
 
 func TestGoogleOverloadPrefersEveryValidHeaderHint(t *testing.T) {

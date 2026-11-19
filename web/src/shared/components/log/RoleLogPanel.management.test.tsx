@@ -313,6 +313,25 @@ it.each(['admin', 'steward'] as const)(
   },
 );
 
+it('refreshes a pending outcome in place when its earlier call settles', async () => {
+  const outcomes: Record<string, unknown>[] = [{ health_impact: { streak_effect: 'pending' } }];
+  fixtures('steward', true, undefined, outcomes);
+  const view = await renderHistoricalLogs(<RoleLogPanel role="steward" accountId="viewer" />, {
+    station: 'user',
+    role: 'level5',
+    route: `/steward?tab=logs&request_id=${requestID}`,
+  });
+  const panel = within(await screen.findByRole('region', { name: /Log details/ }));
+  await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
+  const refresh = panel.getByRole('button', { name: 'Refresh pending outcomes' });
+  outcomes[0] = {
+    health_impact: { streak_effect: 'reset', streak_before: '3', streak_after: '0' },
+  };
+  await view.user.click(refresh);
+  expect(await panel.findByText('3 → 0')).toBeVisible();
+  expect(refresh).not.toBeInTheDocument();
+});
+
 it('leaves charity health observations out of personal attempts in management logs', async () => {
   fixtures('admin', false, { summary: [], routeKind: 'openai_chat_completions' }, [
     { health_impact: { streak_effect: 'reset', streak_after: '0' } },

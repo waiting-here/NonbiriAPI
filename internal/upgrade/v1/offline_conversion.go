@@ -172,15 +172,25 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		return err
 	}
 	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "donation_model_quotas", "model quota conversion", func() error {
-		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL+db.AttemptHealthSQL); err != nil {
+		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL); err != nil {
 			return err
 		}
-		if err := backfillModelConsumption(ctx, tx); err != nil {
+		return backfillModelConsumption(ctx, tx)
+	}); err != nil {
+		return err
+	}
+	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "request_attempts", "attempt health conversion", func() error {
+		if _, err := tx.ExecContext(ctx, db.AttemptHealthSQL); err != nil {
 			return err
 		}
 		if err := backfillAttemptStreaks(ctx, tx); err != nil {
 			return err
 		}
+		return backfillAttemptBackoffs(ctx, tx)
+	}); err != nil {
+		return err
+	}
+	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "schema_state", "schema version update", func() error {
 		updated, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", db.CurrentSchemaVersion, SourceSchemaVersion)
 		if err != nil {
 			return err

@@ -203,6 +203,7 @@ function AttemptTable({
   endpointKeyID,
   page,
   busy,
+  onRefresh,
   onPageChange,
   onPageSizeChange,
   logReturnTo,
@@ -216,6 +217,7 @@ function AttemptTable({
   endpointKeyID?: string;
   page: string;
   busy: boolean;
+  onRefresh: () => void;
   onPageChange: (page: string) => void;
   onPageSizeChange: (size: PageSize) => void;
   focusAttemptSeq?: string;
@@ -253,6 +255,16 @@ function AttemptTable({
   const focusMissing = focusAttemptSeq !== undefined && !locatingFocus && focused === undefined;
   const table = (
     <div className="ops-stack" aria-busy={busy}>
+      {managedCharityRequest &&
+        attempts.data.some(
+          (a) => a.role !== 'user' && a.health_impact?.streak_effect === 'pending',
+        ) && (
+          <div className="ops-actions">
+            <Button type="button" size="sm" disabled={busy} onClick={onRefresh}>
+              {t('common.operations.logs.healthImpact.refresh')}
+            </Button>
+          </div>
+        )}
       {focusMissing && (
         <p
           className="log-focused-attempt-heading"
@@ -401,7 +413,14 @@ function AttemptTable({
                 attempt.diag ||
                 attempt.result_kind === 'synthetic' ||
                 (attempt.status_code ?? 0) >= 400) && (
-                <FailureDetails failure={attempt.error_diagnostics} />
+                <FailureDetails
+                  failure={attempt.error_diagnostics}
+                  showMissing={
+                    attempt.role === 'user' ||
+                    !managedCharityRequest ||
+                    !attempt.health_impact?.backoff
+                  }
+                />
               )}
               {attempt.role !== 'user' && managedCharityRequest ? (
                 managedCharityRequest.charity_model_id &&
@@ -1206,6 +1225,7 @@ function ScopedRoleLogPanel({
                       endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
                       page={attemptPager.page}
                       busy={detail.isFetching}
+                      onRefresh={() => void detail.refetch()}
                       focusAttemptSeq={focusAttemptSeq}
                       locatingFocus={focusAttemptSeq !== undefined && detail.isPlaceholderData}
                       onPageChange={attemptPager.setPage}

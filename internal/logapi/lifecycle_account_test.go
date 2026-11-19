@@ -89,8 +89,13 @@ func insertLifecycleRequestLog(
 	started int64,
 	completed any,
 	duration, unknown int64,
+	routes ...RouteKind,
 ) int64 {
 	t.Helper()
+	route := RouteOpenAIChat
+	if len(routes) > 0 {
+		route = routes[0]
+	}
 	requestState := "running"
 	statusCode := int64(0)
 	errorSource := "platform"
@@ -109,8 +114,8 @@ func insertLifecycleRequestLog(
 INSERT INTO logical_requests(
  id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,
  caller_error_code,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at
-) VALUES(?,?,'openai_chat_completions','safe-model',?,1,?,?,?,'none','user',?,?,?)`,
-		requestID, userID, requestState, class, status, callerCode, make([]byte, 16), started, completed); err != nil {
+) VALUES(?,?,?,'safe-model',?,1,?,?,?,'none','user',?,?,?)`,
+		requestID, userID, route, requestState, class, status, callerCode, make([]byte, 16), started, completed); err != nil {
 		t.Fatal(err)
 	}
 	result, err := database.Exec(`
@@ -118,8 +123,8 @@ INSERT INTO request_logs(
  logical_request_id,user_id,model,route_kind,caller_result_class,caller_status,caller_error_code,
  attempt_count,status_code,duration_ms,started_at,completed_at,uncached_input_tokens,
  cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,error_source,error_code,error_diag
-) VALUES(?,?, 'safe-model','openai_chat_completions',?,?,?,?,?,?,?,?,1,2,3,4,?,?,?,'HOSTILE-RAW-LOG-DIAG')`,
-		requestID, userID, class, status, callerCode, 1, statusCode, duration, started, completed,
+) VALUES(?,?, 'safe-model',?,?,?,?,?,?,?,?,?,1,2,3,4,?,?,?,'HOSTILE-RAW-LOG-DIAG')`,
+		requestID, userID, route, class, status, callerCode, 1, statusCode, duration, started, completed,
 		unknown, errorSource, errorCode)
 	if err != nil {
 		t.Fatal(err)

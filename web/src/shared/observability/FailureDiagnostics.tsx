@@ -25,13 +25,20 @@ const SUGGESTION_CATEGORIES = new Set([
   'platform',
 ]);
 
-export function FailureDetails({ failure }: { failure?: FailureDiagnostics | null }) {
+export function FailureDetails({
+  failure,
+  showMissing = true,
+}: {
+  failure?: FailureDiagnostics | null;
+  showMissing?: boolean;
+}) {
   const { t } = useTranslation();
   const formatTime = useDateTimeFormatter();
   const missing = t('common.failure.notRecorded');
   const flag = (value?: boolean) =>
     value === undefined ? missing : t(value ? 'common.yes' : 'common.no');
   const count = (value?: number) => (value === undefined ? missing : formatCount(value).display);
+  if (failure === undefined && !showMissing) return null;
   if (!failure)
     return (
       <p className="nb-small nb-muted">
