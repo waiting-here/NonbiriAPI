@@ -31,6 +31,15 @@ These fields contain no separate credentials and do not extend retention.
 
 ## Structured request failure observations
 
+Administrator and authorized steward request details read the per-attempt
+consecutive-failure outcome from `request_attempts` and any retained wait from
+`request_attempt_backoffs`. Both share the request log's retention and deletion
+lifecycle, including legal holds. The wait contains a classified reason, scope,
+original retry deadline and optional quota period. It can be recorded before
+the attempt finishes. Ordinary caller views and personal exports omit these
+management facts. Offline conversion preserves historical observations and
+only assigns outcomes supported by retained evidence.
+
 `request_attempt_diagnostics` and `request_delivery_facts` store bounded safe
 observations under the existing request/attempt roots. Each payload is at most
 16 KiB and contains confirmed categories, phases, safe causes, timing, delivery

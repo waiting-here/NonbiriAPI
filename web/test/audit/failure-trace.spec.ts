@@ -12,7 +12,13 @@ interface Fixture {
   user_url: string;
   admin_cookie: Cookie;
   users: { level: number; cookie: Cookie }[];
-  failure_trace: { request_id: string; alert_id: string; attempt_seq: string };
+  failure_trace: {
+    request_id: string;
+    alert_id: string;
+    attempt_seq: string;
+    health_request_id: string;
+    overload_retry_at: string;
+  };
 }
 
 test.skip(
@@ -164,6 +170,7 @@ for (const [language, width, theme] of [
           const detail = await detailResponse.json();
           expect(detail).not.toHaveProperty('failure_summary');
           expect(detail).not.toHaveProperty('attempts');
+          expect(JSON.stringify(detail)).not.toContain('health_impact');
           await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
           await expect(page.getByRole('region', { name: labels.failureSummary })).toHaveCount(0);
           await expect(resultBanner(page)).toContainText(labels.presentation.charityUpstreamHint);
@@ -228,6 +235,38 @@ for (const [language, width, theme] of [
           await expectSummary(page);
           await capture(page, 'missing-attempt');
         }
+
+        const healthURL = role === 'admin' ? '/logs?' : '/steward?tab=logs&';
+        await page.goto(origin + healthURL + 'request_id=' + fixture.failure_trace.health_request_id);
+        const calls = page.locator('.log-attempts > li');
+        await expect(calls).toHaveCount(3);
+        const impact = labels.healthImpact;
+        const overload = calls.nth(0);
+        const streakLine = overload.locator('.log-attempt-streak');
+        await expect(streakLine).toContainText(impact.streak.unchanged);
+        await expect(streakLine).toContainText('5 → 5');
+        await expect(streakLine).toContainText(impact.didNotDisable);
+        const wait = overload.locator('.log-attempt-backoff');
+        await expect(wait).toContainText(impact.backoff.triggered);
+        await expect(wait).toContainText(reasons.google_model_overloaded);
+        await expect(wait).toContainText(impact.backoff.scope.service);
+        await expect(wait).toContainText(common.nativeServices.gemini_generate_content);
+        await expect(wait.locator('time')).toHaveAttribute(
+          'datetime',
+          new Date(Number(fixture.failure_trace.overload_retry_at) * 1000).toISOString(),
+        );
+        const modelWait = calls.nth(1).locator('.log-attempt-backoff');
+        await expect(modelWait).toContainText(reasons.google_daily_requests);
+        await expect(modelWait).toContainText(impact.backoff.scope.model);
+        await expect(modelWait).toContainText('fixture-flash');
+        await expect(calls.nth(2).locator('.log-attempt-streak')).toContainText(impact.streak.reset);
+        await expect(calls.nth(2).locator('.log-attempt-streak')).toContainText('4 → 0');
+        await expect(calls.nth(2).locator('.log-attempt-backoff')).toHaveCount(0);
+        await overload.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await capture(page, `${role}-health`);
       } finally {
         await context.close();
       }

@@ -459,9 +459,7 @@ func (repository *Repository) listAdminAttemptsTx(
 	if err != nil {
 		return Page[AdminLogAttempt]{}, err
 	}
-	query := `SELECT ` + attemptColumns + `,` + managementAttemptTargetColumns + ` FROM request_attempts a` + managementAttemptTargetJoin + `
-WHERE a.request_log_id=? AND a.attempt_seq>?`
-	query, args, metadata, err := logPageQuery(ctx, queryer, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
+	query, args, metadata, err := logPageQuery(ctx, queryer, managementAttemptsSelect, managementAttemptsCount, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[AdminLogAttempt]{}, err
 	}
@@ -478,8 +476,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	var last int64
 	more := false
 	for rows.Next() {
-		var donationID, donationKeyID sql.NullInt64
-		record, scanErr := scanAttempt(rows, &donationID, &donationKeyID)
+		record, management, scanErr := scanManagementAttempt(rows)
 		if scanErr != nil {
 			return Page[AdminLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
@@ -492,9 +489,11 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[AdminLogAttempt]{}, usageErr
 		}
 		facts, disablement := attemptDiagnostics(record.errorDiagnostics)
+		health, service := management.health(disablement)
 		page.Data = append(page.Data, AdminLogAttempt{
+			HealthImpact: health, NativeService: service,
 			ErrorDiagnostics: facts, FailureDisablement: disablement,
-			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
+			DonationID: nullableDecimal(management.donationID), DonationKeyID: nullableDecimal(management.donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
@@ -543,9 +542,7 @@ func (repository *Repository) listStewardAttempts(
 		return Page[StewardLogAttempt]{}, err
 	}
 	// Independent query and projection: no Admin/user/note/logical model column.
-	query := `SELECT ` + attemptColumns + `,` + managementAttemptTargetColumns + ` FROM request_attempts a` + managementAttemptTargetJoin + `
-WHERE a.request_log_id=? AND a.attempt_seq>?`
-	query, args, metadata, err := logPageQuery(ctx, tx, query, `SELECT COUNT(*) FROM (`+query+`)`, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
+	query, args, metadata, err := logPageQuery(ctx, tx, managementAttemptsSelect, managementAttemptsCount, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
 	if err != nil {
 		return Page[StewardLogAttempt]{}, err
 	}
@@ -562,8 +559,7 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 	var last int64
 	more := false
 	for rows.Next() {
-		var donationID, donationKeyID sql.NullInt64
-		record, scanErr := scanAttempt(rows, &donationID, &donationKeyID)
+		record, management, scanErr := scanManagementAttempt(rows)
 		if scanErr != nil {
 			return Page[StewardLogAttempt]{}, translateReadError(ctx, scanErr)
 		}
@@ -576,9 +572,11 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 			return Page[StewardLogAttempt]{}, usageErr
 		}
 		facts, disablement := attemptDiagnostics(record.errorDiagnostics)
+		health, service := management.health(disablement)
 		page.Data = append(page.Data, StewardLogAttempt{
+			HealthImpact: health, NativeService: service,
 			ErrorDiagnostics: facts, FailureDisablement: disablement,
-			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
+			DonationID: nullableDecimal(management.donationID), DonationKeyID: nullableDecimal(management.donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,

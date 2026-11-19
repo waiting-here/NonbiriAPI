@@ -412,6 +412,24 @@ The summary contains no upstream text. Individual attempts may include a
 with decimal-string `streak_before`, `streak_after` and `threshold`, the
 `connector_type` and an optional `native_service`.
 
+Each retained charity attempt in these two management views includes
+`health_impact.streak_effect`. An ordered settlement records `incremented`,
+`reset` (including a success at zero), or `unchanged`. If known, the exact
+`streak_before` and `streak_after` are unsigned decimal strings. A completed
+call can be `pending` while an earlier call on the same resource is outstanding.
+A later detail read returns the settled result. Historical attempts whose
+effect cannot be established return `unknown`.
+
+An optional `health_impact.backoff` records the reason for a wait this call
+started or extended, its `scope` (`key`, `service` or `model`), and the
+original `retry_at` Unix second. The attempt's `native_service` and
+`upstream_model_id` identify the affected service and model when available.
+Quota and trial backoffs can also specify a `period`. A migrated wait with
+`observed_only: true` preserves the suggested retry time. Its reason may be
+`recorded_wait` and its scope may be `unknown` if the original evidence was
+incomplete. The deadline describes what the platform knew at the time.
+The separate `failure_disablement` receipt identifies a threshold crossing.
+
 On either management log detail endpoint, `attempt_seq=23&attempt_page_size=10`
 opens the numbered page containing retained attempt 23. Sequences range from
 1 to 100 and can have gaps. The response includes the actual page in

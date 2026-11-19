@@ -176,6 +176,8 @@ type AdminLogRow struct {
 }
 
 type AdminLogAttempt struct {
+	HealthImpact       *AttemptHealthImpact           `json:"health_impact,omitempty"`
+	NativeService      string                         `json:"native_service,omitempty"`
 	FailureDisablement *diagnostic.FailureDisablement `json:"failure_disablement,omitempty"`
 	ErrorDiagnostics   *diagnostic.Failure            `json:"error_diagnostics,omitempty"`
 	DonationID         *string                        `json:"donation_id,omitempty"`
@@ -231,6 +233,8 @@ type CallerIdentity struct {
 }
 
 type StewardLogAttempt struct {
+	HealthImpact       *AttemptHealthImpact           `json:"health_impact,omitempty"`
+	NativeService      string                         `json:"native_service,omitempty"`
 	FailureDisablement *diagnostic.FailureDisablement `json:"failure_disablement,omitempty"`
 	ErrorDiagnostics   *diagnostic.Failure            `json:"error_diagnostics,omitempty"`
 	DonationID         *string                        `json:"donation_id,omitempty"`

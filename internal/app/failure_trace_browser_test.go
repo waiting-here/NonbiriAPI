@@ -80,8 +80,41 @@ VALUES(?,?,?,?,?,?,?)`, claimID, root, seq, facts.Category, facts.Phase, diagnos
 	if err := tx.QueryRow("SELECT id FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?", ref).Scan(&alertID); err != nil {
 		t.Fatal(err)
 	}
+	// Independent retries use different donations. Their streaks and waits
+	// remain visible even though the caller eventually received a success.
+	healthID, start := id("req_"), at-150
+	exec(`INSERT INTO logical_requests(id,user_id,route_kind,model_snapshot,state,attempt_limit,caller_result_class,caller_status,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at)
+VALUES(?,?,'charity_chat_completions',?,'terminal',3,'success',200,'committed','user',zeroblob(16),?,?)`, healthID, f.users[0].ID, model, start, start+3)
+	exec(`INSERT INTO request_logs(logical_request_id,user_id,route_kind,model,started_at,completed_at,caller_result_class,caller_status,status_code,attempt_count,duration_ms)
+VALUES(?,?,'charity_chat_completions',?,?,?,'success',200,200,3,3000)`, healthID, f.users[0].ID, model, start, start+3)
+	var healthLog int64
+	if err := tx.QueryRow("SELECT id FROM request_logs WHERE logical_request_id=?", healthID).Scan(&healthLog); err != nil {
+		t.Fatal(err)
+	}
+	overloadUntil := start + 1 + 60
+	for i, sample := range []struct {
+		status                               int
+		effect, before, after, reason, scope string
+		until                                int64
+	}{
+		{503, "unchanged", "5", "5", "google_model_overloaded", "service", overloadUntil},
+		{429, "unchanged", "2", "2", "google_daily_requests", "model", start + 86400},
+		{200, "reset", "4", "0", "", "", 0},
+	} {
+		claimID := id("clm_")
+		key := 15000 + i
+		exec(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,endpoint_key_id_snapshot,connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,started_at,completed_at,streak_effect,streak_before,streak_after)
+VALUES(?,?,?,?,'google-gemini','https://generativelanguage.googleapis.com','fixture-flash','response',?,?,?,?,?,?)`,
+			claimID, healthLog, i+1, key, sample.status, start+int64(i), start+int64(i)+1, sample.effect, sample.before, sample.after)
+		exec(`INSERT INTO request_attempt_service_facts(claim_id,credential_id_snapshot,credential_version,native_service_bit,configured_type,wire_type)
+VALUES(?,?,1,?,'google-gemini','google-gemini')`, claimID, key, service.Mask())
+		if sample.reason != "" {
+			exec(`INSERT INTO request_attempt_backoffs(claim_id,request_log_id,reason,scope,retry_at) VALUES(?,?,?,?,?)`, claimID, healthLog, sample.reason, sample.scope, sample.until)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	return map[string]string{"request_id": requestID, "alert_id": strconv.FormatInt(alertID, 10), "attempt_seq": "23"}
+	return map[string]string{"request_id": requestID, "alert_id": strconv.FormatInt(alertID, 10), "attempt_seq": "23",
+		"health_request_id": healthID, "overload_retry_at": strconv.FormatInt(overloadUntil, 10)}
 }

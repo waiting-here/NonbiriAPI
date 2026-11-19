@@ -97,7 +97,12 @@ func newLogFixture(t *testing.T) *logFixture {
 		`CREATE TABLE charity_models(id INTEGER PRIMARY KEY,full_name TEXT NOT NULL UNIQUE)`,
 		`CREATE TABLE charity_reservations(logical_request_id TEXT NOT NULL UNIQUE,charity_model_id INTEGER)`,
 		`CREATE TABLE donations(id INTEGER PRIMARY KEY)`,
-		`CREATE TABLE donation_keys(id INTEGER PRIMARY KEY,donation_id INTEGER NOT NULL,endpoint_key_id INTEGER)`,
+		`CREATE TABLE donation_keys(id INTEGER PRIMARY KEY,donation_id INTEGER NOT NULL,endpoint_key_id INTEGER,ended_at INTEGER,streak_generation BLOB,next_fold_seq BLOB)`,
+		`CREATE TABLE donation_uses(id INTEGER PRIMARY KEY,donation_key_id INTEGER)`,
+		`CREATE TABLE donation_service_health(id INTEGER PRIMARY KEY,use_id INTEGER,streak_generation BLOB,next_fold_seq BLOB)`,
+		`CREATE TABLE dispatch_service_health(claim_id TEXT PRIMARY KEY,health_id INTEGER,streak_generation BLOB,claim_seq BLOB)`,
+		`CREATE TABLE donation_usage_reservations(claim_id TEXT PRIMARY KEY,donation_key_id INTEGER,state TEXT,streak_generation BLOB,claim_seq BLOB)`,
+		`CREATE TABLE request_attempt_service_facts(claim_id TEXT PRIMARY KEY,native_service_bit INTEGER)`,
 		`CREATE TABLE dispatch_claims(id TEXT PRIMARY KEY,logical_request_id TEXT NOT NULL,attempt_seq INTEGER NOT NULL,purpose TEXT NOT NULL,donation_key_id INTEGER,state TEXT NOT NULL DEFAULT 'committed',secret_ref_id INTEGER,UNIQUE(logical_request_id,attempt_seq))`,
 		`CREATE TABLE endpoint_key_secrets(id INTEGER PRIMARY KEY,connector_type TEXT NOT NULL,canonical_base_url TEXT NOT NULL)`,
 		`CREATE TABLE mainstream_channels(id TEXT PRIMARY KEY,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),state TEXT NOT NULL CHECK(state IN ('active','retired')))`,
@@ -131,7 +136,7 @@ func newLogFixture(t *testing.T) *logFixture {
 		`CREATE TABLE credit_entries(operation_id TEXT NOT NULL,delta_mag BLOB NOT NULL,
  account_kind_snapshot TEXT NOT NULL,delta_sign INTEGER NOT NULL,line_no INTEGER NOT NULL)`,
 	}
-	statements = append(statements, db.RequestDiagnosticsSQL)
+	statements = append(statements, db.RequestDiagnosticsSQL, db.AttemptHealthSQL)
 	for _, statement := range statements {
 		if _, err := database.Exec(statement); err != nil {
 			_ = database.Close()
