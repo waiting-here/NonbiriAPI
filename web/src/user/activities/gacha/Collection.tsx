@@ -34,21 +34,19 @@ export function Collection({
   const artwork = useArtworkPolicy();
   const progress = collectionProgress(state, artwork.allowed);
   const [view, setView] = useState<'cards' | 'themes' | 'moments'>('cards');
-  const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState(''),
     [character, setCharacter] = useState(''),
     [rarity, setRarity] = useState(''),
     [owned, setOwned] = useState('');
   const clearFilters = () => {
     setSearch('');
-    setSearchDraft('');
     setCharacter('');
     setRarity('');
     setOwned('');
   };
   const visibleThemes = themes.filter((theme) => state.visible_themes.includes(theme.id));
   const visibleCards = cards.filter((card) => state.visible_themes.includes(card.theme));
-  const query = search.toLowerCase();
+  const query = search.trim().toLowerCase();
   const filtered = visibleCards.filter((card) => {
     const theme = themeById[card.theme];
     return (
@@ -105,15 +103,14 @@ export function Collection({
                   {(props) => (
                     <input
                       {...props}
-                      value={searchDraft}
+                      value={search}
                       placeholder={t('搜索主题或角色', 'Search a theme or character')}
-                      onChange={(e) => setSearchDraft(e.target.value)}
+                      onChange={(e) => setSearch(e.target.value)}
                     />
                   )}
                 </Field>
               }
               activeCount={[search, character, rarity, owned].filter(Boolean).length}
-              onSubmit={() => setSearch(searchDraft.trim())}
               onReset={clearFilters}
               secondary={
                 <>

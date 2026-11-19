@@ -3706,6 +3706,7 @@
         "searchHint": "Search a theme or character",
         "choose": "Choose background artwork",
         "apply": "Use for Heartfelt moments",
+        "fromCollection": "Set as site background",
         "applied": "Currently applied",
         "spHint": "The complete “{{name}}” appearance is also available in Appearance.",
         "empty": "No matching artwork",

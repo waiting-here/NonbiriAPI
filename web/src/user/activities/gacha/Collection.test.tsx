@@ -5,7 +5,7 @@ import { gachaSnapshot } from '../../../../test/fixtures/gacha';
 import { cards } from './catalog';
 import { Collection } from './Collection';
 
-it('submits card search explicitly, applies selects immediately, and preserves filters across tabs', async () => {
+it('filters cards while typing, applies selects immediately, and preserves filters across tabs', async () => {
   const state = gachaSnapshot();
   state.visible_themes = ['g'];
   const visible = cards.filter((card) => card.theme === 'g');
@@ -25,22 +25,21 @@ it('submits card search explicitly, applies selects immediately, and preserves f
   expect(count()).toBe(visible.length);
   const search = screen.getByRole('textbox', { name: 'Search' });
   await view.user.type(search, 'no matching card');
-  expect(count()).toBe(visible.length);
+  expect(count()).toBe(0);
+  await view.user.clear(search);
   await view.user.click(screen.getByText('More filters', { exact: true }));
   await view.user.selectOptions(
     screen.getByRole('combobox', { name: 'Character' }),
     first.character,
   );
   expect(count()).toBe(visible.filter((card) => card.character === first.character).length);
-  await view.user.keyboard('{Enter}');
-  await view.user.click(screen.getByRole('button', { name: 'Search' }));
+  await view.user.type(search, 'no matching card');
   expect(count()).toBe(0);
   await view.user.click(screen.getByRole('button', { name: 'Reset' }));
   expect(search).toHaveValue('');
   expect(screen.getByRole('combobox', { name: 'Character' })).toHaveValue('');
   expect(count()).toBe(visible.length);
   await view.user.type(search, first.name_en);
-  await view.user.keyboard('{Enter}');
   expect(count()).toBe(1);
   await view.user.click(screen.getByRole('tab', { name: 'Theme memories' }));
   await view.user.click(screen.getByRole('tab', { name: 'Cards' }));
@@ -71,7 +70,6 @@ it('finds individual Christmas cards by either theme name or by character', asyn
   ] as const) {
     await view.user.clear(search);
     await view.user.type(search, query);
-    await view.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(count(), query).toBe(expected);
     expect(
       screen.getByRole('button', { name: 'A Date in the Snow · Claude, Not collected' }),
@@ -79,7 +77,7 @@ it('finds individual Christmas cards by either theme name or by character', asyn
   }
 });
 
-it('clears both the applied search and its draft from the empty-state action', async () => {
+it('clears the active search from the empty-state action', async () => {
   const state = gachaSnapshot();
   state.visible_themes = ['g'];
   const visible = cards.filter((card) => card.theme === 'g');
@@ -96,7 +94,6 @@ it('clears both the applied search and its draft from the empty-state action', a
   );
   const search = screen.getByRole('textbox', { name: 'Search' });
   await view.user.type(search, 'No matching card');
-  await view.user.click(screen.getByRole('button', { name: 'Search' }));
   expect(screen.getByText('More filters · 1')).toBeVisible();
   expect(screen.getByRole('heading', { name: 'No cards found' })).toBeVisible();
   await view.user.click(screen.getByRole('button', { name: 'Clear filters' }));
@@ -105,8 +102,4 @@ it('clears both the applied search and its draft from the empty-state action', a
     visible.length,
   );
   expect(screen.getByText('More filters', { exact: true })).toBeVisible();
-  await view.user.click(screen.getByRole('button', { name: 'Search' }));
-  expect(view.container.querySelectorAll('.gacha-catalog .gacha-card')).toHaveLength(
-    visible.length,
-  );
 });

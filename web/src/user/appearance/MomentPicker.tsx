@@ -30,7 +30,6 @@ export function MomentPicker() {
   const choice = choiceOverride ?? appearance?.state.moment ?? defaultMoment.key;
   const [kind, setKind] = useState('all');
   const [search, setSearch] = useState('');
-  const [searchDraft, setSearchDraft] = useState('');
   const [error, setError] = useState<unknown>(null);
   const refresh = appearance?.refresh;
   useEffect(() => {
@@ -54,7 +53,7 @@ export function MomentPicker() {
       (kind === 'all' || item.kind === kind) &&
       (item.name + item.nameEN + (item.card?.character ?? ''))
         .toLowerCase()
-        .includes(search.toLowerCase()),
+        .includes(search.trim().toLowerCase()),
   );
   return (
     <Panel className="nb-moment-picker">
@@ -115,10 +114,8 @@ export function MomentPicker() {
           <FilterBar
             activeCount={search ? 1 : 0}
             ariaLabel={t('user.appearance.moments.search')}
-            onSubmit={() => setSearch(searchDraft.trim())}
             onReset={() => {
               setSearch('');
-              setSearchDraft('');
               setKind('all');
             }}
             search={
@@ -126,9 +123,9 @@ export function MomentPicker() {
                 {(props) => (
                   <input
                     {...props}
-                    value={searchDraft}
+                    value={search}
                     placeholder={t('user.appearance.moments.searchHint')}
-                    onChange={(event) => setSearchDraft(event.target.value)}
+                    onChange={(event) => setSearch(event.target.value)}
                   />
                 )}
               </Field>

@@ -3706,6 +3706,7 @@
         "searchHint": "搜索主题或角色",
         "choose": "选择背景素材",
         "apply": "设为心动时刻",
+        "fromCollection": "设为站点背景",
         "applied": "当前已应用",
         "spHint": "外观中另有「{{name}}」专属整套主题可用。",
         "empty": "没有找到对应素材",
