@@ -200,6 +200,7 @@ test('independent diagnostics retain their filtered window when paging in both s
         const apiPath = role === 'admin' ? '/admin/api/diagnostics' : '/api/steward/diagnostics';
         const page = await context.newPage();
         await page.goto(origin + (role === 'admin' ? '/logs' : '/steward?tab=logs'));
+        await page.getByRole('tab', { name: 'Discovery and activity', exact: true }).click();
         const region = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
         await region.getByLabel('Category', { exact: true }).selectOption('model_discovery');
         const userId = state.users.find((user) => user.level === 1)!.id;

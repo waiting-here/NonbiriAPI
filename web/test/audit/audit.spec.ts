@@ -287,6 +287,7 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, 
 async function discoveryDiagnostics(page: Page, admin: boolean, redacted = false) {
   const f = fixture();
   await page.goto(admin ? f.admin_url + '/logs' : f.user_url + '/steward?tab=logs');
+  await page.getByRole('tab', { name: 'Discovery and activity', exact: true }).click();
   const region = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
   await region.getByLabel('Category').selectOption('model_discovery');
   await region.getByLabel('Request, task or operation ID').fill(f.discovery_id);
@@ -738,6 +739,8 @@ for (const level of [5, 1] as const) {
         await expect(page.getByRole('button', { name: 'Upstream error details' })).toHaveCount(0);
         await expect(page.getByRole('region', { name: 'Request source' })).toHaveCount(0);
         await page.goto(f.user_url + '/steward?tab=logs');
+        if (level === 5)
+          await page.getByRole('tab', { name: 'Discovery and activity', exact: true }).click();
         await expect(
           page.getByRole('region', { name: 'Discovery and activity diagnostics' }),
         ).toHaveCount(level === 5 ? 1 : 0);
@@ -965,8 +968,11 @@ test('audit presentation keeps folds, role tabs and mobile content within the vi
       const page = await context.newPage();
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto(f.user_url + '/steward?tab=charity');
-      const tabs = page.locator('.page > .nb-tabs-root > .nb-tabs').first();
-      await expect(tabs.getByRole('tab')).toHaveCount(7);
+      const tabs = page.getByRole('tablist', { name: 'Steward sections', exact: true });
+      await expect(tabs.getByRole('tab')).toHaveCount(level === 5 ? 3 : 7);
+      await expect(tabs.getByRole('tab', { name: 'Abuse audit', exact: true })).toHaveCount(
+        level === 5 ? 0 : 1,
+      );
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await noOverflow(page);
