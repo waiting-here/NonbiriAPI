@@ -172,7 +172,7 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		return err
 	}
 	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "donation_model_quotas", "model quota conversion", func() error {
-		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL); err != nil {
+		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL+db.AttemptHealthSQL); err != nil {
 			return err
 		}
 		if err := backfillModelConsumption(ctx, tx); err != nil {

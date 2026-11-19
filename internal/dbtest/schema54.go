@@ -10,6 +10,10 @@ import (
 func RestoreSchema54Fixture(t *testing.T, source *sql.DB) {
 	t.Helper()
 	for _, statement := range []string{
+		"DROP TABLE request_attempt_backoffs",
+		"ALTER TABLE request_attempts DROP COLUMN streak_after",
+		"ALTER TABLE request_attempts DROP COLUMN streak_before",
+		"ALTER TABLE request_attempts DROP COLUMN streak_effect",
 		"DROP TRIGGER google_model_target_update",
 		"DROP TRIGGER google_model_target_delete",
 		"DROP TABLE donation_service_model_cooldowns",
