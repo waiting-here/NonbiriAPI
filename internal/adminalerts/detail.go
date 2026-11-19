@@ -18,13 +18,14 @@ import (
 // AlertDetail keeps immutable event facts separate from live resource state.
 // Resource IDs are data, never URLs supplied by an upstream or an alert ref.
 type AlertDetail struct {
-	Alert          AdminAlert      `json:"alert"`
-	ContextVersion int             `json:"context_version"`
-	OccurredFacts  []AlertFact     `json:"occurred_facts"`
-	Targets        []AlertTarget   `json:"targets"`
-	CurrentState   []AlertFact     `json:"current_state"`
-	RelatedLogs    *AlertLogWindow `json:"related_logs"`
-	ResolutionKind string          `json:"resolution_kind"`
+	Alert          AdminAlert           `json:"alert"`
+	ContextVersion int                  `json:"context_version"`
+	OccurredFacts  []AlertFact          `json:"occurred_facts"`
+	Targets        []AlertTarget        `json:"targets"`
+	CurrentState   []AlertFact          `json:"current_state"`
+	RelatedLogs    *AlertLogWindow      `json:"related_logs"`
+	TriggerAttempt *AlertTriggerAttempt `json:"trigger_attempt,omitempty"`
+	ResolutionKind string               `json:"resolution_kind"`
 }
 
 type AlertFact struct {
@@ -49,8 +50,9 @@ type AlertLogWindow struct {
 }
 
 type alertEventContext struct {
-	Targets       []alertEventTarget `json:"targets"`
-	OccurredFacts []AlertFact        `json:"occurred_facts"`
+	Targets        []alertEventTarget `json:"targets"`
+	OccurredFacts  []AlertFact        `json:"occurred_facts"`
+	TriggerAttempt *TriggerAttempt    `json:"trigger_attempt,omitempty"`
 }
 
 type alertEventTarget struct {
@@ -114,6 +116,9 @@ func decodeEventContext(version int, body string) (alertEventContext, error) {
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) || len(event.Targets) > 8 || len(event.OccurredFacts) > 32 {
+		return alertEventContext{}, ErrInvariant
+	}
+	if event.TriggerAttempt != nil && !event.TriggerAttempt.valid() {
 		return alertEventContext{}, ErrInvariant
 	}
 	seen := make(map[string]bool, len(event.Targets))
@@ -224,6 +229,9 @@ func (repository *Repository) GetDetail(ctx context.Context, adminID, alertID in
 	if version == 0 {
 		event = legacyEvent(alert.Kind, row.ref, alert.SubjectUserID, alert.ID)
 	}
+	if event.TriggerAttempt != nil && (alert.Kind != KindDonationFailureDisabled || donationPolicyRef.MatchString(row.ref)) {
+		return AlertDetail{}, ErrInvariant
+	}
 	detail := AlertDetail{
 		Alert: alert, ContextVersion: version, OccurredFacts: event.OccurredFacts,
 		Targets: make([]AlertTarget, 0, len(event.Targets)+2), CurrentState: []AlertFact{},
@@ -243,6 +251,21 @@ func (repository *Repository) GetDetail(ctx context.Context, adminID, alertID in
 		now, err := repository.nowUnix()
 		if err != nil {
 			return AlertDetail{}, err
+		}
+		if trigger := event.TriggerAttempt; trigger != nil {
+			attempt := AlertTriggerAttempt{TriggerAttempt: *trigger}
+			// Only compute whether the link can open. The log detail route
+			// authorizes and audits access to a held object's contents.
+			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM request_logs l
+JOIN request_attempts a ON a.request_log_id=l.id AND a.attempt_seq=?
+WHERE l.logical_request_id=? AND (l.completed_at IS NULL OR l.completed_at>? OR EXISTS(
+	SELECT 1 FROM legal_holds h WHERE h.object_kind='request_log' AND h.object_ref=CAST(l.id AS TEXT)
+	AND h.state='active' AND h.expires_at>?)))`,
+				trigger.AttemptSeq, trigger.RequestID, now-30*24*60*60, now).Scan(&attempt.Available)
+			if err != nil {
+				return AlertDetail{}, fmt.Errorf("administrator alerts: inspect trigger attempt retention: %w", err)
+			}
+			detail.TriggerAttempt = &attempt
 		}
 		if err := enrichDonationDetail(ctx, tx, &detail, now); err != nil {
 			return AlertDetail{}, err

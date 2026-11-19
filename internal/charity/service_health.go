@@ -3,11 +3,11 @@ package charity
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -77,7 +77,7 @@ WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &d
 	if err != nil {
 		return claim.ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT m.claim_seq,r.state,r.protocol_success,r.streak_disposition,r.failure_origin,1
+	rows, err := tx.QueryContext(ctx, `SELECT m.claim_id,m.claim_seq,r.state,r.protocol_success,r.streak_disposition,r.failure_origin,1
 FROM dispatch_service_health m JOIN donation_usage_reservations r ON r.claim_id=m.claim_id
 WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER BY m.claim_seq`,
 		healthID, currentGeneration, db.EncodeU128(next))
@@ -89,7 +89,6 @@ WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER 
 		return err
 	}
 	next, streak, disabled = folded.next, folded.streak, folded.disabled
-	disabledNow, disablingStreak, disablingFold := folded.disabledNow, folded.disablingStreak, folded.disablingFold
 
 	result, err := tx.ExecContext(ctx, `UPDATE donation_service_health SET next_fold_seq=?,failure_streak=?,failure_disabled=?,updated_at=? WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`, db.EncodeU128(next), db.EncodeU128(streak), disabled, at, healthID, currentGeneration, nextBlob, streakBlob)
 	if err != nil {
@@ -98,30 +97,12 @@ WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER 
 	if err := requireOne(result); err != nil {
 		return err
 	}
-	if !disabledNow {
+	if folded.crossing == nil {
 		return nil
 	}
-	ref := fmt.Sprintf("donation-use:%d:health:%d:generation:%s:fold:%s", useID, healthID, generation.Decimal(), disablingFold.Decimal())
-	type target struct {
-		Kind string `json:"kind"`
-		ID   string `json:"id"`
-	}
-	type fact struct {
-		Key   string `json:"key"`
-		Value string `json:"value"`
-	}
-	body, err := json.Marshal(struct {
-		Targets []target `json:"targets"`
-		Facts   []fact   `json:"occurred_facts"`
-	}{
-		Targets: []target{{"donation", fmt.Sprint(donationID)}, {"donation_key", fmt.Sprint(keyID)}, {"endpoint_key", fmt.Sprint(endpointKeyID)}},
-		Facts:   []fact{{"donation_id", fmt.Sprint(donationID)}, {"donation_key_id", fmt.Sprint(keyID)}, {"endpoint_key_id", fmt.Sprint(endpointKeyID)}, {"use_id", fmt.Sprint(useID)}, {"failure_streak", disablingStreak.Decimal()}, {"failure_threshold", thresholdText}, {"generation", generation.Decimal()}, {"fold", disablingFold.Decimal()}},
+	return adminalerts.RecordDonationFailureTx(ctx, tx, adminalerts.DonationFailure{
+		DonationID: donationID, KeyID: keyID, EndpointKeyID: endpointKeyID,
+		UseID: useID, Generation: generation, OccurredAt: at, Crossing: *folded.crossing,
+		Ref: fmt.Sprintf("donation-use:%d:health:%d:generation:%s:fold:%s", useID, healthID, generation.Decimal(), folded.crossing.Fold.Decimal()),
 	})
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved,context_version,context_json)
-SELECT 'donation_failure_disabled','charity donation service disabled after consecutive protocol failures',?,?,0,1,?
-WHERE NOT EXISTS(SELECT 1 FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?)`, ref, at, string(body), ref)
-	return err
 }

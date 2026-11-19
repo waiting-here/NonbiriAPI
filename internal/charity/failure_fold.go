@@ -4,14 +4,14 @@ import (
 	"database/sql"
 	"math/big"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 type failureFold struct {
-	next, streak                   db.U128
-	disabled                       int
-	disabledNow                    bool
-	disablingStreak, disablingFold db.U128
+	next, streak db.U128
+	disabled     int
+	crossing     *adminalerts.FailureCrossing
 }
 
 // Consume exactly the contiguous terminal prefix. A missing or reserved result
@@ -22,11 +22,11 @@ func foldFailureRows(rows *sql.Rows, next, streak, threshold db.U128, disabled i
 	defer rows.Close()
 	for rows.Next() {
 		var sequence []byte
-		var state string
+		var claimID, state string
 		var success sql.NullInt64
 		var disposition, origin sql.NullString
 		var apply bool
-		if err := rows.Scan(&sequence, &state, &success, &disposition, &origin, &apply); err != nil {
+		if err := rows.Scan(&claimID, &sequence, &state, &success, &disposition, &origin, &apply); err != nil {
 			return out, err
 		}
 		sequenceNumber, err := decodeU128(sequence)
@@ -37,12 +37,13 @@ func foldFailureRows(rows *sql.Rows, next, streak, threshold db.U128, disabled i
 			break
 		}
 		var justDisabled bool
+		before := out.streak
 		out.streak, out.disabled, justDisabled, err = foldFailureOutcome(out.streak, out.disabled, threshold, state, success, disposition, origin, apply)
 		if err != nil {
 			return out, err
 		}
 		if justDisabled {
-			out.disabledNow, out.disablingStreak, out.disablingFold = true, out.streak, out.next
+			out.crossing = &adminalerts.FailureCrossing{ClaimID: claimID, Fold: out.next, Before: before, After: out.streak, Threshold: threshold}
 		}
 		out.next, err = addU128(out.next, big.NewInt(1))
 		if err != nil {
