@@ -112,63 +112,159 @@ describe('administrator alerts page', () => {
     );
   });
 
-  it('opens an exact donation alert and links logs by endpoint key, then returns to the prior page', async () => {
-    const donationAlert = alert('7', false, {
-      kind: 'donation_failure_disabled',
-      ref: 'donation-key:71:generation:2:fold:3',
-    });
-    installJsonFetchFixtures([
-      { method: 'GET', path: '/admin/api/session', body: session() },
-      {
-        method: 'GET',
-        path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
-        body: page([donationAlert]),
-      },
-      {
-        method: 'GET',
-        path: '/admin/api/alerts/7',
-        body: {
-          alert: donationAlert,
-          context_version: 1,
-          occurred_facts: [
-            { key: 'failure_streak', value: '3' },
-            { key: 'failure_threshold', value: '3' },
-          ],
-          targets: [
-            { kind: 'donation', id: '2', available: true, status: 'approved' },
-            { kind: 'donation_key', id: '71', available: true, status: 'failure_disabled' },
-            { kind: 'endpoint_key', id: '83', available: true, status: 'enabled' },
-          ],
-          current_state: [],
-          related_logs: {
-            endpoint_key_id: '83',
-            from: 1799999100,
-            to: 1800000300,
-            available: true,
-          },
-          resolution_kind: '',
+  it.each([0, 1])(
+    'opens donation alert context %s and keeps the endpoint-key log link',
+    async (version) => {
+      const donationAlert = alert('7', false, {
+        kind: 'donation_failure_disabled',
+        ref: 'donation-key:71:generation:2:fold:3',
+      });
+      installJsonFetchFixtures([
+        { method: 'GET', path: '/admin/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+          body: page([donationAlert]),
         },
-      },
-    ]);
-    await renderWithProviders(<AlertsPage />, {
-      station: 'admin',
-      role: 'admin',
-      locale: 'en',
-      route:
-        '/alerts?resolved=false&page=1&page_size=20&alert_id=7&return_to=%2Fusers%3Fdeleted%3D9%26page%3D4%26page_size%3D50',
-    });
-    expect(await screen.findByRole('heading', { name: 'Alert details #7' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Return to previous page' })).toHaveAttribute(
-      'href',
-      '/users?deleted=9&page=4&page_size=50',
-    );
-    expect(
-      await screen.findByRole('link', {
-        name: 'From 15 minutes before to 5 minutes after this alert',
-      }),
-    ).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
-    expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
-  });
+        {
+          method: 'GET',
+          path: '/admin/api/alerts/7',
+          body: {
+            alert: donationAlert,
+            context_version: version,
+            occurred_facts:
+              version === 1
+                ? [
+                    { key: 'failure_streak', value: '3' },
+                    { key: 'failure_threshold', value: '3' },
+                  ]
+                : [],
+            targets: [
+              { kind: 'donation', id: '2', available: true, status: 'approved' },
+              { kind: 'donation_key', id: '71', available: true, status: 'failure_disabled' },
+              { kind: 'endpoint_key', id: '83', available: true, status: 'enabled' },
+            ],
+            current_state: [],
+            related_logs: {
+              endpoint_key_id: '83',
+              from: 1799999100,
+              to: 1800000300,
+              available: true,
+            },
+            resolution_kind: '',
+          },
+        },
+      ]);
+      await renderWithProviders(<AlertsPage />, {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route:
+          '/alerts?resolved=false&page=1&page_size=20&alert_id=7&return_to=%2Fusers%3Fdeleted%3D9%26page%3D4%26page_size%3D50',
+      });
+      expect(await screen.findByRole('heading', { name: 'Alert details #7' })).toBeVisible();
+      expect(screen.getByRole('link', { name: 'Return to previous page' })).toHaveAttribute(
+        'href',
+        '/users?deleted=9&page=4&page_size=50',
+      );
+      expect(
+        await screen.findByRole('link', {
+          name: 'From 15 minutes before to 5 minutes after this alert',
+        }),
+      ).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
+      expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
+      expect(
+        screen.queryByRole('link', { name: 'View triggering attempt' }),
+      ).not.toBeInTheDocument();
+      if (version === 0) {
+        expect(screen.getByText('Alert 7', { exact: true })).toBeVisible();
+        expect(screen.getByText('donation-key:71:generation:2:fold:3')).toBeVisible();
+        expect(
+          screen.queryByText(
+            'The donated key was automatically disabled after consecutive failures.',
+          ),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(
+            'The donated key was automatically disabled after consecutive failures.',
+          ),
+        ).toBeVisible();
+        expect(screen.getByText('Alert 7', { exact: true })).not.toBeVisible();
+      }
+    },
+  );
+
+  it.each([true, false])(
+    'shows retained trigger facts with attempt availability %s',
+    async (available) => {
+      const ref = 'donation-use:51:health:11:generation:2:fold:10';
+      const message = 'retained private operator explanation';
+      const donationAlert = alert('7', false, { kind: 'donation_failure_disabled', ref, message });
+      const requestID = `req_${'A'.repeat(21)}Q`;
+      installJsonFetchFixtures([
+        { method: 'GET', path: '/admin/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+          body: page([donationAlert]),
+        },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts/7',
+          body: {
+            alert: donationAlert,
+            context_version: 1,
+            occurred_facts: [{ key: 'use_id', value: '51' }],
+            targets: [],
+            current_state: [],
+            related_logs: null,
+            resolution_kind: '',
+            trigger_attempt: {
+              request_id: requestID,
+              attempt_seq: '23',
+              connector_type: 'google-gemini',
+              native_service: 'gemini_generate_content',
+              reason: 'google_access_token_type_unsupported',
+              status_code: 401,
+              streak_before: '9',
+              streak_after: '10',
+              threshold: '10',
+              available,
+            },
+          },
+        },
+      ]);
+      const view = await renderWithProviders(<AlertsPage />, {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route: '/alerts?resolved=false&page=1&page_size=20&alert_id=7',
+      });
+      const trigger = await screen.findByRole('region', {
+        name: 'Attempt that triggered disablement',
+      });
+      expect(trigger).toHaveTextContent('Google rejected the access token type · HTTP 401');
+      expect(trigger).toHaveTextContent('Consecutive failures rose from 9 to 10');
+      expect(
+        screen.getByText(
+          'A donated service was automatically disabled after consecutive failures.',
+        ),
+      ).toBeVisible();
+      expect(screen.getByText(message)).not.toBeVisible();
+      expect(screen.getByText(ref)).not.toBeVisible();
+      await view.user.click(screen.getByText('Technical information', { selector: 'strong' }));
+      expect(screen.getByText(message)).toBeVisible();
+      expect(screen.getByText(ref)).toBeVisible();
+      const link = within(trigger).queryByRole('link', { name: 'View triggering attempt' });
+      if (available) {
+        expect(link).toHaveAttribute('href', `/logs?request_id=${requestID}&attempt_seq=23`);
+      } else {
+        expect(link).not.toBeInTheDocument();
+        expect(trigger).toHaveTextContent('This attempt is no longer available in request logs.');
+      }
+    },
+  );
 
   it('confirms the administrator session before requesting private alerts', async () => {
     const fetchMock = installJsonFetchFixtures([

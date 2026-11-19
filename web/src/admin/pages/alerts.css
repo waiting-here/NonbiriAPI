@@ -36,6 +36,10 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.alert-trigger-streak,
+.alert-technical-reference {
+  overflow-wrap: anywhere;
+}
 @media (width < 48rem) {
   .alerts-page .nb-table td {
     max-width: none;

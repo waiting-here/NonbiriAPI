@@ -5,39 +5,12 @@ import { formatCount } from '@shared/utils/formatNumber';
 import {
   failureCategoryKey,
   failurePhaseKey,
+  failureReasonKey,
   type DeliveryDiagnostics,
   type FailureDiagnostics,
 } from './failure';
 import './observability.css';
 
-const REASON_CODES = new Set([
-  'dns_timeout',
-  'dns_not_found',
-  'dns_failed',
-  'tls_unknown_authority',
-  'tls_hostname_mismatch',
-  'tls_invalid_certificate',
-  'tls_record_invalid',
-  'canceled',
-  'deadline_exceeded',
-  'network_timeout',
-  'compression_header_invalid',
-  'compression_checksum_invalid',
-  'unexpected_eof',
-  'connection_reset',
-  'connection_refused',
-  'connection_closed',
-  'broken_pipe',
-  'connect_failed',
-  'read_failed',
-  'write_failed',
-  'invalid_json',
-  'json_type_mismatch',
-  'invalid_response',
-  'client_write_failed',
-  'response_limit',
-  'upstream_error',
-]);
 const SUGGESTION_CATEGORIES = new Set([
   'network',
   'policy',
@@ -92,11 +65,7 @@ export function FailureDetails({ failure }: { failure?: FailureDiagnostics | nul
     >
       <Note
         tone="warn"
-        title={t(
-          failure.code && REASON_CODES.has(failure.code)
-            ? `common.failure.reason.${failure.code}`
-            : failureCategoryKey(failure.category),
-        )}
+        title={t(failureReasonKey(failure.code) ?? failureCategoryKey(failure.category))}
       >
         <p>{t('common.failure.atPhase', { phase: t(failurePhaseKey(failure.phase)) })}</p>
         <p>
