@@ -459,10 +459,9 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
   await expect(
     page.getByRole('link', {
-      name: '0 donations awaiting shared follow-up',
-      exact: true,
+      name: /donations awaiting shared follow-up/,
     }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Mark as processed', exact: true })).toHaveCount(0);
   expect(current.revision).toBe('7');

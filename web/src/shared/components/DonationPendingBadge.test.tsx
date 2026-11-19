@@ -67,6 +67,31 @@ describe('DonationPendingBadge', () => {
     },
   );
 
+  it('hides a confirmed zero and reacts when pending work arrives and is cleared', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(badge('0'))),
+    );
+    const view = await renderWithProviders(
+      <DonationPendingBadge role="admin" accountID="account-a" />,
+      {
+        station: 'admin',
+        role: 'admin',
+      },
+    );
+    const key = charityKeys.badge('admin', 'account-a');
+    await waitFor(() => expect(view.queryClient.getQueryData(key)).toEqual(badge('0')));
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    act(() => {
+      view.queryClient.setQueryData(key, badge('3'));
+    });
+    expect(await screen.findByRole('link', { name: /3 donations/ })).toBeVisible();
+    act(() => {
+      view.queryClient.setQueryData(key, badge('0'));
+    });
+    await waitFor(() => expect(screen.queryByRole('link')).not.toBeInTheDocument());
+  });
+
   it('shows an unknown count after a failed read and recovers through retry', async () => {
     const fetchMock = vi.fn<typeof fetch>();
     fetchMock

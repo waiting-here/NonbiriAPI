@@ -1,3 +1,4 @@
+import { TableCheckbox } from '@shared/components/ui/TableCheckbox';
 import { retainQueryScope } from '@shared/query/retain';
 import { FailureDetails } from '@shared/observability/FailureDiagnostics';
 import { sourceLabels } from './presentation';
@@ -471,8 +472,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                         header: t('common.agent.select'),
                         cell: 'select',
                         render: (row) => (
-                          <input
-                            type="checkbox"
+                          <TableCheckbox
                             aria-label={t('common.agent.selectRequest', { id: row.id })}
                             checked={selected.has(row.id)}
                             disabled={locked}

@@ -1,4 +1,4 @@
-import { Field, FilterBar } from '@shared/components/ui';
+import { Field, FilterBar, Fold } from '@shared/components/ui';
 import { FailureDetails } from './FailureDiagnostics';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -336,23 +336,28 @@ function ScopedDiagnostics({
       )}
       <div key={readerGeneration} aria-busy={busy}>
         {page?.data.map((entry) => (
-          <details key={entry.id}>
-            <summary>
-              {labels[entry.kind]} · {entry.subject_id} · {words('User', '用户')} {entry.user_id} ·{' '}
-              {formatDateTime(entry.created_at)}
-              {' · '}
-              {words('Attempt', '尝试')} {entry.attempt_seq} / {entry.event_seq} · HTTP{' '}
-              {entry.http_status ?? '—'}
-              {entry.truncated ? words(' · truncated', ' · 已截断') : ''}
-              {entry.synthetic ? words(' · safe diagnostic', ' · 安全诊断') : ''}
-            </summary>
+          <Fold
+            key={entry.id}
+            plain
+            title={
+              <>
+                {labels[entry.kind]} · {entry.subject_id} · {words('User', '用户')} {entry.user_id}{' '}
+                · {formatDateTime(entry.created_at)}
+                {' · '}
+                {words('Attempt', '尝试')} {entry.attempt_seq} / {entry.event_seq} · HTTP{' '}
+                {entry.http_status ?? '—'}
+                {entry.truncated ? words(' · truncated', ' · 已截断') : ''}
+                {entry.synthetic ? words(' · safe diagnostic', ' · 安全诊断') : ''}
+              </>
+            }
+          >
             {entry.save_state !== 'saved' && (
               <OmittedBody state={entry.save_state} reason={entry.failure_reason} />
             )}
             {!busy ? (
               <Detail role={role} id={entry.id} synthetic={entry.synthetic} onReadFailure={fail} />
             ) : null}
-          </details>
+          </Fold>
         ))}
       </div>
       {applied && (

@@ -192,6 +192,9 @@
   white-space: nowrap;
 }
 @media (width <= 48rem) {
+  .user-list-selection-heading .nb-table-check {
+    display: none;
+  }
   .user-management .nb-table td:has(.user-list-selection) {
     grid-column: 2;
     grid-row: 1;

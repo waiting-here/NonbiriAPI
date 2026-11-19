@@ -256,38 +256,59 @@ function DetailBody({ detail, c }: { detail: Detail; c: RiskCopy }) {
         <SummaryView value={detail.summary} c={c} />
         <Coverage value={detail.coverage} c={c} />
         <p>{c.configHelp}</p>
-        <details>
-          <summary>{c.minutes}</summary>
-          <div className="ops-table-scroll">
-            <table className="ops-table">
-              <thead>
-                <tr>
-                  {[c.minute, c.kind, c.rpmUsed, c.average, c.peak, c.cap, c.coverage].map((x) => (
-                    <th key={x}>{x}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {detail.minutes.map((m) => (
-                  <tr key={`${m.epoch}/${m.minute}/${m.call_kind}`}>
-                    <td>{stamp(m.minute)}</td>
-                    <td>{m.call_kind}</td>
-                    <td>
-                      {m.rpm_committed} ({m.rpm_pending}{' '}
-                      {t('common.operations.logs.resultValue.pending')})
-                    </td>
-                    <td>{(m.occupancy_millis / 60000).toFixed(3)}</td>
-                    <td>{m.peak}</td>
-                    <td>
-                      {m.rpm_limit || c.unknown} / {m.concurrency_limit || c.unknown}
-                    </td>
-                    <td>{m.coverage === 0 ? c.completed : `${c.partial} (${m.coverage})`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+        <Fold title={c.minutes} plain lazy>
+          <DataTable
+            caption={c.minutes}
+            rows={detail.minutes}
+            rowKey={(m) => `${m.epoch}/${m.minute}/${m.call_kind}`}
+            columns={[
+              { key: 'minute', header: c.minute, cell: 'title', render: (m) => stamp(m.minute) },
+              {
+                key: 'kind',
+                header: c.kind,
+                cell: 'meta',
+                mobileLabel: c.kind,
+                render: (m) => m.call_kind,
+              },
+              {
+                key: 'rpm',
+                header: c.rpmUsed,
+                cell: 'meta',
+                mobileLabel: c.rpmUsed,
+                render: (m) =>
+                  `${m.rpm_committed} (${m.rpm_pending} ${t('common.operations.logs.resultValue.pending')})`,
+              },
+              {
+                key: 'average',
+                header: c.average,
+                cell: 'meta',
+                mobileLabel: c.average,
+                render: (m) => (m.occupancy_millis / 60000).toFixed(3),
+              },
+              {
+                key: 'peak',
+                header: c.peak,
+                cell: 'meta',
+                mobileLabel: c.peak,
+                render: (m) => m.peak,
+              },
+              {
+                key: 'cap',
+                header: c.cap,
+                cell: 'meta',
+                mobileLabel: c.cap,
+                render: (m) => `${m.rpm_limit || c.unknown} / ${m.concurrency_limit || c.unknown}`,
+              },
+              {
+                key: 'coverage',
+                header: c.coverage,
+                cell: 'meta',
+                mobileLabel: c.coverage,
+                render: (m) => (m.coverage === 0 ? c.completed : `${c.partial} (${m.coverage})`),
+              },
+            ]}
+          />
+        </Fold>
       </Card>
       <Card>
         <h2>
@@ -670,58 +691,80 @@ function UserIPWindows({ userID, ...scope }: Scope & { userID?: string }) {
               {t('common.audit.ipPeak', { count: item.peak })} · {stamp(item.window_from)} —{' '}
               {stamp(item.window_to)}
             </p>
-            <div className="ops-table-scroll">
-              <table className="ops-table">
-                <thead>
-                  <tr>
-                    <th>{t('common.history.originalAccount')}</th>
-                    <th>{scope.c.kind}</th>
-                    <th>{scope.c.count}</th>
-                    <th>{scope.c.dispatched}</th>
-                    <th>{scope.c.rejected}</th>
-                    <th>
-                      {scope.c.from} / {scope.c.to}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {item.accounts.map((account) => (
-                    <tr key={`${account.user_id}:${account.call_kind}`}>
-                      <td>{account.user_id}</td>
-                      <td>
-                        {(
-                          {
-                            total: scope.c.total,
-                            self: scope.c.self,
-                            charity: scope.c.charity,
-                            unclassified: scope.c.unclassified,
-                          } as Record<string, string>
-                        )[account.call_kind] ?? account.call_kind}
-                      </td>
-                      <td>{account.requests}</td>
-                      <td>{account.dispatched}</td>
-                      <td>{account.rejected}</td>
-                      <td>
-                        {stamp(account.first_seen)} — {stamp(account.last_seen)}
-                        <br />
-                        <Link
-                          to={queryPath(scope.role === 'admin' ? '/logs' : '/steward', {
-                            tab: scope.role === 'steward' ? 'logs' : undefined,
-                            user_id: account.user_id,
-                            from: item.window_from,
-                            to: item.window_to + 1,
-                          })}
-                        >
-                          {t('common.audit.openLogs')}
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <details>
-              <summary>{t('common.audit.windowIPs')}</summary>
+            <DataTable
+              caption={t('common.audit.userIPsHelp')}
+              rows={item.accounts}
+              rowKey={(account) => `${account.user_id}:${account.call_kind}`}
+              columns={[
+                {
+                  key: 'account',
+                  header: t('common.history.originalAccount'),
+                  cell: 'title',
+                  render: (account) => account.user_id,
+                },
+                {
+                  key: 'kind',
+                  header: scope.c.kind,
+                  cell: 'meta',
+                  mobileLabel: scope.c.kind,
+                  render: (account) =>
+                    (
+                      ({
+                        total: scope.c.total,
+                        self: scope.c.self,
+                        charity: scope.c.charity,
+                        unclassified: scope.c.unclassified,
+                      }) as Record<string, string>
+                    )[account.call_kind] ?? account.call_kind,
+                },
+                {
+                  key: 'count',
+                  header: scope.c.count,
+                  cell: 'meta',
+                  mobileLabel: scope.c.count,
+                  render: (account) => account.requests,
+                },
+                {
+                  key: 'dispatched',
+                  header: scope.c.dispatched,
+                  cell: 'meta',
+                  mobileLabel: scope.c.dispatched,
+                  render: (account) => account.dispatched,
+                },
+                {
+                  key: 'rejected',
+                  header: scope.c.rejected,
+                  cell: 'meta',
+                  mobileLabel: scope.c.rejected,
+                  render: (account) => account.rejected,
+                },
+                {
+                  key: 'window',
+                  header: `${scope.c.from} / ${scope.c.to}`,
+                  cell: 'meta',
+                  mobileLabel: `${scope.c.from} / ${scope.c.to}`,
+                  render: (account) => `${stamp(account.first_seen)} — ${stamp(account.last_seen)}`,
+                },
+                {
+                  key: 'logs',
+                  header: t('common.audit.openLogs'),
+                  cell: 'action',
+                  render: (account) => (
+                    <Link
+                      to={queryPath(scope.role === 'admin' ? '/logs' : '/steward', {
+                        tab: scope.role === 'steward' ? 'logs' : undefined,
+                        user_id: account.user_id,
+                        from: item.window_from,
+                        to: item.window_to + 1,
+                      })}
+                    >
+                      {t('common.audit.openLogs')}
+                    </Link>
+                  ),
+                },
+              ]}
+            />
+            <Fold title={t('common.audit.windowIPs')} plain lazy>
               <ul>
                 {item.ips.map((ip, index) => (
                   <li key={index} className="mono">
@@ -729,7 +772,7 @@ function UserIPWindows({ userID, ...scope }: Scope & { userID?: string }) {
                   </li>
                 ))}
               </ul>
-            </details>
+            </Fold>
             {item.ips_truncated || item.accounts_truncated ? (
               <p>{t('common.audit.windowTruncated')}</p>
             ) : null}

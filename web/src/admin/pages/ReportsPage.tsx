@@ -1,17 +1,21 @@
+import { StatusBadge } from '@shared/components/ui/StatusBadge';
+import { reportStatusTone } from '../features/operations/reports';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
-import { DataTable, Field, FilterBar, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
+  DataTable,
+  Field,
+  FilterBar,
+  Note,
+  Panel,
+  PanelBody,
+  PanelHead,
+} from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -29,7 +33,7 @@ import '@shared/operations/operations.css';
 import './reports.css';
 
 function selectedStatus(values: string[]): ReportStatus | '' {
-  return values.length === 1 ? REPORT_STATUSES.find((status) => status === values[0]) ?? '' : '';
+  return values.length === 1 ? (REPORT_STATUSES.find((status) => status === values[0]) ?? '') : '';
 }
 
 export function ReportsPage() {
@@ -202,9 +206,11 @@ export function ReportsPage() {
               {reports.data.data.length === 0 ? (
                 <EmptyState
                   title={t('admin.reports.empty.title')}
-                  body={status
-                    ? t('admin.reports.empty.filtered', { status: statusLabels[status] })
-                    : t('admin.reports.empty.body')}
+                  body={
+                    status
+                      ? t('admin.reports.empty.filtered', { status: statusLabels[status] })
+                      : t('admin.reports.empty.body')
+                  }
                 />
               ) : (
                 <DataTable
@@ -217,11 +223,9 @@ export function ReportsPage() {
                       header: t('admin.reports.table.status'),
                       cell: 'status',
                       render: (item) => (
-                        <StatusBadge
-                          active={item.status === 'pending_review'}
-                          danger={item.status === 'approved_processing'}
-                          label={statusLabels[item.status]}
-                        />
+                        <StatusBadge tone={reportStatusTone[item.status]}>
+                          {statusLabels[item.status]}
+                        </StatusBadge>
                       ),
                     },
                     {

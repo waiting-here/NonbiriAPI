@@ -1,3 +1,5 @@
+import { StatusBadge } from '@shared/components/ui/StatusBadge';
+import { reportStatusTone } from '../features/operations/reports';
 import { DataTable } from '@shared/components/ui/DataTable';
 import { FormActions } from '@shared/components/ui/Fields';
 import { Field } from '@shared/components/ui/Field';
@@ -9,14 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession, stationSessionWrite } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { listReturnPath } from '@shared/operations/listReturn';
@@ -338,11 +333,9 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               <dd>{detail.data.id}</dd>
               <dt>{t('admin.reports.detail.status')}</dt>
               <dd>
-                <StatusBadge
-                  active={detail.data.status === 'pending_review'}
-                  danger={detail.data.status === 'approved_processing'}
-                  label={statusLabels[detail.data.status]}
-                />
+                <StatusBadge tone={reportStatusTone[detail.data.status]}>
+                  {statusLabels[detail.data.status]}
+                </StatusBadge>
               </dd>
               <dt>{t('admin.reports.detail.progress')}</dt>
               <dd>{progressLabels[detail.data.progress_state]}</dd>

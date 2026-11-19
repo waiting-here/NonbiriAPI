@@ -1612,10 +1612,27 @@ export function UserManagement({
                       key: 'limit_selection',
                       header: (
                         <span className="user-list-selection-heading">
-                          {t('management.users.limitSelection')}
+                          <span className="nb-sr">{t('management.users.limitSelection')}</span>
+                          <TableCheckbox
+                            aria-label={t('management.users.selectPageLimits')}
+                            checked={
+                              eligibleUsers.length > 0 &&
+                              limitSelected.length === eligibleUsers.length
+                            }
+                            indeterminate={
+                              limitSelected.length > 0 &&
+                              limitSelected.length < eligibleUsers.length
+                            }
+                            disabled={batchBusy || users.isFetching || eligibleUsers.length === 0}
+                            onChange={(event) =>
+                              setLimitSelected(
+                                event.target.checked ? eligibleUsers.map((user) => user.id) : [],
+                              )
+                            }
+                          />
                         </span>
                       ),
-                      cell: 'meta',
+                      cell: 'select',
                       render: (entry) => (
                         <span className="user-list-selection">
                           {entry.account_state === 'active' &&
