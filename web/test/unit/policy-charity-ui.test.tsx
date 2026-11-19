@@ -1014,6 +1014,8 @@ describe('experimental policy and charity controls', () => {
 
   test('refetches key authority after a lost response and keeps the committed store policy', async () => {
     let keyReads = 0;
+    let authorityReads = 0;
+    let stored = coreEndpointKey;
     const committed = {
       ...coreEndpointKey,
       force_store_false: true,
@@ -1030,10 +1032,12 @@ describe('experimental policy and charity controls', () => {
 
       if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         keyReads += 1;
-        return jsonResponse(coreNumberedPage([keyReads === 1 ? coreEndpointKey : committed]));
+        return jsonResponse(coreNumberedPage([stored]));
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
-        return jsonResponse(corePage([committed]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/2') {
+        authorityReads += 1;
+        return jsonResponse(stored);
+      }
       if (method === 'GET' && path === '/api/models?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (
@@ -1041,8 +1045,14 @@ describe('experimental policy and charity controls', () => {
         path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
       )
         return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
-      if (method === 'PATCH' && path === '/api/endpoints/1/keys/2')
+      if (method === 'PATCH' && path === '/api/endpoints/1/keys/2') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          expected_revision: '1',
+          force_store_false: true,
+        });
+        stored = committed;
         throw new TypeError('connection reset');
+      }
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1059,6 +1069,7 @@ describe('experimental policy and charity controls', () => {
     });
     await rendered.user.click(action);
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
+    expect(authorityReads).toBe(1);
     await rendered.user.click(screen.getByRole('button', { name: 'More actions · key note' }));
     expect(
       await screen.findByRole('menuitem', { name: 'Stop asking the provider not to store chats' }),
@@ -1137,6 +1148,7 @@ describe('experimental policy and charity controls', () => {
   test('reconciles a lost endpoint-key create response from its recorded operation identity', async () => {
     let keyReads = 0;
     let keyPosts = 0;
+    let authorityReads = 0;
     const createdKey = {
       ...coreEndpointKey,
       id: '4',
@@ -1155,7 +1167,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         keyReads += 1;
         return jsonResponse(
-          coreNumberedPage(keyReads === 1 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
+          coreNumberedPage(keyPosts === 0 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
         );
       }
       if (method === 'POST' && path === '/api/resource-operation-status')
@@ -1164,8 +1176,11 @@ describe('experimental policy and charity controls', () => {
           stage: 'key',
           result: { endpoint_id: '1', endpoint_key_id: '4' },
         });
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
-        return jsonResponse(corePage([coreEndpointKey, createdKey]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/4') {
+        authorityReads += 1;
+        expect(keyPosts).toBe(1);
+        return jsonResponse(createdKey);
+      }
       if (method === 'GET' && path === '/api/models?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (
@@ -1209,6 +1224,7 @@ describe('experimental policy and charity controls', () => {
       operation_key: new Headers(original[1]?.headers).get('Idempotency-Key'),
     });
     expect(keyPosts).toBe(1);
+    expect(authorityReads).toBe(1);
     expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
   });
 
