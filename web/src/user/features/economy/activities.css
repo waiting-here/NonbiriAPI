@@ -102,22 +102,3 @@
   font-size: var(--nb-font-size-sm);
   font-weight: var(--nb-font-weight-semibold);
 }
-@media (width < 40rem) {
-  .economy-activities-page a.limited-entry {
-    grid-template-columns: 7rem minmax(0, 1fr);
-  }
-  .economy-activities-page .limited-entry__cover {
-    aspect-ratio: auto;
-    height: 100%;
-  }
-  .economy-activities-page .limited-entry__copy {
-    padding: var(--nb-space-3);
-  }
-  .economy-activities-page a.gacha-pool-entry {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .economy-activities-page .gacha-pool-entry .limited-entry__cover {
-    aspect-ratio: 16 / 9;
-    height: auto;
-  }
-}
