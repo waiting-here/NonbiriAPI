@@ -40,6 +40,7 @@ func TestGoogleOverloadCooldownPreservesStreakAndRecovers(t *testing.T) {
 	if disabled || until != now+60 {
 		t.Fatal("wrong cooldown or disabled state", disabled, until)
 	}
+	e.assertAttemptBackoff(t, h, "google_model_overloaded", "service", "", now+60)
 	if _, err := e.rail.TakeForDispatch(t.Context(), pending); !errors.Is(err, claim.ErrKeyRateLimited) {
 		t.Fatal("pending dispatch ignored cooldown", err)
 	}
@@ -89,6 +90,11 @@ func TestGoogleOverloadPrefersEveryValidHeaderHint(t *testing.T) {
 			if until.Valid != (delay > 0) || until.Valid && until.Int64 != now+delay {
 				t.Fatal("body fallback replaced header", until, delay)
 			}
+			if delay > 0 {
+				e.assertAttemptBackoff(t, h, "retry_header", "service", "", now+delay)
+			} else {
+				e.assertAttemptBackoff(t, h, "", "", "", 0)
+			}
 			assertU128(t, streak, 2, "header priority keeps failure neutral")
 		})
 	}
@@ -110,4 +116,5 @@ func TestOrdinary503StillIncrementsFailures(t *testing.T) {
 	if until.Valid {
 		t.Fatal("ordinary 503 gained cooldown")
 	}
+	e.assertAttemptBackoff(t, h, "", "", "", 0)
 }
