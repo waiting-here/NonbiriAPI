@@ -15,6 +15,9 @@ export interface AppearancePort {
   load(): Promise<AppearanceState>;
   select(id: string, moment?: string): Promise<AppearanceState>;
 }
+export function eligibleMoment(state: AppearanceState) {
+  return state.moments && !state.moments.includes(state.moment ?? '') ? undefined : state.moment;
+}
 export const appearanceKey = (scope: string) => ['user', 'appearance', scope] as const;
 export const AppearanceContext = createContext<{
   state: AppearanceState;

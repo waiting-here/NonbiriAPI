@@ -1,3 +1,10 @@
+import {
+  artworkActivity,
+  displayDensity,
+  graphicsLimit,
+  layerDensity,
+  type ArtworkPlayback,
+} from '@shared/animation/artwork-playback';
 import { gardenParts, gardenMotion } from './wallpaper-garden';
 import { createMythicCharacter, loadMythicImage } from '../activities/gacha/mythic/character';
 import { decorationGlints, meteorAccent } from './wallpaper-accents';
@@ -52,7 +59,9 @@ export async function renderWallpaper(
   theme: WallpaperTheme,
   signal: AbortSignal,
   quality: WallpaperQuality = wallpaperQuality(),
+  playback?: ArtworkPlayback,
 ): Promise<() => void> {
+  const activity = artworkActivity(playback);
   if (signal.aborted) return () => {};
   const prefix = '/assets/gacha/appearances/layers/' + (quality === 'high' ? 'hires/' : '');
   const id = `${scene}-${theme}` as const;
@@ -117,13 +126,14 @@ export async function renderWallpaper(
     signal.removeEventListener('abort', abort);
   }
   const portrait = character;
+  const limits = playback?.highest ? graphicsLimit(gl) : undefined;
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [],
     buffers: WebGLBuffer[] = [];
   const program = gl.createProgram();
   // Wallpapers are always page backgrounds.
-  const cadence = new PaintCadence(undefined, true);
-  const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const cadence = new PaintCadence(undefined, true, playback?.highest);
+  const preference = activity.systemMotion;
   let frameID = 0,
     stopped = false,
     elapsed = 0,
@@ -149,15 +159,17 @@ export async function renderWallpaper(
     if (!locations.has(name)) locations.set(name, gl.getUniformLocation(program!, name));
     return locations.get(name)!;
   };
+  const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize);
   const stop = () => {
     if (stopped) return;
     stopped = true;
     cancelAnimationFrame(frameID);
+    observer?.disconnect();
     window.removeEventListener('resize', resize);
-    document.removeEventListener('visibilitychange', visibility);
+    activity.unlisten(visibility);
     canvas.removeEventListener('webglcontextlost', lost);
     portrait.surface.removeEventListener('webglcontextlost', lost);
-    preference.removeEventListener('change', visibility);
+    preference?.removeEventListener('change', visibility);
     signal.removeEventListener('abort', stop);
     canvas.dataset.ready = 'false';
     delete canvas.dataset.frameRate;
@@ -171,6 +183,7 @@ export async function renderWallpaper(
     shaders.forEach((shader) => gl.deleteShader(shader));
   };
   function lost(event: Event) {
+    playback?.setFailed(true);
     event.preventDefault();
     stop();
     canvas.style.visibility = 'hidden';
@@ -181,16 +194,27 @@ export async function renderWallpaper(
     reportAt = previous;
     paints = 0;
     cadence.reset();
-    if (!document.hidden && !stopped) frameID = requestAnimationFrame(frame);
+    if (!activity.hidden && !stopped) frameID = requestAnimationFrame(frame);
   }
   function resize() {
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    const density = Math.min(
-      window.devicePixelRatio || 1,
-      3840 / Math.max(width, height),
-      Math.sqrt(8_294_400 / (width * height)),
+    const box = canvas.getBoundingClientRect();
+    const width = box.width || window.innerWidth,
+      height = box.height || window.innerHeight;
+    const scale = Math.max(width / 16, height / 9);
+    const cropX = width / (scale * 16),
+      cropY = height / (scale * 9);
+    const rect = portraits[scene][theme].rect;
+    const native = Math.max(
+      layerDensity(images[0], width / cropX, height / cropY),
+      layerDensity(portrait.still, (width * rect[2]) / cropX, (height * rect[3]) / cropY),
     );
+    const density = playback?.highest
+      ? displayDensity(width, height, native, limits)
+      : Math.min(
+          window.devicePixelRatio || 1,
+          3840 / Math.max(width, height),
+          Math.sqrt(8_294_400 / (width * height)),
+        );
     if (width === layoutWidth && height === layoutHeight && density === layoutDensity) return;
     layoutWidth = width;
     layoutHeight = height;
@@ -198,21 +222,22 @@ export async function renderWallpaper(
     canvas.width = Math.max(1, Math.round(width * density));
     canvas.height = Math.max(1, Math.round(height * density));
     gl!.viewport(0, 0, canvas.width, canvas.height);
-    const scale = Math.max(width / 16, height / 9);
-    const cropX = width / (scale * 16),
-      cropY = height / (scale * 9);
     gl!.uniform2f(uniform('crop'), cropX, cropY);
     gl!.uniform2f(uniform('offset'), (1 - cropX) * (width < 640 ? 1 : 0.65), (1 - cropY) * 0.5);
     const portraitWidth = Math.max(
       1,
       Math.min(
-        quality === 'high' ? 3840 : 1920,
+        playback?.highest
+          ? Math.min(portrait.still.naturalWidth, limits![0], (limits![1] * 1672) / 941)
+          : quality === 'high'
+            ? 3840
+            : 1920,
         Math.round((canvas.width * portraits[scene][theme].rect[2]) / cropX),
       ),
     );
     portrait.resize(portraitWidth, Math.round((portraitWidth * 941) / 1672));
     cadence.reset();
-    if (preference.matches && !stopped && !document.hidden) {
+    if (preference?.matches && !stopped && !activity.hidden) {
       cancelAnimationFrame(frameID);
       frameID = requestAnimationFrame(frame);
     }
@@ -258,12 +283,12 @@ export async function renderWallpaper(
   }
   function frame(now: number) {
     frameID = 0;
-    if (stopped || document.hidden) return;
+    if (stopped || activity.hidden) return;
     elapsed += Math.max(0, Math.min(now - previous, 100));
     previous = now;
     try {
       if (cadence.due(now)) {
-        const t = preference.matches ? 0 : elapsed / 1000,
+        const t = preference?.matches ? 0 : elapsed / 1000,
           night = theme === 'dark';
         gl!.uniform1f(uniform('time'), t);
         gl!.uniform1f(uniform('blink'), blinkAt(t));
@@ -284,7 +309,7 @@ export async function renderWallpaper(
         const far = ((t * 0.0028 + 0.08) % 1.15) - 1.15;
         for (const x of [far, far + 1.15]) draw(3, 2, [x, 0.35, 1.2, 0.44], 0.27, cloudTint);
         if (scene === 'wandering') {
-          const rect = whaleRect(t, window.innerWidth, window.innerHeight);
+          const rect = whaleRect(t, layoutWidth, layoutHeight);
           draw(4, 3, rect, 1, night ? [0.55, 0.76, 1] : [1, 1, 1], true);
           canvas.dataset.whaleX = rect[0].toFixed(3);
         }
@@ -294,8 +319,8 @@ export async function renderWallpaper(
           draw(0, 7, [0, 0, 1, 1]);
           for (const accent of decorationGlints(t, theme)) draw(0, 9, accent.rect, accent.opacity);
         }
-        paintGarden(false, t, !preference.matches);
-        portrait.paint(t, preference.matches ? 0 : blinkAt(t), !preference.matches);
+        paintGarden(false, t, !preference?.matches);
+        portrait.paint(t, preference?.matches ? 0 : blinkAt(t), !preference?.matches);
         gl!.activeTexture(gl!.TEXTURE0);
         gl!.bindTexture(gl!.TEXTURE_2D, textures[1]);
         if (
@@ -317,8 +342,9 @@ export async function renderWallpaper(
         }
         gl!.uniform1f(uniform('blink'), 0);
         draw(1, 1, portraits[scene][theme].rect);
-        paintGarden(true, t, !preference.matches);
+        paintGarden(true, t, !preference?.matches);
         canvas.dataset.scene = id;
+        canvas.dataset.motionTime = t.toFixed(3);
         canvas.dataset.ready = 'true';
         paints++;
         if (now - reportAt >= 2000) {
@@ -332,7 +358,7 @@ export async function renderWallpaper(
       canvas.style.visibility = 'hidden';
       return;
     }
-    if (!preference.matches) frameID = requestAnimationFrame(frame);
+    if (!preference?.matches) frameID = requestAnimationFrame(frame);
   }
   try {
     canvas.style.removeProperty('visibility');
@@ -433,17 +459,18 @@ export async function renderWallpaper(
       new Float32Array([...water.flat(), ...Array((4 - water.length) * 4).fill(0)]),
     );
     resize();
+    observer?.observe(canvas);
     window.addEventListener('resize', resize);
-    document.addEventListener('visibilitychange', visibility);
+    activity.listen(visibility);
     canvas.addEventListener('webglcontextlost', lost);
     portrait.surface.addEventListener('webglcontextlost', lost);
-    preference.addEventListener('change', visibility);
+    preference?.addEventListener('change', visibility);
     images.forEach((image) => {
       image.src = '';
     });
     signal.addEventListener('abort', stop, { once: true });
     reportAt = previous = performance.now();
-    if (!document.hidden) {
+    if (!activity.hidden) {
       cancelAnimationFrame(frameID);
       frameID = requestAnimationFrame(frame);
     }

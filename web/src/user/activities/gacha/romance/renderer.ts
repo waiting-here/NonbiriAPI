@@ -1,3 +1,8 @@
+import {
+  artworkActivity,
+  displayDensity,
+  type ArtworkPlayback,
+} from '@shared/animation/artwork-playback';
 import { momentReferenceSize, type MomentFrame } from '../moment-frame';
 import { createScene } from './compositor.js';
 import { PaintCadence } from '@shared/animation/illustration';
@@ -19,10 +24,12 @@ export async function renderRomance(
     backgroundOnly?: boolean;
     frozenTime?: number;
     paused?: () => boolean;
+    playback?: ArtworkPlayback;
     signal?: AbortSignal;
     ambient?: boolean;
   } = {},
 ) {
+  const activity = artworkActivity(options.playback);
   if (options.signal?.aborted) return () => {};
   const scene = await createScene(id, options.polished, options);
   if (options.signal?.aborted) {
@@ -32,7 +39,7 @@ export async function renderRomance(
   const landscape = options.landscape;
   const independentAppearance = options.polished && options.variant === 'appearance';
   const buffer = document.createElement('canvas');
-  const cadence = new PaintCadence(undefined, options.ambient);
+  const cadence = new PaintCadence(undefined, options.ambient, options.playback?.highest);
   let request = 0,
     elapsed = options.frozenTime ?? 0,
     previous = 0,
@@ -43,13 +50,28 @@ export async function renderRomance(
       buffer.height = canvas.height;
       return;
     }
-    const width = canvas.getBoundingClientRect().width || 768;
+    const box = canvas.getBoundingClientRect();
+    const width = box.width || 768;
+    const height = box.height || innerHeight;
     const ratio = window.devicePixelRatio || 1;
     const frame = options.characterOnly ? options.momentFrame : undefined;
     const cap =
       (options.highResolution ? 2560 : 1280) *
       (frame ? frame.canvas[0] / frame.originalRegion.width : 1);
-    canvas.width = Math.max(256, Math.min(cap, Math.round(width * ratio)));
+    canvas.width =
+      options.playback?.highest && landscape
+        ? Math.max(
+            1,
+            Math.round(
+              width *
+                displayDensity(
+                  width,
+                  height,
+                  Math.min(scene.backgroundSize[0] / width, scene.backgroundSize[1] / height),
+                ),
+            ),
+          )
+        : Math.max(256, Math.min(cap, Math.round(width * ratio)));
     canvas.height = landscape
       ? Math.round((canvas.width * (canvas.getBoundingClientRect().height || innerHeight)) / width)
       : Math.round(
@@ -100,18 +122,18 @@ export async function renderRomance(
   };
   const tick = (now: number) => {
     if (disposed) return;
-    if (!document.hidden && !options.paused?.()) {
+    if (!activity.hidden && !options.paused?.()) {
       elapsed += previous ? Math.min((now - previous) / 1000, 0.05) : 0;
       if (cadence.due(now)) paint();
     }
     previous = now;
-    if (!document.hidden) request = requestAnimationFrame(tick);
+    if (!activity.hidden) request = requestAnimationFrame(tick);
   };
   const visibility = () => {
     cancelAnimationFrame(request);
     previous = 0;
     cadence.reset();
-    if (!document.hidden && !disposed && options.frozenTime === undefined)
+    if (!activity.hidden && !disposed && options.frozenTime === undefined)
       request = requestAnimationFrame(tick);
   };
   measure();
@@ -121,14 +143,14 @@ export async function renderRomance(
     paint();
   });
   observer.observe(canvas);
-  if (options.frozenTime === undefined && !document.hidden) request = requestAnimationFrame(tick);
-  document.addEventListener('visibilitychange', visibility);
+  if (options.frozenTime === undefined && !activity.hidden) request = requestAnimationFrame(tick);
+  activity.listen(visibility);
   const dispose = () => {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(request);
     observer.disconnect();
-    document.removeEventListener('visibilitychange', visibility);
+    activity.unlisten(visibility);
     options.signal?.removeEventListener('abort', dispose);
     scene.dispose();
     canvas.dataset.ready = 'false';

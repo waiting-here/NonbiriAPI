@@ -1,3 +1,4 @@
+import { artworkActivity, type ArtworkPlayback } from '@shared/animation/artwork-playback';
 import { blinkAt, PaintCadence } from '@shared/animation/illustration';
 import { cardEyelids } from '../card-eyelids';
 import type { MomentExpansion } from '../moment-frame';
@@ -9,6 +10,7 @@ import type { MythicCard } from './layers';
 export type MythicOptions = {
   frozenTime?: number;
   paused?: () => boolean;
+  playback?: ArtworkPlayback;
   highResolution?: boolean;
   characterOnly?: boolean;
   signal?: AbortSignal;
@@ -19,6 +21,7 @@ export async function renderMythicSSR(
   id: MythicCard,
   options: MythicOptions = {},
 ) {
+  const activity = artworkActivity(options.playback);
   if (options.signal?.aborted) return () => {};
   const expansion =
     options.characterOnly &&
@@ -46,7 +49,7 @@ export async function renderMythicSSR(
         controller.signal,
       )
     : Promise.resolve(null);
-  const guarded = <T,>(promise: Promise<T>) =>
+  const guarded = <T>(promise: Promise<T>) =>
     promise.catch((error: unknown) => {
       controller.abort();
       throw error;
@@ -86,8 +89,8 @@ export async function renderMythicSSR(
     if (expanded) expanded.src = '';
     throw error;
   }
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)'),
-    cadence = new PaintCadence();
+  const reduced = activity.systemMotion,
+    cadence = new PaintCadence(undefined, !!options.playback, options.playback?.highest);
   let raf = 0,
     previous: number | undefined,
     time = options.frozenTime ?? 0,
@@ -95,7 +98,7 @@ export async function renderMythicSSR(
   const frameSize = expansion?.canvas ?? [1024, 1536];
   const paint = () => {
     if (disposed) return;
-    const motion = !reduced.matches;
+    const motion = !reduced?.matches;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     environment?.paint(ctx, time, canvas.width, canvas.height, motion);
     const region = expansion?.originalRegion;
@@ -130,7 +133,7 @@ export async function renderMythicSSR(
   };
   const tick = (now: number) => {
     raf = 0;
-    if (disposed || document.hidden || reduced.matches) return;
+    if (disposed || activity.hidden || reduced?.matches) return;
     if (!options.paused?.()) {
       time += previous === undefined ? 0 : Math.max(0, Math.min((now - previous) / 1000, 0.05));
       if (cadence.due(now)) {
@@ -149,7 +152,7 @@ export async function renderMythicSSR(
     cancelAnimationFrame(raf);
     previous = undefined;
     cadence.reset();
-    if (!disposed && !document.hidden && !reduced.matches && options.frozenTime === undefined)
+    if (!disposed && !activity.hidden && !reduced?.matches && options.frozenTime === undefined)
       raf = requestAnimationFrame(tick);
   };
   const change = () => {
@@ -174,8 +177,8 @@ export async function renderMythicSSR(
     cancelAnimationFrame(raf);
     observer.disconnect();
     window.removeEventListener('resize', onResize);
-    document.removeEventListener('visibilitychange', resume);
-    reduced.removeEventListener('change', change);
+    activity.unlisten(resume);
+    reduced?.removeEventListener('change', change);
     options.signal?.removeEventListener('abort', dispose);
     character.surface.removeEventListener('webglcontextlost', lost);
     environment?.surfaces.forEach((surface) =>
@@ -188,6 +191,7 @@ export async function renderMythicSSR(
     canvas.dataset.ready = 'false';
   };
   function lost(event?: Event) {
+    options.playback?.setFailed(true);
     event?.preventDefault();
     dispose();
     canvas.style.visibility = 'hidden';
@@ -199,8 +203,8 @@ export async function renderMythicSSR(
     measure();
     observer.observe(canvas);
     window.addEventListener('resize', onResize);
-    document.addEventListener('visibilitychange', resume);
-    reduced.addEventListener('change', change);
+    activity.listen(resume);
+    reduced?.addEventListener('change', change);
     options.signal?.addEventListener('abort', dispose, { once: true });
     if (options.signal?.aborted) {
       dispose();

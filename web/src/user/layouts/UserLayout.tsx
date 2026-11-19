@@ -33,6 +33,7 @@ import {
   activeUserNavGroup,
   userRouteLayout,
 } from '../navigation';
+import { ActiveAppearanceBackdrop } from '../appearance/AppearanceBackdrop';
 import { AccountAppearance } from '../appearance/AppearanceProvider';
 import { BackgroundViewButton } from '../appearance/BackgroundViewButton';
 import { AppearanceButton } from '../appearance/AppearanceButton';
@@ -393,6 +394,7 @@ export function UserLayout() {
             ) : null}
           </div>
         </header>
+        <ActiveAppearanceBackdrop />
         {logout.error ? (
           <div className="shell-error nb-shell-status">
             {isApiError(logout.error) ? (

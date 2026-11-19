@@ -40,15 +40,15 @@ for (const design of ['celestial', 'wandering', 'amber'])
         const trigger = page.getByRole('button', { name: '欣赏背景', exact: true });
         await expect(page.locator('.loan-card')).toBeVisible();
         await expect(trigger).toHaveCount(0);
-        const appearance = page.getByRole('button', { name: '外观', exact: true });
-        if (width < 1024) await page.getByRole('button', { name: '打开导航', exact: true }).click();
+        const appearance = page.getByRole('button', { name: '装扮', exact: true });
+
         await appearance.click();
         await expect(page.locator('.nb-appearance-option')).toHaveCount(1);
         await expect(page.getByText('获得对应 SP 卡牌后解锁', { exact: true })).toHaveCount(0);
         await page.getByRole('button', { name: '关闭', exact: true }).click();
         visible = ['default', design];
         await page.reload();
-        if (width < 1024) await page.getByRole('button', { name: '打开导航', exact: true }).click();
+
         await appearance.click();
         await expect(page.locator('.nb-appearance-option')).toHaveCount(2);
         await expect(page.getByText('获得对应 SP 卡牌后解锁', { exact: true })).toBeVisible();
@@ -57,9 +57,9 @@ for (const design of ['celestial', 'wandering', 'amber'])
         selected = design;
         unlocked = ['default', design];
         await page.reload();
-        await expect(trigger).toBeVisible();
         const amount = page.locator('.loan-card select');
         await amount.selectOption('2');
+        if (width < 1024) await appearance.click();
         await trigger.click();
         const view = page.getByRole('dialog', { name: '欣赏背景', exact: true });
         await expect(view).toBeVisible();

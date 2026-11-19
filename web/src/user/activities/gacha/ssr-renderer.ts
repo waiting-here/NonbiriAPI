@@ -1,3 +1,4 @@
+import type { ArtworkPlayback } from '@shared/animation/artwork-playback';
 import type { MomentExpansion } from './moment-frame';
 import { specialCards } from './special-scenes';
 
@@ -7,7 +8,12 @@ export async function renderSSR(
   frozenTime?: number,
   paused?: () => boolean,
   highResolution = false,
-  options: { characterOnly?: boolean; signal?: AbortSignal; momentFrame?: MomentExpansion } = {},
+  options: {
+    playback?: ArtworkPlayback;
+    characterOnly?: boolean;
+    signal?: AbortSignal;
+    momentFrame?: MomentExpansion;
+  } = {},
 ) {
   if (options.signal?.aborted) return () => {};
   if (/^[gij]-/.test(id)) {
@@ -45,7 +51,13 @@ export async function renderSSR(
   if (theme) {
     const { renderSpecial } = await import('./special-renderer');
     if (options.signal?.aborted) return () => {};
-    return renderSpecial(canvas, theme, { ...options, frozenTime, paused, highResolution });
+    return renderSpecial(canvas, theme, {
+      ...options,
+      frozenTime,
+      paused,
+      highResolution,
+      ambient: !!options.playback,
+    });
   }
   throw new Error('card-animation-unavailable');
 }

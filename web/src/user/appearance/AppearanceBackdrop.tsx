@@ -2,93 +2,87 @@ import { useEffect, useRef, useState } from 'react';
 import { MomentBackdrop } from './MomentBackdrop';
 import { SpecialBackdrop } from './SpecialBackdrop';
 import { isSpecialTheme } from '../activities/gacha/special-scenes';
-import type { WallpaperQuality, WallpaperTheme } from './wallpaper-motion';
+import { artSourceSet, highResolutionArt } from '../activities/gacha/art-resolution';
+import type { WallpaperTheme } from './wallpaper-motion';
 import { useArtworkPolicy } from '@shared/artwork/context';
+import { useBackgroundPlayback } from './playback-context';
+import { ArtworkStage } from './stage';
+import { startBackground } from './start-background';
+import { useStageSize } from './stage-size';
+import { defaultMoment, momentByKey, momentArtworkKeys } from './moments';
+import { eligibleMoment, useOptionalAppearance } from './context';
 
 const colorMode = (): WallpaperTheme =>
   document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-const qualityLevel = (): WallpaperQuality =>
-  Math.max(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1920
-    ? 'high'
-    : 'standard';
+
+export function ActiveAppearanceBackdrop() {
+  const appearance = useOptionalAppearance();
+  const state = appearance?.state;
+  return state?.unlocked.includes(state.selected) ? (
+    <AppearanceBackdrop selected={state.selected} moment={eligibleMoment(state)} />
+  ) : null;
+}
 
 export function AppearanceBackdrop({ selected, moment }: { selected: string; moment?: string }) {
   const policy = useArtworkPolicy();
-  const effective = policy.allowed('appearance:' + selected) ? selected : 'default';
-  return <PermittedAppearanceBackdrop selected={effective} moment={moment} />;
+  if (selected === 'default' || !policy.allowed('appearance:' + selected)) return null;
+  const choice = momentByKey.get(moment ?? '') ?? defaultMoment;
+  const artwork = policy.allowed(momentArtworkKeys(choice)) ? choice : defaultMoment;
+  return (
+    <ArtworkStage group={selected === 'heart-moment' && !artwork.card}>
+      {selected === 'heart-moment' ? (
+        <MomentBackdrop key={artwork.key} moment={artwork.key} />
+      ) : (
+        <Wallpaper key={selected} selected={selected} />
+      )}
+    </ArtworkStage>
+  );
 }
-function PermittedAppearanceBackdrop({ selected, moment }: { selected: string; moment?: string }) {
+
+function Wallpaper({ selected }: { selected: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const { playback, animated } = useBackgroundPlayback();
   const [theme, setTheme] = useState(colorMode);
-  const [quality, setQuality] = useState(qualityLevel);
+  const size = useStageSize();
+  const high = playback.highest || Math.max(...size) * (window.devicePixelRatio || 1) > 1920;
   useEffect(() => {
     const observer = new MutationObserver(() => setTheme(colorMode()));
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
     });
-    const resize = () => setQuality(qualityLevel());
-    window.addEventListener('resize', resize);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', resize);
-    };
+    return () => observer.disconnect();
   }, []);
   useEffect(() => {
     const surface = canvas.current;
-    if (!surface || (selected !== 'celestial' && selected !== 'wandering')) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let controller: AbortController | undefined, release: (() => void) | undefined;
-    const update = () => {
-      controller?.abort();
-      release?.();
-      release = undefined;
-      surface.dataset.ready = 'false';
-      if (reduced.matches) return;
-      const next = new AbortController();
-      controller = next;
-      void import('./wallpaper-motion')
-        .then(({ renderWallpaper }) =>
-          renderWallpaper(surface, selected, theme, next.signal, quality),
-        )
-        .then((stop) => {
-          if (next.signal.aborted) stop();
-          else release = stop;
-        })
-        .catch(() => {
-          /* The full static painting remains visible. */
-        });
-    };
-    reduced.addEventListener('change', update);
-    update();
-    return () => {
-      reduced.removeEventListener('change', update);
-      controller?.abort();
-      release?.();
-    };
-  }, [selected, theme, quality]);
-  if (selected === 'heart-moment') return <MomentBackdrop key={moment} moment={moment} />;
-  if (isSpecialTheme(selected)) return <SpecialBackdrop theme={selected} />;
+    if (!surface || !animated || (selected !== 'celestial' && selected !== 'wandering')) return;
+    return startBackground(surface, playback, async (signal) => {
+      const { renderWallpaper } = await import('./wallpaper-motion');
+      return renderWallpaper(
+        surface,
+        selected,
+        theme,
+        signal,
+        high ? 'high' : 'standard',
+        playback,
+      );
+    });
+  }, [selected, theme, high, playback, animated]);
+  if (isSpecialTheme(selected))
+    return <SpecialBackdrop theme={selected} dark={theme === 'dark'} high={high} />;
   if (selected !== 'celestial' && selected !== 'wandering') return null;
-  const revision = '?v=7';
-  const filename = selected + '-' + theme + '.webp' + revision;
+  const src = '/assets/gacha/appearances/' + selected + '-' + theme + '.webp?v=7';
   return (
     <>
       <img
         className="nb-appearance-still"
         alt=""
-        aria-hidden="true"
-        src={'/assets/gacha/appearances/' + filename}
-        srcSet={
-          '/assets/gacha/appearances/' +
-          filename +
-          ' 1672w, /assets/gacha/hires/appearances/' +
-          filename +
-          ' 3840w'
-        }
-        sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"
+        src={playback.highest ? highResolutionArt(src) : src}
+        srcSet={playback.highest ? undefined : artSourceSet(src)}
+        sizes={Math.max(size[0], (size[1] * 16) / 9) + 'px'}
       />
       <canvas
+        key={playback.sceneKey}
         ref={canvas}
         className="nb-appearance-backdrop"
         aria-hidden="true"

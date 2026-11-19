@@ -140,27 +140,14 @@ it('rechecks resolution after the canvas layout changes and disconnects its obse
   expect(disconnect).toHaveBeenCalledOnce();
 });
 
-it('updates the artwork hue after loading and clears it on selection changes and unmount', () => {
-  const context = {
-    drawImage: vi.fn(),
-    getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([255, 128, 0, 255]) })),
-  };
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-    context as unknown as CanvasRenderingContext2D,
-  );
-  const view = render(<MomentBackdrop moment="cover:permanent" />);
-  const scene = view.container.querySelector('img')!;
-  Object.defineProperty(scene, 'naturalWidth', { value: 100, configurable: true });
-  Object.defineProperty(scene, 'complete', { value: false, configurable: true });
-  fireEvent.load(scene);
-  expect(document.documentElement.style.getPropertyValue('--nb-moment-hue')).toBe('30deg');
-  view.rerender(<MomentBackdrop moment="card:a-chatgpt" />);
-  expect(document.documentElement.style.getPropertyValue('--nb-moment-hue')).toBe('');
-  context.getImageData.mockReturnValue({ data: new Uint8ClampedArray([0, 128, 255, 255]) });
-  fireEvent.load(scene);
-  expect(document.documentElement.style.getPropertyValue('--nb-moment-hue')).toBe('210deg');
+it('uses the registered palette on the first frame and releases it when leaving', () => {
+  const hue = () => document.documentElement.style.getPropertyValue('--nb-moment-hue');
+  const view = render(<MomentBackdrop moment="illustration:l" />);
+  expect(hue()).toBe('231deg');
+  view.rerender(<MomentBackdrop moment="illustration:o" />);
+  expect(hue()).toBe('38deg');
   view.unmount();
-  expect(document.documentElement.style.getPropertyValue('--nb-moment-hue')).toBe('');
+  expect(hue()).toBe('');
 });
 
 it('expands only a registered moment canvas while preserving the original static frame and cleanup', async () => {
@@ -225,9 +212,10 @@ it('uses one full-screen scene with a separately registered transparent characte
   );
   expect(view.container.querySelector('.nb-moment-character__scene')).toBeNull();
   expect(view.container.querySelector('.nb-moment-character__plate')).toBeNull();
-  expect(
-    view.container.querySelector('.nb-moment-character__hero'),
-  ).toHaveAttribute('src', '/assets/gacha/motion/s-claude/hero.webp');
+  expect(view.container.querySelector('.nb-moment-character__hero')).toHaveAttribute(
+    'src',
+    '/assets/gacha/motion/s-claude/hero.webp',
+  );
   expect(vi.mocked(renderSSR).mock.calls[0][5]?.momentFrame).toBeUndefined();
   const character = view.container.querySelector<HTMLElement>('.nb-moment-character')!;
   const hero = view.container.querySelector<HTMLImageElement>('.nb-moment-character__hero')!;

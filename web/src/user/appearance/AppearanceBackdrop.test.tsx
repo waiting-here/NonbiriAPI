@@ -1,6 +1,8 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AppearanceBackdrop } from './AppearanceBackdrop';
+import { BackgroundPlayback } from './playback';
+import { useBackgroundPlayback } from './playback-context';
 import { renderWallpaper } from './wallpaper-motion';
 import { renderSpecial } from '../activities/gacha/special-renderer';
 
@@ -204,4 +206,55 @@ it('retains the responsive tomorrow layers when animation loading fails', async 
   ]);
   expect(view.container.querySelector('canvas')).toHaveAttribute('data-ready', 'false');
   view.unmount();
+});
+
+it('honors explicit motion and highest quality under system reduction and retries only the current artwork', async () => {
+  motionPreference(true);
+  localStorage.clear();
+  const stop = vi.fn();
+  vi.mocked(renderWallpaper)
+    .mockRejectedValueOnce(new Error('unavailable'))
+    .mockResolvedValue(stop);
+  function Controls() {
+    const { setQuality, setMotion, retry } = useBackgroundPlayback();
+    return (
+      <>
+        <button onClick={() => setQuality('highest')}>Highest</button>
+        <button onClick={() => setMotion('full')}>Full</button>
+        <button onClick={() => setMotion('static')}>Static</button>
+        <button onClick={retry}>Retry</button>
+      </>
+    );
+  }
+  const view = render(
+    <BackgroundPlayback sceneKey="account/celestial">
+      <Controls />
+      <AppearanceBackdrop selected="celestial" />
+    </BackgroundPlayback>,
+  );
+  try {
+    await act(async () => view.getByText('Highest').click());
+    expect(renderWallpaper).not.toHaveBeenCalled();
+    expect(view.container.querySelector('img')?.src).toContain('/hires/appearances/');
+    await act(async () => view.getByText('Full').click());
+    await waitFor(() =>
+      expect(vi.mocked(renderWallpaper).mock.calls.at(-1)?.[5]?.failed).toBe(true),
+    );
+    const first = vi.mocked(renderWallpaper).mock.calls[0];
+    expect(first[4]).toBe('high');
+    await act(async () => view.getByText('Retry').click());
+    await waitFor(() => expect(renderWallpaper).toHaveBeenCalledTimes(2));
+    expect(first[3].aborted).toBe(true);
+    const current = vi.mocked(renderWallpaper).mock.calls[1];
+    expect(current[5]).not.toBe(first[5]);
+    expect(current[5]?.failed).toBe(false);
+    await act(async () => view.getByText('Static').click());
+    expect(current[3].aborted).toBe(true);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(localStorage.getItem('nb.appearance-quality')).toBe('highest');
+    expect(localStorage.getItem('nb.appearance-motion')).toBe('static');
+  } finally {
+    view.unmount();
+    localStorage.clear();
+  }
 });

@@ -9,9 +9,11 @@ import {
 import {
   AppearanceContext,
   appearanceKey,
+  eligibleMoment,
   type AppearancePort,
   type AppearanceState,
 } from './context';
+import { BackgroundPlayback } from './playback';
 import { AppearanceBackdrop } from './AppearanceBackdrop';
 import './appearance.css';
 import { ConfiguredArtworkPolicy } from '@shared/artwork/policy';
@@ -22,8 +24,10 @@ const defaults: AppearanceState = { selected: 'default', unlocked: ['default'], 
 export function AppearanceProvider({
   port,
   children,
+  backdropInShell = false,
 }: {
   port: AppearancePort | null;
+  backdropInShell?: boolean;
   children: ReactNode;
 }) {
   const client = useQueryClient();
@@ -42,9 +46,11 @@ export function AppearanceProvider({
   });
   const state = port && !query.error ? (query.data ?? defaults) : defaults;
   const policy = useArtworkPolicy();
-  const effectiveSelected = policy.allowed('appearance:' + state.selected)
-    ? state.selected
-    : 'default';
+  const effectiveMoment = eligibleMoment(state);
+  const effectiveSelected =
+    state.unlocked.includes(state.selected) && policy.allowed('appearance:' + state.selected)
+      ? state.selected
+      : 'default';
   useLayoutEffect(() => {
     document.documentElement.dataset.appearance = effectiveSelected;
     return () => {
@@ -55,25 +61,33 @@ export function AppearanceProvider({
     void client.invalidateQueries({ queryKey: appearanceKey(scope) });
   }, [client, scope]);
   return (
-    <AppearanceContext
-      value={
-        port
-          ? {
-              state,
-              pending: query.isPending,
-              error: query.error,
-              saving: mutation.isPending,
-              select: async (id, moment) => {
-                await mutation.mutateAsync({ id, moment });
-              },
-              refresh,
-            }
-          : null
+    <BackgroundPlayback
+      sceneKey={
+        scope + '/' + effectiveSelected + '/' + (state.moment ?? '') + '/' + policy.disabled
       }
     >
-      <AppearanceBackdrop selected={effectiveSelected} moment={state.moment} />
-      {children}
-    </AppearanceContext>
+      <AppearanceContext
+        value={
+          port
+            ? {
+                state,
+                pending: query.isPending,
+                error: query.error,
+                saving: mutation.isPending,
+                select: async (id, moment) => {
+                  await mutation.mutateAsync({ id, moment });
+                },
+                refresh,
+              }
+            : null
+        }
+      >
+        {!backdropInShell && (
+          <AppearanceBackdrop selected={effectiveSelected} moment={effectiveMoment} />
+        )}
+        {children}
+      </AppearanceContext>
+    </BackgroundPlayback>
   );
 }
 
@@ -110,7 +124,7 @@ export function AccountAppearance({
   }, [account, client]);
   return (
     <ConfiguredArtworkPolicy>
-      <AppearanceProvider key={account ?? 'anonymous'} port={port}>
+      <AppearanceProvider backdropInShell key={account ?? 'anonymous'} port={port}>
         {children}
       </AppearanceProvider>
     </ConfiguredArtworkPolicy>

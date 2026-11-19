@@ -1,3 +1,4 @@
+import { artworkActivity, type ArtworkPlayback } from '@shared/animation/artwork-playback';
 import { blinkAt, PaintCadence } from '@shared/animation/illustration';
 import type { MomentExpansion } from '../moment-frame';
 import { createClassicScene } from './scene';
@@ -6,6 +7,7 @@ import type { ClassicCard } from './types';
 export type ClassicOptions = {
   frozenTime?: number;
   paused?: () => boolean;
+  playback?: ArtworkPlayback;
   highResolution?: boolean;
   characterOnly?: boolean;
   signal?: AbortSignal;
@@ -17,10 +19,11 @@ export async function renderClassicSSR(
   id: string,
   options: ClassicOptions = {},
 ) {
+  const activity = artworkActivity(options.playback);
   const { signal, frozenTime, paused, highResolution } = options;
   signal?.throwIfAborted();
-  const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const cadence = new PaintCadence();
+  const preference = activity.systemMotion;
+  const cadence = new PaintCadence(undefined, !!options.playback, options.playback?.highest);
   const frame =
     options.characterOnly && options.momentFrame?.mode === 'expanded-layer'
       ? options.momentFrame
@@ -29,16 +32,17 @@ export async function renderClassicSSR(
   let elapsed = frozenTime ?? 0;
   let previous: number | undefined;
   let disposed = false;
-  const scene = await createClassicScene(canvas, id as ClassicCard, options, frame, () =>
-    dispose(),
-  );
+  const scene = await createClassicScene(canvas, id as ClassicCard, options, frame, () => {
+    options.playback?.setFailed(true);
+    dispose();
+  });
   if (signal?.aborted) {
     scene.dispose();
     signal.throwIfAborted();
   }
 
   const paint = () => {
-    const motion = !preference.matches;
+    const motion = !preference?.matches;
     scene.paint(elapsed, motion ? blinkAt(elapsed) : 0, motion);
   };
   const measure = () => {
@@ -59,7 +63,7 @@ export async function renderClassicSSR(
   };
   const tick = (now: number) => {
     queued = 0;
-    if (disposed || preference.matches || document.hidden) return;
+    if (disposed || preference?.matches || activity.hidden) return;
     if (!paused?.()) {
       elapsed += previous === undefined ? 0 : Math.min(0.05, Math.max(0, (now - previous) / 1000));
       if (cadence.due(now)) paint();
@@ -72,7 +76,7 @@ export async function renderClassicSSR(
     queued = 0;
     previous = undefined;
     cadence.reset();
-    if (!disposed && !document.hidden && !preference.matches && frozenTime === undefined)
+    if (!disposed && !activity.hidden && !preference?.matches && frozenTime === undefined)
       queued = requestAnimationFrame(tick);
   };
   const preferenceChanged = () => {
@@ -85,9 +89,9 @@ export async function renderClassicSSR(
     disposed = true;
     cancelAnimationFrame(queued);
     observer.disconnect();
-    document.removeEventListener('visibilitychange', reset);
+    activity.unlisten(reset);
     window.removeEventListener('resize', measure);
-    preference.removeEventListener('change', preferenceChanged);
+    preference?.removeEventListener('change', preferenceChanged);
     signal?.removeEventListener('abort', dispose);
     scene.dispose();
     canvas.dataset.ready = 'false';
@@ -97,9 +101,9 @@ export async function renderClassicSSR(
     canvas.style.removeProperty('visibility');
     canvas.dataset.ready = 'true';
     observer.observe(canvas);
-    document.addEventListener('visibilitychange', reset);
+    activity.listen(reset);
     window.addEventListener('resize', measure);
-    preference.addEventListener('change', preferenceChanged);
+    preference?.addEventListener('change', preferenceChanged);
     signal?.addEventListener('abort', dispose, { once: true });
     reset();
   } catch (error) {
