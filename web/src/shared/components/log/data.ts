@@ -1,8 +1,11 @@
 import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
+import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
 import { normalizeRouteDecision, type RouteDecision } from './routeDecision';
 import {
+  normalizeAttemptHealthImpact,
   normalizeFailureDisablement,
   normalizeFailureSummary,
+  type AttemptHealthImpact,
   type FailureDisablement,
   type FailureGroup,
 } from './managementFailures';
@@ -212,19 +215,19 @@ export interface UserLogAttempt extends LogAttemptCommon {
   key_note: string;
 }
 
-export interface AdminLogAttempt extends LogAttemptCommon {
+interface ManagementLogAttempt extends LogAttemptCommon {
   failure_disablement?: FailureDisablement;
+  health_impact?: AttemptHealthImpact;
+  native_service?: NativeService;
   donation_id?: string | null;
   donation_key_id?: string | null;
-  role: 'admin';
   usage_total_mismatch: boolean;
 }
-export interface StewardLogAttempt extends LogAttemptCommon {
-  failure_disablement?: FailureDisablement;
-  donation_id?: string | null;
-  donation_key_id?: string | null;
+export interface AdminLogAttempt extends ManagementLogAttempt {
+  role: 'admin';
+}
+export interface StewardLogAttempt extends ManagementLogAttempt {
   role: 'steward';
-  usage_total_mismatch: boolean;
 }
 export type RoleLogAttempt = UserLogAttempt | AdminLogAttempt | StewardLogAttempt;
 
@@ -309,6 +312,16 @@ const ATTEMPT_FIELDS = [
   'usage',
   'started_at',
   'completed_at',
+] as const;
+const REQUIRED_MANAGEMENT_ATTEMPT_FIELDS = [...ATTEMPT_FIELDS, 'usage_total_mismatch'] as const;
+const MANAGEMENT_ATTEMPT_FIELDS = [
+  ...REQUIRED_MANAGEMENT_ATTEMPT_FIELDS,
+  'donation_id',
+  'donation_key_id',
+  'error_diagnostics',
+  'failure_disablement',
+  'health_impact',
+  'native_service',
 ] as const;
 
 export function normalizeLogUsage(value: unknown): LogUsage {
@@ -654,13 +667,6 @@ function managementCharityModelID(root: WireRecord, route: LogRouteKind): string
   return id;
 }
 
-function managementAttemptTarget(root: WireRecord) {
-  const donation_id = nullableDecimalID(root.donation_id ?? null, 'donation id');
-  const donation_key_id = nullableDecimalID(root.donation_key_id ?? null, 'donation key id');
-  if (Boolean(donation_id) !== Boolean(donation_key_id)) invalidResponse('donation key identity');
-  return { donation_id, donation_key_id };
-}
-
 function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
   if (value === null) return null;
   const root = record(value, ['discord_nickname', 'discord_id'], 'caller identity');
@@ -787,50 +793,28 @@ export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
   };
 }
 
-export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
-  const root = record(
-    value,
-    [
-      ...ATTEMPT_FIELDS,
-      'usage_total_mismatch',
-      'donation_id',
-      'donation_key_id',
-      'error_diagnostics',
-      'failure_disablement',
-    ],
-    'administrator log attempt',
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
-  );
+function normalizeManagementLogAttempt(value: unknown, label: string): ManagementLogAttempt {
+  const root = record(value, MANAGEMENT_ATTEMPT_FIELDS, label, REQUIRED_MANAGEMENT_ATTEMPT_FIELDS);
+  const donation_id = nullableDecimalID(root.donation_id ?? null, 'donation id');
+  const donation_key_id = nullableDecimalID(root.donation_key_id ?? null, 'donation key id');
+  if (Boolean(donation_id) !== Boolean(donation_key_id)) invalidResponse('donation key identity');
   return {
     ...commonAttempt(root),
-    ...managementAttemptTarget(root),
+    donation_id,
+    donation_key_id,
     failure_disablement: normalizeFailureDisablement(root.failure_disablement),
-    role: 'admin',
+    health_impact: normalizeAttemptHealthImpact(root.health_impact),
+    native_service: NATIVE_SERVICES.find((item) => item === root.native_service),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
   };
 }
 
+export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
+  return { ...normalizeManagementLogAttempt(value, 'administrator log attempt'), role: 'admin' };
+}
+
 export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
-  const root = record(
-    value,
-    [
-      ...ATTEMPT_FIELDS,
-      'usage_total_mismatch',
-      'donation_id',
-      'donation_key_id',
-      'error_diagnostics',
-      'failure_disablement',
-    ],
-    'steward log attempt',
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
-  );
-  return {
-    ...commonAttempt(root),
-    ...managementAttemptTarget(root),
-    failure_disablement: normalizeFailureDisablement(root.failure_disablement),
-    role: 'steward',
-    usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
-  };
+  return { ...normalizeManagementLogAttempt(value, 'steward log attempt'), role: 'steward' };
 }
 
 export function normalizeUserLogDetail(value: unknown): UserLogDetail {

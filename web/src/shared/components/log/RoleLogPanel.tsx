@@ -22,6 +22,7 @@ import { GlobalPressure } from '@shared/observability/GlobalPressure';
 import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
 import { type PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { isCharityRoute } from '@shared/operations/requestKind';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isApiError, isUnauthorized } from '@shared/query/http';
@@ -69,6 +70,7 @@ import { useLogUrlState } from './useLogUrlState';
 import { ATTEMPT_SEQ_PARAM, logAttemptSequence } from './managementFailures';
 import {
   AttemptFailureSummary,
+  AttemptHealthEffects,
   AttemptReason,
   AttemptService,
   FailureStreak,
@@ -222,6 +224,10 @@ function AttemptTable({
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const isDiscovery = detail.request.route_kind === 'model_discovery';
+  const managedCharityRequest =
+    detail.request.role !== 'user' && isCharityRoute(detail.request.route_kind)
+      ? detail.request
+      : undefined;
   const [previousFocus, setPreviousFocus] = useState(focusAttemptSeq);
   const [open, setOpen] = useState(isDiscovery || focusAttemptSeq !== undefined);
   if (focusAttemptSeq !== previousFocus) {
@@ -306,6 +312,9 @@ function AttemptTable({
                   </Note>
                 </div>
               )}
+              {managedCharityRequest && attempt.role !== 'user' && (
+                <AttemptHealthEffects attempt={attempt} />
+              )}
               {attempt.result_kind === 'synthetic' ? (
                 <p className="log-attempt-notice">
                   {t(
@@ -316,16 +325,20 @@ function AttemptTable({
                 </p>
               ) : null}
               <dl className="nb-facts log-attempt-facts">
-                {attempt.role !== 'user' && attempt.error_diagnostics?.provider_reason && (
-                  <div>
-                    <dt>{t('common.operations.logs.failureReason')}</dt>
-                    <dd>
-                      <AttemptReason
-                        failure={{ reason: attempt.error_diagnostics.provider_reason }}
-                      />
-                    </dd>
-                  </div>
-                )}
+                {attempt.role !== 'user' &&
+                  attempt.error_diagnostics?.provider_reason &&
+                  (!managedCharityRequest ||
+                    attempt.health_impact?.backoff?.reason !==
+                      attempt.error_diagnostics.provider_reason) && (
+                    <div>
+                      <dt>{t('common.operations.logs.failureReason')}</dt>
+                      <dd>
+                        <AttemptReason
+                          failure={{ reason: attempt.error_diagnostics.provider_reason }}
+                        />
+                      </dd>
+                    </div>
+                  )}
                 <div>
                   <dt>{t('logs.endpointBaseUrl')}</dt>
                   <dd className="mono">{attempt.endpoint_base_url}</dd>
@@ -390,19 +403,21 @@ function AttemptTable({
                 (attempt.status_code ?? 0) >= 400) && (
                 <FailureDetails failure={attempt.error_diagnostics} />
               )}
-              {attempt.role !== 'user' &&
-              detail.request.role !== 'user' &&
-              detail.request.route_kind.startsWith('charity_') ? (
-                detail.request.charity_model_id &&
+              {attempt.role !== 'user' && managedCharityRequest ? (
+                managedCharityRequest.charity_model_id &&
                 attempt.donation_id &&
                 attempt.donation_key_id ? (
                   <div className="ops-actions">
                     <Link
                       className="nb-btn nb-btn--secondary"
-                      to={charityManagementPath(attempt.role, detail.request.charity_model_id, {
-                        donationID: attempt.donation_id,
-                        keyID: attempt.donation_key_id,
-                      })}
+                      to={charityManagementPath(
+                        attempt.role,
+                        managedCharityRequest.charity_model_id,
+                        {
+                          donationID: attempt.donation_id,
+                          keyID: attempt.donation_key_id,
+                        },
+                      )}
                       state={{ logReturnTo }}
                     >
                       {t('common.operations.logs.manageCharityKey')}

@@ -513,7 +513,16 @@ it('keeps management failure facts out of ordinary log decoding and requests', a
       failure_summary: failureSummary,
       attempts: {
         data: [
-          { ...userAttempt, error_diagnostics: providerFailure, failure_disablement: disablement },
+          {
+            ...userAttempt,
+            error_diagnostics: providerFailure,
+            failure_disablement: disablement,
+            native_service: 'gemini_generate_content',
+            health_impact: {
+              streak_effect: 'unchanged',
+              backoff: { reason: 'google_model_overloaded', scope: 'service', retry_at: 60 },
+            },
+          },
         ],
         next_cursor: null,
       },
@@ -524,6 +533,8 @@ it('keeps management failure facts out of ordinary log decoding and requests', a
   );
   expect(result).not.toHaveProperty('failure_summary');
   expect(result).not.toHaveProperty('attempts.data.0.failure_disablement');
+  expect(result).not.toHaveProperty('attempts.data.0.health_impact');
+  expect(result).not.toHaveProperty('attempts.data.0.native_service');
   expect(result).not.toHaveProperty('attempts.data.0.error_diagnostics.provider_reason');
   expect(result).toHaveProperty('attempts.data.0.error_diagnostics.code', 'upstream_error');
 });
