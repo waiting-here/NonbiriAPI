@@ -13,7 +13,8 @@ export function useStationTitle(station: Station, siteName: string, signedIn: bo
       .filter((route) => route.labelKey && (signedIn || route.access === 'public'))
       .filter((route) => matchPath({ path: route.path, end: route.path === '/' }, pathname))
       .sort((a, b) => b.path.length - a.path.length)[0];
-    document.title = [match?.labelKey && t(match.labelKey), siteName, t(`${station}.shell.title`)]
+    const consoleTitle = station === 'admin' ? t('admin.shell.title') : t('user.shell.title');
+    document.title = [match?.labelKey && t(match.labelKey), siteName, consoleTitle]
       .filter(Boolean)
       .join(' · ');
   }, [pathname, signedIn, siteName, station, t]);
