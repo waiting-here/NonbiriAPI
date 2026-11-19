@@ -3,6 +3,7 @@ package charity
 import (
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,24 @@ FROM request_attempts WHERE claim_id=?`, claimID).Scan(&gotEffect, &gotBefore, &
 	}
 	if effect != gotEffect || before != gotBefore || after != gotAfter {
 		t.Fatalf("attempt streak = %q %q → %q, want %q %q → %q", gotEffect, gotBefore, gotAfter, effect, before, after)
+	}
+}
+
+func TestBackloggedCallsRetainEachOrderedFailureCount(t *testing.T) {
+	e := newBackoffEnv(t)
+	failure := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 503,
+		StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamResponse}
+	var handles [35]claim.Handle
+	for i := range handles {
+		handles[i], _, _ = connectionDispatch(t, e, claim.RouteCharityChat)
+		if i > 0 {
+			e.complete(t, handles[i], failure)
+			assertAttemptStreak(t, e.store.DB(), handles[i].ClaimID(), "pending", "", "")
+		}
+	}
+	e.complete(t, handles[0], failure)
+	for i, h := range handles {
+		assertAttemptStreak(t, e.store.DB(), h.ClaimID(), "incremented", strconv.Itoa(i), strconv.Itoa(i+1))
 	}
 }
 
