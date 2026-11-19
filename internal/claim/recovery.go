@@ -126,6 +126,14 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 					outcome.Diagnostic = "upstream stream outcome unavailable after restart"
 				}
 			}
+			// A Google 429 interrupted before body classification retains
+			// the ordinary scope of its real, persisted Retry-After header.
+			if googleQuotaResponse(record, 429) {
+				outcome, err = retryAfterOutcomeTx(ctx, tx, record, outcome, at)
+				if err != nil {
+					return "", err
+				}
+			}
 		}
 		if _, err := s.completeAttemptTx(ctx, tx, record, candidateSnapshot{
 			endpointID:    record.currentEndpoint,

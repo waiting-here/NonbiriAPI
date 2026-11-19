@@ -63,7 +63,7 @@ type serviceResetState struct {
 func readServiceResetStatesTx(ctx context.Context, tx *sql.Tx, donationID, keyID, useID, now int64) ([]serviceResetState, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT u.id,dk.endpoint_key_id,u.native_service_bit,COALESCE(g.credential_version_id,0),
  COALESCE(h.id,0),h.streak_generation,h.failure_streak,COALESCE(h.failure_disabled,0),
- NULLIF(h.retry_after_until,0),NULLIF((`+smartbackoff.ServiceUntilSQL("h")+`),0),
+ NULLIF(`+smartbackoff.ServiceRetryAfterSQL("h")+`,0),NULLIF((`+smartbackoff.ServiceUntilSQL("h")+`),0),
  u.enabled=0 OR dk.enabled=0 OR COALESCE(k.enabled,0)=0 OR COALESCE(e.enabled,0)=0 OR COALESCE(c.enabled,0)=0,
  CASE WHEN d.status NOT IN ('pending','approved') OR d.terminal_at IS NOT NULL OR dk.ended_at IS NOT NULL OR dk.expires_at<=? THEN 'ineligible'
  WHEN r.id IS NULL OR r.review_state<>'approved' THEN 'not_approved'

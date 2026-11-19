@@ -1,6 +1,7 @@
 package upstreamerror
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -8,7 +9,21 @@ import (
 
 // TemporaryBackoff is evidence from a complete provider error envelope. Its
 // zero value cannot exempt an arbitrary HTTP 503 from failure accounting.
-type TemporaryBackoff struct{ googleOverload bool }
+type TemporaryBackoff struct {
+	googleOverload bool
+	quotaReason    string
+	modelHash      [32]byte
+	retrySeconds   int64
+}
+
+// ModelQuota is bound to the exact dispatched model. Only normalized
+// evidence from a complete Google response can create this capability.
+func (b TemporaryBackoff) ModelQuota(status int, model string) (reason string, seconds int64) {
+	if status == 429 && b.quotaReason != "" && b.modelHash == sha256.Sum256([]byte(model)) {
+		return b.quotaReason, b.retrySeconds
+	}
+	return "", 0
+}
 
 func (b TemporaryBackoff) Delay(status int) int64 {
 	if b.googleOverload && status == 503 {
@@ -17,12 +32,16 @@ func (b TemporaryBackoff) Delay(status int) int64 {
 	return 0
 }
 
-func (c Context) temporaryBackoff(fields map[string]json.RawMessage) TemporaryBackoff {
-	google := c.GoogleAPI
-	if base, err := url.Parse(c.BaseURL); err == nil && base.Hostname() == "generativelanguage.googleapis.com" {
-		google = true
+func IsGoogleAPI(native bool, baseURL string) bool {
+	if native {
+		return true
 	}
-	if !google {
+	base, err := url.Parse(baseURL)
+	return err == nil && strings.EqualFold(base.Hostname(), "generativelanguage.googleapis.com")
+}
+
+func (c Context) temporaryBackoff(fields map[string]json.RawMessage) TemporaryBackoff {
+	if !IsGoogleAPI(c.GoogleAPI, c.BaseURL) {
 		return TemporaryBackoff{}
 	}
 	var code json.Number

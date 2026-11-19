@@ -25,7 +25,12 @@ type backoffEnv struct {
 
 func newBackoffEnv(t *testing.T) *backoffEnv {
 	t.Helper()
-	e := &backoffEnv{charityTestEnv: newCharityTestEnv(t)}
+	return newBackoffEnvAt(t, "https://charity.example.test/v1")
+}
+
+func newBackoffEnvAt(t *testing.T, baseURL string) *backoffEnv {
+	t.Helper()
+	e := &backoffEnv{charityTestEnv: newCharityTestEnvAt(t, baseURL)}
 	e.clock.Store(charityTestNow + 30)
 	e.billingRail(t)
 	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))

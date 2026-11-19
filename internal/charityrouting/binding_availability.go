@@ -74,6 +74,7 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 	}
 	defer rows.Close()
 	keys := []int64{}
+	targetIDs := []int64{}
 	for rows.Next() {
 		var row bindingAvailabilityRow
 		var bindingID, targetID int64
@@ -84,11 +85,19 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 		row.Availability.ServiceStatuses = []donationstate.ServiceStatus{}
 		out = append(out, row)
 		keys = append(keys, row.keyID)
+		targetIDs = append(targetIDs, targetID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return out, nil
+	}
+	availability, err := availableServiceTargetsTx(ctx, tx, targetIDs, now)
+	if err != nil {
 		return nil, err
 	}
 	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, keys, now)
@@ -101,18 +110,32 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 		if err != nil {
 			return nil, ErrInvariant
 		}
-		row.allStatuses = statuses[row.keyID]
-		for _, status := range row.allStatuses {
+		row.allStatuses = append([]donationstate.ServiceStatus(nil), statuses[row.keyID]...)
+		modelLimited := false
+		for j := range row.allStatuses {
+			status := &row.allStatuses[j]
 			if !selected.Has(status.NativeService) {
 				continue
+			}
+			useID, err := strconv.ParseInt(status.UseID, 10, 64)
+			if err != nil {
+				return nil, ErrInvariant
+			}
+			state := availability[serviceTarget{useID, targetIDs[i]}]
+			if state.modelRetryAt > now && status.State == "available" {
+				status.State, status.ModelQuotaReason, status.RetryAfterUntil = "rate_limited", state.reason, &state.modelRetryAt
 			}
 			services, _ := contract.ParseNativeServices([]contract.NativeService{status.NativeService})
 			for _, op := range row.modelTypes {
 				if routes, err := connector.ResolveServiceRoutes(status.ConfiguredType, services, status.RerankFormat, op); err == nil && len(routes) > 0 {
-					row.Availability.ServiceStatuses = append(row.Availability.ServiceStatuses, status)
+					row.Availability.ServiceStatuses = append(row.Availability.ServiceStatuses, *status)
+					modelLimited = modelLimited || status.ModelQuotaReason != ""
 					break
 				}
 			}
+		}
+		if row.Availability.State == "unavailable" && modelLimited {
+			row.Availability.State = "rate_limited"
 		}
 		if row.Availability.State == "rate_limited" {
 			canRecover := false

@@ -177,7 +177,7 @@ func readUsesTx(ctx context.Context, tx *sql.Tx, access useAccess, donationID in
 	query := `SELECT du.id,dk.id,dk.endpoint_key_id,du.native_service_bit,du.enabled,du.discovery_enabled,du.revision,du.rerank_path_override,dk.connector_type,dk.canonical_base_url,
 du.current_approved_revision_id,du.current_pending_revision_id,(SELECT lr.id FROM donation_use_revisions lr WHERE lr.use_id=du.id AND lr.review_state IN ('rejected','cancelled','superseded') ORDER BY lr.use_revision DESC LIMIT 1),
 d.status IN ('pending','approved') AND d.terminal_at IS NULL AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?) AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.donation_id=d.id AND m.endpoint_key_id=dk.endpoint_key_id),
-COALESCE((` + discoveryEligibleSQL + `),0),EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.use_id=du.id),h.failure_streak,h.failure_disabled,NULLIF(h.retry_after_until,0),NULLIF((` + smartbackoff.ServiceUntilSQL("h") + `),0),
+COALESCE((` + discoveryEligibleSQL + `),0),EXISTS(SELECT 1 FROM charity_use_availability av WHERE av.use_id=du.id),h.failure_streak,h.failure_disabled,NULLIF(` + smartbackoff.ServiceRetryAfterSQL("h") + `,0),NULLIF((` + smartbackoff.ServiceUntilSQL("h") + `),0),
 COALESCE(h.failure_disabled,0)=0 AND COALESCE(h.retry_after_until,0)<=? AND COALESCE((` + smartbackoff.ServiceUntilSQL("h") + `),0)<=?
 FROM donation_uses du JOIN donation_keys dk ON dk.id=du.donation_key_id JOIN donations d ON d.id=dk.donation_id
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id LEFT JOIN users u ON u.id=d.user_id AND u.id=e.user_id

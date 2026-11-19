@@ -108,7 +108,16 @@ func readFact(ctx context.Context, tx *sql.Tx, claimID string) (dispatchFact, er
 // ServiceUntilSQL uses the same waiting/probing semantics as the legacy gate.
 // The alias is supplied only by repository-owned SQL, never request data.
 func ServiceUntilSQL(alias string) string {
-	return `max(COALESCE(` + alias + `.retry_after_until,0),CASE WHEN ` + alias + `.trial_claim_id IS NOT NULL THEN 253402300799 ELSE COALESCE(` + alias + `.backoff_retry_at,0) END)`
+	return `max(` + ServiceRetryAfterSQL(alias) + `,CASE WHEN ` + alias + `.trial_claim_id IS NOT NULL THEN 253402300799 ELSE COALESCE(` + alias + `.backoff_retry_at,0) END)`
+}
+
+func ServiceRetryAfterSQL(alias string) string {
+	return `max(COALESCE(` + alias + `.retry_after_until,0),COALESCE((SELECT MAX(r.rate_limited_until) FROM dispatch_retry_after_observations r WHERE r.pending_health_id=` + alias + `.id),0))`
+}
+
+// ModelUntilSQL is only evaluated for an exact, authorized upstream target.
+func ModelUntilSQL(healthAlias, upstreamModel string) string {
+	return `COALESCE((SELECT mc.retry_at FROM donation_service_model_cooldowns mc WHERE mc.health_id=` + healthAlias + `.id AND mc.upstream_model_id=` + upstreamModel + `),0)`
 }
 
 func ObserveRetryAfter(ctx context.Context, tx *sql.Tx, claimID string, until, now int64) error {
