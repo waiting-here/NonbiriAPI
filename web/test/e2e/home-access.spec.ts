@@ -155,9 +155,10 @@ async function mockHome(page: Page, state: State, locale: 'en' | 'zh') {
       return route.fulfill({
         json: { data: state.active ? [announcement] : [], next_cursor: null },
       });
-    if (url.pathname === `/api/announcements/${announcement.id}`) {
+    if (url.pathname === '/api/announcements/selected') {
+      expect(url.searchParams.get('ids')).toBe(announcement.id);
       const { excerpt, ...detail } = announcement;
-      return route.fulfill({ json: { ...detail, rendered_body: `<p>${excerpt}</p>` } });
+      return route.fulfill({ json: { data: [{ ...detail, rendered_body: `<p>${excerpt}</p>` }] } });
     }
     return route.fallback();
   });
