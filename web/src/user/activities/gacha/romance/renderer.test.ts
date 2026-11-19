@@ -1,8 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { ArtworkPlayback } from '@shared/animation/artwork-playback';
 import { renderRomance } from './renderer';
 import { createScene } from './compositor.js';
 
-const scene = vi.hoisted(() => ({ paint: vi.fn(), dispose: vi.fn() }));
+const scene = vi.hoisted(() => ({
+  backgroundSize: [3840, 2560],
+  paint: vi.fn(),
+  dispose: vi.fn(),
+}));
 vi.mock('./compositor.js', () => ({ createScene: vi.fn(async () => scene) }));
 afterEach(() => {
   vi.restoreAllMocks();
@@ -12,48 +17,66 @@ afterEach(() => {
   vi.mocked(createScene).mockClear();
 });
 
-it('caps high refresh paints, stops hidden frames and resumes without advancing hidden time', async () => {
-  let callback: FrameRequestCallback | undefined;
-  vi.stubGlobal(
-    'requestAnimationFrame',
-    vi.fn((next: FrameRequestCallback) => {
-      callback = next;
-      return 1;
-    }),
-  );
-  const cancel = vi.fn(() => {
-    callback = undefined;
-  });
-  vi.stubGlobal('cancelAnimationFrame', cancel);
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-    clearRect: vi.fn(),
-    drawImage: vi.fn(),
-  } as unknown as CanvasRenderingContext2D);
-  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-  const canvas = document.createElement('canvas');
-  const dispose = await renderRomance(canvas, 'elopement');
-  for (let time = 1; time <= 1000; time += 1000 / 144) callback?.(time);
-  expect(scene.paint.mock.calls.length).toBeGreaterThanOrEqual(60);
-  expect(scene.paint.mock.calls.length).toBeLessThanOrEqual(62);
-  const time = Number(canvas.dataset.time);
-  hidden.mockReturnValue(true);
-  document.dispatchEvent(new Event('visibilitychange'));
-  expect(callback).toBeUndefined();
-  hidden.mockReturnValue(false);
-  document.dispatchEvent(new Event('visibilitychange'));
-  callback?.(10000);
-  expect(Number(canvas.dataset.time) - time).toBeLessThan(1 / 60);
-  dispose();
-  expect(callback).toBeUndefined();
-  expect(scene.dispose).toHaveBeenCalledOnce();
-});
+it.each([
+  { mode: 'game card', highest: false, min: 60, max: 62 },
+  { mode: 'highest appearance', highest: true, min: 144, max: 146 },
+])(
+  'preserves the $mode cadence and excludes time spent hidden at 144 Hz',
+  async ({ highest, min, max }) => {
+    let callback: FrameRequestCallback | undefined;
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((next: FrameRequestCallback) => {
+        callback = next;
+        return 1;
+      }),
+    );
+    const cancel = vi.fn(() => {
+      callback = undefined;
+    });
+    vi.stubGlobal('cancelAnimationFrame', cancel);
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const canvas = document.createElement('canvas');
+    const dispose = await renderRomance(
+      canvas,
+      'elopement',
+      highest
+        ? {
+            polished: true,
+            landscape: true,
+            variant: 'appearance',
+            highResolution: true,
+            playback: new ArtworkPlayback(true),
+          }
+        : undefined,
+    );
+    for (let time = 1; time <= 1000; time += 1000 / 144) callback?.(time);
+    expect(scene.paint.mock.calls.length).toBeGreaterThanOrEqual(min);
+    expect(scene.paint.mock.calls.length).toBeLessThanOrEqual(max);
+    const time = Number(canvas.dataset.time);
+    hidden.mockReturnValue(true);
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(callback).toBeUndefined();
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+    callback?.(10000);
+    expect(Number(canvas.dataset.time) - time).toBeLessThan(1 / 60);
+    dispose();
+    expect(callback).toBeUndefined();
+    expect(scene.dispose).toHaveBeenCalledOnce();
+  },
+);
 
 it('renders a frozen export once without scheduling animation', async () => {
   const raf = vi.fn();

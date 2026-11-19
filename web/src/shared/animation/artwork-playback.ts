@@ -79,7 +79,9 @@ export function artworkActivity(playback?: ArtworkPlayback) {
       return document.hidden || !!playback?.paused || !!playback?.offscreen;
     },
     // The appearance host already resolves the user's system/full/static preference.
-    systemMotion: playback ? undefined : window.matchMedia('(prefers-reduced-motion: reduce)'),
+    get systemMotion() {
+      return playback ? undefined : window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    },
     listen(change: () => void) {
       document.addEventListener('visibilitychange', change);
       playback?.addEventListener('change', change);
