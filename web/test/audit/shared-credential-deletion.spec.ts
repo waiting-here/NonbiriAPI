@@ -260,9 +260,6 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
       .getByRole('group', { name: c.entries, exact: true })
       .locator(`[data-entry-id="${anthropic.id}"]`)
       .click();
-    await page
-      .getByRole('combobox', { name: services.currentKey, exact: true })
-      .selectOption(kept.id);
     const keptRow = page.locator('tr.core-key-card').filter({ hasText: sharedName });
     const discovery = responseFor(page, 'POST', keptPath + '/models/refresh');
     await keptRow

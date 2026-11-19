@@ -122,9 +122,7 @@ function CharityContent() {
     : publicConfig.data?.charityDonationNoticeEn;
 
   return (
-    <div
-      className={`page economy-page economy-charity-page ${tab === 'donate' ? 'page--detail' : 'page--wide'}`}
-    >
+    <div className="page economy-page economy-charity-page page--wide">
       <PageHeader
         title={t('user.charity.title')}
         description={t('user.charity.description')}

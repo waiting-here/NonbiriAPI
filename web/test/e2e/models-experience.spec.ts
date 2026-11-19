@@ -556,8 +556,10 @@ for (const scenario of cases) {
       }
       const rows = page.locator('.core-binding-list .core-binding-row');
       await expect(rows).toHaveCount(20);
-      await rows.first().getByRole('button').click();
-      await page.getByRole('menuitem', { name: core('models.moveDown'), exact: true }).click();
+      await rows
+        .first()
+        .getByRole('button', { name: core('models.moveDown'), exact: true })
+        .click();
       await expect(rows.first()).toContainText('gpt-source-2');
       await page.getByRole('button', { name: core('models.saveOrder'), exact: true }).click();
       await expect.poll(() => state.orders.length).toBe(1);

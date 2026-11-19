@@ -11,6 +11,7 @@ export function EndpointsPage() {
       {(user) =>
         endpointId ? (
           <EndpointDetail
+            followService
             key={user.id + ':' + endpointId}
             accountId={user.id}
             endpointId={endpointId}

@@ -4,7 +4,10 @@
   margin-inline: auto;
 }
 
-@media (width >= 80rem) {
+.economy-charity-page {
+  container: charity-page / inline-size;
+}
+@container charity-page (width >= 64rem) {
   .economy-model-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
@@ -400,4 +403,23 @@
 }
 .economy-charity-page > section[hidden] {
   display: none;
+}
+
+.donation-review-keys {
+  display: grid;
+  gap: var(--nb-space-3);
+  padding: 0;
+  list-style: none;
+}
+.donation-review-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--nb-space-2);
+  padding-block: var(--nb-space-2);
+  border-block-end: 1px solid var(--nb-color-border);
+  overflow-wrap: anywhere;
+}
+.donation-review-key > .nb-fold {
+  grid-column: 1 / -1;
 }

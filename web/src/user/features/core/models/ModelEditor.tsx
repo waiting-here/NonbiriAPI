@@ -26,7 +26,6 @@ import { CoreErrorPanel } from '../components';
 import { useCoreCopy } from '../copy';
 import { validateLogicalName, validatePersonalProviderName } from '../normalizers';
 import { coreKeys, invalidateResourceDependents } from '../queries';
-import { useQuickstartCopy } from '../quickstartCopy';
 import { isOutcomeUnknown } from '../request';
 import { readResourceResult, resourceStatus } from '../resourceOperation';
 import type { Model, ModelCreateInput, ModelPatchInput, RouteStrategy } from '../types';
@@ -120,7 +119,7 @@ export function ModelEditor({
   const roleResult = buildRolePolicy(roleDraft);
   const textModel = useModelText();
   const formRef = useRef<HTMLFormElement>(null);
-  const { t: text } = useQuickstartCopy();
+  const { t: text } = useTranslation();
   const [validation, setValidation] = useState(false);
   const [permissionLost, setPermissionLost] = useState<unknown>(null);
   const savedResult = useRef<Model | null>(null);
@@ -460,7 +459,7 @@ export function ModelEditor({
             className="nb-btn nb-btn--primary"
             disabled={busy || (!hasAttempt && (!!roleResult.error || headersInvalid))}
           >
-            {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
+            {busy ? t('common.working') : hasAttempt ? text('user.quickstart.checkResult') : t('common.save')}
           </button>
         </FormActions>
       )}

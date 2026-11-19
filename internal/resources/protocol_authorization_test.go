@@ -105,7 +105,8 @@ func TestProtocolBindingRequiresOneUsableRouteAndAllowsExtraServices(t *testing.
 	endpoint, key := f.entry(t, f.connection, "https://example.com/v1", services)
 	endpointID, keyID := resourceTestID(t, endpoint.ID), resourceTestID(t, key.ID)
 	entries := []ManualCatalogInput{{UpstreamModelID: "synthetic-model"}}
-	if _, err := f.env.repository.CreateManualEntries(ctx, f.user, endpointID, keyID, f.mutation(t, "POST", routeManualCatalog, []int64{endpointID, keyID}, entries), entries); err != nil {
+	created, err := f.env.repository.CreateManualEntries(ctx, f.user, endpointID, keyID, f.mutation(t, "POST", routeManualCatalog, []int64{endpointID, keyID}, entries), entries)
+	if err != nil {
 		t.Fatal(err)
 	}
 	model := f.env.createModel(t, f.user, resourceTestKey('m'), "protocol", "converted")
@@ -119,6 +120,13 @@ func TestProtocolBindingRequiresOneUsableRouteAndAllowsExtraServices(t *testing.
 		t.Fatalf("useless binding accepted: %v", err)
 	}
 	target.NativeServices = services
+	target.CatalogEntryID = resourceTestID(t, created.Value.Entries[0].ID)
+	target.ExpectedPairRevision = resourceTestID(t, created.Value.Entries[0].PairRevision) + 1
+	groups[0].Targets[0] = target
+	if _, err := f.env.repository.AddBindings(ctx, f.user, modelID, f.mutation(t, "POST", routeBindingBatch, []int64{modelID}, groups), 0, groups); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale catalog proof accepted: %v", err)
+	}
+	target.ExpectedPairRevision--
 	groups[0].Targets[0] = target
 	result, err := f.env.repository.AddBindings(ctx, f.user, modelID, f.mutation(t, "POST", routeBindingBatch, []int64{modelID}, groups), 0, groups)
 	if err != nil {

@@ -13,8 +13,10 @@ export function DirectoryBatch({
   rows,
   initialTarget,
   onLockChange,
+  onRemove,
 }: {
   onLockChange?: (locked: boolean) => void;
+  onRemove?: (id: string) => void;
   accountId: string;
   rows: DiscoveryModel[];
   initialTarget?: { entry: Endpoint; key: EndpointKey };
@@ -46,8 +48,9 @@ export function DirectoryBatch({
   const register = useCallback((id: string, save: () => Promise<boolean>) => {
     saves.current[id] = save;
   }, []);
+  const [expansions, setExpansions] = useState<Record<string, boolean>>({});
   const remaining = rows.filter((row) => !states[row.id]?.complete);
-  const locked = busy || Object.values(states).some((state) => state.locked);
+  const locked = busy || rows.some((row) => states[row.id]?.locked);
   useEffect(() => {
     onLockChange?.(locked);
     return () => onLockChange?.(false);
@@ -95,12 +98,24 @@ export function DirectoryBatch({
       ) : null}
       <fieldset disabled={busy} className="nb-stack connection-model-batch">
         {rows.map((row) => (
-          <Fold key={row.id} title={row.upstream_model_id} defaultOpen>
+          <Fold
+            key={row.id}
+            title={row.upstream_model_id}
+            open={expansions[row.id] ?? rows.length <= 5}
+            onOpenChange={(open) => setExpansions((current) => ({ ...current, [row.id]: open }))}
+            meta={
+              states[row.id]?.complete && !(expansions[row.id] ?? rows.length <= 5)
+                ? t('common.connections.mappingSaved')
+                : undefined
+            }
+          >
             <PresetModelRow
               accountId={accountId}
+              collapsed={!(expansions[row.id] ?? rows.length <= 5)}
               rowId={row.id}
               initialProvider={row.provider || (initialTarget ? 'my' : '')}
               bulk={bulk}
+              catalogEntry={row.catalogEntry}
               editableUpstream
               grantsByEntry
               onState={onState}
@@ -116,9 +131,27 @@ export function DirectoryBatch({
               entries={entries}
               grants={grants}
             />
+            {onRemove && (expansions[row.id] ?? rows.length <= 5) ? (
+              <button
+                type="button"
+                className="nb-btn nb-btn--ghost"
+                disabled={locked}
+                onClick={() => onRemove(row.id)}
+              >
+                {t('common.remove')}
+              </button>
+            ) : null}
           </Fold>
         ))}
       </fieldset>
+      {attempted ? (
+        <p role="status">
+          {t('user.services.batchProgress', {
+            saved: rows.length - remaining.length,
+            total: rows.length,
+          })}
+        </p>
+      ) : null}
       {remaining.length ? (
         <>
           <Note>{t('common.connections.batchMappingHelp')}</Note>
@@ -132,7 +165,10 @@ export function DirectoryBatch({
               void (async () => {
                 try {
                   for (const row of remaining) {
-                    if (!(await saves.current[row.id]?.())) break;
+                    if (!(await saves.current[row.id]?.())) {
+                      setExpansions((current) => ({ ...current, [row.id]: true }));
+                      break;
+                    }
                   }
                 } finally {
                   setBusy(false);

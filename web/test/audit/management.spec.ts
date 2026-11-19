@@ -359,10 +359,7 @@ test('owner reads donation keys and details from current API responses', async (
     for (const { id } of donations.data as { id: string }[]) {
       const detail = page.locator('a[href="/charity/donations/' + id + '"]');
       const card = panel.locator('.economy-donation-summary').filter({ has: detail });
-      await card
-        .getByRole('button', { name: copy.presentation.donationActions, exact: true })
-        .click();
-      await page.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
+      await card.getByRole('button', { name: copy.ownerPages.keys, exact: true }).click();
       const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
       const response = await read(context, state.user_url, '/api/donations/' + id);
       const key = response.keys[0];

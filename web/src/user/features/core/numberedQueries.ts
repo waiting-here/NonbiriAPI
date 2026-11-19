@@ -79,26 +79,26 @@ export function useNumberedCatalog(
   source: CatalogSourceType | undefined,
   window: PageWindow,
   enabled = true,
+  search = '',
 ): UseQueryResult<NumberedCatalogView, Error> {
   const root =
     endpointId && keyId
       ? coreKeys.catalogRoot(accountId, endpointId, keyId)
       : [...coreKeys.endpointsRoot(accountId), 'catalog', 'none'];
   const sourceKey = source ?? '';
-  const queryKey = [...root, 'page', sourceKey, window.page, window.pageSize] as const;
+  const scope = [...root, 'page', sourceKey, search];
+  const queryKey = [...scope, window.page, window.pageSize] as const;
   return useQuery<NumberedCatalogView, Error, NumberedCatalogView>({
     queryKey,
     queryFn: ({ signal }) => {
       if (!endpointId || !keyId) throw new Error('endpoint and key ids are required');
-      return getCatalogPage(endpointId, keyId, window, source, signal);
+      return getCatalogPage(endpointId, keyId, window, source, signal, search);
     },
     enabled: enabled && Boolean(accountId && endpointId && keyId),
     staleTime: 5_000,
     refetchInterval: (query) =>
       !query.state.error && query.state.data?.evidence.state === 'checking' ? 1_000 : false,
     placeholderData:
-      endpointId && keyId
-        ? sameScopePlaceholder<NumberedCatalogView>([...root, 'page', sourceKey])
-        : undefined,
+      endpointId && keyId ? sameScopePlaceholder<NumberedCatalogView>(scope) : undefined,
   });
 }

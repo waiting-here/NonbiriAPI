@@ -9,20 +9,35 @@ import (
 	"sort"
 	"strconv"
 
+	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
 
 func scanCatalogEntry(scanner interface{ Scan(...any) error }) (CatalogEntry, error) {
-	var id, sourceRevision, pairRevision int64
+	return readCatalogEntry(scanner, false)
+}
+
+func readCatalogEntry(scanner pageScanner, includeServices bool) (CatalogEntry, error) {
+	var id, sourceRevision, pairRevision, mask int64
 	var entry CatalogEntry
-	if err := scanner.Scan(&id, &entry.SourceType, &entry.UpstreamModelID, &entry.Provider,
-		&sourceRevision, &pairRevision, &entry.CreatedAt, &entry.UpdatedAt); err != nil {
+	fields := []any{&id, &entry.SourceType, &entry.UpstreamModelID, &entry.Provider, &sourceRevision, &pairRevision, &entry.CreatedAt, &entry.UpdatedAt}
+	if includeServices {
+		fields = append(fields, &mask)
+	}
+	if err := scanner.Scan(fields...); err != nil {
 		return CatalogEntry{}, err
 	}
 	entryID, err := decimalID(id)
 	if err != nil || sourceRevision < 1 || pairRevision < 1 ||
 		(entry.SourceType != "automatic" && entry.SourceType != "manual") {
 		return CatalogEntry{}, ErrUnavailable
+	}
+	if includeServices {
+		services, err := contract.NativeServicesFromMask(mask)
+		if err != nil {
+			return CatalogEntry{}, ErrUnavailable
+		}
+		entry.NativeServices = services.Services()
 	}
 	entry.ID = entryID
 	entry.SourceRevision = strconv.FormatInt(sourceRevision, 10)

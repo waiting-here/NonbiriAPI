@@ -328,7 +328,7 @@ export function DonationComposer({
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [receipt, setReceipt] = useState<Donation>();
   const selectionMode = classifyDonationSelection(selectedChoices);
   const locked =
     !enabled ||
@@ -348,10 +348,23 @@ export function DonationComposer({
         !choice.key.grantRevision,
     ) ||
     new Set(selectedChoices.map((choice) => choice.key.id)).size !== selectedChoices.length;
-  const invalidExpiry = selectedChoices.some(
-    (choice) =>
-      expiryByKey[choice.key.id] && timeDraftValue(expiryByKey[choice.key.id]) === undefined,
-  );
+  const keyExpiry = (id: string) => (expiryByKey[id] ? timeDraftValue(expiryByKey[id]) : null);
+  const expiryLabel = (id: string) => {
+    const expiry = keyExpiry(id);
+    return expiry === undefined
+      ? t('user.charity.expiryInvalid')
+      : expiry === null
+        ? t('user.charity.never')
+        : formatDateTime(expiry);
+  };
+  const invalid = (message: string, control: string, selector?: string) => {
+    setValidation(message);
+    const container = document.getElementById(formID + '-' + control);
+    const focused = selector ? container?.querySelector<HTMLElement>(selector) : container;
+    const details = focused?.closest('details');
+    if (details) details.open = true;
+    focused?.focus();
+  };
 
   useEffect(() => {
     storeDraft(draftNamespace, description);
@@ -361,36 +374,26 @@ export function DonationComposer({
     event.preventDefault();
     if (locked) return;
     setValidation('');
-    setSuccess(false);
+    setReceipt(undefined);
     mutation.reset();
-    if (!validDonationDescription(description)) {
-      setValidation(t('user.charity.descriptionInvalid'));
-      return;
+    if (invalidSelection) return invalid(t('user.charity.chooseExistingKeys'), 'pick');
+    if (selectionMode.kind === 'mixed' || selectionMode.kind === 'cross_channel')
+      return invalid(t('user.charity.splitDonationSources'), 'pick');
+    for (const choice of selectedChoices) {
+      if (keyExpiry(choice.key.id) === undefined)
+        return invalid(t('user.charity.expiryInvalid'), 'options-' + choice.key.id, 'input');
+      if (!validFailureThreshold(thresholdByKey[choice.key.id] ?? '10'))
+        return invalid(
+          t('common.failurePolicy.invalid'),
+          'options-' + choice.key.id,
+          '.failure-policy-input input',
+        );
     }
-    if (invalidSelection) {
-      setValidation(t('user.charity.chooseExistingKeys'));
-      return;
-    }
-    if (!authorized) {
-      setValidation(t('user.charity.authorizationRequired'));
-      return;
-    }
-    if (publicThanks === '') {
-      setValidation(controlCopy.thanks);
-      return;
-    }
-    if (selectionMode.kind === 'mixed' || selectionMode.kind === 'cross_channel') {
-      setValidation(t('user.charity.splitDonationSources'));
-      return;
-    }
-    if (
-      selectedChoices.some(
-        (choice) => !validFailureThreshold(thresholdByKey[choice.key.id] ?? '10'),
-      )
-    ) {
-      setValidation(t('common.failurePolicy.invalid'));
-      return;
-    }
+    if (!validDonationDescription(description))
+      return invalid(t('user.charity.descriptionInvalid'), 'description', 'textarea');
+    if (publicThanks === '')
+      return invalid(controlCopy.thanks, 'thanks-options', 'input[type="radio"]');
+    if (!authorized) return invalid(t('user.charity.authorizationRequired'), 'legal', 'input');
     const keys = selectedChoices.map((choice) => {
       const failureDisableThreshold = thresholdByKey[choice.key.id] ?? '10';
       const expiresAt = expiryByKey[choice.key.id]
@@ -422,7 +425,7 @@ export function DonationComposer({
   };
   const send = async (input: CreateDonationInput) => {
     try {
-      await mutation.mutateAsync(input);
+      const result = await mutation.mutateAsync(input);
       setDescription('');
       setSelectedChoices([]);
       setExpiryByKey({});
@@ -430,7 +433,7 @@ export function DonationComposer({
       setAuthorized(false);
       setPublicThanks('');
       storeDraft(draftNamespace, '');
-      setSuccess(true);
+      setReceipt(result);
     } catch (error) {
       if (isConflictError(error)) setValidation(t('user.charity.reselectAfterConflict'));
     }
@@ -455,14 +458,19 @@ export function DonationComposer({
               type="button"
               className="nb-btn nb-btn--secondary"
               disabled={locked}
+              id={formID + '-pick'}
               onClick={() => setPickerOpen(true)}
             >
               {t('user.charity.presentation.openPicker')}
             </button>
             {selectedChoices.length > 0 ? (
-              <div className="nb-chips donation-selected-chips">
+              <ul className="donation-review-keys">
                 {selectedChoices.map((choice) => (
-                  <span className="nb-chip donation-selected-chip" key={choice.key.id}>
+                  <li
+                    className="donation-review-key"
+                    key={choice.key.id}
+                    id={formID + '-options-' + choice.key.id}
+                  >
                     <span className="nb-stack nb-stack--sm">
                       <span>
                         {choice.endpoint.note || choice.endpoint.baseUrl} ·{' '}
@@ -486,9 +494,50 @@ export function DonationComposer({
                     >
                       ×
                     </button>
-                  </span>
+                    <Fold
+                      title={t('user.workflows.donationOptions')}
+                      summary={t('user.charity.keySettingsSummary', {
+                        expiry: expiryLabel(choice.key.id),
+                        count: thresholdByKey[choice.key.id] ?? '10',
+                      })}
+                    >
+                      <DonationShareFields choice={choice} />
+                      <Field
+                        label={t('user.charity.keyExpiry')}
+                        help={t('user.charity.expiryHint')}
+                      >
+                        {(props) => (
+                          <TimeInput
+                            {...props}
+                            station="user"
+                            disabled={locked}
+                            draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
+                            onChange={(update) =>
+                              setExpiryByKey((current) => ({
+                                ...current,
+                                [choice.key.id]: update(
+                                  current[choice.key.id] ?? createTimeDraft(),
+                                ),
+                              }))
+                            }
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={t('user.charity.keyExpiryFor', {
+                              key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                            })}
+                          />
+                        )}
+                      </Field>
+                      <FailureThresholdInput
+                        value={thresholdByKey[choice.key.id] ?? '10'}
+                        disabled={locked}
+                        onChange={(value) =>
+                          setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
+                        }
+                      />
+                    </Fold>
+                  </li>
                 ))}
-              </div>
+              </ul>
             ) : null}
             {selectedChoices.length > 0 ? (
               <p className="inline-notice" role="status">
@@ -526,44 +575,10 @@ export function DonationComposer({
             }}
             disabled={locked}
             enabled={enabled}
-            renderSelected={(choice) => (
-              <div className="economy-key-expiry">
-                <DonationShareFields choice={choice} />
-                <Fold title={t('user.workflows.donationOptions')}>
-                  <Field label={t('user.charity.keyExpiry')} help={t('user.charity.expiryHint')}>
-                    {(props) => (
-                      <TimeInput
-                        {...props}
-                        station="user"
-                        disabled={locked}
-                        draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
-                        onChange={(update) =>
-                          setExpiryByKey((current) => ({
-                            ...current,
-                            [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
-                          }))
-                        }
-                        onClick={(event) => event.stopPropagation()}
-                        aria-label={t('user.charity.keyExpiryFor', {
-                          key: maskedKey(choice.key.displayHead, choice.key.displayTail),
-                        })}
-                      />
-                    )}
-                  </Field>
-                  <FailureThresholdInput
-                    value={thresholdByKey[choice.key.id] ?? '10'}
-                    disabled={locked}
-                    onChange={(value) =>
-                      setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
-                    }
-                  />
-                </Fold>
-              </div>
-            )}
           />
         </ExpandablePanel>
         <form id={formID} onSubmit={submit} noValidate>
-          <section className="donate-step">
+          <section className="donate-step" id={formID + '-description'}>
             <span className="donate-step__number" aria-hidden="true">
               2
             </span>
@@ -577,9 +592,13 @@ export function DonationComposer({
                     disabled={locked}
                     onChange={(event) => setDescription(event.target.value)}
                     required
-                    aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+                    aria-invalid={
+                      validation === t('user.charity.descriptionInvalid') &&
+                      !validDonationDescription(description)
+                    }
                     aria-describedby={
-                      validation && !validDonationDescription(description)
+                      validation === t('user.charity.descriptionInvalid') &&
+                      !validDonationDescription(description)
                         ? formID + '-description-error'
                         : formID + '-description-help'
                     }
@@ -587,7 +606,8 @@ export function DonationComposer({
                   <small id={formID + '-description-help'}>
                     {t('user.charity.presentation.descriptionHelp')}
                   </small>
-                  {validation && !validDonationDescription(description) ? (
+                  {validation === t('user.charity.descriptionInvalid') &&
+                  !validDonationDescription(description) ? (
                     <p id={formID + '-description-error'} className="field-error" role="alert">
                       {validation}
                     </p>
@@ -600,7 +620,7 @@ export function DonationComposer({
             <span className="donate-step__number" aria-hidden="true">
               3
             </span>
-            <div>
+            <div id={formID + '-thanks-options'}>
               <h3 id={formID + '-thanks'}>{controlCopy.thanks}</h3>
               <Segmented
                 label={controlCopy.thanks}
@@ -632,27 +652,39 @@ export function DonationComposer({
           </ul>
         </Fold>
         <Note>{t('user.charity.sharedKeyLimitsNotice')}</Note>
-        <Field label={t('user.charity.ownershipAuthorization')} span>
-          {(field) => (
-            <input
-              {...field}
-              type="checkbox"
-              checked={authorized}
-              form={formID}
-              disabled={locked}
-              onChange={(event) => setAuthorized(event.target.checked)}
-            />
-          )}
-        </Field>
-        {validation && validDonationDescription(description) ? (
+        <div id={formID + '-legal'}>
+          <Field label={t('user.charity.ownershipAuthorization')} span>
+            {(field) => (
+              <input
+                {...field}
+                type="checkbox"
+                checked={authorized}
+                form={formID}
+                disabled={locked}
+                onChange={(event) => setAuthorized(event.target.checked)}
+              />
+            )}
+          </Field>
+        </div>
+        {validation &&
+        (validation !== t('user.charity.descriptionInvalid') ||
+          validDonationDescription(description)) ? (
           <p className="field-error" role="alert">
             {validation}
           </p>
         ) : null}
         <MutationNotice
           error={mutation.error}
-          successKey={success ? 'user.charity.submitted' : undefined}
+          successKey={receipt?.status === 'pending' ? 'user.charity.submitted' : undefined}
         />
+        {receipt ? (
+          <div className="nb-actions" role="status">
+            <DonationStatusBadge status={receipt.status} summary={receipt.useSummary} />
+            <Link to={'/charity/donations/' + receipt.id}>
+              {t('user.charity.donationNumber', { id: receipt.id })}
+            </Link>
+          </div>
+        ) : null}
         {mutation.outcome === 'unknown' && mutation.variables ? (
           <button
             type="button"
@@ -677,7 +709,9 @@ export function DonationComposer({
             className="nb-btn nb-btn--primary"
             type="submit"
             form={formID}
-            disabled={locked || invalidSelection || invalidExpiry || publicThanks === ''}
+            disabled={
+              locked || selectedChoices.some((choice) => keyExpiry(choice.key.id) === undefined)
+            }
           >
             {mutation.isPending ? t('common.working') : t('user.charity.submit')}
           </button>
@@ -1164,14 +1198,22 @@ export function DonationCard({
             <Field
               label={t('user.charity.donationDescription')}
               size="long"
-              error={validation && !validDonationDescription(description) ? validation : undefined}
+              error={
+                validation === t('user.charity.descriptionInvalid') &&
+                !validDonationDescription(description)
+                  ? validation
+                  : undefined
+              }
             >
               {(field) => (
                 <textarea
                   {...field}
                   value={description}
                   required
-                  aria-invalid={Boolean(validation) && !validDonationDescription(description)}
+                  aria-invalid={
+                    validation === t('user.charity.descriptionInvalid') &&
+                    !validDonationDescription(description)
+                  }
                   onChange={(event) => setDescription(event.target.value)}
                 />
               )}

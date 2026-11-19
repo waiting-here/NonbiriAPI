@@ -256,6 +256,8 @@ function ModelLimitEditor({
   const formatDateTime = useDateTimeFormatter();
   const charityModelID = useCharityModelScope();
   const model = initial.upstream_model_id;
+  const [section, setSection] = useState<'total' | 'recurring'>('total');
+  const [visitedRules, setVisitedRules] = useState(false);
   const [draft, setDraft] = useState<{
     revision: string;
     changes: Partial<ModelBudgets>;
@@ -393,11 +395,15 @@ function ModelLimitEditor({
         onChange={(text) => {
           if (!read.data) return;
           const revision = read.data.donation_revision;
-          setDraft((previous) => ({
-            revision: previous?.revision ?? revision,
-            original: previous?.original ?? value.limits,
-            changes: { ...previous?.changes, [metric]: text || null },
-          }));
+          setDraft((previous) => {
+            const original = previous?.original ?? value.limits;
+            const changes = { ...previous?.changes, [metric]: text || null };
+            if ((text ? quotaInput(text, metric) : null) === original[metric])
+              delete changes[metric];
+            return Object.keys(changes).length
+              ? { revision: previous?.revision ?? revision, original, changes }
+              : null;
+          });
           if (!conflict) save.reset();
         }}
       />
@@ -412,6 +418,7 @@ function ModelLimitEditor({
       <h3 ref={heading} tabIndex={-1} className="model-limits__model">
         {model}
       </h3>
+      <p className="nb-small nb-muted">{t('common.modelLimits.keyScope', { key: props.keyId })}</p>
       {read.error ? <ErrorState error={read.error} onRetry={() => void read.refetch()} /> : null}
       {read.data && !current ? (
         <EmptyState
@@ -420,161 +427,193 @@ function ModelLimitEditor({
         />
       ) : (
         <>
-          {editable ? (
-            <form
-              className="nb-stack"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!read.data || !current || !draft || busy || conflict || metrics.some(invalid))
-                  return;
-                const payload: ModelLimitPayload = {
-                  ...current.limits,
-                  upstream_model_id: model,
-                  expected_revision: read.data.donation_revision,
-                };
-                for (const metric of metrics) {
-                  const input = draft.changes[metric];
-                  if (input !== undefined)
-                    payload[metric] = input === null ? null : quotaInput(input, metric);
-                }
-                submit(payload);
+          <div className="nb-actions" role="group" aria-label={t('common.modelLimits.title')}>
+            <Button
+              type="button"
+              aria-pressed={section === 'total'}
+              onClick={() => setSection('total')}
+            >
+              {t('common.modelLimits.cumulative')}
+            </Button>
+            <Button
+              type="button"
+              aria-pressed={section === 'recurring'}
+              onClick={() => {
+                setVisitedRules(true);
+                setSection('recurring');
               }}
             >
-              <Fields
-                legend={t('common.modelLimits.cumulative')}
-                hint={t('common.modelLimits.limitHelp')}
+              {t('common.modelLimits.recurring')}
+            </Button>
+          </div>
+          <div hidden={section !== 'total'} className="nb-stack">
+            {editable ? (
+              <form
+                className="nb-stack"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!read.data || !current || !draft || busy || conflict || metrics.some(invalid))
+                    return;
+                  const payload: ModelLimitPayload = {
+                    ...current.limits,
+                    upstream_model_id: model,
+                    expected_revision: read.data.donation_revision,
+                  };
+                  for (const metric of metrics) {
+                    const input = draft.changes[metric];
+                    if (input !== undefined)
+                      payload[metric] = input === null ? null : quotaInput(input, metric);
+                  }
+                  submit(payload);
+                }}
               >
-                {primaryMetrics.map(amountField)}
-              </Fields>
-              <Fold
-                title={t('common.modelLimits.split')}
-                plain
-                defaultOpen={splitMetrics.some((metric) => value.limits[metric] !== null)}
-              >
-                <p className="field-help">{t('common.modelLimits.splitHelp')}</p>
-                <Fields columns={2}>{splitMetrics.map(amountField)}</Fields>
-              </Fold>
-              <FormActions>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={busy || !current || !draft || conflict || metrics.some(invalid)}
+                <Fields
+                  legend={t('common.modelLimits.cumulative')}
+                  hint={t('common.modelLimits.limitHelp')}
                 >
-                  {t('common.modelLimits.save')}
-                </Button>
-              </FormActions>
-              {save.error ? <ErrorState error={save.error} /> : null}
-              {save.refreshError ? (
-                <ErrorState error={save.refreshError} onRetry={() => void save.refresh()} />
-              ) : null}
-              {conflict && draft ? (
-                <div className="nb-stack nb-stack--sm" role="status">
-                  <p>{t('common.modelLimits.conflict')}</p>
-                  {metrics
-                    .filter((metric) => metric in draft.changes)
-                    .map((metric) => (
-                      <p key={metric}>
-                        {t('common.modelLimits.currentLimit', {
-                          metric: t(labelKeys[metric]),
-                          limit:
-                            value.limits[metric] === null
-                              ? t('common.modelLimits.unlimited')
-                              : displayQuotaAmount(value.limits[metric], metric),
-                        })}
-                      </p>
-                    ))}
+                  {primaryMetrics.map(amountField)}
+                </Fields>
+                <Fold
+                  title={t('common.modelLimits.split')}
+                  plain
+                  defaultOpen={splitMetrics.some((metric) => value.limits[metric] !== null)}
+                >
+                  <p className="field-help">{t('common.modelLimits.splitHelp')}</p>
+                  <Fields columns={2}>{splitMetrics.map(amountField)}</Fields>
+                </Fold>
+                <FormActions>
+                  {draft ? (
+                    <Button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setDraft(null);
+                        save.reset();
+                      }}
+                    >
+                      {t('common.modelLimits.discardTotal')}
+                    </Button>
+                  ) : null}
                   <Button
-                    type="button"
-                    disabled={read.isFetching}
-                    onClick={async () => {
-                      const latest = await read.refetch();
-                      if (!latest.isSuccess || !latest.data.data[0]) return;
-                      const revision = latest.data.donation_revision;
-                      const original = latest.data.data[0].limits;
-                      setDraft((previous) => previous && { ...previous, revision, original });
-                      save.reset();
-                    }}
+                    type="submit"
+                    variant="primary"
+                    disabled={busy || !current || !draft || conflict || metrics.some(invalid)}
                   >
-                    {t('common.modelLimits.reload')}
+                    {t('common.modelLimits.save')}
                   </Button>
-                </div>
-              ) : null}
-              {uncertain ? (
-                <div role="status" className="nb-stack nb-stack--sm">
-                  <p>{t('common.modelLimits.unknown')}</p>
-                  <Button
-                    type="button"
-                    disabled={save.isPending}
-                    onClick={() => {
-                      if (save.variables) submit(save.variables);
-                    }}
-                  >
-                    {t('common.modelLimits.retry')}
-                  </Button>
-                </div>
-              ) : null}
-              {save.isSuccess ? <p role="status">{t('common.modelLimits.saved')}</p> : null}
-            </form>
-          ) : (
-            <>
-              <h4>{t('common.modelLimits.cumulative')}</h4>
-              <DataTable
-                caption={t('common.modelLimits.cumulative')}
-                rows={metrics}
-                rowKey={(metric) => metric}
-                columns={[
-                  {
-                    key: 'metric',
-                    header: t('common.modelLimits.metric'),
-                    cell: 'title',
-                    render: (metric) => t(labelKeys[metric]),
-                  },
-                  ...(['limits', 'used', 'reserved', 'remaining'] as const).map((key) => ({
-                    key,
-                    header: t(labelKeys[key]),
-                    cell: 'meta' as const,
-                    mobileLabel: t(labelKeys[key]),
-                    render: (metric: ModelMetric) => (
-                      <Amount metric={metric} value={value[key][metric]} />
-                    ),
-                  })),
-                ]}
-              />
-            </>
-          )}
-          <div className="nb-stack nb-stack--sm field-help">
-            <p>{t('common.modelLimits.creditsHelp')}</p>
-            <p>
-              {value.tracking_started_at === null
-                ? t('common.modelLimits.trackingNew')
-                : t('common.modelLimits.trackingSince', {
-                    time: formatDateTime(value.tracking_started_at),
-                  })}
-            </p>
-            {value.historical_costs_partial ? <p>{t('common.modelLimits.partialCosts')}</p> : null}
-            {value.unattributed_total_tokens !== '0' ? (
+                </FormActions>
+                {save.error ? <ErrorState error={save.error} /> : null}
+                {save.refreshError ? (
+                  <ErrorState error={save.refreshError} onRetry={() => void save.refresh()} />
+                ) : null}
+                {conflict && draft ? (
+                  <div className="nb-stack nb-stack--sm" role="status">
+                    <p>{t('common.modelLimits.conflict')}</p>
+                    {metrics
+                      .filter((metric) => metric in draft.changes)
+                      .map((metric) => (
+                        <p key={metric}>
+                          {t('common.modelLimits.currentLimit', {
+                            metric: t(labelKeys[metric]),
+                            limit:
+                              value.limits[metric] === null
+                                ? t('common.modelLimits.unlimited')
+                                : displayQuotaAmount(value.limits[metric], metric),
+                          })}
+                        </p>
+                      ))}
+                    <Button
+                      type="button"
+                      disabled={read.isFetching}
+                      onClick={async () => {
+                        const latest = await read.refetch();
+                        if (!latest.isSuccess || !latest.data.data[0]) return;
+                        const revision = latest.data.donation_revision;
+                        const original = latest.data.data[0].limits;
+                        setDraft((previous) => previous && { ...previous, revision, original });
+                        save.reset();
+                      }}
+                    >
+                      {t('common.modelLimits.reload')}
+                    </Button>
+                  </div>
+                ) : null}
+                {uncertain ? (
+                  <div role="status" className="nb-stack nb-stack--sm">
+                    <p>{t('common.modelLimits.unknown')}</p>
+                    <Button
+                      type="button"
+                      disabled={save.isPending}
+                      onClick={() => {
+                        if (save.variables) submit(save.variables);
+                      }}
+                    >
+                      {t('common.modelLimits.retry')}
+                    </Button>
+                  </div>
+                ) : null}
+                {save.isSuccess ? <p role="status">{t('common.modelLimits.saved')}</p> : null}
+              </form>
+            ) : (
+              <>
+                <h4>{t('common.modelLimits.cumulative')}</h4>
+                <DataTable
+                  caption={t('common.modelLimits.cumulative')}
+                  rows={metrics}
+                  rowKey={(metric) => metric}
+                  columns={[
+                    {
+                      key: 'metric',
+                      header: t('common.modelLimits.metric'),
+                      cell: 'title',
+                      render: (metric) => t(labelKeys[metric]),
+                    },
+                    ...(['limits', 'used', 'reserved', 'remaining'] as const).map((key) => ({
+                      key,
+                      header: t(labelKeys[key]),
+                      cell: 'meta' as const,
+                      mobileLabel: t(labelKeys[key]),
+                      render: (metric: ModelMetric) => (
+                        <Amount metric={metric} value={value[key][metric]} />
+                      ),
+                    })),
+                  ]}
+                />
+              </>
+            )}
+            <div className="nb-stack nb-stack--sm field-help">
+              <p>{t('common.modelLimits.creditsHelp')}</p>
               <p>
-                {t('common.modelLimits.unattributed', {
-                  tokens: displayQuotaAmount(value.unattributed_total_tokens, 'tokens'),
-                })}
+                {value.tracking_started_at === null
+                  ? t('common.modelLimits.trackingNew')
+                  : t('common.modelLimits.trackingSince', {
+                      time: formatDateTime(value.tracking_started_at),
+                    })}
               </p>
+              {value.historical_costs_partial ? (
+                <p>{t('common.modelLimits.partialCosts')}</p>
+              ) : null}
+              {value.unattributed_total_tokens !== '0' ? (
+                <p>
+                  {t('common.modelLimits.unattributed', {
+                    tokens: displayQuotaAmount(value.unattributed_total_tokens, 'tokens'),
+                  })}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div hidden={section !== 'recurring'}>
+            {visitedRules ? (
+              <RecurringLimits
+                {...props}
+                upstreamModelID={model}
+                onSaved={(receipt) => {
+                  void client.invalidateQueries({ queryKey: root });
+                  props.onSaved?.(receipt);
+                }}
+              />
             ) : null}
           </div>
-          <Fold
-            title={t('common.modelLimits.recurring')}
-            summary={t('common.modelLimits.recurringHelp')}
-            plain
-            lazy
-          >
-            <RecurringLimits
-              {...props}
-              upstreamModelID={model}
-              onSaved={(receipt) => {
-                void client.invalidateQueries({ queryKey: root });
-                props.onSaved?.(receipt);
-              }}
-            />
-          </Fold>
         </>
       )}
     </section>

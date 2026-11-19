@@ -1,7 +1,7 @@
 import { channelPreset } from '../../../../../test/fixtures/resourceScopes';
 import { useState } from 'react';
 import { QueryObserver, type QueryClient } from '@tanstack/react-query';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { Sheet } from '@shared/components/ui/Sheet';
@@ -219,6 +219,20 @@ async function fillCustom(
   return view;
 }
 describe('service setup as one task', () => {
+  it('preserves an invalid additional key without creating a partial service', async () => {
+    const view = await fillCustom();
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));
+    const label = userEn.user.services.additionalKey.replace('{{number}}', '2');
+    const field = screen.getByLabelText(label);
+    const invalid = 'synthetic' + String.fromCharCode(1) + 'key';
+    fireEvent.change(field, { target: { value: invalid } });
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(field).toHaveValue(invalid);
+    view.unmount();
+    expect(document.body.innerHTML).not.toContain(invalid);
+  });
+
   it('creates a dedicated HTTP rerank service using its registered path capability', async () => {
     const dedicated = { ...options.native_service_options[0]! };
     Object.assign(dedicated, {

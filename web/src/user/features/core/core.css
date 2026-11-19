@@ -1250,7 +1250,7 @@
 }
 .models-workspace .core-binding-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--nb-space-3);
 }
@@ -1308,6 +1308,10 @@
 @media (width < 48rem) {
   .models-workspace .core-binding-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .models-workspace .core-binding-row > .nb-actions {
+    grid-column: 2 / -1;
+    grid-row: 3;
   }
   .models-workspace .core-binding-row > .nb-badge {
     grid-column: 2;

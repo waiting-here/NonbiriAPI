@@ -151,22 +151,24 @@ type DiscoveryEvidence struct {
 }
 
 type CatalogEntry struct {
-	ID              string `json:"id"`
-	SourceType      string `json:"source_type"`
-	UpstreamModelID string `json:"upstream_model_id"`
-	Provider        string `json:"provider"`
-	SourceRevision  string `json:"source_revision"`
-	PairRevision    string `json:"pair_revision"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	NativeServices  []connectorcontract.NativeService `json:"native_services,omitempty"`
+	ID              string                            `json:"id"`
+	SourceType      string                            `json:"source_type"`
+	UpstreamModelID string                            `json:"upstream_model_id"`
+	Provider        string                            `json:"provider"`
+	SourceRevision  string                            `json:"source_revision"`
+	PairRevision    string                            `json:"pair_revision"`
+	CreatedAt       int64                             `json:"created_at"`
+	UpdatedAt       int64                             `json:"updated_at"`
 }
 
 type CatalogView struct {
-	Evidence         DiscoveryEvidence    `json:"evidence"`
-	AutomaticEntries []CatalogEntry       `json:"automatic_entries"`
-	ManualEntries    []CatalogEntry       `json:"manual_entries"`
-	NextCursor       *string              `json:"next_cursor"`
-	Pagination       *pagination.Metadata `json:"pagination,omitempty"`
+	SelectionRevision string               `json:"selection_revision,omitempty"`
+	Evidence          DiscoveryEvidence    `json:"evidence"`
+	AutomaticEntries  []CatalogEntry       `json:"automatic_entries"`
+	ManualEntries     []CatalogEntry       `json:"manual_entries"`
+	NextCursor        *string              `json:"next_cursor"`
+	Pagination        *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type BindingCandidate struct {

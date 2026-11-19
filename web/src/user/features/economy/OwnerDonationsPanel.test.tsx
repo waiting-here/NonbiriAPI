@@ -171,8 +171,7 @@ describe('owner donation pages', () => {
     await view.user.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByText('needle submission');
     expect(screen.queryByText('Submission 1')).not.toBeInTheDocument();
-    await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
-    await view.user.click(screen.getByRole('menuitem', { name: 'View donated keys' }));
+    await view.user.click(screen.getByRole('button', { name: 'View donated keys' }));
     let region = screen.getByRole('region', { name: 'View donated keys' });
     await within(region).findByText(/head1…tail/);
     await view.user.click(within(region).getByRole('button', { name: 'Next' }));
@@ -261,19 +260,15 @@ describe('owner donation pages', () => {
     await view.queryClient.invalidateQueries({ queryKey: economyKeys.donations });
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible();
     expect(screen.getByText('Submission 1')).toBeVisible();
-    await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
-    const keysAction = screen.getByRole('menuitem', { name: 'View donated keys' });
-    expect(keysAction).toHaveAttribute('aria-disabled', 'true');
+    const keysAction = screen.getByRole('button', { name: 'View donated keys' });
+    expect(keysAction).toBeDisabled();
     await view.user.click(keysAction);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await view.user.keyboard('{Escape}');
     status = 200;
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
-    await view.user.click(screen.getByRole('button', { name: 'Donation actions' }));
     await waitFor(() =>
-      expect(screen.getByRole('menuitem', { name: 'View donated keys' })).not.toHaveAttribute(
-        'aria-disabled',
-      ),
+      expect(screen.getByRole('button', { name: 'View donated keys' })).toBeEnabled(),
     );
     await view.user.keyboard('{Escape}');
     status = 401;

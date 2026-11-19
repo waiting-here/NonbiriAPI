@@ -208,10 +208,7 @@ for (const [width, locale, theme] of [
 
     await panel.getByRole('button', { name: common.next, exact: true }).click();
     await expect(panel.getByText('needle submission', { exact: true })).toBeVisible();
-    await panel
-      .getByRole('button', { name: copy.presentation.donationActions, exact: true })
-      .click();
-    await page.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
+    await panel.getByRole('button', { name: copy.ownerPages.keys, exact: true }).click();
     const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
     await expect(keys.getByText('head1…tail', { exact: true })).toBeVisible();
     await keys.getByRole('button', { name: common.next, exact: true }).click();

@@ -296,6 +296,23 @@ func (api *httpAPI) deleteEndpoint(writer http.ResponseWriter, request *http.Req
 	writeMutation(writer, result)
 }
 
+func (api *httpAPI) getEndpointKey(w http.ResponseWriter, req *http.Request, principal UserPrincipal) {
+	endpointID, ok := parsePathID(w, req, "id")
+	if !ok {
+		return
+	}
+	keyID, ok := parsePathID(w, req, "keyId")
+	if !ok || !requireNoBody(w, req) || !requireEmptyQuery(w, req) {
+		return
+	}
+	item, err := api.repository.GetEndpointKeyDetail(req.Context(), principal.UserID, endpointID, keyID)
+	if err != nil {
+		writeResourceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (api *httpAPI) listEndpointKeys(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
 	endpointID, ok := parsePathID(writer, request, "id")
 	if !ok || !requireNoBody(writer, request) {

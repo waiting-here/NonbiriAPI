@@ -56,7 +56,8 @@ describe('core narrow viewport and untrusted-text boundary', () => {
       'src/user/pages/AccountPage.tsx',
       'src/user/features/core/components.tsx',
       'src/user/features/core/EndpointDetail.tsx',
-      'src/user/features/core/EndpointWizard.tsx',
+      'src/user/features/core/connections/ServiceCreateForm.tsx',
+      'src/user/features/core/connections/CredentialGrantForm.tsx',
       'src/user/features/core/ModelsWorkspace.tsx',
       'src/user/features/core/AccountWorkspace.tsx',
     ];

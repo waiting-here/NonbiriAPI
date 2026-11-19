@@ -905,8 +905,7 @@ test.describe('donation expiry in UTC', () => {
     await expect(first.locator('.economy-status-stack')).toContainText(
       'Charity services paused or not enabled · 1',
     );
-    await first.getByRole('button', { name: 'Donation actions', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
+    await first.getByRole('button', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-blocked…tail' })).toBeVisible();
     await page.getByRole('tab', { name: 'History', exact: true }).click();
@@ -919,8 +918,7 @@ test.describe('donation expiry in UTC', () => {
       .filter({ hasText: 'Sources and key status' })
       .click();
     await expect(donations.locator('.economy-status-stack')).toContainText('Expired · 1');
-    await donations.getByRole('button', { name: 'Donation actions', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'View donated keys', exact: true }).click();
+    await donations.getByRole('button', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toHaveCount(0);
     await page.getByRole('tab', { name: 'Current donations', exact: true }).click();
