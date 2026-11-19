@@ -121,6 +121,10 @@ func TestGoogleModelQuotaAdmissionAndAliases(t *testing.T) {
 		}
 	}
 	e.complete(t, pending, googleQuotaOutcome(t, "upstream-model", false))
+	e.assertAttemptBackoff(t, h, "google_daily_requests", "model", "", now+12075)
+	e.assertAttemptBackoff(t, late, "", "", "", 0)
+	e.assertAttemptBackoff(t, other, "google_minute_input_tokens", "model", "", now+20)
+	e.assertAttemptBackoff(t, pending, "", "", "", 0)
 	var count int
 	if err := e.store.DB().QueryRow(`SELECT count(*) FROM donation_service_model_cooldowns WHERE upstream_model_id='upstream-model'`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("late receipt recreated deleted target", count, err)
@@ -158,6 +162,8 @@ func TestGoogleModelHeaderScopeAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(now+10, 0, now+30)
+	e.assertAttemptBackoff(t, first, "google_daily_requests", "model", "", now+10)
+	e.assertAttemptBackoff(t, second, "retry_header", "service", "", now+30)
 	e.clock.Store(now + 30)
 	h := e.googleDispatch(t, e.tokenModel, "upstream-model")
 	if err := e.rail.ObserveResponseHeaders(t.Context(), h, contract.ResponseObservation{HasRetryAfter: true, Status: 429, ObservedAt: now + 30, RateLimitedUntil: now + 30}); err != nil {
@@ -165,6 +171,17 @@ func TestGoogleModelHeaderScopeAndRecovery(t *testing.T) {
 	}
 	e.complete(t, h, googleQuotaOutcome(t, "upstream-model", false))
 	check(now+10, 0, now+30)
+	e.assertAttemptBackoff(t, h, "", "", "", 0)
+
+	// A valid provisional header can expire while its body is being read.
+	h = e.googleDispatch(t, e.tokenModel, "upstream-model")
+	if err := e.rail.ObserveResponseHeaders(t.Context(), h, contract.ResponseObservation{HasRetryAfter: true, Status: 429, ObservedAt: now + 30, RateLimitedUntil: now + 40}); err != nil {
+		t.Fatal(err)
+	}
+	e.clock.Store(now + 41)
+	e.complete(t, h, noDelay)
+	check(now+40, 0, now+30)
+	e.assertAttemptBackoff(t, h, "", "", "", 0)
 }
 
 func TestGoogleModelQuotaLateReceiptsAfterChanges(t *testing.T) {
@@ -188,6 +205,7 @@ func TestGoogleModelQuotaLateReceiptsAfterChanges(t *testing.T) {
 				}
 			}
 			e.complete(t, h, googleQuotaOutcome(t, "upstream-model", false))
+			e.assertAttemptBackoff(t, h, "", "", "", 0)
 			var count int
 			if err := e.store.DB().QueryRow("SELECT count(*) FROM donation_service_model_cooldowns").Scan(&count); err != nil || count != 0 {
 				t.Fatal("late quota updated changed target", count, err)

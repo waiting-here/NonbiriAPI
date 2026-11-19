@@ -273,8 +273,15 @@ func Complete(ctx context.Context, tx *sql.Tx, claimID string, status int, now i
 	next := s
 	next.Episode, next.Period, next.Source, next.Stage = nextEpisode, nextPeriod, nextSource, stage
 	next.RetryAt, next.Trial = sql.NullInt64{Int64: until, Valid: true}, sql.NullString{}
-	_, err = writeScope(ctx, tx, f.scope, s, next, now)
-	return err
+	changed, err := writeScope(ctx, tx, f.scope, s, next, now)
+	if err != nil || !changed || until <= now {
+		return err
+	}
+	reason := "smart_quota"
+	if trial {
+		reason = "smart_trial"
+	}
+	return RecordApplied(ctx, tx, claimID, reason, f.scope.name(), nextPeriod, until)
 }
 func EffectiveUntilSQL(key string) string {
 	return `max(COALESCE((SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=` + key + `),0),

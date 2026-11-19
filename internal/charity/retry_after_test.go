@@ -3,6 +3,7 @@ package charity
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -20,6 +21,22 @@ func (e *charityTestEnv) retryClaimInput(t *testing.T, request string) claim.Cla
 	authorization := e.authorization(t, tx, request)
 	_ = tx.Rollback()
 	return claim.ClaimInput{RequestID: request, ActorUserID: e.callerID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{Authorization: authorization, EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: contract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}}
+}
+
+func (e *charityTestEnv) assertAttemptBackoff(t *testing.T, handle claim.Handle, reason, scope, period string, until int64) {
+	t.Helper()
+	var gotReason, gotScope, gotPeriod, request string
+	var gotUntil int64
+	err := e.store.DB().QueryRow(`SELECT b.reason,b.scope,COALESCE(b.period,''),b.retry_at,l.logical_request_id
+FROM request_attempt_backoffs b JOIN request_logs l ON l.id=b.request_log_id WHERE b.claim_id=?`, handle.ClaimID()).
+		Scan(&gotReason, &gotScope, &gotPeriod, &gotUntil, &request)
+	if reason == "" && errors.Is(err, sql.ErrNoRows) {
+		return
+	}
+	if err != nil || gotReason != reason || gotScope != scope || gotPeriod != period || gotUntil != until || request != handle.RequestID() {
+		t.Fatalf("attempt %s: got backoff (%q, %q, %q, %d, %q), want (%q, %q, %q, %d, %q); err=%v",
+			handle.ClaimID(), gotReason, gotScope, gotPeriod, gotUntil, request, reason, scope, period, until, handle.RequestID(), err)
+	}
 }
 
 func TestRetryAfterBlocksNewAndPendingDispatchAcrossModels(t *testing.T) {
@@ -201,6 +218,30 @@ func TestRetryAfterConcurrentObservationsOnlyExtendAndReplayDoesNotRestart(t *te
 	}
 }
 
+func TestRetryAfterReceiptsKeepOnlyAppliedExtensions(t *testing.T) {
+	e := newBackoffEnv(t)
+	now := e.clock.Load()
+	first, _ := e.dispatch(t)
+	second, _ := e.dispatch(t)
+	covered, _ := e.dispatch(t)
+	for _, item := range []struct {
+		handle claim.Handle
+		delay  int64
+	}{{first, 30}, {second, 90}, {covered, 60}} {
+		if err := e.rail.ObserveResponseHeaders(t.Context(), item.handle, contract.ResponseObservation{
+			HasRetryAfter: true, Status: 503, ObservedAt: now, RateLimitedUntil: now + item.delay,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.rail.RecoverNonterminal(t.Context(), 100); err != nil {
+		t.Fatal(err)
+	}
+	e.assertAttemptBackoff(t, first, "retry_header", "service", "", now+30)
+	e.assertAttemptBackoff(t, second, "retry_header", "service", "", now+90)
+	e.assertAttemptBackoff(t, covered, "", "", "", 0)
+}
+
 func TestRetryAfterDoesNotExemptAnUnobservedFailure(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
@@ -273,6 +314,8 @@ func TestRetryAfterDeletedKeyCannotBeResurrectedAndFactsCascade(t *testing.T) {
 	if err := e.store.DB().QueryRow("SELECT count(*) FROM dispatch_retry_after_observations").Scan(&receipts); err != nil || receipts != 0 {
 		t.Fatal("orphan receipt", receipts, err)
 	}
+	e.assertAttemptBackoff(t, a, "retry_header", "service", "", charityTestNow+90)
+	e.assertAttemptBackoff(t, b, "", "", "", 0)
 }
 
 func TestRetryAfterStreamAcceptanceRetainsBillingAndFailureReset(t *testing.T) {

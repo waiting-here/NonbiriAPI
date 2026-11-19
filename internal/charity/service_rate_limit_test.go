@@ -65,6 +65,7 @@ func TestServiceRateLimitReleaseFencesLateHeadersAndBackoff(t *testing.T) {
 					}
 				}
 				e.complete(t, old, quotaOutcome("day"))
+				e.assertAttemptBackoff(t, old, "", "", "", 0)
 				var waits int
 				query := `SELECT (SELECT count(*) FROM donation_service_health WHERE retry_after_until IS NOT NULL OR backoff_retry_at IS NOT NULL OR trial_claim_id IS NOT NULL)+(SELECT count(*) FROM donation_key_cooldowns)+(SELECT count(*) FROM donation_key_backoffs WHERE retry_at IS NOT NULL OR trial_claim_id IS NOT NULL)`
 				if err := e.store.DB().QueryRow(query).Scan(&waits); err != nil || waits != 0 {

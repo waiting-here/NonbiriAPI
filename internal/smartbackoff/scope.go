@@ -10,6 +10,13 @@ import (
 // distinguish a new service probe from a probe granted by a legacy gate.
 type stateScope struct{ keyID, healthID int64 }
 
+func (s stateScope) name() string {
+	if s.healthID > 0 {
+		return "service"
+	}
+	return "key"
+}
+
 func readScope(ctx context.Context, q Querier, scope stateScope) (stored, error) {
 	var s stored
 	var period, source sql.NullString
@@ -120,21 +127,44 @@ func ModelUntilSQL(healthAlias, upstreamModel string) string {
 	return `COALESCE((SELECT mc.retry_at FROM donation_service_model_cooldowns mc WHERE mc.health_id=` + healthAlias + `.id AND mc.upstream_model_id=` + upstreamModel + `),0)`
 }
 
-func ObserveRetryAfter(ctx context.Context, tx *sql.Tx, claimID string, until, now int64) error {
-	f, err := readFact(ctx, tx, claimID)
+// RecordApplied keeps the attempt's decision after the live gate is released,
+// superseded or deleted. The request log owns its retention.
+func RecordApplied(ctx context.Context, tx *sql.Tx, claimID, reason, scope, period string, retryAt int64) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO request_attempt_backoffs(claim_id,request_log_id,reason,scope,period,retry_at)
+VALUES(?1,(SELECT l.id FROM dispatch_claims c JOIN request_logs l ON l.logical_request_id=c.logical_request_id WHERE c.id=?1),
+?2,?3,NULLIF(?4,''),?5)`, claimID, reason, scope, period, retryAt)
+	return err
+}
+
+func ObserveRetryAfter(ctx context.Context, tx *sql.Tx, claimID, reason string, until, observed, now int64) error {
+	var key, health, previous sql.NullInt64
+	var generation int64
+	err := tx.QueryRowContext(ctx, `SELECT f.donation_key_id,f.health_id_snapshot,f.generation,
+CASE WHEN f.health_id_snapshot IS NOT NULL THEN (SELECT retry_after_until FROM donation_service_health WHERE id=f.health_id_snapshot)
+ELSE (SELECT rate_limited_until FROM donation_key_cooldowns WHERE donation_key_id=f.donation_key_id) END
+FROM dispatch_smart_backoff_facts f WHERE f.claim_id=?`, claimID).Scan(&key, &health, &generation, &previous)
 	if err != nil {
 		return err
 	}
-	if !f.key.Valid {
+	if !key.Valid {
 		return nil
 	}
-	if f.scope.healthID > 0 {
-		_, err = tx.ExecContext(ctx, `UPDATE donation_service_health SET retry_after_until=max(COALESCE(retry_after_until,0),?),updated_at=max(updated_at,?)
-WHERE id=? AND backoff_generation=? AND EXISTS(SELECT 1 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=donation_service_health.use_id AND dk.id=? AND dk.ended_at IS NULL)`, until, now, f.scope.healthID, f.generation, f.key.Int64)
+	var result sql.Result
+	if health.Valid {
+		result, err = tx.ExecContext(ctx, `UPDATE donation_service_health SET retry_after_until=max(COALESCE(retry_after_until,0),?),updated_at=max(updated_at,?)
+WHERE id=? AND backoff_generation=? AND EXISTS(SELECT 1 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id WHERE u.id=donation_service_health.use_id AND dk.id=? AND dk.ended_at IS NULL)`, until, observed, health.Int64, generation, key.Int64)
+	} else {
+		result, err = tx.ExecContext(ctx, `INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at)
+SELECT k.id,?,? FROM donation_keys k JOIN donation_key_backoffs b ON b.donation_key_id=k.id WHERE k.id=? AND k.ended_at IS NULL AND b.generation=?
+ON CONFLICT(donation_key_id) DO UPDATE SET rate_limited_until=max(donation_key_cooldowns.rate_limited_until,excluded.rate_limited_until),updated_at=max(donation_key_cooldowns.updated_at,excluded.updated_at)`, until, observed, key.Int64, generation)
+	}
+	if err != nil || until <= now || until <= previous.Int64 {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO donation_key_cooldowns(donation_key_id,rate_limited_until,updated_at)
-SELECT k.id,?,? FROM donation_keys k JOIN donation_key_backoffs b ON b.donation_key_id=k.id WHERE k.id=? AND k.ended_at IS NULL AND b.generation=?
-ON CONFLICT(donation_key_id) DO UPDATE SET rate_limited_until=max(donation_key_cooldowns.rate_limited_until,excluded.rate_limited_until),updated_at=max(donation_key_cooldowns.updated_at,excluded.updated_at)`, until, now, f.key.Int64, f.generation)
-	return err
+	n, err := result.RowsAffected()
+	if err != nil || n == 0 {
+		return err
+	}
+	scope := stateScope{keyID: key.Int64, healthID: health.Int64}
+	return RecordApplied(ctx, tx, claimID, reason, scope.name(), "", until)
 }
