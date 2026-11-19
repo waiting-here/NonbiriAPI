@@ -21,5 +21,12 @@ SELECT u.id,dk.endpoint_key_id,u.native_service_bit,g.credential_version_id,nbi_
 FROM donation_uses u JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donation_use_revisions r ON r.id=u.current_approved_revision_id JOIN endpoint_key_grant_revisions g ON g.id=r.grant_revision_id WHERE dk.id=? AND u.native_service_bit=1`, now, donated); err != nil {
 		t.Fatal(err)
 	}
+	// A failure reset lifts the service pause; the independent model quota
+	// then becomes the limiting reason until expiry or an explicit release.
+	if _, err := f.store.DB().Exec(`INSERT INTO donation_service_model_cooldowns(health_id,upstream_model_id,reason,retry_at)
+SELECT h.id,'health-upstream','google_daily_requests',? FROM donation_service_health h
+JOIN donation_uses u ON u.id=h.use_id WHERE u.donation_key_id=? AND h.native_service_bit=1`, now+12075, donated); err != nil {
+		t.Fatal(err)
+	}
 	return map[string]any{"donation_id": donation["id"], "key_id": donated, "model_id": model["id"]}
 }

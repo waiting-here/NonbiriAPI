@@ -53,6 +53,22 @@ func TestUnavailableCandidatesKeepSafeDetailBeforeDispatch(t *testing.T) {
 	}
 }
 
+func TestModelQuotaRecheckUsesTheRejectedBinding(t *testing.T) {
+	for _, stage := range []string{"claim", "dispatch"} {
+		ctx, _, err := requestattempt.New(t.Context(), 1, "POST", "/v1/chat/completions")
+		if err != nil {
+			t.Fatal(err)
+		}
+		blocked := &claim.ModelQuotaLimit{BindingID: 91, NativeService: contract.NativeServiceGeminiGenerateContent, Reason: "google_daily_requests"}
+		observeClaimError(ctx, RouteCandidate{BindingID: 11}, stage, blocked)
+		trace := requestattempt.RouteSnapshot(ctx)
+		want := requestattempt.RouteObservation{BindingID: "91", NativeService: blocked.NativeService, Reason: blocked.Reason, Stage: stage}
+		if trace == nil || len(trace.Observations) != 1 || trace.Observations[0] != want {
+			t.Fatalf("recheck did not identify the candidate that hit quota: %+v", trace)
+		}
+	}
+}
+
 func TestEmptyResourceSnapshotIsUnavailableBeforeClaim(t *testing.T) {
 	for _, charity := range []bool{false, true} {
 		f := newServiceFixture(t, nil)

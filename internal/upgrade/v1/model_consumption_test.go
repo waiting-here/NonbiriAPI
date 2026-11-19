@@ -142,16 +142,7 @@ func mustExec(t *testing.T, source *sql.DB, q string, args ...any) {
 
 func restoreSourceLayout(t *testing.T, source *sql.DB) {
 	t.Helper()
-	mustExec(t, source, "DROP TRIGGER google_model_target_update")
-	mustExec(t, source, "DROP TRIGGER google_model_target_delete")
-	mustExec(t, source, "DROP TABLE donation_service_model_cooldowns")
-	mustExec(t, source, "DROP INDEX idx_retry_pending_health")
-	mustExec(t, source, "ALTER TABLE dispatch_retry_after_observations DROP COLUMN pending_health_id")
-	mustExec(t, source, "DROP INDEX idx_donation_keys_due_expiry")
-	for _, column := range []string{"historical_costs_partial", "price_reserved_mag", "calls_reserved", "price_used_mag", "calls_used", "price_limit_mag", "call_limit_mag"} {
-		mustExec(t, source, "ALTER TABLE donation_model_quotas DROP COLUMN "+column)
-	}
-	mustExec(t, source, "UPDATE schema_state SET version=54")
+	dbtest.RestoreSchema54Fixture(t, source)
 	assertRetainedManifest(t, source, db.Schema54ManifestHash)
 }
 

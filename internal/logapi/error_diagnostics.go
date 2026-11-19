@@ -26,6 +26,10 @@ func readDelivery(ctx context.Context, reader logReadQueryer, logID int64, manag
 	if len(raw) > 16<<10 || json.Unmarshal([]byte(raw), &value) != nil {
 		return nil, nil, nil
 	}
+	if !management && value.Failure != nil {
+		value.Failure.ProviderReason = ""
+		value.Failure.FailureDisablement = nil
+	}
 	if management && len(value.Route) > 0 {
 		var route requestattempt.RouteDecision
 		if json.Unmarshal(value.Route, &route) == nil && route.Valid() {

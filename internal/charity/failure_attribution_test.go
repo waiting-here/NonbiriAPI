@@ -12,6 +12,37 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
+func TestFailureDisablementOnRetainedHTTPResultWithoutDiagnosis(t *testing.T) {
+	e := newCharityTestEnv(t)
+	rail := e.billingRail(t)
+	if _, err := e.store.DB().Exec("UPDATE donation_keys SET failure_disable_threshold='2' WHERE id=?", e.donationKey); err != nil {
+		t.Fatal(err)
+	}
+	first := e.billingRequest(t, rail, e.tokenModel, 5, 1)
+	oldest := e.billingDispatch(t, rail, first.ID, 1)
+	request := e.billingRequest(t, rail, e.tokenModel, 5, 1)
+	h := e.billingDispatch(t, rail, request.ID, 1)
+	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 401, StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamResponse}
+	if _, err := rail.CompleteAttempt(t.Context(), h, outcome); err != nil {
+		t.Fatal(err)
+	}
+	// Older attempts can retain only their HTTP result when the unfinished
+	// preceding claim finally settles.
+	if _, err := e.store.DB().Exec("DELETE FROM request_attempt_diagnostics WHERE claim_id=?", h.ClaimID()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rail.CompleteAttempt(t.Context(), oldest, outcome); err != nil {
+		t.Fatal(err)
+	}
+	var before, after, threshold string
+	var fields int
+	if err := e.store.DB().QueryRow(`SELECT json_extract(details,'$.failure_disablement.streak_before'),
+json_extract(details,'$.failure_disablement.streak_after'),json_extract(details,'$.failure_disablement.threshold'),
+(SELECT count(*) FROM json_each(details)) FROM request_attempt_diagnostics WHERE claim_id=?`, h.ClaimID()).Scan(&before, &after, &threshold, &fields); err != nil || before != "1" || after != "2" || threshold != "2" || fields != 1 {
+		t.Fatalf("receipt for an HTTP-only attempt: %s → %s / %s, %d fields, %v", before, after, threshold, fields, err)
+	}
+}
+
 func TestFailureDisablementIdentifiesCrossingAcrossRequests(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)

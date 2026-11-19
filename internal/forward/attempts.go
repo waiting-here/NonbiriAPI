@@ -366,7 +366,11 @@ func (service *Service) runAttempts(
 		settleContext, cancel := context.WithTimeout(context.WithoutCancel(attemptContext), service.settlement)
 		outcome := attemptOutcome(result)
 		diagnostic.ProtocolComplete(attemptContext, outcome.ProtocolSuccess)
-		outcome.ErrorDiagnostics = diagnostic.Encode(diagnostic.Finish(attemptContext, result.Success, result.Committed, result.Usage.Present, result.UpstreamStatus, result.Diagnostic, string(result.FailureOrigin)))
+		failureFacts := diagnostic.Finish(attemptContext, result.Success, result.Committed, result.Usage.Present, result.UpstreamStatus, result.Diagnostic, string(result.FailureOrigin))
+		if failureFacts != nil {
+			failureFacts.ProviderReason = result.ErrorDetail.ProviderReason()
+		}
+		outcome.ErrorDiagnostics = diagnostic.Encode(failureFacts)
 		acceptedByCharityUpstream := plan.charity && result.UpstreamStatus == http.StatusOK
 		if plan.charity && responseStart != nil && responseStart.retryAfterObserved && !outcome.ProtocolSuccess {
 			outcome.StreakDisposition = connectorcontract.StreakNeutral
@@ -417,7 +421,11 @@ func (service *Service) runAttempts(
 
 func observeClaimError(ctx context.Context, candidate RouteCandidate, stage string, err error) {
 	var reason string
+	var quota *claim.ModelQuotaLimit
 	switch {
+	case errors.As(err, &quota):
+		requestattempt.ObserveRecheck(ctx, quota.BindingID, quota.NativeService, quota.Reason, stage)
+		return
 	case errors.Is(err, claim.ErrKeyRateLimited):
 		reason = "key_rate_limit"
 	case errors.Is(err, donationquota.ErrLimited):

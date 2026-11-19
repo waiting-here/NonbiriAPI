@@ -140,10 +140,8 @@ WHERE a.claim_id=?`, c.ClaimID).Scan(&a.RequestID, &seq, &a.ConnectorType, &serv
 	if !a.valid() {
 		return nil, ErrInvariant
 	}
-	if f != nil {
-		if err := saveAttemptDisablement(ctx, tx, c.ClaimID, f, a.FailureDisablement); err != nil {
-			return nil, err
-		}
+	if err := saveAttemptDisablement(ctx, tx, c.ClaimID, f, a.FailureDisablement); err != nil {
+		return nil, err
 	}
 	return &a, nil
 }
@@ -151,6 +149,14 @@ WHERE a.claim_id=?`, c.ClaimID).Scan(&a.RequestID, &seq, &a.ConnectorType, &serv
 func saveAttemptDisablement(ctx context.Context, tx *sql.Tx, claimID string, f *diagnostic.Failure, effect diagnostic.FailureDisablement) error {
 	receipt, err := json.Marshal(effect)
 	if err != nil {
+		return err
+	}
+	if f == nil {
+		// A retained attempt may have only its HTTP result. Record the new
+		// transition without inventing a transport diagnosis for that attempt.
+		_, err = tx.ExecContext(ctx, `INSERT INTO request_attempt_diagnostics(claim_id,request_log_id,attempt_seq,category,phase,details,completed_at)
+SELECT claim_id,request_log_id,attempt_seq,'unknown','execute',json_object('failure_disablement',json(?)),completed_at
+FROM request_attempts WHERE claim_id=? ON CONFLICT(claim_id) DO NOTHING`, string(receipt), claimID)
 		return err
 	}
 	// Preserve the original document (including extensions) whenever it fits.

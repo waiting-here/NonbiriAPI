@@ -422,6 +422,12 @@ func parseAttemptFilter(rawQuery string) (AttemptFilter, error) {
 		}
 		switch name {
 		case "attempt_page", "attempt_page_size":
+		case "attempt_seq":
+			sequence, ok := parseCanonicalInt64(entries[0], 1, maximumLimit)
+			if !ok || values.Has("attempt_page") || values.Has("attempt_cursor") || values.Has("attempt_limit") {
+				return AttemptFilter{}, ErrInvalid
+			}
+			filter.FocusSeq = sequence
 		case "attempt_cursor":
 			if entries[0] == "" {
 				return AttemptFilter{}, ErrInvalid

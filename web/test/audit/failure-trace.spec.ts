@@ -51,10 +51,13 @@ for (const [language, width, theme] of [
     const capture = (page: Page, name: string) =>
       page.screenshot({ path: resolve(visual, `failure-trace-${name}-${width}-${theme}.png`) });
 
+    const resultBanner = (page: Page) =>
+      page.locator('.nb-expandable-panel:not([hidden])').getByRole('alert').first();
+
     const expectSummary = async (page: Page) => {
       const summary = page.getByRole('region', { name: labels.failureSummary });
       await expect(summary).toBeVisible();
-      await expect(page.getByText(labels.presentation.retryHint, { exact: true })).toHaveCount(0);
+      await expect(resultBanner(page)).not.toContainText(labels.presentation.retryHint);
       for (const [reason, status, count] of [
         [reasons.google_access_token_type_unsupported, 401, '8'],
         [reasons.google_daily_requests, 429, '5'],
@@ -163,9 +166,7 @@ for (const [language, width, theme] of [
           expect(detail).not.toHaveProperty('attempts');
           await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
           await expect(page.getByRole('region', { name: labels.failureSummary })).toHaveCount(0);
-          await expect(
-            page.getByText(labels.presentation.retryHint, { exact: true }),
-          ).toBeVisible();
+          await expect(resultBanner(page)).toContainText(labels.presentation.charityUpstreamHint);
           await expect(page.getByRole('link', { name: alert.view })).toHaveCount(0);
           continue;
         }

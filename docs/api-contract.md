@@ -402,6 +402,23 @@ Request logs and JSON/CSV exports include nullable `requested_streaming` (the ca
 
 Administrator and authorized steward request details can include `route_decision` for personal and charity requests. Its `observations` describe candidates as the platform saw them during that request. An observation has a `reason` and can identify the `binding_id`, `native_service`, native or conversion `match`, and a safe parameter `field`. For example, a direct binding can be disabled after repeated failures, followed by a converted candidate that rejects a particular parameter before dispatch. An eligible candidate can still fail later. Actual upstream calls are recorded under `attempts`. The optional `truncated` flag identifies a partial record. Historical requests can lack observations. These details are restricted to management detail reads.
 
+Administrator and steward request details can also include `failure_summary`.
+Each group has a stable `reason`, a numeric `count` and, when observed, a numeric
+`status_code`. Counts cover all retained attempts for that request, including
+unsuccessful attempts before a successful response and attempts on other pages.
+Older attempts with only a failing HTTP status are grouped by that status.
+The summary contains no upstream text. Individual attempts may include a
+`provider_reason` in `error_diagnostics` and a `failure_disablement` receipt
+with decimal-string `streak_before`, `streak_after` and `threshold`, the
+`connector_type` and an optional `native_service`.
+
+On either management log detail endpoint, `attempt_seq=23&attempt_page_size=10`
+opens the numbered page containing retained attempt 23. Sequences range from
+1 to 100 and can have gaps. The response includes the actual page in
+`attempt_pagination`. A missing sequence returns the request's first page.
+The page size defaults to 20. Supply the sequence on its own or with
+`attempt_page_size`. Regular page, cursor and limit queries retain their usual meanings.
+
 An observation with `stage: "claim"` records a resource reservation check. A `"dispatch"` observation records the last check before the upstream call. Reasons distinguish a key's rate or concurrency limit, a recurring quota, and exhausted platform reservation storage. An aggregate check across several bindings can omit the binding ID.
 
 Request-log list/detail and JSON exports may include safe `rejection_detail:{field,reason,suggestion?}` for a recorded pre-handler refusal or a platform resource refusal before any upstream attempt. Administrators, authorized stewards and the ordinary caller viewing **their own** log receive the same server-authored check and corrective suggestion, subject to existing display privacy. For example:
@@ -992,10 +1009,12 @@ donations and their `owner_hidden_at`, including hidden history.
 ### 4.1.2 Temporary donated-key cooldown
 
 On any upstream HTTP status, valid `Retry-After` or `X-Retry-After` values
-temporarily remove that donated key from charity selection until
-`rate_limited_until` (nullable Unix seconds). This does not change personal-call
-limits. The latest valid deadline across both names and repeated values wins;
-an HTTP date's comma is not a value separator. A later observation cannot shorten
+can pause charity selection until the indicated deadline. The pause normally
+applies to the approved service on that credential, or to the whole key for a
+key-wide recovery state. A verified Google model quota narrows the pause to
+the affected model as described below. Personal calls keep their own limits.
+The latest valid deadline across both names and repeated values wins.
+An HTTP date's comma is part of the date. A later observation cannot shorten
 an existing cooldown. Basic unavailable states take precedence over
 `rate_limited`. An elapsed deadline immediately stops limiting without a reset
 or administrator action.
@@ -1026,6 +1045,28 @@ authentication/billing failures retain ordinary failure accounting. The original
 503 and error details still reach the caller and diagnostics; no retry header is
 invented. The minimal claim-bound cooldown receipt survives recovery and replay
 without extending the deadline. This is a short temporary wait, not a quota trial.
+
+An HTTP 429 from Google can carry a model-specific waiting period. The API
+recognizes `RESOURCE_EXHAUSTED` with a structured `google.rpc.QuotaFailure`
+for a positive Gemini request or input-token quota per model, per day or per
+minute. The latest valid `Retry-After` or `X-Retry-After` header deadline
+takes precedence over the duration in `google.rpc.RetryInfo`.
+Without either header a positive, valid retry duration is required. Fractional
+seconds round up. The affected credential's
+approved service preserves its consecutive-failure count. Bindings to the same
+upstream model on that service share the wait. Other models and other
+credentials remain eligible under their own limits.
+
+In binding availability, a service waiting on that model reports
+`state: "rate_limited"`, `retry_after_until` (Unix seconds) and
+`model_quota_reason`. Routing observations distinguish the reason at selection,
+reservation or dispatch. On a binding with overlapping waits, the retry time
+includes both the service's retry header and that model's deadline. A failure
+reset preserves the model wait. An explicit service rate-limit release clears
+its model waits and fences earlier in-flight observations.
+Authentication errors and unsupported or contradictory
+quota details follow the existing policies. Fresh installations and the explicit
+schema 54 to 55 upgrade start with empty model-specific waits.
 
 ### 4.1.3 Smart donated-key backoff
 
@@ -2644,6 +2685,11 @@ removes the owner's associations; delayed session observations cannot recreate t
 
 Connection metadata adds `connections,credentials,credential_versions,grants,discovery_sources,source_revisions,binding_targets,native_service_evidence,donation_uses`. These owner-scoped collections expose public versions and revision numbers, safe settings, review snapshots and current approved health. They exclude secret material, fingerprints, review HMACs and internal authorization identities. See [service connections](service-connections.md) for rotation, approval and deletion semantics.
 
+An owned `donation_uses[].health[]` entry with active model-specific waits
+includes `model_cooldowns`. Each entry contains `upstream_model_id`, the
+bounded `reason` and `retry_at` in Unix seconds. Expired waits are omitted
+at the export snapshot time.
+
 Format 31 adds nullable `endpoint_key_id,last_success_at,added_count,removed_count`
 to each exported discovery source. Counts are decimal strings; the timestamp is
 UTC Unix seconds. Sources belong to one endpoint/key pair, and keys belong to
@@ -2987,6 +3033,14 @@ Lake Notes is a permanent free minigame with four independently configured excha
 `GET /admin/api/alerts` accepts optional `kind` alongside `resolved` and either cursor or numbered pagination. Kind is a closed alert-kind value, including `account_deleted`; cursors are bound to both filters. `POST /admin/api/alerts/resolve` accepts `{"ids":["1","2"]}` with 1–100 distinct positive decimal ID strings. It atomically marks those alerts resolved, preserves previously resolved timestamps, and returns `{"resolved_count":2}`. A missing ID returns 404 without partial writes. All alert routes require an administrator session; writes retain same-origin/CSRF checks.
 
 **Rc.4 alert detail:** `GET /admin/api/alerts/{id}` returns `{alert,context_version,occurred_facts,targets,current_state,related_logs,resolution_kind}`. This is a read-only detail, with no request body or query. `alert` retains the compatible `kind,message,ref` and resolution fields; `context_version` is 1 for a recorded event context or 0 for a legacy row. Each event/current fact is `{key,value}`. A target is `{kind,id,available,status,unavailable_reason?}` and is at most eight per alert; the persisted context is at most 16 KiB. `related_logs` is null or `{endpoint_key_id,from,to,available,unavailable_reason?}` and uses the actual physical endpoint-key ID and an explicit UTC window. `resolution_kind` distinguishes manual, automatic-blacklist, recovered-worker and legacy outcomes when known. Current resource state is separately rechecked and can be unavailable after deletion, loss of authority or log expiry; old references are parsed only when their known format matches exactly. A `ref`, message or upstream string is data, never a navigation URL.
+
+An automatic donation failure alert can also return `trigger_attempt`. It records
+the `request_id` and decimal-string `attempt_seq` of the attempt that crossed the
+threshold, its `connector_type`, optional `native_service` and HTTP `status_code`,
+a bounded `reason`, and decimal-string `streak_before`, `streak_after`, `threshold`.
+The `available` flag reflects whether that precise attempt is still readable,
+including under an active legal hold. The saved event facts survive log expiry.
+Historical alerts and threshold edits have no inferred trigger.
 
 `GET /admin/api/alerts/targets/{kind}/{target_id}` is a separate administrator-only, read-only diagnostic for an **exact** target. The only accepted `kind` values are `issue`, `issue_user`, `fishing_batch` and `rps_session`; `target_id` must be the corresponding valid opaque ID, or a canonical positive user ID for `issue_user`. It accepts no query or body and returns HTTP 200 with `{kind,id,facts,related_issue_ids}` under `no-store`, rechecking administrator authority in the same bounded read transaction. Facts are fixed `{key,value}` safe operational strings: issue state/source/count/times, a fishing batch's retry/settlement stage, or an RPS session's current retry phase or retained terminal summary. `issue_user` returns the projection phase, counts and at most 20 retained issue IDs, **only** when an `issue_projection_incomplete` alert for that user exists. Invalid kind/ID is 400; an absent, expired or unqualified target is 404. No full game inputs, randomness, another player's identity, secret, free-form SQL/URL selector or mutation is exposed. Level-6 stewards have no route to this diagnostic.
 

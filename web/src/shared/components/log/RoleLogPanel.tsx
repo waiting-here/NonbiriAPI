@@ -1008,8 +1008,11 @@ function ScopedRoleLogPanel({
   const resultHint = (row: RoleLogRow, hasFailureSummary: boolean) => {
     const result = logResult(row);
     if (!result.hint) return null;
-    if (hasFailureSummary && ['keyHint', 'rateHint', 'retryHint'].includes(result.hint))
-      return null;
+    if (['keyHint', 'rateHint', 'retryHint'].includes(result.hint)) {
+      if (row.role === 'user' && row.route_kind.startsWith('charity_'))
+        return t('common.operations.logs.presentation.charityUpstreamHint');
+      if (hasFailureSummary) return null;
+    }
     const hintKeys = {
       creditsHint: 'common.operations.logs.presentation.creditsHint',
       keyHint: 'common.operations.logs.presentation.keyHint',

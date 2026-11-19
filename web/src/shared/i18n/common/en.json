@@ -554,6 +554,7 @@
           "storageSummary": "{{used}} / {{budget}} MiB used · {{count}} bodies omitted over time",
           "storageFailures": "{{capacity}} omitted for capacity, {{count}} read/write failures in total; {{current}} missing records remain queryable.",
           "retryHint": "Retry later, or add a second source to the model.",
+          "charityUpstreamHint": "Try again later or choose another charity model. If the problem persists, include this request ID when reporting it.",
           "keyHint": "Check that this service key is valid.",
           "rateHint": "The provider limited the rate. Try again later.",
           "creditsHint": "Get credits through check-in or activities.",

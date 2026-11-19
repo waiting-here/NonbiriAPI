@@ -554,6 +554,7 @@
           "storageSummary": "已用 {{used}} / {{budget}} MiB · 历史累计 {{count}} 条未保存",
           "storageFailures": "容量不足累计 {{capacity}} 条，读写失败累计 {{count}} 条；当前仍可查询 {{current}} 条缺失记录。",
           "retryHint": "稍后重试，或在模型里添加第二个来源。",
+          "charityUpstreamHint": "稍后重试，或换一个公益模型。如果问题持续，反馈时请附上这条请求 ID。",
           "keyHint": "检查这个服务的密钥是否有效。",
           "rateHint": "服务商限制了频率，稍后再试。",
           "creditsHint": "去签到或活动获取积分。",

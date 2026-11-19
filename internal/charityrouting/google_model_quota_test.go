@@ -79,6 +79,25 @@ FROM donation_uses u JOIN donation_keys k ON k.id=u.donation_key_id JOIN donatio
 			t.Fatal("sibling cooldown", i, s, view.State)
 		}
 	}
+	// A separate service-wide header can be shorter or longer than the model
+	// wait. Both facts remain visible and the binding cannot recover early.
+	for _, global := range []int64{until - 20, until + 20} {
+		if _, err := e.store.DB().Exec("UPDATE donation_service_health SET retry_after_until=? WHERE id=?", global, health); err != nil {
+			t.Fatal(err)
+		}
+		admin, err := e.service.GetBindingsAdmin(ctx, mid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		waiting, sibling := admin.Bindings[0].Targets[0].Availability.ServiceStatuses[0], admin.Bindings[1].Targets[0].Availability.ServiceStatuses[0]
+		if waiting.State != "rate_limited" || waiting.ModelQuotaReason != "google_minute_input_tokens" || waiting.RetryAfterUntil == nil || *waiting.RetryAfterUntil != max(global, until) ||
+			sibling.ModelQuotaReason != "" || sibling.RetryAfterUntil == nil || *sibling.RetryAfterUntil != global {
+			t.Fatal(waiting, sibling)
+		}
+	}
+	if _, err := e.store.DB().Exec("UPDATE donation_service_health SET retry_after_until=NULL WHERE id=?", health); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.store.DB().Exec(`DELETE FROM charity_binding_targets WHERE donation_key_id=? OR upstream_model_id='model-b'`, otherKey); err != nil {
 		t.Fatal(err)
 	}

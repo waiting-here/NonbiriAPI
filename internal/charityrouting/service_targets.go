@@ -74,7 +74,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 			}
 			approvedMask |= services.Mask()
 			state, present := available[serviceTarget{use.UseID, candidate.Authorization.TargetID}]
-			modelLimited := state.modelRetryAt > now && strings.HasPrefix(state.reason, "google_")
+			modelLimited := state.modelRetryAt > now && state.reason == state.modelReason
 			if !present || (state.reason != "" && !modelLimited) {
 				if state.reason == "" {
 					state.reason = "unavailable"
@@ -157,6 +157,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 type serviceTarget struct{ useID, targetID int64 }
 type serviceTargetState struct {
 	reason       string
+	modelReason  string
 	modelRetryAt int64
 }
 
@@ -169,7 +170,8 @@ func availableServiceTargetsTx(ctx context.Context, tx *sql.Tx, targetIDs []int6
 		args = append(args, target)
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT a.use_id,t.id,CASE WHEN h.failure_disabled=1 THEN 'failure_disabled'
-WHEN `+smartbackoff.ServiceUntilSQL("h")+`>? THEN 'cooldown' WHEN mc.retry_at>? THEN mc.reason ELSE '' END,COALESCE(mc.retry_at,0)
+WHEN `+smartbackoff.ServiceUntilSQL("h")+`>? THEN 'cooldown' WHEN mc.retry_at>? THEN mc.reason ELSE '' END,
+COALESCE(mc.reason,''),COALESCE(mc.retry_at,0)
 FROM charity_binding_targets t JOIN charity_use_availability a ON a.donation_key_id=t.donation_key_id AND (a.native_service_bit & t.native_service_mask)<>0
 JOIN donation_keys dk ON dk.id=a.donation_key_id
 LEFT JOIN donation_service_health h ON h.use_id=a.use_id AND h.endpoint_key_id=dk.endpoint_key_id
@@ -184,7 +186,7 @@ WHERE t.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(targetIDs)), ",")+`
 	for rows.Next() {
 		var key serviceTarget
 		var state serviceTargetState
-		if err := rows.Scan(&key.useID, &key.targetID, &state.reason, &state.modelRetryAt); err != nil {
+		if err := rows.Scan(&key.useID, &key.targetID, &state.reason, &state.modelReason, &state.modelRetryAt); err != nil {
 			return nil, err
 		}
 		result[key] = state

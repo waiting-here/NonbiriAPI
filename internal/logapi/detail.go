@@ -7,11 +7,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 func (repository *Repository) GetUser(ctx context.Context, userID int64, requestID string, filter AttemptFilter) (UserLogDetail, error) {
-	if repository == nil || ctx == nil || userID <= 0 || !db.ValidateOpaqueID(requestID, "req_") {
+	if repository == nil || ctx == nil || userID <= 0 || filter.FocusSeq != 0 || !db.ValidateOpaqueID(requestID, "req_") {
 		return nil, ErrInvalid
 	}
 	filter, err := normalizeAttemptFilter(filter)
@@ -160,6 +159,10 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		UsageTotalMismatch: record.usageTotalMismatch == 1,
 		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 	}
+	summary, filter, err := managementAttemptOverview(ctx, tx, record, filter)
+	if err != nil {
+		return AdminLogDetail{}, err
+	}
 	attempts, err := repository.listAdminAttemptsTx(ctx, tx, record.rowID, requestID, filter)
 	if err != nil {
 		return AdminLogDetail{}, err
@@ -173,7 +176,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
-	return AdminLogDetail{RouteDecision: routeDecision, Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+	return AdminLogDetail{FailureSummary: summary, RouteDecision: routeDecision, Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 func (repository *Repository) GetSteward(
@@ -238,6 +241,10 @@ func (repository *Repository) GetSteward(
 		UsageTotalMismatch: record.usageTotalMismatch == 1,
 		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
 	}
+	summary, filter, err := managementAttemptOverview(ctx, tx, record, filter)
+	if err != nil {
+		return StewardLogDetail{}, err
+	}
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {
 		return StewardLogDetail{}, err
@@ -269,7 +276,7 @@ func (repository *Repository) GetSteward(
 	}
 	metadata := attempts.Pagination
 	attempts.Pagination = nil
-	return StewardLogDetail{RouteDecision: routeDecision, Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
+	return StewardLogDetail{FailureSummary: summary, RouteDecision: routeDecision, Delivery: delivery, Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 type attemptRecord struct {
@@ -403,8 +410,12 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		if usageErr != nil {
 			return Page[UserSelfLogAttempt]{}, usageErr
 		}
+		facts, _ := attemptDiagnostics(record.errorDiagnostics)
+		if facts != nil {
+			facts.ProviderReason = ""
+		}
 		page.Data = append(page.Data, UserSelfLogAttempt{
-			ErrorDiagnostics: diagnostic.Decode(record.errorDiagnostics),
+			ErrorDiagnostics: facts,
 			AttemptSeq:       strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			EndpointNote: endpointNote, KeyNote: keyNote, ConnectorType: record.connectorType,
@@ -480,9 +491,10 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		if usageErr != nil {
 			return Page[AdminLogAttempt]{}, usageErr
 		}
+		facts, disablement := attemptDiagnostics(record.errorDiagnostics)
 		page.Data = append(page.Data, AdminLogAttempt{
-			ErrorDiagnostics: diagnostic.Decode(record.errorDiagnostics),
-			DonationID:       nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
+			ErrorDiagnostics: facts, FailureDisablement: disablement,
+			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,
@@ -563,9 +575,10 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		if usageErr != nil {
 			return Page[StewardLogAttempt]{}, usageErr
 		}
+		facts, disablement := attemptDiagnostics(record.errorDiagnostics)
 		page.Data = append(page.Data, StewardLogAttempt{
-			ErrorDiagnostics: diagnostic.Decode(record.errorDiagnostics),
-			DonationID:       nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
+			ErrorDiagnostics: facts, FailureDisablement: disablement,
+			DonationID: nullableDecimal(donationID), DonationKeyID: nullableDecimal(donationKeyID),
 			AttemptSeq: strconv.FormatInt(record.sequence, 10), ResultKind: ResultKind(record.resultKind),
 			EndpointKeyID: attemptKeyID(record.endpointKeyID), EndpointBaseURL: record.baseURL,
 			ConnectorType: record.connectorType, UpstreamModelID: record.upstreamModel,

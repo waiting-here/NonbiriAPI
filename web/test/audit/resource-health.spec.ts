@@ -214,6 +214,23 @@ test('current service failures are visible to owner and managers and recover thr
     await page.goto(
       `${fixture.admin_url}/charity?charity_section=models&charity_model=${ids.model_id}`,
     );
+    const modelStatus = page.getByRole('region', { name: 'Service health' }).first();
+    await expect(modelStatus).toContainText('Google model daily request quota exhausted');
+    await expect(modelStatus).toContainText('Rate limit wait until');
+    await expect(modelStatus).not.toContainText('Paused after consecutive failures');
+    if (process.env.NONBIRI_VISUAL_DIR) {
+      await modelStatus.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: resolve(process.env.NONBIRI_VISUAL_DIR, 'model-quota-wait.png'),
+      });
+    }
+    await page.goto(`${fixture.admin_url}/charity?donation_id=${ids.donation_id}`);
+    const controls = page.locator('.donation-key-use-controls').first();
+    await controls.getByRole('button', { name: 'Release rate limit', exact: true }).click();
+    await expect(controls).toContainText('Saved');
+    await page.goto(
+      `${fixture.admin_url}/charity?charity_section=models&charity_model=${ids.model_id}`,
+    );
     await expect(page.getByText('Connection available', { exact: true })).toBeVisible();
   } finally {
     await context.close();

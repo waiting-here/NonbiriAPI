@@ -122,14 +122,20 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 				return nil, ErrInvariant
 			}
 			state := availability[serviceTarget{useID, targetIDs[i]}]
-			if state.modelRetryAt > now && status.State == "available" {
-				status.State, status.ModelQuotaReason, status.RetryAfterUntil = "rate_limited", state.reason, &state.modelRetryAt
+			if state.modelRetryAt > now {
+				status.ModelQuotaReason = state.modelReason
+				if status.RetryAfterUntil == nil || *status.RetryAfterUntil < state.modelRetryAt {
+					status.RetryAfterUntil = &state.modelRetryAt
+				}
+				if status.State == "available" {
+					status.State = "rate_limited"
+				}
 			}
 			services, _ := contract.ParseNativeServices([]contract.NativeService{status.NativeService})
 			for _, op := range row.modelTypes {
 				if routes, err := connector.ResolveServiceRoutes(status.ConfiguredType, services, status.RerankFormat, op); err == nil && len(routes) > 0 {
 					row.Availability.ServiceStatuses = append(row.Availability.ServiceStatuses, *status)
-					modelLimited = modelLimited || status.ModelQuotaReason != ""
+					modelLimited = modelLimited || status.State == "rate_limited" && status.ModelQuotaReason != ""
 					break
 				}
 			}

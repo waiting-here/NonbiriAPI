@@ -70,13 +70,14 @@ function LocationProbe() {
 function fixtures(
   role: 'admin' | 'steward' | 'user',
   available = true,
-  failure?: { summary: FailureGroup[]; suggestion?: string },
+  failure?: { summary: FailureGroup[]; suggestion?: string; routeKind?: string },
 ) {
   const failedResult = failure
     ? {
         caller_result_class: 'failed',
         caller_status: 400,
         caller_error_code: 'upstream',
+        route_kind: failure.routeKind ?? request.route_kind,
         ...(failure.suggestion
           ? {
               rejection_detail: {
@@ -91,7 +92,8 @@ function fixtures(
   const managedRequest = { ...request, ...failedResult, charity_model_id: available ? '31' : null };
   const row: Record<string, unknown> =
     role === 'user' ? { ...request, ...failedResult, model: 'public model' } : managedRequest;
-  if (role === 'user') delete row.attempt_count;
+  const charityCaller = role === 'user' && managedRequest.route_kind.startsWith('charity_');
+  if (charityCaller) delete row.attempt_count;
   const root =
     role === 'admin' ? '/admin/api/logs' : role === 'steward' ? '/api/steward/logs' : '/api/logs';
   vi.stubGlobal(
@@ -109,7 +111,7 @@ function fixtures(
         : url.pathname === root
           ? { data: [row], next_cursor: null, pagination }
           : url.pathname === `${root}/${requestID}`
-            ? role === 'user'
+            ? charityCaller
               ? {
                   request: row,
                   caller_safe_result: { class: row.caller_result_class },
@@ -119,14 +121,15 @@ function fixtures(
                   request: row,
                   failure_summary: failure?.summary,
                   attempts: {
-                    data: [
-                      attempt(1),
-                      {
-                        ...attempt(2),
-                        donation_id: available ? '9' : null,
-                        donation_key_id: available ? '13' : null,
-                      },
-                    ],
+                    data: [1, 2].map((number) =>
+                      role === 'user'
+                        ? { ...attempt(number), endpoint_note: 'My service', key_note: 'My key' }
+                        : {
+                            ...attempt(number),
+                            donation_id: available || number === 1 ? String(7 + number) : null,
+                            donation_key_id: available || number === 1 ? String(11 + number) : null,
+                          },
+                    ),
                     next_cursor: null,
                   },
                   attempt_pagination: {
@@ -211,6 +214,8 @@ const authFailures = [
 const quotaFailures = [{ reason: 'google_daily_requests', status_code: 429, count: 5 }];
 const preciseSuggestion = 'Review authorization for the selected upstream model.';
 const retryHint = 'Retry later, or add a second source to the model.';
+const charityHint =
+  'Try again later or choose another charity model. If the problem persists, include this request ID when reporting it.';
 
 it.each([
   { role: 'admin', summary: [...authFailures, ...quotaFailures], expectedHint: null },
@@ -221,7 +226,8 @@ it.each([
     expectedHint: preciseSuggestion,
   },
   { role: 'admin', summary: [], expectedHint: retryHint },
-  { role: 'user', summary: authFailures, expectedHint: retryHint },
+  { role: 'user', summary: authFailures, expectedHint: charityHint },
+  { role: 'user', summary: [], routeKind: 'openai_chat_completions', expectedHint: retryHint },
 ] as const)(
   'shows scoped failure guidance for $role with $expectedHint',
   async ({ role, summary, expectedHint, ...details }) => {

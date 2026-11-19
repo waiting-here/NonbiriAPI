@@ -113,6 +113,17 @@
     }
   },
   "admin": {
+    "failure_summary": [
+      {
+        "reason": "http_error",
+        "status_code": 429,
+        "count": 1
+      },
+      {
+        "reason": "attempt_failed",
+        "count": 1
+      }
+    ],
     "request": {
       "origin_user_id": "101",
       "origin_discord_id": null,
@@ -199,6 +210,17 @@
     }
   },
   "steward": {
+    "failure_summary": [
+      {
+        "reason": "http_error",
+        "status_code": 429,
+        "count": 1
+      },
+      {
+        "reason": "attempt_failed",
+        "count": 1
+      }
+    ],
     "request": {
       "origin_user_id": "101",
       "origin_discord_id": null,

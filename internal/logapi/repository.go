@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math/big"
 	"net/url"
 	"strconv"
@@ -15,9 +14,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
@@ -223,6 +224,18 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 }
 
 func normalizeAttemptFilter(filter AttemptFilter) (AttemptFilter, error) {
+	if filter.FocusSeq != 0 {
+		if filter.FocusSeq < 1 || filter.FocusSeq > maximumLimit || filter.Cursor != "" || filter.Limit != 0 {
+			return AttemptFilter{}, ErrInvalid
+		}
+		if filter.Page == nil {
+			page := pagination.Default()
+			filter.Page = &page
+		}
+		if filter.Page.Page != 1 {
+			return AttemptFilter{}, ErrInvalid
+		}
+	}
 	if filter.Page != nil {
 		if !filter.Page.Valid() || filter.Cursor != "" || filter.Limit != 0 {
 			return AttemptFilter{}, ErrInvalid

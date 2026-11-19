@@ -284,6 +284,7 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	}
 	if os.Getenv("NONBIRI_REQUEST_REJECTIONS_BROWSER") == "1" {
 		state["request_rejections"] = seedRequestRejectionsBrowser(t, f)
+		state["failure_trace"] = seedBrowserFailureTrace(t, f, now-60)
 	}
 	if os.Getenv("NONBIRI_DONATION_CONTEXT_BROWSER") == "1" {
 		state["donation_context"] = seedDonationContextBrowser(t, f, now)

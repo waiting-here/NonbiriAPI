@@ -239,6 +239,17 @@ key still consume its existing limits. Existing key-wide recovery gates are
 preserved during upgrades. No cross-entry quota pool is created, and one failed
 service is not treated as proof that the whole credential is unusable.
 
+If Google reports that an upstream model has used its daily or per-minute
+quota, its binding shows the quota and the earliest retry time. Another model
+using the same credential can still serve requests. In a management request
+log, the failure summary covers every attempt, even when a later credential
+succeeded. An automatic disablement alert links to the attempt that crossed the
+threshold and shows the count before and after that failure.
+
+Resetting consecutive failures can reveal a model that is still waiting on its
+quota. The binding shows the earliest retry time. **Release rate limit** on the
+donated key clears the waits for its eligible services and their models.
+
 Failure reset acts on eligible approved services and their exact credential
 versions. It clears only their consecutive-failure counters/pauses and advances
 the generation so older callbacks cannot restore them. A zero counter also gets
