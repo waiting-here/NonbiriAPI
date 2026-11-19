@@ -577,6 +577,41 @@ it('keeps optional failure observations without rejecting readable attempts or e
   expect(charity.delivery).toMatchObject({ http_status: 200, bytes: 14, failed: false });
 });
 
+it('keeps independent health observations when optional attempt fields are unreadable', () => {
+  const decoded = normalizeAdminLogAttempt({
+    ...attempt,
+    status_code: 429,
+    native_service: 'gemini_generate_content',
+    health_impact: {
+      streak_effect: 'unchanged',
+      streak_before: '01',
+      streak_after: '0',
+      backoff: {
+        reason: 'google_minute_input_tokens',
+        scope: 'model',
+        retry_at: 'expired',
+        period: 'future',
+      },
+    },
+  });
+  expect(decoded.status_code).toBe(429);
+  expect(decoded.native_service).toBe('gemini_generate_content');
+  expect(decoded.health_impact).toMatchObject({
+    streak_effect: 'unchanged',
+    streak_before: undefined,
+    streak_after: '0',
+    backoff: {
+      reason: 'google_minute_input_tokens',
+      scope: 'model',
+      retry_at: undefined,
+      period: undefined,
+    },
+  });
+  expect(
+    normalizeStewardLogAttempt({ ...attempt, health_impact: [] }).health_impact,
+  ).toBeUndefined();
+});
+
 it('keeps diagnostic filters and exports within management roles', () => {
   const filters = { error_category: 'network', error_phase: 'read_response' };
   expect(validateLogFilter('admin', filters)).toMatchObject(filters);

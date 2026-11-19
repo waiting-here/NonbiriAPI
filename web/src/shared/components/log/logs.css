@@ -126,9 +126,30 @@
 .log-attempt-heading h3[tabindex='-1']:focus-visible {
   box-shadow: var(--nb-focus-ring);
 }
-.log-attempt-disablement {
+.log-attempt-disablement,
+.log-attempt-backoff,
+.log-attempt-streak {
   margin-block-start: var(--nb-space-2);
   overflow-wrap: anywhere;
+}
+.log-attempt-streak,
+.log-attempt-retry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--nb-space-2);
+}
+.log-attempt-streak {
+  margin-block-end: 0;
+  font-size: var(--nb-font-size-sm);
+}
+.log-attempt-streak,
+.log-attempt-retry-time {
+  font-variant-numeric: tabular-nums;
+}
+.log-attempt-retry-time > span {
+  display: inline-block;
+  max-width: 100%;
 }
 .log-filters .nb-chip button {
   min-width: 2.5rem;

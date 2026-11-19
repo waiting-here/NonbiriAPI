@@ -525,6 +525,34 @@
         "failureReason": "失败原因",
         "failureDisablement": "此次调用触发自动停用",
         "failureStreak": "连续失败次数从 {{before}} 次增至 {{after}} 次，停用阈值为 {{threshold}} 次。",
+        "healthImpact": {
+          "streak": {
+            "incremented": "连续失败次数已增加",
+            "reset": "连续失败次数已清零",
+            "unchanged": "连续失败次数未变",
+            "pending": "连续失败次数待按调用顺序结算",
+            "unknown": "未记录连续失败次数变化"
+          },
+          "before": "调用前 {{count}} 次",
+          "after": "调用后 {{count}} 次",
+          "didNotDisable": "此次调用未触发下架",
+          "backoff": {
+            "triggered": "此次调用触发等待",
+            "observed": "当时记录的等待建议",
+            "retryHeader": "上游 Retry-After 响应头",
+            "smartTrial": "试用请求失败",
+            "reasonUnknown": "未记录等待原因",
+            "retryAt": "当时预计可重试时间",
+            "suggestedRetryAt": "建议重试时间",
+            "timeUnknown": "未记录重试时间",
+            "scope": {
+              "key": "整把密钥",
+              "service": "此密钥下的服务",
+              "model": "此密钥下的模型",
+              "unknown": "未记录等待范围"
+            }
+          }
+        },
         "platformRecord": "平台生成的记录",
         "requestUnavailable": "这条请求日志已过期或不属于当前账号。日志过期后，积分流水仍会保留。",
         "upstreamResponse": "上游实际响应",

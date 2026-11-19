@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { expect, it, vi } from 'vitest';
+import { DisplayTimeContext } from '@shared/components/timeContextValue';
 import { renderHistoricalLogs } from '../../../../test/unit/logSupport';
 import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 import { RoleLogPanel } from './RoleLogPanel';
@@ -71,6 +72,7 @@ function fixtures(
   role: 'admin' | 'steward' | 'user',
   available = true,
   failure?: { summary: FailureGroup[]; suggestion?: string; routeKind?: string },
+  attemptOverrides: readonly Record<string, unknown>[] = [{}, {}],
 ) {
   const failedResult = failure
     ? {
@@ -89,10 +91,17 @@ function fixtures(
           : {}),
       }
     : {};
-  const managedRequest = { ...request, ...failedResult, charity_model_id: available ? '31' : null };
+  const charity = (failure?.routeKind ?? request.route_kind).startsWith('charity_');
+  const managedRequest = {
+    ...request,
+    ...failedResult,
+    charity_model: charity ? request.charity_model : null,
+    charity_model_id: charity && available ? '31' : null,
+    attempt_count: String(attemptOverrides.length),
+  };
   const row: Record<string, unknown> =
-    role === 'user' ? { ...request, ...failedResult, model: 'public model' } : managedRequest;
-  const charityCaller = role === 'user' && managedRequest.route_kind.startsWith('charity_');
+    role === 'user' ? { ...managedRequest, model: 'public model' } : managedRequest;
+  const charityCaller = role === 'user' && charity;
   if (charityCaller) delete row.attempt_count;
   const root =
     role === 'admin' ? '/admin/api/logs' : role === 'steward' ? '/api/steward/logs' : '/api/logs';
@@ -121,21 +130,27 @@ function fixtures(
                   request: row,
                   failure_summary: failure?.summary,
                   attempts: {
-                    data: [1, 2].map((number) =>
-                      role === 'user'
-                        ? { ...attempt(number), endpoint_note: 'My service', key_note: 'My key' }
-                        : {
-                            ...attempt(number),
-                            donation_id: available || number === 1 ? String(7 + number) : null,
-                            donation_key_id: available || number === 1 ? String(11 + number) : null,
-                          },
-                    ),
+                    data: attemptOverrides.map((overrides, index) => {
+                      const number = index + 1;
+                      return {
+                        ...attempt(number),
+                        ...(role === 'user'
+                          ? { endpoint_note: 'My service', key_note: 'My key' }
+                          : {
+                              donation_id:
+                                charity && (available || number === 1) ? String(7 + number) : null,
+                              donation_key_id:
+                                charity && (available || number === 1) ? String(11 + number) : null,
+                            }),
+                        ...overrides,
+                      };
+                    }),
                     next_cursor: null,
                   },
                   attempt_pagination: {
                     page: '1',
                     page_size: 20,
-                    total_items: '2',
+                    total_items: String(attemptOverrides.length),
                     total_pages: '1',
                   },
                 }
@@ -180,6 +195,139 @@ it.each(['admin', 'level6', 'level5'] as const)(
     expect(JSON.parse(screen.getByTestId('location').textContent!).state.logReturnTo).toBe(before);
   },
 );
+
+it.each(['admin', 'steward'] as const)(
+  'shows %s the effect of each charity attempt and the historical retry time',
+  async (role) => {
+    const retryISO = '2023-11-14T22:14:21.000Z';
+    const retryAt = Date.parse(retryISO) / 1000;
+    const threshold = {
+      connector_type: 'openai-compatible',
+      streak_before: '9',
+      streak_after: '10',
+      threshold: '10',
+    };
+    fixtures(role, true, undefined, [
+      {
+        connector_type: 'google-gemini',
+        native_service: 'gemini_generate_content',
+        status_code: 503,
+        error_diagnostics: { code: 'upstream_error', provider_reason: 'google_model_overloaded' },
+        health_impact: {
+          streak_effect: 'unchanged',
+          streak_before: '9007199254740993',
+          streak_after: '9007199254740993',
+          backoff: { reason: 'google_model_overloaded', scope: 'service', retry_at: retryAt },
+        },
+      },
+      {
+        status_code: 400,
+        health_impact: {
+          streak_effect: 'incremented',
+          streak_before: '10000',
+          streak_after: '10001',
+        },
+      },
+      { health_impact: { streak_effect: 'reset', streak_after: '0' } },
+      {
+        status_code: 429,
+        health_impact: {
+          streak_effect: 'pending',
+          backoff: { reason: 'smart_quota', scope: 'key', period: 'week' },
+        },
+      },
+      {
+        status_code: 400,
+        health_impact: {
+          streak_effect: 'incremented',
+          backoff: {
+            reason: 'recorded_wait',
+            scope: 'unknown',
+            retry_at: retryAt,
+            observed_only: true,
+          },
+        },
+      },
+      { status_code: 503 },
+      {
+        status_code: 400,
+        failure_disablement: threshold,
+        health_impact: { streak_effect: 'incremented', streak_before: '9', streak_after: '10' },
+      },
+    ]);
+    const view = await renderHistoricalLogs(
+      <DisplayTimeContext.Provider value={{ mode: 'site', offset_minutes: 480 }}>
+        <RoleLogPanel role={role} accountId="viewer" />
+      </DisplayTimeContext.Provider>,
+      {
+        station: role === 'admin' ? 'admin' : 'user',
+        role: role === 'admin' ? 'admin' : 'level5',
+        route: `${role === 'admin' ? '/logs?' : '/steward?tab=logs&'}request_id=${requestID}`,
+      },
+    );
+    const panel = within(await screen.findByRole('region', { name: /Log details/ }));
+    await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
+    const call = (number: number) =>
+      within(panel.getByRole('heading', { name: `Attempt ${number}` }).closest('li')!);
+    const noDisablement = 'This attempt did not trigger automatic disablement';
+
+    const overloaded = call(1);
+    expect(overloaded.getByText('Consecutive failures unchanged')).toBeVisible();
+    expect(overloaded.getByText('9,007,199,254,740,993 → 9,007,199,254,740,993')).toBeVisible();
+    expect(overloaded.getByText(noDisablement)).toBeVisible();
+    const wait = overloaded.getByText('Wait triggered').closest<HTMLElement>('[role="alert"]')!;
+    expect(within(wait).getByText('Google model overloaded')).toBeVisible();
+    expect(overloaded.getAllByText('Google model overloaded')).toHaveLength(1);
+    expect(wait).toHaveTextContent('Service on this key · Gemini GenerateContent');
+    expect(wait.querySelector('time')).toHaveAttribute('datetime', retryISO);
+    expect(wait.querySelector('time')).toHaveTextContent('11/15/2023, 06:14:21 AM (UTC+08:00)');
+
+    expect(call(2).getByText('Consecutive failures increased')).toBeVisible();
+    expect(call(2).getByText('10,000 → 10,001')).toBeVisible();
+    expect(call(2).getByText(noDisablement)).toBeVisible();
+    expect(call(3).getByText('Consecutive failures cleared')).toBeVisible();
+    expect(call(3).getByText('After this call 0')).toBeVisible();
+    expect(call(3).getByText(noDisablement)).toBeVisible();
+    expect(call(4).getByText('Consecutive failures awaiting earlier calls')).toBeVisible();
+    expect(call(4).getByText('Weekly allowance exhausted')).toBeVisible();
+    expect(call(4).getByText('Whole key')).toBeVisible();
+    expect(call(4).getByText('Retry time not recorded')).toBeVisible();
+    expect(call(4).queryByText(noDisablement)).not.toBeInTheDocument();
+
+    const historical = call(5);
+    expect(historical.getByText('Consecutive failures increased')).toBeVisible();
+    expect(historical.getByText('Recorded retry guidance')).toBeVisible();
+    expect(historical.getByText('Wait reason not recorded')).toBeVisible();
+    expect(historical.getByText('Scope not recorded')).toBeVisible();
+    expect(historical.getByText('Suggested retry time')).toBeVisible();
+    expect(historical.queryByText('Wait triggered')).not.toBeInTheDocument();
+    expect(historical.queryByText(noDisablement)).not.toBeInTheDocument();
+    expect(call(6).getByText('Consecutive failure change not recorded')).toBeVisible();
+    expect(call(6).queryByText('Wait triggered')).not.toBeInTheDocument();
+    expect(call(6).queryByText(noDisablement)).not.toBeInTheDocument();
+    expect(call(7).getByText('Triggered automatic disablement')).toBeVisible();
+    expect(
+      call(7).getByText('Consecutive failures rose from 9 to 10 (disable threshold 10).'),
+    ).toBeVisible();
+    expect(call(7).queryByText('Consecutive failures increased')).not.toBeInTheDocument();
+  },
+);
+
+it('leaves charity health observations out of personal attempts in management logs', async () => {
+  fixtures('admin', false, { summary: [], routeKind: 'openai_chat_completions' }, [
+    { health_impact: { streak_effect: 'reset', streak_after: '0' } },
+  ]);
+  const view = await renderHistoricalLogs(<RoleLogPanel role="admin" accountId="viewer" />, {
+    station: 'admin',
+    role: 'admin',
+    route: `/logs?request_id=${requestID}`,
+  });
+  const panel = within(await screen.findByRole('region', { name: /Log details/ }));
+  await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
+  expect(panel.getByRole('heading', { name: 'Attempt 1' })).toBeVisible();
+  expect(panel.queryByText('Consecutive failures cleared')).not.toBeInTheDocument();
+  expect(panel.queryByText('Consecutive failure change not recorded')).not.toBeInTheDocument();
+});
 
 it('explains missing historic targets and keeps ordinary charity logs free of management links', async () => {
   fixtures('admin', false);

@@ -1,11 +1,11 @@
 // Bounded, locale-aware formatting for untrusted ISO/epoch timestamps coming
 // from the API. A value that cannot be parsed falls back to '—' so a malformed
 // server field never crashes the UI. Output follows the active station context
-// in a short date-and-minute shape, never the raw RFC3339 string.
+// and shows minutes by default.
 
 import { useCallback } from 'react';
 import { useDisplayTimeContext } from '../components/timeContextValue';
-import { browserTimeContext, type TimeContext } from '../time';
+import { browserTimeContext, type TimeContext, type TimePrecision } from '../time';
 
 type Locale = 'zh' | 'en';
 
@@ -29,16 +29,21 @@ if (typeof window !== 'undefined') window.addEventListener('focus', refreshBrows
 if (typeof document !== 'undefined')
   document.addEventListener('visibilitychange', refreshBrowserZone);
 
-function formatter(locale: Locale, context: TimeContext): Intl.DateTimeFormat {
+function formatter(
+  locale: Locale,
+  context: TimeContext,
+  precision: TimePrecision,
+): Intl.DateTimeFormat {
   const zone =
     context.mode === 'site'
       ? 'UTC'
       : (browserZone ??= Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
-  const key = `${locale}:${zone}`;
+  const key = `${locale}:${zone}:${precision}`;
   let fmt = formatters.get(key);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
       ...DATETIME_OPTIONS,
+      second: precision === 'second' ? '2-digit' : undefined,
       timeZone: zone,
     });
     if (formatters.size >= 8) formatters.clear();
@@ -72,21 +77,25 @@ export function formatDateTime(
   value: unknown,
   locale: Locale = currentLocale(),
   context: TimeContext = browserTimeContext(),
+  precision: TimePrecision = 'minute',
 ): string {
   const date = toDate(value);
   if (!date) return '—';
   try {
     if (context.mode === 'site' && context.offset_minutes === null) return '—';
     if (context.mode === 'site' && context.offset_minutes !== null) {
-      return formatter(locale, context).format(
+      return formatter(locale, context, precision).format(
         new Date(date.getTime() + context.offset_minutes * 60_000),
       );
     }
-    return formatter(locale, context).format(date);
+    return formatter(locale, context, precision).format(date);
   } catch {
     return context.mode === 'site'
       ? '—'
-      : date.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      : date
+          .toISOString()
+          .replace('T', ' ')
+          .slice(0, precision === 'second' ? 19 : 16) + ' UTC';
   }
 }
 

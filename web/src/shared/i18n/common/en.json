@@ -525,6 +525,34 @@
         "failureReason": "Failure reason",
         "failureDisablement": "Triggered automatic disablement",
         "failureStreak": "Consecutive failures rose from {{before}} to {{after}} (disable threshold {{threshold}}).",
+        "healthImpact": {
+          "streak": {
+            "incremented": "Consecutive failures increased",
+            "reset": "Consecutive failures cleared",
+            "unchanged": "Consecutive failures unchanged",
+            "pending": "Consecutive failures awaiting earlier calls",
+            "unknown": "Consecutive failure change not recorded"
+          },
+          "before": "Before this call {{count}}",
+          "after": "After this call {{count}}",
+          "didNotDisable": "This attempt did not trigger automatic disablement",
+          "backoff": {
+            "triggered": "Wait triggered",
+            "observed": "Recorded retry guidance",
+            "retryHeader": "Upstream Retry-After header",
+            "smartTrial": "Trial request failed",
+            "reasonUnknown": "Wait reason not recorded",
+            "retryAt": "Estimated retry time",
+            "suggestedRetryAt": "Suggested retry time",
+            "timeUnknown": "Retry time not recorded",
+            "scope": {
+              "key": "Whole key",
+              "service": "Service on this key",
+              "model": "Model on this key",
+              "unknown": "Scope not recorded"
+            }
+          }
+        },
         "platformRecord": "Platform record",
         "requestUnavailable": "This request log is no longer available, or does not belong to this account. Credit history remains available after request logs expire.",
         "upstreamResponse": "Upstream response",

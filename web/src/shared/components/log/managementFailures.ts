@@ -23,6 +23,25 @@ export interface FailureDisablement {
   threshold: string;
 }
 
+const STREAK_EFFECTS = ['incremented', 'reset', 'unchanged', 'pending', 'unknown'] as const;
+const BACKOFF_SCOPES = ['key', 'service', 'model', 'unknown'] as const;
+const BACKOFF_PERIODS = ['five_hour', 'day', 'week', 'month'] as const;
+
+export interface AttemptBackoff {
+  reason?: string;
+  scope: (typeof BACKOFF_SCOPES)[number];
+  retry_at?: number;
+  period?: (typeof BACKOFF_PERIODS)[number];
+  observed_only: boolean;
+}
+
+export interface AttemptHealthImpact {
+  streak_effect: (typeof STREAK_EFFECTS)[number];
+  streak_before?: string;
+  streak_after?: string;
+  backoff?: AttemptBackoff;
+}
+
 export function normalizeAttemptFailureReason(
   row: Record<string, unknown>,
 ): AttemptFailureReason | undefined {
@@ -57,6 +76,40 @@ export function normalizeFailureSummary(value: unknown): FailureGroup[] | undefi
 
 function canonicalCount(value: unknown): value is string {
   return typeof value === 'string' && /^(?:0|[1-9][0-9]{0,38})$/.test(value);
+}
+
+function normalizeAttemptBackoff(value: unknown): AttemptBackoff | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const row = value as Record<string, unknown>;
+  const reason = normalizeAttemptFailureReason(row)?.reason;
+  const scope = BACKOFF_SCOPES.find((item) => item === row.scope) ?? 'unknown';
+  const retryAt = row.retry_at;
+  const retry_at =
+    typeof retryAt === 'number' &&
+    Number.isSafeInteger(retryAt) &&
+    retryAt > 0 &&
+    retryAt <= 253_402_300_799
+      ? retryAt
+      : undefined;
+  if (reason === undefined && scope === 'unknown' && retry_at === undefined) return;
+  return {
+    reason,
+    scope,
+    retry_at,
+    period: BACKOFF_PERIODS.find((item) => item === row.period),
+    observed_only: row.observed_only === true,
+  };
+}
+
+export function normalizeAttemptHealthImpact(value: unknown): AttemptHealthImpact | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const row = value as Record<string, unknown>;
+  return {
+    streak_effect: STREAK_EFFECTS.find((item) => item === row.streak_effect) ?? 'unknown',
+    streak_before: canonicalCount(row.streak_before) ? row.streak_before : undefined,
+    streak_after: canonicalCount(row.streak_after) ? row.streak_after : undefined,
+    backoff: normalizeAttemptBackoff(row.backoff),
+  };
 }
 
 export function normalizeFailureDisablement(value: unknown): FailureDisablement | undefined {
