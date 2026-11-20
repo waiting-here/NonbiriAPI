@@ -4,6 +4,7 @@ import {
   type RouteDescriptor,
 } from '@shared/routing/routeRegistry';
 import type { IconName } from '@shared/components/Icon';
+import type { CopyKey } from '@shared/i18n/useRegisteredCopy';
 
 export interface NavItem {
   to: string;
@@ -76,3 +77,113 @@ export const UNPLACED_ADMIN_NAV_ROUTES = ADMIN_ROUTE_DESCRIPTORS.filter(
   (route) =>
     'nav' in route && route.nav && !ADMIN_PRIMARY_NAV.some((item) => item.key === route.id),
 ).map((route) => route.id);
+
+interface SearchPage {
+  labelKey: CopyKey;
+  routeId?: string;
+  search?: string;
+  keywordKeys?: readonly CopyKey[];
+}
+
+/** Search indexes common workspaces with stable URLs, plus terms for their parent pages. */
+const SEARCH_PAGES: Partial<
+  Record<string, { keywordKeys?: readonly CopyKey[]; subpages?: readonly SearchPage[] }>
+> = {
+  'admin-charity': {
+    subpages: [
+      {
+        labelKey: 'admin.charity.donationsTitle',
+        search: 'charity_section=donations',
+      },
+      {
+        labelKey: 'admin.charity.modelsTitle',
+        search: 'charity_section=models',
+        keywordKeys: ['admin.navigation.keywords.modelBindings'],
+      },
+      {
+        labelKey: 'common.operations.charity.sourceGroups',
+        search: 'charity_section=sources',
+      },
+      {
+        labelKey: 'common.workflow.templates',
+        search: 'charity_section=templates',
+        keywordKeys: ['admin.navigation.keywords.priceTemplates'],
+      },
+      {
+        labelKey: 'common.bindingPresets.title',
+        routeId: 'admin-channel-binding-presets',
+      },
+    ],
+  },
+  'admin-logs': {
+    keywordKeys: ['admin.logs.logsTitle', 'logs.workspaceRequests'],
+    subpages: [
+      {
+        labelKey: 'logs.workspaceActivity',
+        search: 'log_view=activity',
+        keywordKeys: ['admin.navigation.keywords.activityLogs'],
+      },
+    ],
+  },
+  'admin-rewards': {
+    keywordKeys: ['common.rewards.broadcast', 'admin.navigation.keywords.rewards'],
+  },
+  'admin-activities': {
+    subpages: [
+      {
+        labelKey: 'admin.activities.gacha',
+        routeId: 'admin-gacha',
+      },
+      {
+        labelKey: 'admin.navigation.gachaTemplates',
+        routeId: 'admin-gacha',
+        search: 'gacha_view=presets',
+        keywordKeys: ['admin.navigation.keywords.gachaTemplates'],
+      },
+    ],
+  },
+  'admin-limited-activities': {
+    subpages: [
+      {
+        labelKey: 'common.limitedActivities.common.pictureBook',
+        search: 'activity=picture-book',
+      },
+      {
+        labelKey: 'common.limitedActivities.common.fatFish',
+        routeId: 'admin-fat-fish',
+      },
+    ],
+  },
+  'admin-games': {
+    subpages: [
+      { labelKey: 'admin.navigation.whaleHaven', routeId: 'admin-whale-haven' },
+      { labelKey: 'admin.games.aiPlayersTitle', routeId: 'admin-game-ai' },
+      { labelKey: 'admin.lakeNotes.title', routeId: 'admin-lake-notes' },
+      { labelKey: 'admin.navigation.blackjackHistory', routeId: 'admin-blackjack-history' },
+    ],
+  },
+};
+
+export interface SearchNavItem extends NavItem {
+  parentLabelKey?: string;
+  keywordKeys?: readonly CopyKey[];
+}
+
+export const ADMIN_SEARCH_NAV: SearchNavItem[] = ADMIN_PRIMARY_NAV.flatMap((parent) => {
+  const page = SEARCH_PAGES[parent.key];
+  const subpages = (page?.subpages ?? []).map<SearchNavItem>((subpage) => {
+    const path = subpage.routeId ? requiredRouteById('admin', subpage.routeId).path : parent.to;
+    const to = subpage.search ? `${path}?${subpage.search}` : path;
+    return {
+      key: to,
+      to,
+      end: true,
+      group: parent.group,
+      icon: parent.icon,
+      labelKey: subpage.labelKey,
+      parentLabelKey: parent.labelKey,
+      keywordKeys: subpage.keywordKeys,
+    };
+  });
+  return [{ ...parent, keywordKeys: page?.keywordKeys }, ...subpages];
+});

@@ -118,6 +118,49 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   errors.assertNone();
 });
 
+test('admin mobile page search opens the price templates workspace', async ({ page }) => {
+  const guard = collectConsoleViolations(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'admin', 'admin');
+  await mockPublicConfig(page, 'admin');
+  await page.route(`${ADMIN_ORIGIN}/admin/api/donations?*`, (route) =>
+    route.fulfill({ json: numberedResponse([], '1', 20) }),
+  );
+  await page.route(`${ADMIN_ORIGIN}/admin/api/charity-price-templates?*`, (route) =>
+    route.fulfill({ json: numberedResponse([], '1', 20) }),
+  );
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(`${ADMIN_ORIGIN}/charity`);
+  await expect(page.getByRole('tab', { name: '捐赠审核队列' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const toggle = page.locator('.nb-menu-button');
+  const drawer = page.getByRole('dialog', { name: '管理导航' });
+  const search = drawer.getByRole('textbox', { name: '查找管理页面' });
+  const result = drawer.getByRole('link', { name: '价格模板', exact: true });
+  await toggle.click();
+  await search.fill('价格');
+  await expect(result).toBeVisible();
+  await search.press('Enter');
+  await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?charity_section=templates`);
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole('tab', { name: '价格模板' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: '没有匹配的价格模板' })).toBeVisible();
+  await toggle.click();
+  await expect(search).toHaveValue('');
+  await search.fill('pricing');
+  await expect(result).toHaveAttribute('aria-current', 'page');
+  await search.press('Escape');
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue('');
+  guard.assertNone();
+});
+
 for (const locale of ['en', 'zh'] as const) {
   for (const role of ['user', 'level5', 'level6'] as const) {
     test(`user shell keeps desktop navigation in one row and mobile drawer controls ${locale}/${role}`, async ({
