@@ -13,6 +13,9 @@ import (
 
 func translatingCapabilities(kind contract.Type) contract.CapabilitySet {
 	capabilities := contract.CapabilitySet(contract.CapabilityText | contract.CapabilitySystem | contract.CapabilityDeveloper | contract.CapabilityImages | contract.CapabilityTools | contract.CapabilityToolChoice | contract.CapabilityParallelTools | contract.CapabilityStream | contract.CapabilitySampling | contract.CapabilityModelDiscovery)
+	if kind == contract.TypeGoogleGemini {
+		capabilities |= contract.CapabilitySet(contract.CapabilityReasoningEffort)
+	}
 	if kind == contract.TypeOpenAIResponses {
 		capabilities |= inferenceCapabilities(kind) | contract.CapabilitySet(contract.CapabilityReasoningEffort|contract.CapabilityStorage|contract.CapabilityPromptCache|contract.CapabilityUnknownOpenAIFields)
 	}

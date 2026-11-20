@@ -95,12 +95,7 @@ func Compile(r *openai.ChatRequest, model string, policy contract.AttemptPolicy)
 	}
 	if !chatwire.Null(root["reasoning_effort"]) {
 		value, ok := chatwire.String(root["reasoning_effort"])
-		if !ok {
-			return nil, chatwire.Rejection("reasoning_effort")
-		}
-		switch value {
-		case "none", "minimal", "low", "medium", "high", "xhigh":
-		default:
+		if !ok || !openai.ValidReasoningEffort(value) {
 			return nil, chatwire.Rejection("reasoning_effort")
 		}
 		out["reasoning"] = map[string]string{"effort": value}

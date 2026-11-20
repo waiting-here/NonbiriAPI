@@ -38,7 +38,7 @@ func TestInferencePreflightPreservesSpecificChecks(t *testing.T) {
 		operation                 contract.Operation
 		headers                   http.Header
 	}{
-		{"chat reasoning", `{"model":"m","input":"PRIVATE_INPUT","reasoning":{"effort":"low"}}`, "reasoning", conversion, contract.TypeOpenAIChatCompletions, contract.OperationResponses, nil},
+		{"chat reasoning summary", `{"model":"m","input":"PRIVATE_INPUT","reasoning":{"effort":"low","summary":"auto"}}`, "reasoning", conversion, contract.TypeOpenAIChatCompletions, contract.OperationResponses, nil},
 		{"gateway v3 tools", `{"model":"m","input":"PRIVATE_INPUT","tools":[{"type":"web_search"}]}`, "tools", conversion, contract.TypeAISDKGatewayV3, contract.OperationResponses, nil},
 		{"gateway v4 text", `{"model":"m","input":"PRIVATE_INPUT","text":{"verbosity":"low"}}`, "text", conversion, contract.TypeAISDKGatewayV4, contract.OperationResponses, nil},
 		{"unknown option", `{"model":"m","input":"PRIVATE_INPUT","PRIVATE_OPTION":"PRIVATE_VALUE"}`, "request", conversion, contract.TypeOpenAIChatCompletions, contract.OperationResponses, nil},
