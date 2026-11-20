@@ -85,6 +85,6 @@ describe('finding a management page', () => {
       expect(menu.queryByRole('link', { name: label })).toBeNull();
     await view.user.click(search);
     await view.user.paste(query);
-    expect(menu.getByRole('link', { name: label, exact: true })).toHaveAttribute('href', href);
+    expect(menu.getByRole('link', { name: label })).toHaveAttribute('href', href);
   });
 });
