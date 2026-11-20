@@ -33,15 +33,25 @@ for (const locale of ['zh', 'en'] as const) {
       await page.setViewportSize({ width: 3766, height: 900 });
       await page.goto(`${origin}${path}`);
       const header = page.locator('.nb-page-header');
+      const servicesIndex = origin === USER_ORIGIN && path === '/endpoints';
+      const heading = header.getByRole('heading', { level: 1 });
+      await expect(heading).toBeVisible();
       const description = header.locator('.nb-page-header__description');
-      await expect(description).toBeVisible();
+      const headerContent = servicesIndex ? header.getByRole('button') : description;
+      await expect(headerContent).toBeVisible();
       const headerBox = (await header.boundingBox())!;
-      const descriptionBox = (await description.boundingBox())!;
-      expect(descriptionBox.width).toBeLessThanOrEqual(Math.min(headerBox.width, 52 * 16) + 1);
-      const lineHeight = await description.evaluate((node) =>
-        parseFloat(getComputedStyle(node).lineHeight),
-      );
-      expect(descriptionBox.height).toBeLessThan(lineHeight * 1.5);
+      if (servicesIndex) {
+        await expect(headerContent).toHaveAccessibleName(
+          locale === 'zh' ? '添加服务' : 'Add service',
+        );
+      } else {
+        const descriptionBox = (await description.boundingBox())!;
+        expect(descriptionBox.width).toBeLessThanOrEqual(Math.min(headerBox.width, 52 * 16) + 1);
+        const lineHeight = await description.evaluate((node) =>
+          parseFloat(getComputedStyle(node).lineHeight),
+        );
+        expect(descriptionBox.height).toBeLessThan(lineHeight * 1.5);
+      }
       if (process.env.NONBIRI_VISUAL_DIR && path === '/models') {
         await page.screenshot({
           path: `${process.env.NONBIRI_VISUAL_DIR}/models-${locale}-3766.png`,
@@ -49,11 +59,12 @@ for (const locale of ['zh', 'en'] as const) {
       }
       for (const width of [320, 390, 768, 1440, 1920]) {
         await page.setViewportSize({ width, height: 900 });
-        await expect(description).toBeVisible();
+        await expect(heading).toBeVisible();
+        await expect(headerContent).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
         );
-        const box = (await description.boundingBox())!;
+        const box = (await headerContent.boundingBox())!;
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(width);
       }

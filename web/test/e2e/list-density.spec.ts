@@ -1571,44 +1571,29 @@ test.describe('donation selection expiry in UTC', () => {
     const keys = picker.locator('.donation-resource-picker__section').nth(1);
     const choice = keys.getByRole('checkbox').first();
     await choice.check();
-    await expect(
-      picker
-        .locator('.donation-resource-picker__selected-list > li')
-        .first()
-        .getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1'), {
-          exact: true,
-        }),
-    ).toBeVisible();
-    const expiry = picker
-      .locator('.donation-resource-picker__selected-list input[type=datetime-local]')
-      .first();
-    await picker
-      .locator('.donation-resource-picker__selected-list > li')
-      .first()
-      .locator('.nb-fold > summary')
-      .filter({ hasText: userCopy.user.workflows.donationOptions })
-      .click();
-    await expiry.fill('2027-02-01T12:00');
     await expect(choice).toBeChecked();
+    const done = page.getByRole('button', { name: 'Done', exact: true });
+    await done.click();
+    const composer = page.getByRole('region', { name: 'Submit a charity donation', exact: true });
+    const firstKey = composer.getByRole('listitem').filter({ hasText: 'Endpoint 20 —' });
+    const options = userCopy.user.workflows.donationOptions;
+    const sharing = commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1');
+    await firstKey.getByText(options, { exact: true }).click();
+    await expect(firstKey.getByText(sharing, { exact: true })).toBeVisible();
+    const expiry = firstKey.getByLabel('Expiry for head…0001', { exact: true });
+    await expiry.fill('2027-02-01T12:00');
+    await composer.getByRole('button', { name: 'Choose keys…', exact: true }).click();
     await filter.fill('Endpoint 1 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
     await sources.getByRole('button', { name: /^Endpoint 1 —/ }).click();
     await keys.getByRole('checkbox').nth(1).check();
-    await expect(
-      picker
-        .locator('.donation-resource-picker__selected-list > li')
-        .last()
-        .getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1'), {
-          exact: true,
-        }),
-    ).toBeVisible();
+    await expect(keys.getByRole('checkbox').nth(1)).toBeChecked();
     await filter.fill('Endpoint 20 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
     await sources.getByRole('button', { name: /^Endpoint 20 —/ }).click();
     await expect(keys.getByRole('checkbox').first()).toBeChecked();
-    await expect(expiry).toHaveValue('2027-02-01T12:00');
     await expect(picker.locator('.donation-resource-picker__selected-list > li')).toHaveCount(2);
     await filter.fill('');
     await filter.press('Enter');
@@ -1622,7 +1607,11 @@ test.describe('donation selection expiry in UTC', () => {
     }
     await page.setViewportSize({ width: 390, height: 1000 });
     await screenshot(page, 'donation-resources-mobile');
-    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await done.click();
+    await expect(expiry).toHaveValue('2027-02-01T12:00');
+    const secondKey = composer.getByRole('listitem').filter({ hasText: 'Endpoint 1 —' });
+    await secondKey.getByText(options, { exact: true }).click();
+    await expect(secondKey.getByText(sharing, { exact: true })).toBeVisible();
     await page
       .getByRole('textbox', { name: 'Donation description', exact: true })
       .fill('A helpful description for the shared resources');

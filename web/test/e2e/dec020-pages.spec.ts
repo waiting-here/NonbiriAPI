@@ -127,7 +127,7 @@ async function assertPricesFit(page: Page) {
 
 function endpointKey(
   id: string,
-  state: 'available' | 'disabled' | 'expired',
+  state: 'available' | 'disabled' | 'expired' | 'pending',
   options: {
     endpointKeyID?: string | null;
     endedReason?: 'expired' | null;
@@ -178,7 +178,7 @@ function userDonation(
   id: string,
   keys: unknown[],
   options: {
-    status?: 'approved' | 'expired';
+    status?: 'approved' | 'expired' | 'pending';
     reviewAt?: number;
     createdAt?: number;
     updatedAt?: number;
@@ -192,11 +192,14 @@ function userDonation(
     status,
     revision: '1',
     description: `Fixture donation ${id}`,
-    review_result: {
-      decision: 'approve',
-      reason: 'Fixture authority review',
-      reviewed_at: options.reviewAt ?? createdAt + 1,
-    },
+    review_result:
+      status === 'pending'
+        ? null
+        : {
+            decision: 'approve',
+            reason: 'Fixture authority review',
+            reviewed_at: options.reviewAt ?? createdAt + 1,
+          },
     keys,
     created_at: createdAt,
     updated_at: updatedAt,
@@ -700,9 +703,11 @@ test.describe('donation expiry in UTC', () => {
       updatedAt: 1_800_000_030,
       reviewAt: 1_800_000_021,
     });
-    const createdDonation = userDonation('11', [
-      endpointKey('14', 'available', { displayHead: 'key-free' }),
-    ]);
+    const createdDonation = userDonation(
+      '11',
+      [endpointKey('14', 'pending', { displayHead: 'key-free', expiresAt: 1_800_000_000 })],
+      { status: 'pending' },
+    );
     let donationPostBody: Record<string, unknown> | null = null;
     await mockJson(page, {
       origin: USER_ORIGIN,
@@ -936,15 +941,13 @@ test.describe('donation expiry in UTC', () => {
     const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);
     await expect(keyChoices.getByRole('checkbox', { name: /key-11…tail/ })).toBeDisabled();
     await keyChoices.getByRole('checkbox', { name: /key-free…tail/ }).check();
-    await expect(
-      picker.getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1')),
-    ).toBeVisible();
-    await picker
-      .locator('.nb-fold > summary')
-      .filter({ hasText: userCopy.user.workflows.donationOptions })
-      .click();
-    await picker.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
     await picker.getByRole('button', { name: 'Done', exact: true }).click();
+    const selectedKey = composer.getByRole('listitem').filter({ hasText: 'key-free…tail' });
+    await selectedKey.getByText(userCopy.user.workflows.donationOptions, { exact: true }).click();
+    await expect(
+      selectedKey.getByText(connectionCopy.shareExactVersion.replace('{{version}}', '1')),
+    ).toBeVisible();
+    await selectedKey.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
     await composer
       .getByRole('checkbox', {
         name: 'I own every selected resource or have authorization to contribute its capacity.',
@@ -961,6 +964,10 @@ test.describe('donation expiry in UTC', () => {
     await expect(publicThanks).toBeChecked();
     await composer.getByRole('button', { name: 'Submit for review' }).click();
     await expect(page.getByText('Donation submitted for review.')).toBeVisible();
+    await expect(composer.getByRole('link', { name: 'Donation #11' })).toHaveAttribute(
+      'href',
+      '/charity/donations/11',
+    );
     expect(donationPostBody).toMatchObject({
       description: 'Per-key expiry fixture',
       ownership_authorized: true,
