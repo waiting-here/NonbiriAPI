@@ -28,18 +28,14 @@ export function RomanceStill({ theme, dark }: { theme: RomanceTheme; dark: boole
             ? '(max-aspect-ratio: 3/2) 150vh, 106vw'
             : '(max-aspect-ratio: 16/9) 177.78vh, 100vw'
         }
-        style={
-          theme === 'heart-thief'
-            ? {
-                left: background.left,
-                top: background.top,
-                width: 1536 * background.scale,
-                height: 1024 * background.scale,
-                maxWidth: 'none',
-                objectFit: 'fill',
-              }
-            : { objectPosition: size[0] < 768 ? '48% top' : '78% top' }
-        }
+        style={{
+          left: background.left,
+          top: background.top,
+          width: 1536 * background.scale,
+          height: (theme === 'heart-thief' ? 1024 : 864) * background.scale,
+          maxWidth: 'none',
+          objectFit: 'fill',
+        }}
         alt=""
         aria-hidden="true"
       />

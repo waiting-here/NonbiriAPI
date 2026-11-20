@@ -96,9 +96,12 @@ for (const design of ['celestial', 'wandering', 'heart-moment'])
           await list.locator('summary').first().click();
           await list.locator('summary').first().scrollIntoViewIfNeeded();
           await capture(page, 'donation-details-' + suffix);
-          await list.getByRole('button', { name: '捐赠操作', exact: true }).first().click();
-          await expect(page.getByRole('menu')).toBeVisible();
-          await capture(page, 'donation-menu-' + suffix);
+          await expect(
+            list.getByRole('button', { name: '查看捐赠密钥', exact: true }).first(),
+          ).toBeVisible();
+          await page.locator('.nb-account-trigger').click();
+          await expect(page.getByRole('dialog', { name: '账号操作', exact: true })).toBeVisible();
+          await capture(page, 'account-menu-' + suffix);
           await page.keyboard.press('Escape');
 
           for (const [path, selector, label] of [

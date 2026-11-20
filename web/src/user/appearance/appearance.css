@@ -264,9 +264,6 @@ html[data-appearance='default'] body::after {
 .nb-appearance-still[data-scene] {
   object-position: 78% top;
 }
-.nb-appearance-still[data-scene='amber'] {
-  object-position: 82% top;
-}
 .nb-amber-still-character,
 .nb-romance-still-character,
 .nb-mirror-still-character,
@@ -638,6 +635,7 @@ html[data-theme='dark'][data-appearance]:not([data-appearance='default'])
 }
 
 .nb-art-stage {
+  --nb-art-band-height: clamp(13rem, min(34vw, 36dvh), 25rem);
   position: fixed;
   inset: 0;
   z-index: -1;
@@ -687,7 +685,7 @@ html:not([data-background-view='true']) .nb-user-shell > .nb-art-stage[data-comp
     inset: auto;
     z-index: 0;
     flex: none;
-    height: clamp(13rem, 34vw, 25rem);
+    height: var(--nb-art-band-height);
   }
 }
 @media (width >= 80rem) {
@@ -784,10 +782,8 @@ html[data-background-view='true']:not([data-appearance='heart-moment']) .nb-art-
     inset: auto;
     z-index: 0;
     flex: none;
-    align-self: center;
-    width: min(100%, 64dvh);
-    height: auto;
-    aspect-ratio: 16 / 9;
+    width: 100%;
+    height: var(--nb-art-band-height);
   }
   html:not([data-background-view='true'])
     .nb-user-shell[data-layout='wide']:has(> .nb-art-stage[data-composition='portrait'])
