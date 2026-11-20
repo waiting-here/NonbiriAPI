@@ -40,6 +40,22 @@ func rejectionSuggestion(field, reason string) string {
 		return "Use complete Chat messages or choose a model with native Responses support."
 	case "tool flattening is unavailable for Responses conversion":
 		return "Turn off tool flattening or choose a model with a source that supports it."
+	case string(AdmissionRPM):
+		return "Space out requests and retry after the rate window advances."
+	case string(AdmissionConcurrency):
+		return "Wait for an active request to finish or choose another available model."
+	case string(AdmissionBoth):
+		return "Reduce parallel requests and retry after the rate window advances."
+	case string(AdmissionQueueFull), string(AdmissionQueueTimeout), string(AdmissionCooldown), string(AdmissionMixed):
+		return "Wait before retrying or choose another available model."
+	case string(AdmissionBudget):
+		return "Choose another available model or ask an operator to check the model usage budget."
+	case string(AdmissionRouting), string(AdmissionQuotaStore):
+		return "Retry later. If this persists, share the request ID with an operator."
+	case string(AdmissionLedgerBusy):
+		return "Wait briefly before retrying."
+	case string(AdmissionLedgerSpace):
+		return "Share the request ID with an operator so they can check accounting storage."
 	}
 	if validContentLengthReason(reason) {
 		return "Add more message text to meet the minimum content length."

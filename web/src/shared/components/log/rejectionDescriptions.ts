@@ -318,6 +318,45 @@ export const rejectionDescriptionKeys: Record<string, string> = {
     'logs.rejectionSuggestions.Turn off tool flattening or choose a model with a source that supports it.',
   'no usable model resource is available for this request':
     'logs.rejectionDescriptions.no usable model resource is available for this request',
+  'the model connection has reached its per-minute request limit':
+    'logs.rejectionDescriptions.the model connection has reached its per-minute request limit',
+  'the model connection has reached its concurrent request limit':
+    'logs.rejectionDescriptions.the model connection has reached its concurrent request limit',
+  'the model connection has reached both its per-minute and concurrent request limits':
+    'logs.rejectionDescriptions.the model connection has reached both its per-minute and concurrent request limits',
+  'the waiting queue for the model connection is full':
+    'logs.rejectionDescriptions.the waiting queue for the model connection is full',
+  'the request deadline expired while waiting for a model connection':
+    'logs.rejectionDescriptions.the request deadline expired while waiting for a model connection',
+  'the model usage budget could not cover this request':
+    'logs.rejectionDescriptions.the model usage budget could not cover this request',
+  'the model connection is temporarily in cooldown':
+    'logs.rejectionDescriptions.the model connection is temporarily in cooldown',
+  'the model connections were unavailable for different reasons':
+    'logs.rejectionDescriptions.the model connections were unavailable for different reasons',
+  'the platform could not reserve routing space for this request':
+    'logs.rejectionDescriptions.the platform could not reserve routing space for this request',
+  'the platform could not record a new usage reservation':
+    'logs.rejectionDescriptions.the platform could not record a new usage reservation',
+  'the accounting service was busy while processing this request':
+    'logs.rejectionDescriptions.the accounting service was busy while processing this request',
+  'the accounting service has no room for a new reservation':
+    'logs.rejectionDescriptions.the accounting service has no room for a new reservation',
+  'Space out requests and retry after the rate window advances.':
+    'logs.rejectionSuggestions.Space out requests and retry after the rate window advances.',
+  'Wait for an active request to finish or choose another available model.':
+    'logs.rejectionSuggestions.Wait for an active request to finish or choose another available model.',
+  'Reduce parallel requests and retry after the rate window advances.':
+    'logs.rejectionSuggestions.Reduce parallel requests and retry after the rate window advances.',
+  'Wait before retrying or choose another available model.':
+    'logs.rejectionSuggestions.Wait before retrying or choose another available model.',
+  'Choose another available model or ask an operator to check the model usage budget.':
+    'logs.rejectionSuggestions.Choose another available model or ask an operator to check the model usage budget.',
+  'Retry later. If this persists, share the request ID with an operator.':
+    'logs.rejectionSuggestions.Retry later. If this persists, share the request ID with an operator.',
+  'Wait briefly before retrying.': 'logs.rejectionSuggestions.Wait briefly before retrying.',
+  'Share the request ID with an operator so they can check accounting storage.':
+    'logs.rejectionSuggestions.Share the request ID with an operator so they can check accounting storage.',
   'shared model resources are temporarily at capacity':
     'logs.rejectionDescriptions.shared model resources are temporarily at capacity',
   'No upstream request was sent. Retry later or choose another available model.':

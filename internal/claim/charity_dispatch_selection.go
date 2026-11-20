@@ -8,6 +8,8 @@ import (
 	"math"
 	"sort"
 
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
+
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
@@ -48,9 +50,12 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 	// Scoring performs no writes. Reuse only the load of an already authorized
 	// physical identity; every candidate still verifies its current grant.
 	loads := make(map[[32]byte]int64, len(input.BalancedCandidates))
+	var skipped requestattempt.AdmissionCause
 	for index, option := range input.BalancedCandidates {
 		grant, err := physicalGrantTx(ctx, tx, input.ActorUserID, option)
 		if errors.Is(err, ErrNotFound) {
+			skipped = skipped.Combine(requestattempt.AdmissionUnavailable)
+			observeCandidateAdmission(ctx, ClaimInput{Candidate: option.Candidate}, "claim", err)
 			continue
 		}
 		if err != nil {
@@ -112,6 +117,7 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 		if _, err := tx.ExecContext(ctx, `RELEASE balanced_candidate`); err != nil {
 			return Handle{}, fmt.Errorf("claim: close balanced candidate: %w", err)
 		}
+		observeCandidateAdmission(ctx, selected, "claim", claimErr)
 		if errors.Is(claimErr, ErrNotFound) || errors.Is(claimErr, ErrKeyRateLimited) || errors.Is(claimErr, donationquota.ErrLimited) {
 			if choice.preferred && !input.skipAffinityQueue && len(KeyQueueCandidates(claimErr)) > 0 {
 				// A still-valid affinity may wait before using another physical
@@ -120,18 +126,22 @@ func (s *Service) claimBalancedCandidatesTx(ctx context.Context, tx *sql.Tx, cla
 				fallback := input
 				fallback.skipAffinityQueue = true
 				selected.queueFallback = &fallback
-				return Handle{}, &keyQueueError{candidates: []ClaimInput{selected}}
+				return Handle{}, AdmissionReason(claimErr).Wrap(&keyQueueError{candidates: []ClaimInput{selected}, skipped: skipped})
 			}
-			queued = append(queued, KeyQueueCandidates(claimErr)...)
+			if wait := KeyQueueCandidates(claimErr); len(wait) > 0 {
+				queued = append(queued, wait...)
+			} else {
+				skipped = skipped.Combine(AdmissionReason(claimErr))
+			}
 			last = claimErr
 			continue
 		}
 		return Handle{}, claimErr
 	}
 	if len(queued) > 0 {
-		return Handle{}, &keyQueueError{candidates: queued}
+		return Handle{}, &keyQueueError{candidates: queued, skipped: skipped}
 	}
-	return Handle{}, last
+	return Handle{}, skipped.Wrap(last)
 }
 
 func physicalGrantTx(ctx context.Context, tx *sql.Tx, actorID int64, option BalancedCandidate) (connectionstore.GrantAuthorization, error) {

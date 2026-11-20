@@ -3,6 +3,13 @@ import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeSer
 import { failureReasonKey, isGoogleModelQuotaReason } from '@shared/observability/failure';
 import { type RouteDecision } from './routeDecision';
 
+const stageLabels = {
+  accept: 'logs.routing.accept',
+  claim: 'logs.routing.claim',
+  queue: 'logs.routing.queue',
+  dispatch: 'logs.routing.dispatch',
+} as const;
+
 const reasonLabels: Record<string, string> = {
   failure_disabled: 'logs.routing.failureDisabled',
   cooldown: 'logs.routing.cooldown',
@@ -10,6 +17,14 @@ const reasonLabels: Record<string, string> = {
   expired: 'logs.routing.expired',
   capacity: 'logs.routing.capacity',
   quota: 'logs.routing.quota',
+  key_rpm: 'logs.routing.key_rpm',
+  key_concurrency: 'logs.routing.key_concurrency',
+  key_concurrency_rpm: 'logs.routing.key_concurrency_rpm',
+  key_queue_full: 'logs.routing.key_queue_full',
+  key_queue_timeout: 'logs.routing.key_queue_timeout',
+  mixed_admission: 'logs.routing.mixed_admission',
+  ledger_busy: 'logs.routing.ledger_busy',
+  ledger_full: 'logs.routing.ledger_full',
   key_rate_limit: 'logs.routing.keyRateLimit',
   quota_storage_full: 'logs.routing.quotaStorageFull',
   routing_busy: 'logs.routing.routingBusy',
@@ -54,15 +69,7 @@ export function RequestRouteDecision({ decision }: { decision: RouteDecision }) 
                   </span>
                 )}
                 {binding && <span>{t('logs.routing.binding', { id: binding })}</span>}
-                {observation.stage && (
-                  <span>
-                    {t(
-                      observation.stage === 'claim'
-                        ? 'logs.routing.claim'
-                        : 'logs.routing.dispatch',
-                    )}
-                  </span>
-                )}
+                {observation.stage && <span>{t(stageLabels[observation.stage])}</span>}
               </div>
               <p>
                 {isGoogleModelQuotaReason(reason)

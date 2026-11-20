@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
@@ -40,7 +41,7 @@ WHERE t.claim_id=? AND t.authorization_kind='charity'`, claimID).Scan(&id, &gene
 		return ErrNotFound
 	}
 	if until > at {
-		return ErrKeyRateLimited
+		return requestattempt.AdmissionCooldown.Wrap(ErrKeyRateLimited)
 	}
 	if _, err := db.DecodeU128(generation); err != nil {
 		return ErrInvariant

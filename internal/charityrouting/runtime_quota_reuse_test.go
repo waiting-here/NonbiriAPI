@@ -8,6 +8,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func quotaSnapshotFixture(t *testing.T, candidates, distinct int) (*routingTestEnv, int64, []int64) {
@@ -53,6 +54,9 @@ func TestRuntimeQuotaReuseRemainsTransactionLocal(t *testing.T) {
 	check := func(want map[int64]int, wantErr error) {
 		t.Helper()
 		snapshot, err := e.service.chatSnapshot(t.Context(), modelID, routingTestNow, []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
+		if wantErr == donationquota.ErrLimited && requestattempt.AdmissionCauseOf(err) != requestattempt.AdmissionBudget {
+			t.Fatalf("expected usage budget, got %q", requestattempt.AdmissionCauseOf(err))
+		}
 		if !errors.Is(err, wantErr) {
 			t.Fatalf("snapshot error=%v, want %v", err, wantErr)
 		}

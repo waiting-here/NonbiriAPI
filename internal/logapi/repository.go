@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
@@ -498,6 +499,9 @@ func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 		return commonLogRecord{}, err
 	}
 	record.rejectionDetail = requestattempt.DecodeDetail(detail.String)
+	if !record.rejectionStage.Valid && (record.callerErrorCode.String == httperr.CodeServiceUnavailable || record.callerErrorCode.String == httperr.CodeInternal) && !requestattempt.IsServiceAdmissionDetail(record.rejectionDetail) {
+		record.rejectionDetail = nil
+	}
 	if err := validateCommonRecord(record); err != nil {
 		return commonLogRecord{}, err
 	}

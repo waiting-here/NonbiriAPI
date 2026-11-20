@@ -227,13 +227,10 @@ func (w *streamWriter) finishFailure(failure wireFailure) bool {
 		return true
 	}
 	w.terminal = true
-	value := httperr.Localize(httperr.New(failure.code, failure.message), httperr.Language(w.writer))
+	language := httperr.Language(w.writer)
+	value := httperr.Localize(failure.publicError(language), language)
 	frame := httperr.SSEErrorFrame(value)
 	if failure.upstreamContext {
-		value = value.WithUpstreamCode(failure.upstreamCode)
-		if failure.diagnostic != "" {
-			value = value.WithDiag(failure.diagnostic)
-		}
 		frame = httperr.SSEUpstreamErrorFrame(value)
 	}
 	_, _ = w.writeLocked(frame, true)

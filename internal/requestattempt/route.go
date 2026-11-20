@@ -30,12 +30,13 @@ func (o RouteObservation) valid() bool {
 	switch o.Reason {
 	case "no_bindings", "failure_disabled", "cooldown", "unavailable", "expired", "capacity", "quota",
 		"google_daily_requests", "google_minute_requests", "google_minute_input_tokens", "google_daily_input_tokens", "google_model_quota",
+		"key_rpm", "key_concurrency", "key_concurrency_rpm", "key_queue_full", "key_queue_timeout", "mixed_admission", "ledger_busy", "ledger_full",
 		"key_rate_limit", "quota_storage_full", "routing_busy", "caller_level", "credential_unavailable", "dependency_unavailable",
 		"operation_unsupported", "features_unsupported", "preparation_rejected", "continuation_mismatch", "protocol_rejected", "eligible":
 	default:
 		return false
 	}
-	if o.Stage != "" && o.Stage != "claim" && o.Stage != "dispatch" {
+	if o.Stage != "" && o.Stage != "claim" && o.Stage != "dispatch" && o.Stage != "queue" && o.Stage != "accept" {
 		return false
 	}
 	if o.BindingID != "" {
