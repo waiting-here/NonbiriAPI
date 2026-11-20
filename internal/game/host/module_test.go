@@ -444,7 +444,7 @@ func TestHostConstructionRecoveryFailureAndReverseClose(t *testing.T) {
 	if err := registry.Seal(); err != nil {
 		t.Fatal(err)
 	}
-	for _, failure := range []string{"construct", "validate", "recover", "start", "none"} {
+	for _, failure := range []string{"construct", "validate", "prepare", "recover", "start", "none"} {
 		t.Run(failure, func(t *testing.T) {
 			events := []string{}
 			var limiter *game.StartLimiter
@@ -467,6 +467,16 @@ func TestHostConstructionRecoveryFailureAndReverseClose(t *testing.T) {
 							return errors.New("bad persisted state")
 						}
 						return nil
+					}
+					// Only modules with initial records need the optional stage.
+					if id == "two" {
+						m.PrepareStartupDefaults = func(context.Context) error {
+							events = append(events, "prepare "+id)
+							if failure == "prepare" {
+								return errors.New("invalid defaults")
+							}
+							return nil
+						}
 					}
 					m.RecoverBeforeListen = func(context.Context, int64, int, time.Time) (WorkResult, error) {
 						events = append(events, "recover "+id)
@@ -503,7 +513,14 @@ func TestHostConstructionRecoveryFailureAndReverseClose(t *testing.T) {
 			if !reflect.DeepEqual(events[len(events)-len(want):], want) {
 				t.Fatalf("reverse close %v", events)
 			}
-			if failure == "validate" || failure == "recover" {
+			if failure == "prepare" {
+				for _, event := range events {
+					if strings.HasPrefix(event, "recover ") {
+						t.Fatalf("recovered before defaults were installed: %v", events)
+					}
+				}
+			}
+			if failure == "validate" || failure == "prepare" || failure == "recover" {
 				for _, event := range events {
 					if strings.HasPrefix(event, "start ") {
 						t.Fatalf("started before recovery %v", events)
