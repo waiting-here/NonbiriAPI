@@ -220,6 +220,11 @@
   padding-block: var(--nb-space-2);
 }
 
+.economy-review-result > summary > .nb-fold__meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .economy-key-details[open] > summary {
   margin-bottom: var(--nb-space-3);
 }

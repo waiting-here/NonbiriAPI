@@ -486,8 +486,8 @@ test('real administrator editor and narrow bilingual user pages preserve role an
     ).json();
     await page.getByLabel('Choose a model to configure').selectOption(model.id);
     const editor = page
-      .getByRole('heading', { name: 'Model availability and pricing' })
-      .locator('..');
+      .getByRole('heading', { name: 'Model availability and pricing', exact: true })
+      .locator('xpath=ancestor::section[1]');
     await expect(editor.getByText(modelName, { exact: true })).toBeVisible();
     await expect(editor.getByText(modelDescription, { exact: true })).toBeVisible();
     expect(await page.locator('svg[onload], img[src="x"]').count()).toBe(0);
@@ -622,8 +622,8 @@ test('real linked size editors preserve drafts and quote all four modes without 
     await page.goto(fixture().admin_url + '/limited-activities?activity=picture-book');
     await page.getByRole('tab', { name: 'Model catalog', exact: true }).click();
     const editor = page
-      .getByRole('heading', { name: 'Model availability and pricing' })
-      .locator('..');
+      .getByRole('heading', { name: 'Model availability and pricing', exact: true })
+      .locator('xpath=ancestor::section[1]');
     for (const [index, model] of models.entries()) {
       const capability = model.size_capability!;
       const hasTier = capability.combinations?.some((row) => row.tier === 'standard') ?? false;

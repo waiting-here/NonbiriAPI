@@ -381,8 +381,8 @@ for (const width of [1440, 390]) {
       await page.getByRole('button', { name: 'Refresh model catalog', exact: true }).click();
       await expect(page.getByRole('option', { name: /synthetic-image-1/ })).toBeAttached();
       const editor = page
-        .getByRole('heading', { name: 'Model availability and pricing' })
-        .locator('..');
+        .getByRole('heading', { name: 'Model availability and pricing', exact: true })
+        .locator('xpath=ancestor::section[1]');
       for (let index = 0; index < modelRows.length; index++) {
         await page.getByLabel('Choose a model to configure').selectOption(ids[index]);
         await editor.getByLabel('Sketch paper per image').fill('2');

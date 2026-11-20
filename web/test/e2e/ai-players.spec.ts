@@ -3,6 +3,7 @@ import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './s
 import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
 import { aiTerms } from '../fixtures/aiPlayers';
+import { setControlChecked } from '../controls';
 
 for (const { width, theme } of [390, 1440].flatMap((width) =>
   ['light', 'dark'].map((theme) => ({ width, theme })),
@@ -95,11 +96,13 @@ for (const { width, theme } of [390, 1440].flatMap((width) =>
         return route.fallback();
       });
       await page.goto(USER_ORIGIN + '/games/bidding');
+      const opponentType = page.getByRole('radiogroup', { name: 'Opponent type', exact: true });
+      const ai = opponentType.getByRole('radio', { name: 'AI players', exact: true });
       await expect(
-        page.getByRole('button', { name: 'Player matches', exact: true }),
-      ).toHaveAttribute('aria-pressed', 'true');
+        opponentType.getByRole('radio', { name: 'Player matches', exact: true }),
+      ).toBeChecked();
       await expect(page.locator('.bid-ai-card')).toHaveCount(0);
-      await page.getByRole('button', { name: 'AI players', exact: true }).click();
+      await setControlChecked(ai, true);
       const choices = page.getByRole('group', { name: 'Choose an AI opponent', exact: true });
       await expect(choices.getByRole('button')).toHaveCount(4);
       await choices.getByRole('button', { name: /Comeback/ }).click();
@@ -132,8 +135,9 @@ for (const { width, theme } of [390, 1440].flatMap((width) =>
       ]);
       await expect(page.getByText(/No ticket is charged before admission/)).toBeVisible();
       await page.getByRole('button', { name: 'Leave queue', exact: true }).click();
-      await page.getByRole('button', { name: 'AI players', exact: true }).click();
+      await setControlChecked(ai, true);
       await expect(page.getByRole('button', { name: 'Challenge', exact: true })).toBeEnabled();
+      await expect(toggle).not.toBeChecked();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
