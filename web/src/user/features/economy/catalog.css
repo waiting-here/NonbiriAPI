@@ -30,6 +30,10 @@
   min-width: 0;
   width: 100%;
 }
+.economy-catalog-filters .nb-chip button {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
 /* The four filters open from More filters; applied ones stay visible as chips. On phones the
  * opened filters share rows so the models start sooner. */
 @media (22rem <= width <= 32rem) {

@@ -128,6 +128,8 @@ async function newService(page: Page, name: string, recoverLost = false) {
 }
 async function associateSource(page: Page) {
   const meta = resources.get(page)!;
+  const c = connectionCopy('en');
+  const services = servicesCopy('en');
   const keys = await api(
     page.context(),
     '/api/endpoints/' + meta.endpointId + '/keys?page=1&page_size=100',
@@ -140,11 +142,6 @@ async function associateSource(page: Page) {
   expect(savedSource.credential_version).toBe(savedKey.credential_version);
   expect(savedKey.discovery_source_id).toBe(meta.sourceId);
   const path = '/api/endpoints/' + meta.endpointId + '/keys/' + meta.keyId;
-  const waitForWrite = () =>
-    page.waitForResponse(
-      (response) =>
-        response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,
-    );
   const detached = await api(page.context(), path, 'PATCH', {
     expected_revision: savedKey.revision,
     discovery_source_id: null,
@@ -152,47 +149,64 @@ async function associateSource(page: Page) {
   expect(detached.status()).toBe(200);
   const detachedKey = await detached.json();
   expect(detachedKey.discovery_source_id).toBeNull();
-  await page.goto(
+  const keyPage =
     fixture().user_url +
-      '/endpoints?connection_id=' +
-      meta.connectionId +
-      '&endpoint_id=' +
-      meta.endpointId +
-      '&key_id=' +
-      meta.keyId,
-  );
+    '/endpoints?connection_id=' +
+    meta.connectionId +
+    '&endpoint_id=' +
+    meta.endpointId +
+    '&focus_key_id=' +
+    meta.keyId;
+  await page.goto(keyPage);
+  const modelPanel = page.getByRole('region', {
+    name: services.viewModels + ' · ' + meta.keyLabel,
+    exact: true,
+  });
+  await expect(modelPanel).toBeVisible();
+  const fetchModels = modelPanel.getByRole('button', { name: services.fetchModels, exact: true });
+  await expect(fetchModels).toHaveCount(0);
   await expect(
-    page.getByRole('button', { name: servicesCopy('en').fetchModels, exact: true }),
-  ).toBeDisabled();
-  const associating = waitForWrite();
-  const associationResult = await page.evaluate(
-    async ({ path, source, revision }) => {
-      const response = await fetch(path, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({ discovery_source_id: source, expected_revision: revision }),
-      });
-      return { status: response.status, body: await response.json() };
-    },
-    { path, source: meta.sourceId, revision: detachedKey.revision },
+    page.getByRole('button', { name: services.chooseCatalog, exact: true }),
+  ).toBeEnabled();
+
+  await page.goto(fixture().user_url + '/endpoints?discovery_source_id=' + meta.sourceId);
+  await page.getByText(c.associateEntries, { exact: true }).click();
+  await page
+    .getByRole('table', { name: c.chooseEntry, exact: true })
+    .getByRole('row')
+    .filter({ has: page.getByRole('cell', { name: meta.name, exact: true }) })
+    .getByRole('button', { name: c.select, exact: true })
+    .click();
+  const associating = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PATCH' && new URL(response.url()).pathname === path,
   );
+  await page
+    .getByRole('table', { name: meta.name, exact: true })
+    .getByRole('row')
+    .filter({ has: page.getByText(meta.keyLabel!, { exact: true }) })
+    .getByRole('button', { name: c.useSource, exact: true })
+    .click();
   const associated = await associating;
   expect(associated.status()).toBe(200);
-  expect(associationResult.status).toBe(200);
   expect(associated.request().postDataJSON()).toEqual({
     discovery_source_id: meta.sourceId,
     expected_revision: detachedKey.revision,
   });
-  expect(associationResult.body).toMatchObject({
+  expect(await associated.json()).toMatchObject({
     credential_id: savedKey.credential_id,
     credential_version: savedKey.credential_version,
     discovery_source_id: meta.sourceId,
   });
-  await page.reload();
-  await expect(
-    page.getByRole('button', { name: servicesCopy('en').fetchModels, exact: true }),
-  ).toBeEnabled();
-  await page.getByRole('button', { name: servicesCopy('en').fetchModels, exact: true }).click();
+  await page.goto(keyPage);
+  await expect(fetchModels).toBeEnabled();
+  const refreshing = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === path + '/models/refresh',
+  );
+  await fetchModels.click();
+  expect((await refreshing).status()).toBe(202);
 }
 async function manual(page: Page, upstream: string, prefix: string, locale: Locale = 'en') {
   const c = connectionCopy(locale),
@@ -488,7 +502,15 @@ test('existing resources support empty and failed discovery plus manual setup in
     expect((await models(user, prefix))[0].binding_count).toBe('1');
     await screenshot(page, 'resources-manual-zh-narrow-dark.png');
     await page.getByRole('link', { name: servicesCopy('zh').apiKeyLink, exact: true }).click();
-    await page.getByRole('link', { name: zh.user.core['keys.charityModels'], exact: true }).click();
+    await expect(page).toHaveURL(/\/keys#client$/);
+    const core = zh.user.core;
+    const pickerName = core['keys.showModelNames'];
+    await page.getByRole('button', { name: pickerName, exact: true }).click();
+    const picker = page.getByRole('dialog', { name: pickerName, exact: true });
+    await expect(
+      picker.getByRole('tab', { name: core['keys.charityModels'], exact: true }),
+    ).toHaveAttribute('aria-selected', 'true');
+    await picker.getByRole('link', { name: core['keys.catalogPrices'], exact: true }).click();
     await expect(page).toHaveURL(/\/charity$/);
   } finally {
     await control(user, 'success');
@@ -662,16 +684,16 @@ test('partial completion keeps finished models and retries only the unfinished c
       else await route.continue();
     });
     await connect(page, 'en', 2).click();
-    await expect(
-      page.getByRole('button', { name: connectionCopy('en').resumeUnrecorded, exact: true }),
-    ).toBeVisible();
+    const retry = page.getByRole('button', {
+      name: connectionCopy('en').resumeUnrecorded,
+      exact: true,
+    });
+    await expect(retry).toBeEnabled();
     const partial = await models(user, prefix);
     expect(partial).toHaveLength(2);
     expect(partial.map((model) => model.binding_count).sort()).toEqual(['0', '1']);
-    await page
-      .getByRole('button', { name: connectionCopy('en').resumeUnrecorded, exact: true })
-      .click();
-    await connect(page, 'en', 1).click();
+    expect(keys).toHaveLength(2);
+    await retry.click();
     await expect(page.getByText(connectionCopy('en').mappingSaved, { exact: true })).toHaveCount(2);
     expect(keys).toHaveLength(3);
     expect(keys[2]).toBe(keys[1]);
