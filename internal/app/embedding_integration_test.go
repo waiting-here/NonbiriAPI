@@ -72,7 +72,7 @@ func newModelHTTPFixtureWithEgress(t *testing.T, configure func(*db.Store, strin
 			return
 		}
 		var body map[string]json.RawMessage
-		if r.Method != "POST" || (r.URL.Path != "/v1/embeddings" && r.URL.Path != "/v1/chat/completions") || r.Header.Get("Authorization") != "Bearer embedding-fixture-secret" || json.NewDecoder(r.Body).Decode(&body) != nil {
+		if r.Method != "POST" || (r.URL.Path != "/v1/embeddings" && r.URL.Path != "/v1/chat/completions" && r.URL.Path != "/v1/responses") || r.Header.Get("Authorization") != "Bearer embedding-fixture-secret" || json.NewDecoder(r.Body).Decode(&body) != nil {
 			w.WriteHeader(400)
 			return
 		}
@@ -90,6 +90,10 @@ func newModelHTTPFixtureWithEgress(t *testing.T, configure func(*db.Store, strin
 		}
 		if scenario == "bad-vector" {
 			_, _ = io.WriteString(w, `{"object":"list","model":"private-model","data":[]}`)
+			return
+		}
+		if r.URL.Path == "/v1/responses" {
+			_, _ = io.WriteString(w, `{"id":"resp_local","object":"response","created_at":1,"status":"completed","model":"private-model","output":[{"type":"message","id":"msg_local","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok","annotations":[]}]}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}`)
 			return
 		}
 		if r.URL.Path == "/v1/chat/completions" {

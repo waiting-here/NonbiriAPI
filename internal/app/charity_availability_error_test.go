@@ -58,7 +58,22 @@ SELECT a.use_id,dk.endpoint_key_id,a.native_service_bit,a.credential_version_id,
 		t.Fatalf("%d %s", status, body)
 	}
 
-	// Restore the native service before inspecting the old request.
+	// Apply the model exclusion while Chat is still quarantined. The identical
+	// client request must now be sent through the Responses conversion.
+	f.exec(t, "UPDATE charity_models SET excluded_request_fields=?,revision=revision+1 WHERE id=?", `["presence_penalty"]`, modelID)
+	status, body, convertedID := f.postWithID(t, "/v1/chat/completions", raw)
+	if status != http.StatusOK {
+		t.Fatalf("excluded parameter blocked conversion: %d %s", status, body)
+	}
+	converted := getAdmin(t, convertedID)
+	if len(converted.Attempts.Data) != 1 || converted.RouteDecision == nil || !slices.Contains(converted.RouteDecision.Observations, requestattempt.RouteObservation{
+		BindingID: strconv.FormatInt(responseBinding.BindingID, 10), NativeService: contract.NativeServiceResponses, Match: "conversion", Reason: "eligible",
+	}) {
+		t.Fatalf("wrong conversion route: %+v attempts=%d", converted.RouteDecision, len(converted.Attempts.Data))
+	}
+
+	// Restore both native Chat and the original policy before reading old facts.
+	f.exec(t, "UPDATE charity_models SET excluded_request_fields='[]',revision=revision+1 WHERE id=?", modelID)
 	f.exec(t, "UPDATE donation_service_health SET failure_disabled=0,failure_streak=nbi_u128(0)")
 	status, body, restored := f.postWithID(t, "/v1/chat/completions", raw)
 	if status != 200 {
@@ -86,8 +101,15 @@ SELECT a.use_id,dk.endpoint_key_id,a.native_service_bit,a.credential_version_id,
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.upstreamRequests) != 1 {
+	if len(f.upstreamRequests) != 2 {
 		t.Fatalf("actual requests=%d", len(f.upstreamRequests))
+	}
+	first, second := f.upstreamRequests[0], f.upstreamRequests[1]
+	if _, exists := first["presence_penalty"]; exists || first["messages"] != nil || !strings.Contains(string(first["input"]), "PRIVATE_INPUT") {
+		t.Fatal("converted Responses payload did not preserve the input and remove the excluded field")
+	}
+	if string(second["presence_penalty"]) != "0.4" || second["messages"] == nil || second["input"] != nil {
+		t.Fatal("restored native Chat payload lost the caller's parameter")
 	}
 }
 
