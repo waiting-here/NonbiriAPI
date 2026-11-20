@@ -35,6 +35,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   read statements and bound blackjack status queries.
 - Update frontend lint tooling to pick up minimatch 11.0.9 and refresh the
   third-party notices.
+- Build the service and standalone upgrader with Go 1.26.11, which includes
+  the net/http security fix for [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859).
 - Require exact database schema 55 or a fresh database. The standalone upgrader
   converts exact v1.3.12 schema 54 offline. Earlier registered sources use the
   v1.3.12 tool first. Upgrades are one-way. Account export advances from format

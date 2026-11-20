@@ -12,7 +12,7 @@ nullable predicate scanned retained error bodies. The revised equality lookup
 preserves event identity, body budgets, deleted-owner handling and the original
 write transaction; it adds no index or schema change.
 
-Run the bounded experiments serially with Go 1.26.10:
+Run the bounded experiments serially with Go 1.26.11:
 
 ```sh
 NONBIRI_ERROR_LOOKUP_SCALE=1 GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=2 \
@@ -177,7 +177,7 @@ impact remains to be measured after an explicitly authorized deployment.
 ## Idle projection and balanced dispatch samples
 
 These opt-in experiments use real temporary SQLite databases and the application
-connection pools. Use the project's Go 1.26.10 toolchain and run them serially:
+connection pools. Use the project's Go 1.26.11 toolchain and run them serially:
 
 ```sh
 NONBIRI_PERFORMANCE_SAMPLE=1 NONBIRI_PREWARM_READERS=1 \
