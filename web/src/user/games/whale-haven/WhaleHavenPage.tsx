@@ -10,8 +10,13 @@ import { UserPageGate } from '../../components/UserPageGate';
 import { act, exchange, fetchProfile, costWithCoupon, type Action, type Profile } from './api';
 import { soundEngine } from './audio/soundEngine';
 import { WhaleNamingModal } from './components/WhaleNamingModal';
-import { ControlDeck, FloatingDock, type DeckTabId } from './components/ControlDeck';
-import { OceanStage, type MenuPresentationMode } from './components/OceanStage';
+import {
+  ControlDeck,
+  FloatingDock,
+  type DeckTabId,
+  type MenuPresentationMode,
+} from './components/ControlDeck';
+import { OceanStage } from './components/OceanStage';
 import { Backpack } from './components/Backpack';
 import { ActivityPane, DecorPane, WardrobePane } from './components/Panels';
 import { SocialPane, DepartureDialog } from './components/SocialPane';
@@ -26,6 +31,7 @@ import './styles/deck.css';
 import './styles/host.css';
 
 const profileKey = ['user', 'games', 'whale-haven', 'profile'] as const;
+const menuPreference = 'nonbiri:user:whale-haven:menu-position';
 
 function useSmallViewport() {
   const [small, setSmall] = useState(() => window.matchMedia('(max-width:860px)').matches);
@@ -45,7 +51,15 @@ function WhaleGame() {
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [tab, setTab] = useState<DeckTabId | null>(null);
   const [settings, setSettings] = useState(false);
-  const [menu, setMenu] = useState<MenuPresentationMode>('drawer');
+  const [menu, setMenu] = useState<MenuPresentationMode>(() => {
+    try {
+      return localStorage.getItem(menuPreference) === 'sheet' ? 'sheet' : 'drawer';
+    } catch {
+      return 'drawer';
+    }
+  });
+  const lastTab = useRef<DeckTabId>('feed');
+  const [spokenReply, setSpokenReply] = useState('');
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark');
   const [pure, setPure] = useState(false);
   const [bg, setBg] = useState<string | null>(null);
@@ -60,6 +74,7 @@ function WhaleGame() {
     unit: string;
     revision: string;
     profileRevision: number;
+    error?: string;
   } | null>(null);
   const [impulse, setImpulse] = useState<RigImpulseEvent | null>(null);
   const nextImpulse = useRef(0);
@@ -73,11 +88,15 @@ function WhaleGame() {
   const profile = data.data;
   const effectiveMenu = small ? 'sheet' : menu;
   const viewing = profile?.social.open ? view : null;
-  function deck(t: DeckTabId) {
-    setTab(t);
+  function deck(id: DeckTabId) {
+    lastTab.current = id;
+    setTab(id);
     setSettings(false);
   }
-  const closeDeck = () => setTab(null);
+  function closeDeck() {
+    setTab(null);
+    document.getElementById('whale-dock-' + lastTab.current)?.focus({ preventScroll: true });
+  }
   useEffect(() => soundEngine.mount(), []);
   useEffect(() => {
     const close = (e: KeyboardEvent) => {
@@ -87,8 +106,8 @@ function WhaleGame() {
         document.querySelector('[role="alertdialog"]')
       )
         return;
-      if (tab) setTab(null);
-      else if (settings) setSettings(false);
+      if (settings) setSettings(false);
+      else if (tab) closeDeck();
       else if (pure) setPure(false);
     };
     window.addEventListener('keydown', close);
@@ -99,63 +118,94 @@ function WhaleGame() {
     const timer = window.setTimeout(() => setFeedback(null), 4500);
     return () => window.clearTimeout(timer);
   }, [feedback]);
-  async function commit(perform: () => Promise<Profile>, message: string) {
-    if (lock.current) return false;
+  async function commit(
+    perform: () => Promise<Profile>,
+    message?: string,
+    onError?: (reason: string) => void,
+  ) {
+    if (lock.current) return null;
     lock.current = true;
     setBusy(true);
+    setFeedback(null);
     try {
       await client.cancelQueries({ queryKey: profileKey });
       const updated = await perform();
       client.setQueryData(profileKey, updated);
       void client.invalidateQueries({ queryKey: ['user', 'games', 'whale-haven', 'neighbors'] });
       void client.invalidateQueries({ queryKey: ['user', 'games', 'snapshot'] });
-      setFeedback({ message, error: false });
-      return true;
+      if (message) setFeedback({ message, error: false });
+      return updated;
     } catch (err) {
-      setFeedback({
-        message:
-          err instanceof Error
-            ? t(
-                err.message,
-                'The action could not be completed. Check the updated balance, settings and visit status, then retry.',
-              )
-            : t(
-                '操作未完成，请刷新重试。',
-                'The action could not be completed. Refresh and retry.',
-              ),
-        error: true,
-      });
+      const reason =
+        err instanceof Error
+          ? err.message
+          : t('操作未完成，请刷新重试。', 'The action could not be completed. Refresh and retry.');
+      if (onError) onError(reason);
+      else setFeedback({ message: reason, error: true });
       void data.refetch();
-      return false;
+      return null;
     } finally {
       lock.current = false;
       setBusy(false);
     }
   }
-  async function dispatch(command: Action) {
+  function receipt(command: Action, previous: Profile) {
+    switch (command.type) {
+      case 'buy_feed': {
+        const count = command.quantity ?? 1;
+        const name = FEED_CATALOG[command.feedId].name;
+        return t(`已购入 ${name} ×${count}。`, `Purchased ${name} ×${count}.`);
+      }
+      case 'harvest_pearls':
+        return t('本次收益已入账。', 'Earnings collected.');
+      case 'select_outfit':
+        if (
+          command.outfitId !== 'maid_classic' &&
+          !previous.snapshot.home.ownedOutfits?.includes(command.outfitId)
+        ) {
+          const name = OUTFIT_CATALOG[command.outfitId].name;
+          return t(`已解锁并换上${name}。`, `Unlocked and equipped ${name}.`);
+        }
+        break;
+      case 'toggle_decor':
+        if (!previous.snapshot.home.ownedDecor.includes(command.decorId)) {
+          const name = DECOR_CATALOG[command.decorId].name;
+          return t(`已解锁并布置${name}。`, `Unlocked and placed ${name}.`);
+        }
+        break;
+      case 'set_open':
+        if (!command.open)
+          return t('小筑已关闭，本次来往已结算。', 'Haven closed and visits settled.');
+        break;
+      case 'send_visit':
+        return t('鲸鱼娘已出发。', 'Your whale has departed.');
+      case 'recall_home':
+        return t(
+          '鲸鱼娘已回家，本次来往已结算。',
+          'Your whale is home and the visit has been settled.',
+        );
+      case 'catch_guest':
+        if (command.action === 'hire') return t('客鲸开始帮工了。', 'Your guest has started work.');
+        if (command.action === 'treat')
+          return t('已招待客鲸用餐。', 'You shared a meal with your guest.');
+        return t(
+          '客鲸已回家，本次来往已结算。',
+          'Your guest is home and the visit has been settled.',
+        );
+      case 'spin_conch_gacha':
+        return t(
+          '海螺扭蛋已开启，本次奖励已领取。',
+          'Conch draw complete. Your reward has been granted.',
+        );
+    }
+  }
+  async function dispatch(command: Action, onError?: (reason: string) => void) {
     if (!profile) return false;
     const prev = profile;
-    const success = await commit(
-      () => act(prev, command),
-      (
-        {
-          adopt: t('鲸鱼娘到家啦！', 'Your whale is home!'),
-          buy_feed: t('已购入口粮。', 'Feed purchased.'),
-          use_feed: t('已投喂。', 'Feed served.'),
-          harvest_pearls: t('小鲸币已收取。', 'Earnings collected.'),
-          set_open: t('小筑开放设置已保存。', 'Visit preferences saved.'),
-          send_visit: t('鲸鱼娘已出发。', 'Your whale has departed.'),
-          recall_home: t(
-            '鲸鱼娘已回家，本次来往已结算。',
-            'Your whale is home and the visit has been settled.',
-          ),
-          catch_guest: t('客鲸状态已更新。', 'Guest status updated.'),
-          spin_conch_gacha: t('扭蛋已开启，奖励已放入背包。', 'Your conch reward is in your bag.'),
-          rename: t('新名字已保存。', 'Name saved.'),
-        } as Partial<Record<Action['type'], string>>
-      )[command.type] ?? t('已更新。', 'Updated.'),
-    );
-    if (success) {
+    const updated = await commit(() => act(prev, command), receipt(command, prev), onError);
+    if (updated) {
+      if (command.type === 'chat' || command.type === 'interact')
+        setSpokenReply(updated.snapshot.whale.tempEmotion?.line ?? '');
       const anim =
         command.type === 'interact'
           ? command.zone === 'head'
@@ -184,7 +234,7 @@ function WhaleGame() {
       );
       if (command.type === 'set_open' && !command.open) setView(null);
     }
-    return success;
+    return !!updated;
   }
   function choose(command: Action) {
     if (!profile) return;
@@ -301,7 +351,16 @@ function WhaleGame() {
       </main>
     );
   const values = profile.settings.values;
-  const toggleMenu = () => setMenu((prev) => (prev === 'drawer' ? 'sheet' : 'drawer'));
+  function toggleMenu() {
+    const next = menu === 'drawer' ? 'sheet' : 'drawer';
+    setMenu(next);
+    try {
+      localStorage.setItem(menuPreference, next);
+    } catch {
+      // The selected position still applies for this visit.
+    }
+    deck(tab ?? lastTab.current);
+  }
   function preview(peer: NeighborStation) {
     setView(peer);
     setTab(null);
@@ -330,12 +389,12 @@ function WhaleGame() {
             isMobileViewport={small}
             customBgUrl={bg}
             menuMode={effectiveMenu}
-            isDeckOpen={!!tab}
+            isDeckOpen={!!tab && !settings}
             settingsOpen={settings}
             onToggleTheme={() => setDark(!dark)}
             onTogglePureView={() => setPure(!pure)}
             onChangeCustomBg={setBg}
-            onChangeMenuMode={setMenu}
+            onToggleMenuMode={toggleMenu}
             onCloseDeck={closeDeck}
             onCloseSettings={() => setSettings(false)}
             onOpenWardrobe={() => deck('wardrobe')}
@@ -380,7 +439,7 @@ function WhaleGame() {
             dockSlot={
               <FloatingDock
                 profile={profile}
-                activeTab={tab}
+                activeTab={settings ? null : tab}
                 isHome={!viewing}
                 settingsOpen={settings}
                 onHome={() => {
@@ -388,13 +447,10 @@ function WhaleGame() {
                   setTab(null);
                   setSettings(false);
                 }}
-                onToggleSettings={() => {
-                  setTab(null);
-                  setSettings(!settings);
-                }}
+                onToggleSettings={() => setSettings(!settings)}
                 onSelectTab={(id) => {
-                  setTab(id === tab ? null : id);
-                  setSettings(false);
+                  if (id === tab && !settings) closeDeck();
+                  else deck(id);
                 }}
               />
             }
@@ -403,6 +459,7 @@ function WhaleGame() {
                 <ControlDeck
                   activeTab={tab}
                   menuMode={effectiveMenu}
+                  hidden={settings}
                   onClose={closeDeck}
                   onToggleMenuMode={toggleMenu}
                 >
@@ -437,14 +494,15 @@ function WhaleGame() {
                         busy={busy}
                         onRefresh={() => void data.refetch()}
                         onCollect={() => void dispatch({ type: 'harvest_pearls' })}
-                        onExchange={(q) =>
-                          commit(
+                        onExchange={async (q, onError) =>
+                          !!(await commit(
                             () => exchange(q),
                             t(
                               '兑换成功，通用积分已到账。',
                               'Exchange complete. General credits added.',
                             ),
-                          )
+                            onError,
+                          ))
                         }
                       />
                       <DecorPane profile={profile} dispatch={choose} />
@@ -461,6 +519,9 @@ function WhaleGame() {
             }
           />
         )}
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {spokenReply}
+        </span>
         {feedback && (
           <div
             className={'wh-feedback' + (feedback.error ? ' is-error' : '')}
@@ -504,10 +565,11 @@ function WhaleGame() {
           }
           onCancel={() => setPurchase(null)}
           onConfirm={async () => {
-            await dispatch(purchase.command);
-            setPurchase(null);
+            if (await dispatch(purchase.command, (error) => setPurchase({ ...purchase, error })))
+              setPurchase(null);
           }}
         >
+          {purchase.error && !busy && <p role="alert">{purchase.error}</p>}
           {(purchase.revision !== profile.settings_revision ||
             purchase.profileRevision !== snap.revision) && (
             <p>

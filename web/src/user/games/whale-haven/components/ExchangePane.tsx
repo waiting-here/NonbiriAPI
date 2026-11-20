@@ -15,7 +15,7 @@ export function ExchangePane({
 }: {
   profile: Profile;
   busy: boolean;
-  onExchange: (quote: Quote) => Promise<boolean>;
+  onExchange: (quote: Quote, onError: (reason: string) => void) => Promise<boolean>;
   onRefresh: () => void;
   onCollect: () => void;
 }) {
@@ -24,7 +24,7 @@ export function ExchangePane({
   const [quotedBalance, setQuotedBalance] = useState<string>();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [error, setError] = useState('');
   const values = profile.settings.values;
   const wallet = profile.snapshot.wallet;
   const enabled = profile.settings.exchange_enabled;
@@ -79,13 +79,20 @@ export function ExchangePane({
   async function preview() {
     if (!valid || busy || loading) return;
     setLoading(true);
-    setFailed(false);
+    setError('');
     try {
       const result = await getQuote(lots);
       setQuotedBalance(String(wallet.generalMilli));
       setQuote(result);
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : t(
+              '未能取得报价，请核对余额与额度后重试。',
+              'Could not get a quote. Check the updated balance and limit, then retry.',
+            ),
+      );
       onRefresh();
       void availability.refetch();
     } finally {
@@ -97,12 +104,22 @@ export function ExchangePane({
       <h3 className="kit-section-title">
         {t('小鲸币兑换通用积分', 'Exchange whale coins for general credits')}
       </h3>
-      <p>
-        {t('持有小鲸币', 'Whale coin balance')} <strong>{wallet.pearls}</strong> ·{' '}
-        {t('海螺碎片', 'Conch shards')} <strong>{wallet.conchShards}</strong> ·{' '}
-        {t('今日已兑', 'Exchanged today')} {wallet.dailyPearlExchanged} /{' '}
-        {values.daily_exchange_pearls}
-      </p>
+      <dl className="wh-metrics">
+        <div>
+          <dt>{t('持有小鲸币', 'Whale coin balance')}</dt>
+          <dd>{wallet.pearls}</dd>
+        </div>
+        <div>
+          <dt>{t('海螺碎片', 'Conch shards')}</dt>
+          <dd>{wallet.conchShards ?? 0}</dd>
+        </div>
+        <div>
+          <dt>{t('今日已兑', 'Exchanged today')}</dt>
+          <dd>
+            {wallet.dailyPearlExchanged} / {values.daily_exchange_pearls}
+          </dd>
+        </div>
+      </dl>
       {(pendingCoins > 0 || pendingShards > 0 || wageProgress > 0) && (
         <div>
           <p>
@@ -207,7 +224,7 @@ export function ExchangePane({
               void preview();
             }}
           >
-            <label>
+            <label className="wh-field">
               {t('兑换手数', 'Lots to exchange')}{' '}
               <input
                 className="kit-input"
@@ -218,7 +235,7 @@ export function ExchangePane({
                 value={lots}
                 onChange={(e) => {
                   setLots(e.target.value);
-                  setFailed(false);
+                  setError('');
                 }}
               />
             </label>
@@ -240,14 +257,7 @@ export function ExchangePane({
           )}
         </>
       )}
-      {failed && (
-        <p role="alert">
-          {t(
-            '未能取得该数量的报价。请核对最新余额与额度后重试。',
-            'Could not quote that quantity. Check the updated balance and limit, then retry.',
-          )}
-        </p>
-      )}
+      {error && <p role="alert">{error}</p>}
       <Link to="/credits">{t('查看积分明细', 'View credit history')}</Link>
       <ConfirmDialog
         open={!!quote}
@@ -266,9 +276,8 @@ export function ExchangePane({
         onCancel={() => setQuote(null)}
         onConfirm={async () => {
           if (!quote || stale) return;
-          const ok = await onExchange(quote);
+          await onExchange(quote, setError);
           setQuote(null);
-          setFailed(!ok);
           onRefresh();
           void availability.refetch();
         }}

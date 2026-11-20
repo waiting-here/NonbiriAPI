@@ -1,12 +1,16 @@
 @scope (.whale-haven) {
   /* Drawer and sheet share the Whale Maid component kit. */
   .deck-panel {
+    container: whale-deck / inline-size;
     background: var(--nb-color-surface-raised);
     border-color: var(--nb-color-border);
   }
 
   .deck-panel:not(.is-open) {
     visibility: hidden;
+  }
+  .deck-panel[hidden] {
+    display: none;
   }
   .deck-panel--drawer {
     width: min(458px, calc(100% - 28px));
@@ -91,8 +95,8 @@
 
   .deck-icon-btn {
     display: grid;
-    width: 33px;
-    height: 33px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     place-items: center;
     border: 1px solid transparent;
@@ -103,6 +107,26 @@
   .deck-icon-btn:hover {
     border-color: var(--nb-color-border);
     background: var(--nb-color-accent-quiet);
+  }
+  .wh-menu-position {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--nb-space-1);
+    min-height: 40px;
+    padding: 0 var(--nb-space-2);
+    color: var(--nb-color-accent);
+    border: 1px solid var(--nb-color-border);
+    border-radius: var(--nb-radius-control);
+    background: var(--nb-color-surface-raised);
+    font: inherit;
+    font-size: var(--nb-font-size-sm);
+    white-space: nowrap;
+  }
+  .wh-menu-position:hover {
+    background: var(--nb-color-accent-quiet);
+  }
+  .deck-header__title:focus:not(:focus-visible) {
+    outline: none;
   }
 
   .deck-body {
@@ -129,7 +153,7 @@
     margin: 0 0 0.67rem;
   }
   .deck-body .kit-section-title {
-    font-size: 0.95rem;
+    font-size: var(--nb-font-size-md);
   }
   .deck-section-head {
     display: flex;
@@ -644,7 +668,7 @@
   }
   .outfit-gallery {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
     gap: 0.65rem;
   }
   .outfit-tile {
@@ -684,18 +708,23 @@
     padding: 0.58rem;
   }
   .outfit-tile__content h4 {
-    font-size: 0.84rem;
+    font-size: var(--nb-font-size-md);
     line-height: 1.35;
   }
   .outfit-tile__content p {
     color: var(--nb-color-text-muted);
-    font-size: 0.7rem;
+    font-size: var(--nb-font-size-sm);
   }
   .outfit-tile__content .nb-btn {
     width: 100%;
-    min-height: 31px;
+    min-height: 40px;
     margin-top: auto;
-    font-size: 0.72rem;
+    font-size: var(--nb-font-size-sm);
+  }
+  .wh-item-price {
+    color: var(--nb-color-text);
+    font-size: var(--nb-font-size-sm);
+    font-variant-numeric: tabular-nums;
   }
   .deck-preferences .ui-switch-row {
     padding: 0.4rem 0;
@@ -773,15 +802,16 @@
   }
   .backpack-selection {
     display: grid;
-    gap: 0.6rem;
-    padding: 0.72rem;
-    border-radius: 14px;
-    background: var(--nb-color-accent-quiet);
+    gap: var(--nb-space-3);
+    padding: var(--nb-space-3);
+    border: 1px solid var(--nb-color-border);
+    border-radius: var(--nb-radius-card);
+    background: var(--nb-color-surface);
   }
   .backpack-selection__summary {
     display: grid;
     grid-template-columns: 64px minmax(0, 1fr);
-    gap: 0.6rem;
+    gap: var(--nb-space-3);
     align-items: center;
   }
   .backpack-selection__art {
@@ -801,28 +831,75 @@
   }
   .backpack-selection h3,
   .backpack-gift h3 {
-    font-size: 0.87rem;
+    font-size: var(--nb-font-size-md);
     line-height: 1.3;
   }
   .backpack-selection p,
   .backpack-gift p {
     color: var(--nb-color-text-muted);
-    font-size: 0.73rem;
+    font-size: var(--nb-font-size-sm);
     line-height: 1.5;
   }
   .backpack-selection p {
     margin-top: 0.22rem;
   }
-  .backpack-selection__actions {
+  .backpack-purchase {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    gap: 0.45rem;
+    gap: var(--nb-space-3);
+    padding-top: var(--nb-space-3);
+    border-top: 1px solid var(--nb-color-border);
   }
-  .backpack-selection__actions .nb-btn {
-    min-height: 34px;
-    padding-inline: 0.3rem;
-    font-size: 0.72rem;
+  .backpack-selection__stock,
+  .backpack-purchase__quantity,
+  .backpack-purchase__checkout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--nb-space-2) var(--nb-space-3);
+    font-size: var(--nb-font-size-sm);
+  }
+  .backpack-purchase__quantity {
+    justify-content: flex-start;
+  }
+  .backpack-purchase__quantity label {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--nb-space-1);
+  }
+  .backpack-purchase__quantity small,
+  .backpack-purchase__price > span,
+  .wh-detail {
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+  }
+  .backpack-purchase__quantity small {
+    white-space: nowrap;
+  }
+  .backpack-purchase__quantity input {
+    width: 5rem;
+    min-height: 40px;
+    margin: 0;
+  }
+  .backpack-selection .nb-btn {
+    min-height: 40px;
+    padding-inline: var(--nb-space-3);
+    font-size: var(--nb-font-size-sm);
+    border-radius: var(--nb-radius-control);
+  }
+  .backpack-purchase__price {
+    display: grid;
+    min-width: 0;
+    gap: var(--nb-space-1);
+    font-variant-numeric: tabular-nums;
+  }
+  .backpack-purchase__price .nb-amount {
+    display: inline-block;
+  }
+  .wh-detail {
+    display: block;
+    font-weight: var(--nb-font-weight-regular);
   }
   .backpack-gift {
     display: grid;
@@ -1042,18 +1119,19 @@
     object-fit: contain;
   }
   .decor-shelf h4 {
-    font-size: 0.8rem;
+    font-size: var(--nb-font-size-md);
     line-height: 1.36;
   }
   .decor-shelf p {
     color: var(--nb-color-text-muted);
-    font-size: 0.7rem;
+    font-size: var(--nb-font-size-sm);
     line-height: 1.4;
   }
   .decor-shelf .nb-btn {
     white-space: nowrap;
-    font-size: 0.69rem;
-    padding-inline: 0.42rem;
+    min-height: 40px;
+    font-size: var(--nb-font-size-sm);
+    padding-inline: var(--nb-space-3);
   }
   .deck-timeline--activity [data-kind='exchange']::before,
   .deck-timeline--activity [data-kind='harvest']::before {
@@ -1063,7 +1141,7 @@
     background: #56b89f;
   }
 
-  @media (max-width: 530px) {
+  @container whale-deck (width < 32rem) {
     .deck-header {
       padding: 0.52rem 0.88rem 0.18rem;
     }
@@ -1107,14 +1185,6 @@
       min-width: 30px;
       height: 30px;
     }
-    .backpack-selection__actions {
-      grid-auto-flow: row;
-      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-    }
-    .backpack-selection__actions .nb-btn {
-      min-height: 38px;
-      font-size: 0.76rem;
-    }
     .backpack-gift .nb-btn {
       min-height: 36px;
     }
@@ -1128,10 +1198,7 @@
     }
   }
 
-  @media (max-width: 380px) {
-    .outfit-gallery {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  @container whale-deck (width < 24rem) {
     .decor-shelf li {
       grid-template-columns: 40px minmax(0, 1fr);
     }

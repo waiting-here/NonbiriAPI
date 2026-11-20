@@ -51,15 +51,40 @@
 .wh-buttons input {
   max-width: 8rem;
 }
+.wh-field {
+  display: grid;
+  gap: var(--nb-space-1);
+  min-width: 0;
+}
+.wh-field .kit-input {
+  margin: 0;
+}
+.wh-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
+  gap: var(--nb-space-2) var(--nb-space-3);
+  margin: var(--nb-space-1) 0;
+}
+.wh-metrics dt {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.wh-metrics dd {
+  margin: 0;
+  font-weight: var(--nb-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
 .wh-neighbors {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 .wh-neighbors li {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--nb-space-2) var(--nb-space-3);
   border-block-start: 1px solid var(--nb-color-border);
   padding-block: 0.75rem;
   overflow-wrap: anywhere;
@@ -69,14 +94,24 @@
   height: 64px;
   object-fit: contain;
 }
+.wh-neighbors .wh-buttons {
+  grid-column: 2;
+}
+@container whale-deck (width < 32rem) {
+  .wh-neighbors .wh-buttons {
+    grid-column: 1 / -1;
+  }
+}
 .wh-quote div {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: var(--nb-space-1) var(--nb-space-3);
   padding-block: 0.2rem;
 }
 .wh-quote dd {
-  margin: 0;
+  margin: 0 0 0 auto;
+  font-variant-numeric: tabular-nums;
 }
 .whale-haven .voyage-card {
   display: grid;
@@ -107,8 +142,17 @@
   border-color: var(--nb-color-danger);
 }
 .whale-haven .wh-feedback button {
-  min-width: 2rem;
-  min-height: 2rem;
+  flex: none;
+  min-width: 40px;
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--nb-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.whale-haven .wh-feedback button:hover {
+  background: var(--nb-color-surface-muted);
 }
 @media (width < 40rem) {
   .whale-haven .whale-adoption {

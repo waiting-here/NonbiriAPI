@@ -12,8 +12,6 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Moon,
-  PanelBottom,
-  PanelRight,
   Plus,
   Send,
   ShieldAlert,
@@ -48,9 +46,9 @@ import type { FaceCalibrationConfig } from '../rig/calibrator';
 import { WhaleRigActor, type RigImpulseEvent } from '../rig/WhaleRigActor';
 import { formatMilliCredits } from '../api';
 import { UiSwitch } from './UiMotifs';
+import { MenuPositionButton, type MenuPresentationMode } from './ControlDeck';
 
 import { useWhaleText } from '../copy';
-export type MenuPresentationMode = 'drawer' | 'sheet';
 
 const CABIN_FURNITURE = ['shell_cabinet', 'pearl_clock', 'sea_planter'] as const;
 
@@ -75,7 +73,7 @@ interface OceanStageProps {
 
   onTogglePureView: () => void;
   onChangeCustomBg: (dataUrl: string | null) => void;
-  onChangeMenuMode: (mode: MenuPresentationMode) => void;
+  onToggleMenuMode: () => void;
   onCloseDeck: () => void;
   onCloseSettings: () => void;
 
@@ -129,7 +127,7 @@ export function OceanStage({
 
   onTogglePureView,
   onChangeCustomBg,
-  onChangeMenuMode,
+  onToggleMenuMode,
   onCloseDeck,
   onCloseSettings,
 
@@ -1388,19 +1386,7 @@ export function OceanStage({
               aria-label={t('小屋设置', 'Haven settings')}
               hidden={!settingsOpen}
             >
-              {/* Desktop Menu Presentation Mode Switcher (Drawer vs Bottom Sheet) */}
-              <button
-                type="button"
-                className="hud-icon-btn hide-on-mobile"
-                onClick={() => onChangeMenuMode(menuMode === 'drawer' ? 'sheet' : 'drawer')}
-                title={
-                  menuMode === 'drawer'
-                    ? '当前菜单：右侧悬浮抽屉（点击切换为底部半屏卡片）'
-                    : '当前菜单：底部上滑卡片（点击切换为右侧悬浮抽屉）'
-                }
-              >
-                {menuMode === 'drawer' ? <PanelRight size={15} /> : <PanelBottom size={15} />}
-              </button>
+              <MenuPositionButton mode={menuMode} onClick={onToggleMenuMode} />
 
               {/* Sound Effects & Deep Sea Ambient Popover */}
               <button

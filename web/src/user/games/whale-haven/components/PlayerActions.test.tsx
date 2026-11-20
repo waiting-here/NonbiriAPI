@@ -139,7 +139,8 @@ describe('player exchange limits and consent', () => {
       'Whale coins 2 · Conch shards 3',
     );
     expect(screen.getByText('Pending settlement', { exact: false })).toHaveTextContent('45%');
-    expect(screen.getByText('Whale coin balance', { exact: false })).toHaveTextContent('20');
+    const balance = screen.getByText('Whale coin balance').parentElement!;
+    expect(within(balance).getByRole('definition')).toHaveTextContent('20');
     await user.click(screen.getByRole('button', { name: 'Collect earnings' }));
     expect(act.onCollect).toHaveBeenCalledOnce();
   });
@@ -160,7 +161,7 @@ describe('player exchange limits and consent', () => {
     expect(dialog.getByText('Net credit').parentElement).toHaveTextContent('750');
     await user.click(dialog.getByRole('button', { name: 'Confirm exchange' }));
     await waitFor(() => expect(act.onRefresh).toHaveBeenCalledOnce());
-    expect(act.onExchange).toHaveBeenCalledWith(priced);
+    expect(act.onExchange).toHaveBeenCalledWith(priced, expect.any(Function));
     expect(vi.mocked(getQuote).mock.calls.map(([n]) => n)).toEqual(['0', '1', '0']);
   });
   it('disables a pending confirmation when a new profile or rule invalidates the quote', async () => {
@@ -230,7 +231,10 @@ describe('player exchange limits and consent', () => {
       screen.getByText('Wages count toward your daily social whale coin limit.'),
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Depart' }));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'send_visit', target: 'next', allowHire: true });
+    expect(dispatch).toHaveBeenCalledWith(
+      { type: 'send_visit', target: 'next', allowHire: true },
+      expect.any(Function),
+    );
   });
   it.each(['en', 'zh'] as const)(
     'discloses the configured wage share and shared daily social limit before hiring in %s',
@@ -266,11 +270,14 @@ describe('player exchange limits and consent', () => {
       await user.click(
         within(dialog).getByRole('button', { name: locale === 'en' ? 'Confirm' : '确认' }),
       );
-      expect(dispatch).toHaveBeenCalledWith({
-        type: 'catch_guest',
-        neighborId: 'g',
-        action: 'hire',
-      });
+      expect(dispatch).toHaveBeenCalledWith(
+        {
+          type: 'catch_guest',
+          neighborId: 'g',
+          action: 'hire',
+        },
+        expect.any(Function),
+      );
     },
   );
 });

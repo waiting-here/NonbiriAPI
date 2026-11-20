@@ -206,8 +206,22 @@ for (const width of [1440, 390]) {
         await capture('cabin');
         const dock = page.getByRole('navigation', { name: '海湾功能菜单栏' });
         await dock.getByRole('button', { name: '背包' }).click();
-        await page.getByRole('spinbutton', { name: '购买份数（1–99）' }).fill('3');
-        await page.getByRole('button', { name: /购买 ·/ }).click();
+        const servings = page.getByRole('spinbutton', { name: /购买份数/ });
+        const buyFeed = page.getByRole('button', { name: '购买口粮' });
+        await servings.fill('100');
+        await expect(buyFeed).toBeDisabled();
+        await expect(page.getByText('请输入 1–99 的整数。')).toBeVisible();
+        await servings.fill('3');
+        const item = page.getByRole('region', { name: '当前道具' });
+        await expect(item).toContainText('合计 57 游戏积分');
+        await item.scrollIntoViewIfNeeded();
+        const field = (await servings.boundingBox())!;
+        const button = (await buyFeed.boundingBox())!;
+        expect(button.height).toBeGreaterThanOrEqual(40);
+        expect(button.height).toBeLessThanOrEqual(field.height + 8);
+        expect(await item.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+        await capture('backpack');
+        await buyFeed.click();
         const buy = page.getByRole('alertdialog');
         await expect(buy).toContainText('×3');
         await expect(buy).toContainText('57');
@@ -215,6 +229,7 @@ for (const width of [1440, 390]) {
         await expect
           .poll(() => commands.filter((c) => c.type === 'buy_feed'))
           .toMatchObject([{ quantity: 3, feedId: 'silver_fish' }]);
+        await expect(page.getByRole('status')).toContainText('已购入 热腾腾大碗白米饭 ×3');
         await page.getByRole('button', { name: '收起菜单面板' }).click();
         await dock.getByRole('button', { name: '串门' }).click();
         await expect(page.getByText('Hidden identity')).toHaveCount(0);
@@ -248,6 +263,84 @@ for (const width of [1440, 390]) {
     );
   }
 }
+
+test('menu position takes effect in place and routine interactions reply in the cabin', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  let failChat = false;
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: profile });
+    const { type } = route.request().postDataJSON();
+    if (type === 'buy_feed')
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: 'conflict', message: '游戏积分不足。' } },
+      });
+    if (type === 'chat' && failChat)
+      return route.fulfill({
+        status: 409,
+        json: { error: { code: 'conflict', message: '小鲸正在串门，先召回她吧。' } },
+      });
+    profile.snapshot.revision++;
+    profile.snapshot.whale.tempEmotion = {
+      expression: 'cheerful',
+      line: type === 'chat' ? '听我讲个海湾冷笑话！' : '摸摸头，好开心！',
+      expiresAt: Date.now() + 30000,
+    };
+    return route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  const button = (name: string) => page.getByRole('button', { name, exact: true });
+  const panel = page.getByRole('complementary', { name: '背包与投喂' });
+  const servings = panel.getByRole('spinbutton', { name: /购买份数/ });
+  await button('设置').click();
+  await button('将菜单移到底部').click();
+  await expect(panel.getByRole('heading', { name: '背包与投喂' })).toBeFocused();
+  const bottom = (await panel.boundingBox())!;
+  await servings.fill('7');
+  await button('将菜单移到右侧').click();
+  await expect.poll(async () => (await panel.boundingBox())!.x).toBeGreaterThan(bottom.x + 80);
+  await expect(servings).toHaveValue('7');
+  await button('设置').click();
+  await button('将菜单移到底部').click();
+  await expect(servings).toHaveValue('7');
+  await button('购买口粮').click();
+  const order = page.getByRole('alertdialog');
+  await order.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(order.getByRole('alert')).toHaveText('游戏积分不足。');
+  await order.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(servings).toHaveValue('7');
+  await page.keyboard.press('Escape');
+  await expect(button('背包')).toBeFocused();
+  await page.reload();
+  await button('背包').click();
+  await expect(button('将菜单移到右侧')).toBeVisible();
+  await button('收起菜单面板').click();
+  const chat = button('唠嗑/冷笑话');
+  await chat.click();
+  await expect(page.getByRole('button', { name: /听我讲个海湾冷笑话/ })).toBeVisible();
+  await expect(button('关闭提示')).toHaveCount(0);
+  await page.getByRole('button', { name: /摸摸头（/ }).click();
+  await expect(page.getByRole('button', { name: /摸摸头，好开心/ })).toBeVisible();
+  await expect(button('关闭提示')).toHaveCount(0);
+  failChat = true;
+  await chat.click();
+  await expect(page.getByRole('alert')).toHaveText(/先召回/);
+  failChat = false;
+  await chat.click();
+  await expect(page.getByRole('button', { name: /听我讲个海湾冷笑话/ })).toBeVisible();
+  await expect(button('关闭提示')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await button('设置').click();
+  await expect(page.getByRole('group', { name: '小屋设置' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /将菜单移/ })).toHaveCount(0);
+});
 
 test('hall only advertises an open Whale Haven and loads motion after arrival', async ({
   page,

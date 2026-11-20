@@ -8,6 +8,7 @@ import {
 import { MessageCircle, Waves } from './Icons';
 import { UiSwitch } from './UiMotifs';
 import { costWithCoupon, type Action, type Profile } from '../api';
+import { useWhaleText } from '../copy';
 const OUTFITS = (Object.keys(OUTFIT_CATALOG) as WhaleOutfitId[]).filter(
   (id) => !OUTFIT_CATALOG[id].hidden,
 );
@@ -37,6 +38,7 @@ export function WardrobePane({
   profile: Profile;
   dispatch: (a: Action) => void;
 }) {
+  const t = useWhaleText();
   const snapshot = profile.snapshot;
   const currentOutfit = snapshot.whale.outfit;
   return (
@@ -44,7 +46,7 @@ export function WardrobePane({
       <section aria-labelledby="wardrobe-outfits">
         <div className="deck-section-head">
           <h3 className="kit-section-title" id="wardrobe-outfits">
-            衣橱
+            {t('衣橱', 'Wardrobe')}
           </h3>
           <div
             style={{
@@ -55,12 +57,20 @@ export function WardrobePane({
             }}
           >
             {Boolean(snapshot.home.buffs?.wardrobeDiscountCoupons) && (
-              <span className="deck-balance" title="下次解锁服装或装扮时自动抵扣">
-                <img src={getSceneAssetUrl('props/buff-tailor-coupon.webp')} alt="" /> 抵用券可用
+              <span
+                className="deck-balance"
+                title={t(
+                  '下次解锁服装或家具时自动抵扣',
+                  'Applied to your next outfit or furnishing',
+                )}
+              >
+                <img src={getSceneAssetUrl('props/buff-tailor-coupon.webp')} alt="" />{' '}
+                {t('抵用券可用', 'Coupon available')}
               </span>
             )}
             <span className="deck-balance">
-              <img src={getSceneAssetUrl(COIN_ART)} alt="" /> {snapshot.wallet.pearls} 小鲸币
+              <img src={getSceneAssetUrl(COIN_ART)} alt="" /> {snapshot.wallet.pearls}{' '}
+              {t('小鲸币', 'whale coins')}
             </span>
           </div>
         </div>
@@ -81,13 +91,22 @@ export function WardrobePane({
                 <div className="outfit-tile__content">
                   <h4>{item.name}</h4>
                   <p title={item.description}>{item.badge}</p>
+                  {!owned && (
+                    <span className="wh-item-price">
+                      {finalCost} {t('小鲸币', 'whale coins')}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className={`nb-btn nb-btn--sm ${isActive ? '' : 'nb-btn--primary'}`}
                     disabled={isActive}
                     onClick={() => dispatch({ type: 'select_outfit', outfitId: id })}
                   >
-                    {isActive ? '已穿戴' : owned ? '换上这套' : `${finalCost} 小鲸币解锁`}
+                    {isActive
+                      ? t('已穿戴', 'Equipped')
+                      : owned
+                        ? t('换上这套', 'Wear outfit')
+                        : t('解锁衣装', 'Unlock outfit')}
                   </button>
                 </div>
               </article>
@@ -97,7 +116,7 @@ export function WardrobePane({
       </section>
       <section className="deck-preferences" aria-labelledby="wardrobe-behavior">
         <h3 className="kit-section-title deck-section-title" id="wardrobe-behavior">
-          待机偏好
+          {t('待机偏好', 'Idle behavior')}
         </h3>
         <UiSwitch
           checked={snapshot.whale.petLookEnabled ?? true}
@@ -109,7 +128,7 @@ export function WardrobePane({
             })
           }
         >
-          鼠标视线跟随
+          {t('视线跟随鼠标', 'Follow the pointer')}
         </UiSwitch>
         <UiSwitch
           checked={snapshot.whale.petRoamEnabled ?? true}
@@ -121,7 +140,7 @@ export function WardrobePane({
             })
           }
         >
-          海底自由漫步
+          {t('自由漫步', 'Roam around')}
         </UiSwitch>
       </section>
     </>
@@ -134,11 +153,12 @@ export function DecorPane({
   profile: Profile;
   dispatch: (a: Action) => void;
 }) {
+  const t = useWhaleText();
   const snapshot = profile.snapshot;
   return (
     <section aria-labelledby="exchange-decor">
       <h3 className="kit-section-title deck-section-title" id="exchange-decor">
-        小屋装扮（提升转化率与存钱罐上限）
+        {t('小屋家具', 'Furnishings')}
       </h3>
       <ul className="decor-shelf">
         {(Object.keys(DECOR_CATALOG) as DecorItemId[]).map((id) => {
@@ -158,20 +178,33 @@ export function DecorPane({
                 <h4>{item.name}</h4>
                 <p>
                   {id === 'golden_clam'
-                    ? '存钱罐容量 ' + profile.settings.values.bank_upgraded_pearls + ' 枚'
+                    ? t(
+                        `存钱罐容量 ${profile.settings.values.bank_upgraded_pearls} 枚`,
+                        `Coin bank capacity: ${profile.settings.values.bank_upgraded_pearls}`,
+                      )
                     : profile.settings.values['decor_' + id + '_bonus_bp']
-                      ? '转化率 +' +
+                      ? t('转化率', 'Conversion rate') +
+                        ' +' +
                         profile.settings.values['decor_' + id + '_bonus_bp'] / 100 +
                         '%'
-                      : '小屋雅致收藏'}
+                      : t('小屋收藏', 'Collectible')}
                 </p>
+                {!owned && (
+                  <span className="wh-item-price">
+                    {finalCost} {t('小鲸币', 'whale coins')}
+                  </span>
+                )}
               </div>
               <button
                 type="button"
                 className={`nb-btn nb-btn--sm ${equipped ? '' : 'nb-btn--primary'}`}
                 onClick={() => dispatch({ type: 'toggle_decor', decorId: id })}
               >
-                {owned ? (equipped ? '收起装扮' : '布置上场') : `解锁 (${finalCost} 鲸币)`}
+                {owned
+                  ? equipped
+                    ? t('收起', 'Put away')
+                    : t('布置', 'Place')
+                  : t('解锁家具', 'Unlock')}
               </button>
             </li>
           );

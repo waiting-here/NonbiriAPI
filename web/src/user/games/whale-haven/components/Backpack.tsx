@@ -1,6 +1,7 @@
 import { useWhaleText } from '../copy';
 import { useState } from 'react';
-import { Plus, ShoppingBag, Sparkles } from './Icons';
+import { Amount } from '@shared/components/Amount';
+import { Sparkles } from './Icons';
 import {
   CONCH_GACHA_ART,
   CONCH_GACHA_POOL,
@@ -9,15 +10,14 @@ import {
   FEED_CATALOG,
   getSceneAssetUrl,
 } from '../game/catalog';
-import { formatMilliCredits } from '../api';
 import type { DecorItemId, FeedItemId, GameSnapshot } from '../game/types';
 import { UiSwitch } from './UiMotifs';
 
 const FEEDS: readonly FeedItemId[] = ['silver_fish', 'sweet_shrimp', 'berry_teacake'];
-const FEED_ART: Record<FeedItemId, string> = {
-  silver_fish: 'props/rice-bowl-full.webp',
-  sweet_shrimp: 'props/rice-bowl-token.webp',
-  berry_teacake: 'props/rice-onigiri-snack.webp',
+const FEED_SLOTS: Record<FeedItemId, { art: string; label: [string, string] }> = {
+  silver_fish: { art: 'props/rice-bowl-full.webp', label: ['白米饭', 'Rice'] },
+  sweet_shrimp: { art: 'props/rice-bowl-token.webp', label: ['Token 盖饭', 'Token rice'] },
+  berry_teacake: { art: 'props/rice-onigiri-snack.webp', label: ['小饭团', 'Rice ball'] },
 };
 
 interface BackpackProps {
@@ -37,7 +37,7 @@ type ItemSlot =
 
 function BackpackArt({ item }: { item: ItemSlot }) {
   const src = getSceneAssetUrl(
-    item.kind === 'feed' ? FEED_ART[item.id] : DECOR_CATALOG[item.id].artwork,
+    item.kind === 'feed' ? FEED_SLOTS[item.id].art : DECOR_CATALOG[item.id].artwork,
   );
   return <img src={src} alt="" />;
 }
@@ -66,6 +66,9 @@ export function Backpack({
     items.push({ kind: 'decor', id, name: DECOR_CATALOG[id].name, count: 1 });
   }
   const selected = items.find((item) => item.id === selectedId) ?? items[0];
+  const unit = t('游戏积分', 'game credits');
+  const unitPrice =
+    selected.kind === 'feed' ? String(values['feed_' + selected.id + '_price_milli']) : '';
   const equipped = selected.kind === 'decor' && snapshot.home.equippedDecor.includes(selected.id);
   const totalFood = FEEDS.reduce((total, id) => total + (snapshot.inventory[id] ?? 0), 0);
   const buffs = snapshot.home.buffs ?? {
@@ -84,7 +87,7 @@ export function Backpack({
       <section className="backpack-card" aria-labelledby="backpack-items">
         <header className="backpack-head">
           <h3 className="kit-section-title" id="backpack-items">
-            {t('背包（仅游戏积分购粮）', 'Bag and feed')}
+            {t('物品栏', 'Inventory')}
           </h3>
           <span>{t(`口粮 ${totalFood} 份`, `${totalFood} feed servings`)}</span>
         </header>
@@ -95,25 +98,13 @@ export function Backpack({
               type="button"
               className="backpack-slot"
               aria-pressed={item.id === selected.id}
-              aria-label={t(
-                `${item.name}，数量 ${item.count}`,
-                `${item.name}, quantity ${item.count}`,
-              )}
               title={item.name}
               onClick={() => setSelectedId(item.id)}
             >
               <BackpackArt item={item} />
-              <span>×{item.count}</span>
+              <span>{item.kind === 'feed' ? t(...FEED_SLOTS[item.id].label) : item.name}</span>
+              <span className="backpack-slot__count">×{item.count}</span>
             </button>
-          ))}
-          {Array.from({ length: Math.max(0, 8 - items.length) }, (_, index) => (
-            <div
-              className="backpack-slot backpack-slot--empty"
-              key={`empty-${index}`}
-              aria-hidden="true"
-            >
-              {index === 0 && <Plus size={21} />}
-            </div>
           ))}
         </div>
       </section>
@@ -125,13 +116,6 @@ export function Backpack({
           </span>
           <div>
             <h3>{selected.name}</h3>
-            <span className="nb-badge nb-badge--info">
-              {selected.kind === 'feed'
-                ? t(`库存 ×${selected.count}`, `In stock ×${selected.count}`)
-                : equipped
-                  ? t('已布置', 'Placed')
-                  : t('已拥有', 'Owned')}
-            </span>
             <p>
               {selected.kind === 'feed'
                 ? FEED_CATALOG[selected.id].subtitle
@@ -139,33 +123,18 @@ export function Backpack({
             </p>
           </div>
         </div>
-        {selected.kind === 'feed' ? (
-          <div className="backpack-selection__actions">
-            <label>
-              {t('购买份数（1–99）', 'Servings to buy (1–99)')}{' '}
-              <input
-                type="number"
-                min={1}
-                max={99}
-                step={1}
-                className="kit-input"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-              />
-            </label>
+        <div className="backpack-selection__stock">
+          <span>
+            {selected.kind === 'feed'
+              ? t(`库存 ${selected.count} 份`, `In stock: ${selected.count}`)
+              : equipped
+                ? t('已布置', 'Placed')
+                : t('已拥有', 'Owned')}
+          </span>
+          {selected.kind === 'feed' ? (
             <button
               type="button"
-              className="nb-btn nb-btn--sm"
-              disabled={!validQuantity}
-              onClick={() => onBuyFeed(selected.id, Number(quantity))}
-            >
-              <ShoppingBag size={15} /> {t('购买', 'Buy')} ·{' '}
-              {formatMilliCredits(values['feed_' + selected.id + '_price_milli'])}{' '}
-              {t('游戏积分 / 份', 'game credits per serving')}
-            </button>
-            <button
-              type="button"
-              className="nb-btn nb-btn--sm nb-btn--primary"
+              className="nb-btn"
               disabled={selected.count <= 0}
               onClick={() => onUseFeed(selected.id)}
             >
@@ -173,17 +142,61 @@ export function Backpack({
                 ? t('亲手喂饭团', 'Hand-feed a treat')
                 : t('盛入饭盆', 'Fill the bowl')}
             </button>
-          </div>
-        ) : (
-          <div className="backpack-selection__actions">
-            <button
-              type="button"
-              className="nb-btn nb-btn--sm nb-btn--primary"
-              onClick={() => onToggleDecor(selected.id)}
-            >
+          ) : (
+            <button type="button" className="nb-btn" onClick={() => onToggleDecor(selected.id)}>
               {equipped ? t('收起装扮', 'Put away') : t('布置小屋', 'Place in haven')}
             </button>
-          </div>
+          )}
+        </div>
+        {selected.kind === 'feed' && (
+          <form
+            className="backpack-purchase"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (validQuantity) onBuyFeed(selected.id, Number(quantity));
+            }}
+          >
+            <div className="backpack-purchase__quantity">
+              <label htmlFor="whale-feed-quantity">
+                {t('购买份数', 'Servings to buy')} <small>1–99</small>
+              </label>
+              <input
+                id="whale-feed-quantity"
+                className="kit-input"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={99}
+                step={1}
+                required
+                value={quantity}
+                aria-invalid={!validQuantity}
+                aria-describedby={!validQuantity ? 'whale-feed-range' : undefined}
+                onChange={(event) => setQuantity(event.target.value)}
+              />
+            </div>
+            {!validQuantity && (
+              <p id="whale-feed-range">
+                {t('请输入 1–99 的整数。', 'Enter a whole number from 1 to 99.')}
+              </p>
+            )}
+            <div className="backpack-purchase__checkout">
+              <div className="backpack-purchase__price">
+                <span>
+                  {t('每份', 'Per serving')} <Amount value={unitPrice} unit={unit} />
+                </span>
+                {validQuantity && Number(quantity) > 1 && (
+                  <strong>
+                    {t('合计', 'Total')}{' '}
+                    <Amount value={BigInt(unitPrice) * BigInt(quantity)} unit={unit} />
+                  </strong>
+                )}
+              </div>
+              <button className="nb-btn nb-btn--primary" disabled={!validQuantity} type="submit">
+                {t('购买口粮', 'Buy feed')}
+              </button>
+            </div>
+          </form>
         )}
       </section>
 
@@ -196,7 +209,7 @@ export function Backpack({
               className="inline-coin-icon"
               style={{ marginRight: 5 }}
             />
-            {t('深海海螺扭蛋 & 保温增益', 'Conch draws and boosts')}
+            {t('海螺扭蛋与道具', 'Conch draws and boosts')}
           </h3>
           <span className="deck-balance">
             <img src={getSceneAssetUrl(CONCH_SHARD_ART)} alt="" /> {shards}{' '}
@@ -239,7 +252,13 @@ export function Backpack({
                 checked={buffs.autoRefillEnabled && buffs.autoRefillTickets > 0}
                 onChange={onToggleAutoRefill}
               >
-                空碗自动续米饭（保温券 ×{buffs.autoRefillTickets}）
+                {t('空碗自动续饭', 'Refill an empty bowl')}
+                <small className="wh-detail">
+                  {t(
+                    `保温券 ×${buffs.autoRefillTickets}`,
+                    `Refill tickets ×${buffs.autoRefillTickets}`,
+                  )}
+                </small>
               </UiSwitch>
             </div>
           </div>
@@ -250,11 +269,15 @@ export function Backpack({
             </span>
             <div className="conch-buff-item__row">
               <span>
-                新米增香：
-                {buffs.aromaActiveGrams > 0
-                  ? `生效中 (${Math.round(buffs.aromaActiveGrams)}g 增香中)`
-                  : '未激活'}{' '}
-                · 库存 ×{buffs.aromaCharges}
+                {t('新米增香', 'Rice seasoning')}
+                <small className="wh-detail">
+                  {buffs.aromaActiveGrams > 0 &&
+                    t(
+                      `生效中 · ${Math.round(buffs.aromaActiveGrams)} g · `,
+                      `Active · ${Math.round(buffs.aromaActiveGrams)} g · `,
+                    )}
+                  {t(`库存 ×${buffs.aromaCharges}`, `In stock ×${buffs.aromaCharges}`)}
+                </small>
               </span>
               <button
                 type="button"
@@ -262,7 +285,7 @@ export function Backpack({
                 disabled={buffs.aromaCharges <= 0}
                 onClick={onActivateAroma}
               >
-                撒入增香包
+                {t('使用增香包', 'Add seasoning')}
               </button>
             </div>
           </div>
@@ -286,7 +309,7 @@ export function Backpack({
           disabled={shards < pullCost}
           onClick={onSpinConchGacha}
         >
-          <Sparkles size={14} /> 转动海螺扭蛋机（消耗 {pullCost} 片碎片）
+          <Sparkles size={16} /> {t('转动扭蛋', 'Draw an item')}
         </button>
       </section>
     </>

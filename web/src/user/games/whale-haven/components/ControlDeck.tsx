@@ -13,9 +13,9 @@ import {
   ShoppingBag,
   X,
 } from './Icons';
-import type { MenuPresentationMode } from './OceanStage';
 import { StarWave } from './UiMotifs';
 
+export type MenuPresentationMode = 'drawer' | 'sheet';
 export type DeckTabId = 'feed' | 'wardrobe' | 'social' | 'exchange' | 'logs';
 
 const DECK_TABS_META: readonly {
@@ -103,6 +103,7 @@ export function FloatingDock({
         const Icon = TAB_ICONS[tab.id];
         return (
           <button
+            id={`whale-dock-${tab.id}`}
             key={tab.id}
             type="button"
             className={`dock-item ${isActive ? 'is-active' : ''}`}
@@ -134,9 +135,37 @@ export function FloatingDock({
   );
 }
 
+export function MenuPositionButton({
+  mode,
+  onClick,
+}: {
+  mode: MenuPresentationMode;
+  onClick: () => void;
+}) {
+  const t = useWhaleText();
+  const bottom = mode === 'drawer';
+  const label = bottom
+    ? t('将菜单移到底部', 'Move menu to bottom')
+    : t('将菜单移到右侧', 'Move menu to the right');
+  return (
+    <button
+      type="button"
+      className="wh-menu-position hide-on-mobile"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      aria-controls="game-control-deck"
+    >
+      {bottom ? <PanelBottom size={18} /> : <PanelRight size={18} />}
+      {bottom ? t('移到底部', 'Dock below') : t('移到右侧', 'Dock right')}
+    </button>
+  );
+}
+
 interface ControlDeckProps {
   activeTab: DeckTabId;
   menuMode: MenuPresentationMode;
+  hidden: boolean;
   onClose: () => void;
   onToggleMenuMode: () => void;
   children: ReactNode;
@@ -144,16 +173,21 @@ interface ControlDeckProps {
 export function ControlDeck({
   activeTab,
   menuMode,
+  hidden,
   onClose,
   onToggleMenuMode,
   children,
 }: ControlDeckProps) {
   const t = useWhaleText();
   const body = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
 
   useLayoutEffect(() => {
     if (body.current) body.current.scrollTop = 0;
   }, [activeTab]);
+  useLayoutEffect(() => {
+    if (!hidden) heading.current?.focus({ preventScroll: true });
+  }, [activeTab, hidden]);
 
   const active = DECK_TABS_META.find((tab) => tab.id === activeTab) ?? DECK_TABS_META[0];
   const Icon = TAB_ICONS[active.id];
@@ -162,7 +196,7 @@ export function ControlDeck({
     <aside
       id="game-control-deck"
       className={`deck-panel deck-panel--${menuMode} is-open`}
-
+      hidden={hidden}
       aria-labelledby="deck-title"
       onClick={(event) => event.stopPropagation()}
     >
@@ -175,26 +209,12 @@ export function ControlDeck({
             <span className="deck-header__emblem" aria-hidden="true">
               <Icon size={23} />
             </span>
-            <h2 className="deck-header__title" id="deck-title">
+            <h2 className="deck-header__title" id="deck-title" ref={heading} tabIndex={-1}>
               {t(...active.title)}
             </h2>
           </div>
           <div className="deck-header__actions">
-            <button
-              type="button"
-              className="deck-icon-btn hide-on-mobile"
-              onClick={onToggleMenuMode}
-              aria-label={
-                menuMode === 'drawer'
-                  ? t('切换底部模式', 'Switch to bottom panel')
-                  : t('切换侧栏模式', 'Switch to sidebar')
-              }
-              title={
-                menuMode === 'drawer' ? t('底部模式', 'Bottom panel') : t('侧栏模式', 'Sidebar')
-              }
-            >
-              {menuMode === 'drawer' ? <PanelBottom size={17} /> : <PanelRight size={17} />}
-            </button>
+            <MenuPositionButton mode={menuMode} onClick={onToggleMenuMode} />
             <button
               type="button"
               className="deck-icon-btn"

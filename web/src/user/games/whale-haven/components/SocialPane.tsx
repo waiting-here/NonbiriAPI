@@ -12,7 +12,7 @@ import {
 import type { NeighborFilterKind, NeighborStation, CatchActionKind } from '../game/types';
 import { searchNeighbors, type Profile, type Action } from '../api';
 
-export type Dispatch = (action: Action) => Promise<boolean>;
+export type Dispatch = (action: Action, onError?: (reason: string) => void) => Promise<boolean>;
 interface Props {
   profile: Profile;
   dispatch: Dispatch;
@@ -39,6 +39,7 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<NeighborFilterKind>('all');
   const [close, setClose] = useState(false);
+  const [dialogError, setDialogError] = useState('');
   const [guestAction, setGuestAction] = useState<{
     id: string;
     action: CatchActionKind;
@@ -70,18 +71,31 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
             type="checkbox"
             checked={social.open}
             disabled={busy}
-            onChange={() =>
-              social.open ? setClose(true) : void dispatch({ type: 'set_open', open: true })
-            }
+            onChange={() => {
+              setDialogError('');
+              if (social.open) setClose(true);
+              else void dispatch({ type: 'set_open', open: true });
+            }}
           />{' '}
           {t('开放小筑，允许互相串门', 'Open my haven for mutual visits')}
         </label>
-        <p>
-          {t('今日社交所得（含工资）', 'Social earnings today (including wages)')} ·{' '}
-          {t('小鲸币', 'Whale coins')} {profile.snapshot.wallet.dailySocialPearlsGained} /{' '}
-          {values.daily_social_pearls} · {t('海螺碎片', 'Conch shards')}{' '}
-          {profile.snapshot.wallet.dailyConchShardsGained} / {values.daily_conch_shards}
-        </p>
+        <div>
+          <h4>{t('今日社交所得（含工资）', 'Social earnings today (including wages)')}</h4>
+          <dl className="wh-metrics">
+            <div>
+              <dt>{t('小鲸币', 'Whale coins')}</dt>
+              <dd>
+                {profile.snapshot.wallet.dailySocialPearlsGained} / {values.daily_social_pearls}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('海螺碎片', 'Conch shards')}</dt>
+              <dd>
+                {profile.snapshot.wallet.dailyConchShardsGained} / {values.daily_conch_shards}
+              </dd>
+            </div>
+          </dl>
+        </div>
         <p>
           {t(
             `近 ${values.stove_window_seconds / 3600} 小时自家消耗至少 ${values.stove_required_grams} 克口粮可获得社交鲸币。`,
@@ -100,9 +114,11 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
         busy={busy}
         onCancel={() => setClose(false)}
         onConfirm={async () => {
-          if (await dispatch({ type: 'set_open', open: false })) setClose(false);
+          if (await dispatch({ type: 'set_open', open: false }, setDialogError)) setClose(false);
         }}
-      />
+      >
+        {dialogError && !busy && <p role="alert">{dialogError}</p>}
+      </ConfirmDialog>
       {social.away && (
         <section className="voyage-card">
           <h3>
@@ -154,6 +170,7 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
                       key={action}
                       onClick={() => {
                         setMessage('');
+                        setDialogError('');
                         setGuestAction({
                           id: guest.neighbor_id,
                           action,
@@ -172,8 +189,9 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
         </section>
       )}
       <ConfirmDialog
-        open={!!activeGuest && !!guestAction}
+        open={!!guestAction}
         title={guestAction?.label ?? ''}
+        confirmDisabled={!activeGuest}
         description={
           guestAction?.action === 'hire'
             ? t(
@@ -193,16 +211,24 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
         onConfirm={async () => {
           if (
             guestAction &&
-            (await dispatch({
-              type: 'catch_guest',
-              neighborId: guestAction.id,
-              action: guestAction.action,
-              ...(message ? { presetId: message } : {}),
-            }))
+            (await dispatch(
+              {
+                type: 'catch_guest',
+                neighborId: guestAction.id,
+                action: guestAction.action,
+                ...(message ? { presetId: message } : {}),
+              },
+              setDialogError,
+            ))
           )
             setGuestAction(null);
         }}
       >
+        {!busy && (dialogError || !activeGuest) && (
+          <p role="alert">
+            {dialogError || t('这只客鲸已经离开了。', 'This guest has already left.')}
+          </p>
+        )}
         <label>
           {t('给客鲸的口信', 'Message for the guest')}{' '}
           <select value={message} onChange={(e) => setMessage(e.target.value)}>
@@ -218,7 +244,7 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
       {social.open ? (
         <section className="voyage-card">
           <h3 className="kit-section-title">{t('邻居海湾', 'Neighbor havens')}</h3>
-          <label>
+          <label className="wh-field">
             {t('查找邻居', 'Find neighbors')}
             <input
               className="kit-input"
@@ -228,7 +254,7 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          <label>
+          <label className="wh-field">
             {t('筛选', 'Filter')}{' '}
             <select
               value={filter}
@@ -278,30 +304,30 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
                     <p>
                       {n.whaleName} · {t('余粮', 'Feed left')} {Math.floor(n.troughGrams)} g
                     </p>
-                    <div className="wh-buttons">
-                      <button className="nb-btn" onClick={() => onPreview(n)}>
-                        {t('看看小筑', 'View haven')}
-                      </button>
-                      <button
-                        className="nb-btn"
-                        disabled={busy || !!social.away}
-                        onClick={() => onDepart(n)}
-                      >
-                        {t('去串门', 'Visit')}
-                      </button>
-                      <button
-                        className="nb-btn"
-                        disabled={busy}
-                        onClick={async () => {
-                          if (await dispatch({ type: 'toggle_pin_neighbor', neighborId: n.id }))
-                            void neighbors.refetch();
-                        }}
-                      >
-                        {(profile.snapshot.pinnedNeighborIds ?? []).includes(n.id)
-                          ? t('取消收藏', 'Unpin')
-                          : t('收藏', 'Pin')}
-                      </button>
-                    </div>
+                  </div>
+                  <div className="wh-buttons">
+                    <button className="nb-btn" onClick={() => onPreview(n)}>
+                      {t('看看小筑', 'View haven')}
+                    </button>
+                    <button
+                      className="nb-btn"
+                      disabled={busy || !!social.away}
+                      onClick={() => onDepart(n)}
+                    >
+                      {t('去串门', 'Visit')}
+                    </button>
+                    <button
+                      className="nb-btn"
+                      disabled={busy}
+                      onClick={async () => {
+                        if (await dispatch({ type: 'toggle_pin_neighbor', neighborId: n.id }))
+                          void neighbors.refetch();
+                      }}
+                    >
+                      {(profile.snapshot.pinnedNeighborIds ?? []).includes(n.id)
+                        ? t('取消收藏', 'Unpin')
+                        : t('收藏', 'Pin')}
+                    </button>
                   </div>
                 </li>
               ))}
@@ -335,6 +361,7 @@ export function DepartureDialog({
   const t = useWhaleText();
   const [hire, setHire] = useState(false);
   const [message, setMessage] = useState(initialMessage);
+  const [error, setError] = useState('');
   return (
     <ConfirmDialog
       open
@@ -351,16 +378,20 @@ export function DepartureDialog({
       onCancel={onClose}
       onConfirm={async () => {
         if (
-          await dispatch({
-            type: 'send_visit',
-            target: neighbor.id,
-            allowHire: hire,
-            ...(message ? { presetId: message } : {}),
-          })
+          await dispatch(
+            {
+              type: 'send_visit',
+              target: neighbor.id,
+              allowHire: hire,
+              ...(message ? { presetId: message } : {}),
+            },
+            setError,
+          )
         )
           onClose();
       }}
     >
+      {error && !busy && <p role="alert">{error}</p>}
       <label className="wh-choice">
         <input type="checkbox" checked={hire} onChange={(e) => setHire(e.target.checked)} />{' '}
         {t('本次允许主人雇佣帮工', 'Allow the host to hire my whale on this visit')}

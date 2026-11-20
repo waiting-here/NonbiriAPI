@@ -3,6 +3,14 @@ export const ICON_STROKE_WIDTH = 1.8;
 const SOUND_PATH = 'M11 4 6 8H3v8h3l5 4V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14';
 
 export const GAME_ICON_PATHS = {
+  'panel-right': 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm10 0v18',
+  'panel-bottom': 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 15h18',
+  viewfinder:
+    'M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3',
+  bag: 'M4 8h16l1 12H3L4 8Zm4 1V6a4 4 0 0 1 8 0v3',
+  bowl: 'M3 12h18a9 8 0 0 1-18 0Zm5 8h8M8 8c-2-2 2-3 0-5m5 5c-2-2 2-3 0-5',
+  shirt: 'm8 3-6 4 3 5 3-2v11h8V10l3 2 3-5-6-4a4 4 0 0 1-8 0Z',
+  chat: 'M21 11a9 8 0 0 1-12 7.5L3 21l1.5-5A9 8 0 1 1 21 11Z',
   warning: 'M12 4 2.5 20h19L12 4Zm0 6v4m0 3h.01',
   help: 'M9.5 9a2.5 2.5 0 1 1 4.1 1.9C12.6 11.6 12 12 12 13.5M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
   sound: SOUND_PATH,
