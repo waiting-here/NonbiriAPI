@@ -161,6 +161,10 @@
   color: var(--nb-color-text-muted);
 }
 
+button .game-money__unit {
+  color: inherit;
+}
+
 .game-state-actions {
   display: flex;
   flex-wrap: wrap;
