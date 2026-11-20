@@ -830,16 +830,26 @@
     },
     "navigation": {
       "findPage": "Find a page",
-      "findHint": "Page name or /path",
+      "findHint": "Name or page path",
       "clearSearch": "Clear page search",
       "matchCount": "Matching pages ({{count}})",
-      "noPages": "No matching page. Try a shorter name or a route such as /logs.",
+      "noPages": "No matching page. Try a shorter term like “pricing” or “logs”.",
       "overview": "Overview",
       "users": "Users",
       "services": "Charity & services",
       "records": "Logs & audits",
       "activities": "Activities & content",
-      "system": "System"
+      "system": "System",
+      "gachaTemplates": "Gacha configuration templates",
+      "whaleHaven": "Whale Haven",
+      "blackjackHistory": "Blackjack history",
+      "keywords": {
+        "priceTemplates": "pricing rates",
+        "modelBindings": "model binding",
+        "activityLogs": "activity logs discovery logs",
+        "rewards": "send rewards redeem codes",
+        "gachaTemplates": "gacha presets"
+      }
     },
     "dashboard": {
       "nav": "Dashboard",

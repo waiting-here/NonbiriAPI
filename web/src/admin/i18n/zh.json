@@ -830,16 +830,26 @@
     },
     "navigation": {
       "findPage": "查找管理页面",
-      "findHint": "页面名称或 /路径",
+      "findHint": "名称或页面路径",
       "clearSearch": "清除页面搜索",
       "matchCount": "找到 {{count}} 个页面",
-      "noPages": "没有匹配的页面。试试更短的名称，或输入 /logs 这样的路径。",
+      "noPages": "没有匹配的页面。试试“价格”或“日志”等简短关键词。",
       "overview": "概览",
       "users": "用户",
       "services": "公益与服务",
       "records": "日志与审计",
       "activities": "活动与内容",
-      "system": "系统"
+      "system": "系统",
+      "gachaTemplates": "抽卡配置模板",
+      "whaleHaven": "鲸鱼湾小筑",
+      "blackjackHistory": "二十一点历史",
+      "keywords": {
+        "priceTemplates": "定价 计费 价格模版",
+        "modelBindings": "模型绑定",
+        "activityLogs": "活动日志 拉取日志",
+        "rewards": "发奖 发放奖励",
+        "gachaTemplates": "抽卡预设 配置预设"
+      }
     },
     "dashboard": {
       "nav": "仪表盘",
