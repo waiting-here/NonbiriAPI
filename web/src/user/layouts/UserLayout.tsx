@@ -74,6 +74,15 @@ const USER_PUBLIC_SHELL_PATHS = new Set([
   USER_REPORT_PATH,
 ]);
 
+// The public report can be edited while the first session request is still pending.
+function CredentialReportOutlet({ account }: { account: string | null | undefined }) {
+  const [draft, setDraft] = useState({ account, revision: 0 });
+  if (account !== undefined && account !== draft.account) {
+    setDraft({ account, revision: draft.account === undefined ? 0 : draft.revision + 1 });
+  }
+  return <Outlet key={draft.revision} />;
+}
+
 export function UserLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -201,9 +210,14 @@ export function UserLayout() {
     // Legal and explicit public status routes keep a compact shell even when
     // the bootstrap is pending/failed. Their pages provide built-in legal or
     // status copy and never need the signed-in navigation.
+    const sessionClosed = logoutRequested || session.data === null;
     return (
       <PublicShell siteName={siteName} siteLogoURL={siteLogoURL}>
-        <Outlet key={profile?.id ?? 'signed-out'} />
+        {location.pathname === USER_REPORT_PATH ? (
+          <CredentialReportOutlet account={profile?.id ?? (sessionClosed ? null : undefined)} />
+        ) : (
+          <Outlet />
+        )}
       </PublicShell>
     );
   }
