@@ -324,6 +324,19 @@ var rejectionReasonsAllowed = map[string]bool{
 	"OpenAI key storage policy is incompatible with this connector":                       true,
 	"stream options cannot be converted":                                                  true,
 	"role cannot be passed through to this connector":                                     true,
+
+	string(AdmissionRPM):          true,
+	string(AdmissionConcurrency):  true,
+	string(AdmissionBoth):         true,
+	string(AdmissionQueueFull):    true,
+	string(AdmissionQueueTimeout): true,
+	string(AdmissionBudget):       true,
+	string(AdmissionCooldown):     true,
+	string(AdmissionMixed):        true,
+	string(AdmissionRouting):      true,
+	string(AdmissionQuotaStore):   true,
+	string(AdmissionLedgerBusy):   true,
+	string(AdmissionLedgerSpace):  true,
 }
 
 func NewDetail(field, reason string) *RejectionDetail {

@@ -36,12 +36,20 @@ func writeFailure(writer http.ResponseWriter, failure wireFailure) {
 	if writer == nil {
 		return
 	}
+	value := failure.publicError(httperr.Language(writer))
+	if failure.code == httperr.CodeUpstream && failure.upstreamContext {
+		httperr.WriteUpstreamError(writer, value, failure.status)
+		return
+	}
+	httperr.WriteError(writer, value)
+}
+
+func (failure wireFailure) publicError(language string) httperr.Error {
 	message := failure.message
 	if failure.detail != nil {
 		// Revalidate at the response boundary: only fixed server-authored
 		// checks and suggestions can become caller-visible explanations.
 		if detail := requestattempt.NewDetail(failure.detail.Field, failure.detail.Reason); detail != nil {
-			language := httperr.Language(writer)
 			localize := func(text string) string { return httperr.Localize(httperr.New(failure.code, text), language).Message }
 			message = detail.Field + ": " + localize(detail.Reason) + ". " + localize(detail.Suggestion)
 		}
@@ -53,11 +61,7 @@ func writeFailure(writer http.ResponseWriter, failure wireFailure) {
 	if failure.upstreamContext && failure.diagnostic != "" {
 		value = value.WithDiag(failure.diagnostic)
 	}
-	if failure.code == httperr.CodeUpstream && failure.upstreamContext {
-		httperr.WriteUpstreamError(writer, value, failure.status)
-		return
-	}
-	httperr.WriteError(writer, value)
+	return value
 }
 
 func statusForCode(code string) int {
@@ -110,6 +114,15 @@ func writeModelList(writer http.ResponseWriter, value ModelList) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(encoded)
+}
+
+func admissionFailure(code string, cause requestattempt.AdmissionCause) wireFailure {
+	field := "model"
+	switch cause {
+	case requestattempt.AdmissionLedgerBusy, requestattempt.AdmissionLedgerSpace, requestattempt.AdmissionQuotaStore, requestattempt.AdmissionRouting:
+		field = "request"
+	}
+	return rejectionFailure(code, string(cause), field, string(cause))
 }
 
 func rejectionFailure(code, message, field, reason string) wireFailure {

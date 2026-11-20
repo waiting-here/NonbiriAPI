@@ -101,7 +101,7 @@ FROM donation_uses u JOIN donation_keys k ON k.id=u.donation_key_id JOIN donatio
 	if _, err := e.store.DB().Exec(`DELETE FROM charity_binding_targets WHERE donation_key_id=? OR upstream_model_id='model-b'`, otherKey); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.service.chatSnapshot(ctx, mid, until-1, []contract.Type{contract.TypeGoogleGemini}); !errors.Is(err, donationquota.ErrLimited) {
+	if _, err := e.service.chatSnapshot(ctx, mid, until-1, []contract.Type{contract.TypeGoogleGemini}); !errors.Is(err, donationquota.ErrLimited) || requestattempt.AdmissionCauseOf(err) != requestattempt.AdmissionCooldown {
 		t.Fatal("last candidate still cooling", err)
 	}
 	if snap, err := e.service.chatSnapshot(ctx, mid, until, []contract.Type{contract.TypeGoogleGemini}); err != nil || len(snap.Candidates()) != 1 {

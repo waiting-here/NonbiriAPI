@@ -376,6 +376,8 @@ describe('preflight rejection details', () => {
             match: 'conversion',
             field: 'presence_penalty',
           },
+          { reason: 'key_queue_full', stage: 'queue', binding_id: '14' },
+          { reason: 'ledger_busy', stage: 'accept' },
         ],
       },
     });
@@ -399,6 +401,10 @@ describe('preflight rejection details', () => {
     expect(rows[0]).toHaveTextContent('repeated failures');
     expect(rows[1]).toHaveTextContent('Protocol conversion');
     expect(rows[1]).toHaveTextContent('presence_penalty');
+    expect(rows[2]).toHaveTextContent('Waiting for a model connection');
+    expect(rows[2]).toHaveTextContent('no room for another waiting request');
+    expect(rows[3]).toHaveTextContent('Accepting the request');
+    expect(rows[3]).toHaveTextContent('temporary write lock');
   });
 
   it('explains an unknown top-level field by its safe position', async () => {

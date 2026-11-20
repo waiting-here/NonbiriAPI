@@ -469,6 +469,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 	}
 	modelQuotas := make(map[modelQuotaKey]bool)
 	sawRecurringLimit := false
+	var skipped requestattempt.AdmissionCause
 	var listed []int64
 	if requestattempt.CurrentID(ctx) != "" && len(operations) == 1 && operations[0] != "" {
 		listed = []int64{}
@@ -505,10 +506,12 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			skipped = skipped.Combine(requestattempt.AdmissionUnavailable)
 			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "expired")
 			continue
 		}
 		if rateLimitedUntil.Valid && rateLimitedUntil.Int64 > decisionNow {
+			skipped = skipped.Combine(requestattempt.AdmissionCooldown)
 			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "cooldown")
 			sawRecurringLimit = true
 			continue
@@ -531,6 +534,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.budgetAvailable {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
 			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "capacity")
 			continue
 		}
@@ -546,6 +550,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
 			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "capacity")
 			continue
 		}
@@ -571,6 +576,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.recurringAvailable {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
 			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "quota")
 			sawRecurringLimit = true
 			continue
@@ -588,6 +594,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			modelQuotas[modelKey] = modelAvailable
 		}
 		if !modelAvailable {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
 			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "quota")
 			sawRecurringLimit = true
 			continue
@@ -610,9 +617,9 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			observeUnlistedTargets(ctx, tx, modelID, listed)
 		}
 		if sawRecurringLimit {
-			return RuntimeSnapshot{}, donationquota.ErrLimited
+			return RuntimeSnapshot{}, skipped.Wrap(donationquota.ErrLimited)
 		}
-		return RuntimeSnapshot{}, ErrUnavailable
+		return RuntimeSnapshot{}, skipped.Wrap(ErrUnavailable)
 	}
 	var operation connectorcontract.Operation
 	if len(operations) > 1 {
@@ -628,6 +635,9 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		observeUnlistedTargets(ctx, tx, modelID, listed)
 	}
 	if err != nil {
+		if cause := requestattempt.AdmissionCauseOf(err); cause != "" {
+			err = skipped.Combine(cause).Wrap(err)
+		}
 		return RuntimeSnapshot{}, err
 	}
 	if len(snapshot.candidates) == 0 {

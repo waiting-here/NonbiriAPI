@@ -623,7 +623,8 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 	}
 	rejectionDetail := ""
 	if dispatchedClaims == 0 && input.Caller.Class == ResultFailed &&
-		(input.Caller.ErrorCode == httperr.CodeUnboundModel || input.Caller.ErrorCode == httperr.CodeRateLimited) {
+		(input.Caller.ErrorCode == httperr.CodeUnboundModel || input.Caller.ErrorCode == httperr.CodeRateLimited ||
+			((input.Caller.ErrorCode == httperr.CodeServiceUnavailable || input.Caller.ErrorCode == httperr.CodeInternal) && requestattempt.IsServiceAdmissionDetail(input.RejectionDetail))) {
 		rejectionDetail = requestattempt.EncodeDetail(input.RejectionDetail)
 	}
 	terminal := func(callbackCtx context.Context, callbackTx *sql.Tx) error {

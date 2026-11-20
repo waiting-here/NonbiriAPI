@@ -169,6 +169,9 @@ func (service *Service) writePreAcceptanceFailure(
 		trace = nil
 	}
 	failure := failureForError(err, charity)
+	if failure.code == httperr.CodeRateLimited && claim.AdmissionReason(err) != "" {
+		requestattempt.Stage(parent, "preflight", "resource_limit_exceeded")
+	}
 	requestattempt.Detail(parent, failure.detail)
 	if recordedShort {
 		writer.Header().Set("X-Request-ID", rejected.RequestID)

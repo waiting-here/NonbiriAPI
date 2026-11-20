@@ -3,7 +3,7 @@ export interface RouteObservation {
   binding_id?: string;
   native_service?: string;
   match?: 'native' | 'conversion';
-  stage?: 'claim' | 'dispatch';
+  stage?: 'claim' | 'dispatch' | 'queue' | 'accept';
   field?: string;
 }
 
@@ -29,7 +29,13 @@ export function normalizeRouteDecision(value: unknown): RouteDecision | undefine
       binding_id: typeof item.binding_id === 'string' ? item.binding_id : undefined,
       native_service: typeof item.native_service === 'string' ? item.native_service : undefined,
       match: item.match === 'native' || item.match === 'conversion' ? item.match : undefined,
-      stage: item.stage === 'claim' || item.stage === 'dispatch' ? item.stage : undefined,
+      stage:
+        item.stage === 'claim' ||
+        item.stage === 'dispatch' ||
+        item.stage === 'queue' ||
+        item.stage === 'accept'
+          ? item.stage
+          : undefined,
       field: typeof item.field === 'string' ? item.field : undefined,
     });
   }

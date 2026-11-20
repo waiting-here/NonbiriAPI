@@ -58,6 +58,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 	groups := make(map[int64]bool)
 	sawAvailableOperation := false
 	sawModelQuota := false
+	var skipped requestattempt.AdmissionCause
 	for _, item := range candidates {
 		var approvedMask int64
 		var unsupported connectorcontract.NativeService
@@ -76,6 +77,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 			state, present := available[serviceTarget{use.UseID, candidate.Authorization.TargetID}]
 			modelLimited := state.modelRetryAt > now && state.reason == state.modelReason
 			if !present || (state.reason != "" && !modelLimited) {
+				skipped = skipped.Combine(requestattempt.AdmissionUnavailable)
 				if state.reason == "" {
 					state.reason = "unavailable"
 				}
@@ -108,6 +110,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 				}
 			}
 			if !compatible {
+				skipped = skipped.Combine(requestattempt.AdmissionUnavailable)
 				if matchedOperation {
 					requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, "features_unsupported", "", "")
 				} else if unsupported == "" {
@@ -117,6 +120,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 			}
 			if modelLimited {
 				requestattempt.ObserveRoute(ctx, candidate.BindingID, use.NativeService, state.reason, "", "")
+				skipped = skipped.Combine(requestattempt.AdmissionCooldown)
 				sawModelQuota = true
 				continue
 			}
@@ -142,7 +146,7 @@ func authorizedServiceTargetsTx(ctx context.Context, tx *sql.Tx, candidates []we
 		return nil, ErrResourceLimit
 	}
 	if len(result) == 0 && sawModelQuota {
-		return nil, donationquota.ErrLimited
+		return nil, skipped.Wrap(donationquota.ErrLimited)
 	}
 	if len(result) == 0 && sawAvailableOperation {
 		return nil, errors.Join(ErrInvalidRequest, &connectorcontract.RequestRejection{

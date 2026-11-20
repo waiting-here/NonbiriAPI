@@ -555,7 +555,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 			clear(contextID)
 			clear(encrypted)
 			if errors.Is(backoffErr, smartbackoff.ErrUnavailable) {
-				return nil, ErrKeyRateLimited
+				return nil, requestattempt.AdmissionCooldown.Wrap(ErrKeyRateLimited)
 			}
 			return nil, backoffErr
 		}

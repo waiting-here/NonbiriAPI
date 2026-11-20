@@ -212,6 +212,9 @@ func TestKeyQueueHTTPDispatchAndDynamicRejection(t *testing.T) {
 					}
 					select {
 					case got := <-second:
+						if outcome == "reject" && (!strings.Contains(got.body, "concurrent request limit") || !strings.Contains(got.body, "Wait for an active request")) {
+							t.Fatalf("lost queued admission reason and remedy: %+v", got)
+						}
 						if got.err != nil || got.status != want {
 							t.Fatalf("queued rejection: %+v", got)
 						}
