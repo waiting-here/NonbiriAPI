@@ -653,6 +653,9 @@ export function GamesPage() {
       />
       <div className="admin-games-toolbar">
         <div className="nb-actions">
+          <Link className="nb-btn nb-btn--secondary" to="/games/whale-haven">
+            {duelText('鲸鱼湾小筑', 'Whale Haven')}
+          </Link>
           <Link className="nb-btn nb-btn--secondary" to="/games/ai">
             {t('admin.games.aiPlayersTitle')}
           </Link>
