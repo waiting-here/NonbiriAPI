@@ -5,8 +5,10 @@ import {
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
   installURLPersistenceObserver,
+  mockJson,
   mockPublicConfig,
   mockRoleSession,
+  userSession,
 } from './support';
 import { expect, test, type Page } from './test';
 
@@ -191,6 +193,107 @@ async function capture(page: Page, name: string, locale: string, metrics: unknow
       });
     }
 }
+test('unfinished setup comes first even after an API call, and completed setup moves below announcements', async ({
+  page,
+}) => {
+  await mockPublicConfig(page, 'user');
+  await mockRoleSession(page, 'user', 'user');
+  const session = userSession('user');
+  session.user.usage.total_requests = '4';
+  for (const path of ['/api/session', '/api/me']) {
+    await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: session });
+  }
+  const state: State = {
+    active: true,
+    key: true,
+    models: true,
+    charity: false,
+    posts: 0,
+    reads: [],
+  };
+  await mockHome(page, state, 'en');
+  await page.addInitScript(() => {
+    localStorage.setItem('nb.lang', 'en');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => {} },
+    });
+  });
+  await page.goto(USER_ORIGIN);
+  await expect(page.locator('.home-start')).toContainText('2 of 3 complete');
+  await expect(
+    page.locator('.home-welcome + .home-start + .home-daily + .home-announcements'),
+  ).toBeVisible();
+  await page.locator('.home-start .home-address-copy button').click();
+  await expect(page.getByRole('heading', { name: 'Setup guide complete' })).toBeVisible();
+  await expect(
+    page.locator('.home-daily + .home-announcements ~ .home-start--complete'),
+  ).toBeVisible();
+});
+test('home only advertises Whale Haven after the effective switch is confirmed', async ({
+  page,
+}) => {
+  await mockPublicConfig(page, 'user');
+  await mockRoleSession(page, 'user', 'user');
+  const state: State = {
+    active: true,
+    key: true,
+    models: true,
+    charity: false,
+    posts: 0,
+    reads: [],
+  };
+  await mockHome(page, state, 'en');
+  const gameReads: string[] = [];
+  const artwork: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/games')) gameReads.push(path);
+    if (path.includes('/assets/whale-haven/')) artwork.push(path);
+  });
+  const path = '/api/games/whale-haven/availability';
+  let mode: 'closed' | 'open' | 'failed' = 'closed';
+  await page.route(USER_ORIGIN + path, (route) =>
+    route.fulfill(
+      mode === 'failed'
+        ? { status: 503, json: {} }
+        : { json: { enabled: mode === 'open', exchange_enabled: false } },
+    ),
+  );
+  const entry = page.locator('.home-whale-entry');
+  for (const setting of ['closed', 'failed', 'open'] as const) {
+    mode = setting;
+    const statusRead = page.waitForResponse(USER_ORIGIN + path);
+    await page.goto(USER_ORIGIN);
+    await statusRead;
+    await expect(page.locator('.home-announcement-card')).toHaveCount(1);
+    if (mode !== 'open') {
+      await expect(entry).toHaveCount(0);
+      expect(artwork).toEqual([]);
+    }
+  }
+  const daily = await page.locator('.home-daily').boundingBox();
+  const announcements = await page.locator('.home-announcements').boundingBox();
+  expect(daily).not.toBeNull();
+  expect(announcements).not.toBeNull();
+  expect(announcements!.x).toBeCloseTo(daily!.x);
+  expect(announcements!.width).toBeCloseTo(daily!.width);
+  expect(announcements!.y).toBeGreaterThanOrEqual(daily!.y + daily!.height);
+  await expect(entry).toBeVisible();
+  await expect(entry).toHaveAccessibleName('Whale Haven');
+  await expect(entry).toHaveAttribute('href', '/games/whale-haven');
+  expect(gameReads).toEqual([path, path, path]);
+  expect(artwork).toEqual(['/assets/whale-haven/sprites/whale-home.webp']);
+  await entry.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(USER_ORIGIN + '/games/whale-haven');
+  mode = 'closed';
+  const closeRead = page.waitForResponse(USER_ORIGIN + path);
+  await page.goBack();
+  await closeRead;
+  await expect(page.locator('.home-wallet')).toBeVisible();
+  await expect(entry).toHaveCount(0);
+});
 for (const locale of ['en', 'zh'] as const) {
   test(`home checklist and client instructions follow real state ${locale}`, async ({
     context,
@@ -368,6 +471,7 @@ for (const locale of ['en', 'zh'] as const) {
       })
       .click();
     await expect(page.getByRole('heading', { name: completed })).toBeVisible();
+    await expect(page.getByRole('heading', { name: completed })).toBeFocused();
     expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.hidden'))).toBeNull();
 
     state.key = false;
@@ -417,7 +521,7 @@ for (const locale of ['en', 'zh'] as const) {
     const privateReads: string[] = [];
     page.on('request', (request) => {
       const path = new URL(request.url()).pathname;
-      if (/^\/api\/(me|caller-key|models|charity|checkin|home|announcements)/.test(path))
+      if (/^\/api\/(me|caller-key|models|charity|checkin|home|announcements|games)/.test(path))
         privateReads.push(path);
     });
     await page.goto(USER_ORIGIN);

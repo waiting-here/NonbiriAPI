@@ -4,6 +4,11 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+- Put the wallet and daily check-ins together above announcements on the user home page.
+  Keep unfinished setup steps first, and add a direct Whale Haven entrance while the game is open.
+
 ## 1.4.0 — 2026-11-20
 
 - Add Whale Haven with account-backed care, decorations, offline progress,

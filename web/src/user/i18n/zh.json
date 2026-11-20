@@ -63,6 +63,10 @@
       "introGames": "小游戏和活动",
       "introGamesBody": "签到、参加活动或玩小游戏。",
       "claimedToday": "今日已签",
+      "whaleVisit": "照料小鲸，去邻居家串门",
+      "dailyCheckins": "每日签到",
+      "checkinReward": "奖励",
+      "balanceLimitReached": "余额已达签到上限",
       "availableTomorrow": "明天可领"
     },
     "steward": {
@@ -2567,7 +2571,7 @@
       "home.checkin.today": "今日状态",
       "home.checkin.checkedIn": "已签到",
       "home.checkin.notCheckedIn": "未签到",
-      "home.checkin.exclusiveNotice": "每天只能选一种签到：通用积分或游戏积分。今天领过其中一种后，另一种要等到按本站时区计算的明天才能领。",
+      "home.checkin.exclusiveNotice": "每天只能选一种签到。两种签到都会在本站时间次日零点重置。",
       "home.checkin.otherChosen": "已领取另一种签到",
       "home.checkin.otherChosenHint": "今天已经领取另一种积分签到。按本站时区，明天才能领取此签到。",
       "home.checkin.awardRange": "奖励范围（积分）",

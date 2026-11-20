@@ -303,6 +303,14 @@ export async function mockRoleSession(
     });
     return;
   }
+  if (station === 'user') {
+    await mockJson(page, {
+      origin,
+      method: 'GET',
+      path: '/api/games/whale-haven/availability',
+      body: { enabled: false, exchange_enabled: false },
+    });
+  }
   const apiRoot = station === 'admin' ? '/admin/api' : '/api';
   await page.route(origin + apiRoot + '/attendance?*', async (route) => {
     const url = new URL(route.request().url());

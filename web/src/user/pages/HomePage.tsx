@@ -5,12 +5,14 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { ApiAddressCopy, markOnboarding, useOnboardingFlag } from '../features/core/onboarding';
 import { useNumberedModels } from '../features/core/modelNumberedQueries';
 import { DEFAULT_CHARITY_CATALOG_FILTERS, useCharityCatalog } from '../features/economy/catalog';
+import { Icon } from '@shared/components/Icon';
+import { useWhaleHavenOpen } from '../games/common/useWhaleHavenOpen';
 import { PageHeader } from '@shared/components/States';
 import { StatusBadge } from '@shared/components/ui';
 import { Stepper, type StepState, type StepperStep } from '@shared/components/ui/Stepper';
@@ -46,6 +48,11 @@ import '../features/core/core.css';
 import '../features/core/home.css';
 
 const pageCopyKeys = {
+  'user.games.copy.center.whalehaven.title': 'user.games.copy.center.whalehaven.title',
+  'user.home.whaleVisit': 'user.home.whaleVisit',
+  'user.home.dailyCheckins': 'user.home.dailyCheckins',
+  'user.home.balanceLimitReached': 'user.home.balanceLimitReached',
+  'user.home.checkinReward': 'user.home.checkinReward',
   'user.home.apiAccess': 'user.home.apiAccess',
   'user.home.calls': 'user.home.calls',
   'user.home.charity': 'user.home.charity',
@@ -170,6 +177,32 @@ function SignedOutHome() {
   );
 }
 
+function WhaleHavenEntry({ enabled }: { enabled: boolean }) {
+  const open = useWhaleHavenOpen(enabled);
+  const { t } = useRegisteredCopy(pageCopyKeys);
+  if (!open) return null;
+  return (
+    <Link
+      className="nb-panel home-whale-entry"
+      to="/games/whale-haven"
+      aria-labelledby="home-whale-title"
+    >
+      <img
+        src="/assets/whale-haven/sprites/whale-home.webp"
+        alt=""
+        width={60}
+        height={64}
+        decoding="async"
+      />
+      <span className="home-whale-entry__copy">
+        <strong id="home-whale-title">{t('user.games.copy.center.whalehaven.title')}</strong>
+        <span>{t('user.home.whaleVisit')}</span>
+      </span>
+      <Icon name="chevron-right" />
+    </Link>
+  );
+}
+
 function EconomyCard({ accountId }: { accountId: string }) {
   const { t } = useCoreCopy();
   const { t: text } = useRegisteredCopy(pageCopyKeys);
@@ -235,14 +268,7 @@ function EconomyCard({ accountId }: { accountId: string }) {
   );
 }
 
-function OnboardingChecklist({
-  accountId,
-  sessionReady,
-}: {
-  accountId: string;
-  sessionReady: boolean;
-}) {
-  const { t } = useRegisteredCopy(pageCopyKeys);
+function useHomeOnboarding(accountId: string, sessionReady: boolean) {
   const clientDone = useOnboardingFlag('client');
   const hidden = useOnboardingFlag('hidden');
   const enabled = sessionReady && !hidden;
@@ -262,7 +288,22 @@ function OnboardingChecklist({
   const keyDone = Boolean(key.data?.metadata);
   const modelDone = Boolean(models.data?.data.length || charity.data?.models.length);
   const complete = keyDone && modelDone && clientDone;
-  if (hidden) return null;
+  return { hidden, keyDone, modelDone, clientDone, complete };
+}
+
+function OnboardingChecklist({
+  progress,
+  focusOnShow,
+}: {
+  progress: ReturnType<typeof useHomeOnboarding>;
+  focusOnShow: boolean;
+}) {
+  const { t } = useRegisteredCopy(pageCopyKeys);
+  const { keyDone, modelDone, clientDone, complete } = progress;
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusOnShow) titleRef.current?.focus();
+  }, [focusOnShow]);
   const done = [keyDone, modelDone, clientDone];
   // The first unfinished step is the suggested next one; later steps stay usable.
   const stateOf = (index: number): StepState =>
@@ -331,7 +372,7 @@ function OnboardingChecklist({
       aria-labelledby="home-start-title"
     >
       <div className="home-start__head">
-        <h2 id="home-start-title">
+        <h2 id="home-start-title" ref={titleRef} tabIndex={-1}>
           {complete ? t('user.home.setupDone') : t('user.home.getStarted')}
         </h2>
         <div className="home-start__side">
@@ -359,24 +400,14 @@ function OnboardingChecklist({
   );
 }
 
-function CheckinCard({
-  accountId,
-  asset,
-  capability,
-}: {
-  accountId: string;
-  capability: HomeAdapters['checkin'];
-  asset: CreditAsset;
-}) {
-  const { t } = useCoreCopy();
-  const { t: text } = useRegisteredCopy(pageCopyKeys);
+function useCheckinStatus(
+  accountId: string,
+  asset: CreditAsset,
+  capability: HomeAdapters['checkin'],
+) {
   const queryClient = useQueryClient();
-  const [committed, setCommitted] = useState<CommittedCheckin | null>(null);
-  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
   const loader = capability.state === 'available' ? capability.load : null;
-  const submitter = capability.state === 'available' ? capability.submit : null;
-  const status = useQuery({
+  return useQuery({
     queryKey: coreKeys.home(accountId, asset === 'game' ? 'game-checkin' : 'checkin'),
     queryFn: ({ signal }) => {
       if (!loader) throw new CapabilityUnavailableError();
@@ -385,6 +416,26 @@ function CheckinCard({
     enabled: capability.state === 'available',
     retry: false,
   });
+}
+
+function CheckinCard({
+  accountId,
+  asset,
+  capability,
+  status,
+}: {
+  accountId: string;
+  capability: HomeAdapters['checkin'];
+  asset: CreditAsset;
+  status: ReturnType<typeof useCheckinStatus>;
+}) {
+  const { t } = useCoreCopy();
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
+  const queryClient = useQueryClient();
+  const [committed, setCommitted] = useState<CommittedCheckin | null>(null);
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+  const submitter = capability.state === 'available' ? capability.submit : null;
   const mutation = useMutation({
     mutationFn: async () => {
       if (!submitter) throw new CapabilityUnavailableError();
@@ -462,9 +513,11 @@ function CheckinCard({
     displayedAuthority.balance_cap !== '0' &&
     checkinMilli(displayedAuthority.balance) >= checkinMilli(displayedAuthority.balance_cap);
   return (
-    <section className="core-card core-checkin-card">
+    <section className="core-card core-checkin-card" aria-labelledby={'home-checkin-' + asset}>
       <div className="core-card__header">
-        <h2>{t(asset === 'game' ? 'home.gameCheckinTitle' : 'home.checkinTitle')}</h2>
+        <h3 id={'home-checkin-' + asset}>
+          {t(asset === 'game' ? 'home.gameCheckinTitle' : 'home.checkinTitle')}
+        </h3>
         {capability.state === 'available' &&
         !outcomeUnknown &&
         !status.isPending &&
@@ -518,11 +571,13 @@ function CheckinCard({
                 ? t('home.checkin.checkedIn')
                 : blockedByOtherCheckin
                   ? t('home.checkin.otherChosen')
-                  : t('home.checkin.notCheckedIn')}
+                  : capReached
+                    ? text('user.home.balanceLimitReached')
+                    : t('home.checkin.notCheckedIn')}
             </span>
             <span className="nb-muted">
-              {' '}
-              · <ExactCredits value={displayedAuthority.award_min} />–
+              {text('user.home.checkinReward')}{' '}
+              <ExactCredits value={displayedAuthority.award_min} />–
               <ExactCredits value={displayedAuthority.award_max} />
             </span>
           </p>
@@ -573,59 +628,44 @@ function CheckinCard({
 /** Both daily check-ins, shown beside the wallet they add to. */
 function CheckinSection({ accountId, adapters }: { accountId: string; adapters: HomeAdapters }) {
   const { t } = useCoreCopy();
-  const queryClient = useQueryClient();
-  const generalLoader = adapters.checkin.state === 'available' ? adapters.checkin.load : null;
-  const gameLoader = adapters.gameCheckin.state === 'available' ? adapters.gameCheckin.load : null;
-  const generalStatus = useQuery({
-    queryKey: coreKeys.home(accountId, 'checkin'),
-    queryFn: ({ signal }) => {
-      if (!generalLoader) throw new CapabilityUnavailableError();
-      return accountScopedHomeLoad(queryClient, accountId, generalLoader, signal);
-    },
-    enabled: adapters.checkin.state === 'available',
-    retry: false,
-  });
-  const gameStatus = useQuery({
-    queryKey: coreKeys.home(accountId, 'game-checkin'),
-    queryFn: ({ signal }) => {
-      if (!gameLoader) throw new CapabilityUnavailableError();
-      return accountScopedHomeLoad(queryClient, accountId, gameLoader, signal);
-    },
-    enabled: adapters.gameCheckin.state === 'available',
-    retry: false,
-  });
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
+  const generalStatus = useCheckinStatus(accountId, 'general', adapters.checkin);
+  const gameStatus = useCheckinStatus(accountId, 'game', adapters.gameCheckin);
+  const bothKnown = generalStatus.isSuccess && gameStatus.isSuccess;
+  const showGeneral = !bothKnown || generalStatus.data.enabled;
+  const showGame = !bothKnown || gameStatus.data.enabled;
+  if (!showGeneral && !showGame) return null;
   const mutuallyExclusive =
     generalStatus.data?.mutually_exclusive || gameStatus.data?.mutually_exclusive;
-  if (
-    !mutuallyExclusive &&
-    generalStatus.isSuccess &&
-    gameStatus.isSuccess &&
-    !generalStatus.data.enabled &&
-    !gameStatus.data.enabled
-  )
-    return null;
   return (
-    <div className="home-checkins">
-      {mutuallyExclusive ? (
+    <section className="nb-panel home-checkins" aria-labelledby="home-checkins-title">
+      <h2 id="home-checkins-title">{text('user.home.dailyCheckins')}</h2>
+      {showGeneral && showGame && mutuallyExclusive ? (
         <p className="core-checkin-choice-note" role="note">
           {t('home.checkin.exclusiveNotice')}
         </p>
       ) : null}
       <div className="core-checkin-grid">
-        <CheckinCard
-          key={`general:${accountId}`}
-          accountId={accountId}
-          asset="general"
-          capability={adapters.checkin}
-        />
-        <CheckinCard
-          key={`game:${accountId}`}
-          accountId={accountId}
-          asset="game"
-          capability={adapters.gameCheckin}
-        />
+        {showGeneral && (
+          <CheckinCard
+            key={`general:${accountId}`}
+            accountId={accountId}
+            asset="general"
+            capability={adapters.checkin}
+            status={generalStatus}
+          />
+        )}
+        {showGame && (
+          <CheckinCard
+            key={`game:${accountId}`}
+            accountId={accountId}
+            asset="game"
+            capability={adapters.gameCheckin}
+            status={gameStatus}
+          />
+        )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -693,40 +733,48 @@ export function HomeDashboard({
 }) {
   const { t } = useCoreCopy();
   const { t: text } = useRegisteredCopy(pageCopyKeys);
-  const guideHidden = useOnboardingFlag('hidden');
+  const onboarding = useHomeOnboarding(user.id, sessionReady);
+  const [guideRequested, setGuideRequested] = useState(false);
+  const guideFirst = !onboarding.complete || guideRequested;
+  const guide = onboarding.hidden ? null : (
+    <OnboardingChecklist progress={onboarding} focusOnShow={guideRequested} />
+  );
   return (
     <div className="page core-page core-stack home-page">
-      <PageHeader
-        icon="home"
-        title={t('home.title', { name: user.guild_nick || user.username })}
-        actions={
-          guideHidden ? (
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              onClick={() => markOnboarding('hidden', false)}
-            >
-              {text('user.home.showGuide')}
-            </button>
-          ) : null
-        }
-      />
-      <div className="home-overview">
-        <div className="home-overview__main">
-          <OnboardingChecklist key={user.id} accountId={user.id} sessionReady={sessionReady} />
-          <HomeAnnouncements
-            accountId={user.id}
-            language={user.lang}
-            capability={adapters.announcements}
-            sessionReady={sessionReady}
-          />
-        </div>
-        <div className="home-overview__account">
-          <EconomyCard accountId={user.id} />
-          <CheckinSection accountId={user.id} adapters={adapters} />
-        </div>
+      <div className="home-welcome">
+        <PageHeader
+          icon="home"
+          title={t('home.title', { name: user.guild_nick || user.username })}
+          actions={
+            onboarding.hidden ? (
+              <button
+                type="button"
+                className="nb-btn nb-btn--ghost nb-btn--sm"
+                onClick={() => {
+                  setGuideRequested(true);
+                  markOnboarding('hidden', false);
+                }}
+              >
+                {text('user.home.showGuide')}
+              </button>
+            ) : null
+          }
+        />
+        <WhaleHavenEntry enabled={sessionReady} />
       </div>
+      {guideFirst ? guide : null}
+      <div className="home-daily">
+        <EconomyCard accountId={user.id} />
+        <CheckinSection accountId={user.id} adapters={adapters} />
+      </div>
+      <HomeAnnouncements
+        accountId={user.id}
+        language={user.lang}
+        capability={adapters.announcements}
+        sessionReady={sessionReady}
+      />
       <GamesSection accountId={user.id} adapters={adapters} />
+      {guideFirst ? null : guide}
     </div>
   );
 }

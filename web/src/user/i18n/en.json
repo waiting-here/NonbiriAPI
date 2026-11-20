@@ -63,6 +63,10 @@
       "introGames": "Games and activities",
       "introGamesBody": "Check in, join activities or play games.",
       "claimedToday": "Claimed today",
+      "whaleVisit": "Care for your whale and visit neighbors",
+      "dailyCheckins": "Daily check-in",
+      "checkinReward": "Reward",
+      "balanceLimitReached": "Balance limit reached",
       "availableTomorrow": "Available tomorrow"
     },
     "steward": {
@@ -2567,7 +2571,7 @@
       "home.checkin.today": "Today",
       "home.checkin.checkedIn": "Checked in",
       "home.checkin.notCheckedIn": "Not checked in yet",
-      "home.checkin.exclusiveNotice": "Choose one check-in each site day: general credits or game credits. Once you claim either one, the other is unavailable until the next site day.",
+      "home.checkin.exclusiveNotice": "Choose one check-in each site day. Both options reset at midnight in the site’s time zone.",
       "home.checkin.otherChosen": "Other check-in claimed",
       "home.checkin.otherChosenHint": "You already chose the other credit check-in today. This one becomes available on the next site day.",
       "home.checkin.awardRange": "Award range (credits)",
