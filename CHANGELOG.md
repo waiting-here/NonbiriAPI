@@ -4,6 +4,16 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.4.2 — Unreleased
+
+- Keep account names, levels and selection controls readable in the user list
+  when opening a detail panel or browsing on a phone.
+- Fit channel protocols, addresses and actions to the available list width.
+  The charity model management list also switches to labeled cards in narrow panes.
+- Report upstream network timeouts, including TLS handshake timeouts, as 504
+  on personal and charity requests. Callers receive HTTP 504 when the response
+  headers are still pending.
+
 ## 1.4.1 — 2026-11-20
 
 - Put the wallet and daily check-ins together above announcements on the user home page.
