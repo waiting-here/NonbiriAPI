@@ -272,3 +272,36 @@ func TestCallerListsKeepSixLevelsAndDonorIdentitySeparate(t *testing.T) {
 		}
 	}
 }
+
+func TestFilteredCatalogClampsPageInAuthorizedSnapshot(t *testing.T) {
+	service, user := newCatalogSuccessFixture(t, 23, 0)
+	// Put the lowest ID last in display order.
+	if _, err := service.db.ExecContext(t.Context(), `UPDATE charity_models SET model='zzz',full_name='[公益]benchmark/zzz' WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	var once sync.Once
+	attachBrowseProbe(t, service, func() {
+		once.Do(func() {
+			// Hide the last three models after the reader has established its snapshot.
+			if _, err := service.db.ExecContext(t.Context(), `UPDATE charity_model_access SET allowed_level_mask=0 WHERE model_id>20`); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+	yes, no := true, false
+	filter := CatalogFilter{AllowedForMe: &yes, CurrentlyAvailable: &no}
+	page := pagination.Request{Page: pagination.MaxPage, Size: 10}
+	for _, want := range []struct {
+		total, last, firstModel string
+		count                   int
+	}{{"23", "3", "model-021", 3}, {"20", "2", "model-011", 10}} {
+		got, err := service.Catalog(t.Context(), user, filter, page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Pagination.TotalItems != want.total || got.Pagination.Page != want.last || got.Pagination.TotalPages != want.last ||
+			len(got.Models) != want.count || got.Models[0].Model != want.firstModel || got.Models[want.count-1].Model != "zzz" {
+			t.Fatalf("filtered last page: %+v", got)
+		}
+	}
+}

@@ -93,8 +93,8 @@ THEN (SELECT value FROM site_config WHERE key='charity_token_reserve_milli') ELS
 			return Catalog{}, ErrInvariant
 		}
 	}
-	from := ` FROM charity_models cm JOIN charity_model_access a ON a.model_id=cm.id
-CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx WHERE 1=1`
+	const modelTables = ` FROM charity_models cm JOIN charity_model_access a ON a.model_id=cm.id`
+	from := modelTables + ` CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx WHERE 1=1`
 	args := []any{now, tokenReserve, charityGate == "1"}
 	if filter.Query != "" {
 		from += ` AND (instr(lower(cm.full_name),lower(?))>0 OR instr(lower(a.public_description),lower(?))>0)`
@@ -116,24 +116,35 @@ CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx
 		from += ` AND (a.allowed_level_mask & ?)<>0`
 		args = append(args, 1<<(*filter.AllowedLevel-1))
 	}
-	if filter.CurrentlyAvailable != nil {
-		from += ` AND ` + catalogAvailableSQL() + `=?`
-		args = append(args, *filter.CurrentlyAvailable)
-	}
-	availabilityProjection := catalogAvailableSQL()
-	if filter.CurrentlyAvailable != nil {
-		availabilityProjection = "0"
-		if *filter.CurrentlyAvailable {
-			availabilityProjection = "1"
-		}
-	}
 	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
-		return Catalog{}, fmt.Errorf("charity routing: count catalog: %w", err)
+	var pageIDs string
+	availabilityProjection := catalogAvailabilitySQL
+	if filter.CurrentlyAvailable == nil {
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*)"+from, args...).Scan(&total); err != nil {
+			return Catalog{}, fmt.Errorf("charity routing: count catalog: %w", err)
+		}
+	} else {
+		// Supply checks are shared by the exact count and the clamped page. Only
+		// IDs and sort keys are materialized, and at most one page leaves SQLite.
+		query := `WITH matched AS MATERIALIZED (SELECT cm.id,cm.full_name` + from + ` AND ` + catalogAvailabilitySQL + `=?),
+totals AS (SELECT COUNT(*) AS total FROM matched),
+page_ids AS (SELECT id FROM matched ORDER BY full_name,id LIMIT ? OFFSET
+ (SELECT MIN(?,MAX(total-1,0)/?)*? FROM totals))
+SELECT total,(SELECT json_group_array(id) FROM page_ids) FROM totals`
+		params := append(args, *filter.CurrentlyAvailable, page.Size, page.Page-1, page.Size, page.Size)
+		if err := tx.QueryRowContext(ctx, query, params...).Scan(&total, &pageIDs); err != nil {
+			return Catalog{}, fmt.Errorf("charity routing: select available catalog page: %w", err)
+		}
+		from = modelTables + ` WHERE cm.id IN (SELECT value FROM json_each(?))`
+		args = []any{pageIDs}
+		availabilityProjection = strconv.Itoa(boolInt(*filter.CurrentlyAvailable))
 	}
 	meta, offset, err := page.Window(total)
 	if err != nil {
 		return Catalog{}, ErrInvariant
+	}
+	if filter.CurrentlyAvailable != nil {
+		offset = 0 // The selected IDs already describe the clamped page.
 	}
 	rows, err := tx.QueryContext(ctx, db.MaterializePage(`SELECT cm.id,cm.provider,cm.model,cm.full_name,cm.pricing_mode,
 cm.request_user_price,cm.uncached_user_price,cm.cache_write_user_price,cm.cache_read_user_price,cm.output_user_price,

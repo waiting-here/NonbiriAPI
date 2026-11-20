@@ -14,9 +14,7 @@ import (
 // Count only through the runtime candidate ceiling: an oversized candidate set
 // cannot be dispatched, even when it contains individually eligible keys.
 // Only repository-owned SQL expressions are interpolated here.
-func catalogAvailableSQL() string {
-	return catalogAvailableBindingSQL("")
-}
+var catalogAvailabilitySQL = catalogAvailableBindingSQL("")
 
 // bindingID is an internal SQL expression, never request input. An empty
 // expression retains the public catalog's bounded model availability check.
