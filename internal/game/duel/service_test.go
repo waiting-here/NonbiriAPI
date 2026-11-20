@@ -88,6 +88,15 @@ type fixture struct {
 
 func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 	t.Helper()
+	f := newUnrecoveredFixture(t, kind, override...)
+	if _, err := f.s.RecoverBeforeListenAt(f.ctx, 100, 100, time.Now().Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func newUnrecoveredFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
+	t.Helper()
 	f := &fixture{t: t, ctx: context.Background(), admin: &adminAuthorization{}}
 	f.clock.Store(100)
 	path := filepath.Join(t.TempDir(), "game.db")
@@ -228,9 +237,6 @@ func newFixture(t *testing.T, kind string, override ...duel.Rules) *fixture {
 		t.Fatal(err)
 	}
 	if err := registry.Freeze(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.s.RecoverBeforeListenAt(f.ctx, 100, 100, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	return f

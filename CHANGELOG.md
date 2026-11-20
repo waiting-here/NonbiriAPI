@@ -18,7 +18,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   exact total in the same database snapshot. Existing v1.4.0 deployments
   keep schema 55 and account export format 38.
 - Give interrupted startup recovery and retention batches one fresh time
-  budget. Name the affected domain if recovery still fails.
+  budget. Install initial game AI policies atomically during startup, avoid
+  taking the writer on empty game recovery, and identify any failed domain.
 
 ## 1.4.0 — 2026-11-20
 

@@ -53,6 +53,7 @@ type Module struct {
 	// ConfigurationChangedTx applies module-owned effects in the same configuration transaction.
 	ConfigurationChangedTx func(context.Context, *sql.Tx, game.ConfigValue, game.ConfigValue) error
 	ValidatePersistedState func(context.Context) error
+	PrepareStartupDefaults func(context.Context) error
 	RecoverBeforeListen    func(context.Context, int64, int, time.Time) (WorkResult, error)
 	RegisterRoutes         func(Registrars) error
 	StartWorker            func(context.Context) error
@@ -176,6 +177,27 @@ func (service *Service) ValidatePersistedState(ctx context.Context) error {
 		}
 	}
 	service.validated = true
+	return nil
+}
+
+// PrepareStartupDefaults installs immutable initial definitions before timed recovery.
+// Validation stays read-only. The caller supplies the bounded startup context.
+func (service *Service) PrepareStartupDefaults(ctx context.Context) error {
+	if service == nil || ctx == nil {
+		return ErrInvalidRequest
+	}
+	service.operationMu.Lock()
+	defer service.operationMu.Unlock()
+	if service.closed.Load() || !service.validated {
+		return ErrClosed
+	}
+	for _, descriptor := range service.registry.Descriptors() {
+		if prepare := service.modules[descriptor.ID].PrepareStartupDefaults; prepare != nil {
+			if err := prepare(ctx); err != nil {
+				return fmt.Errorf("game host: prepare %s defaults: %w", descriptor.ID, err)
+			}
+		}
+	}
 	return nil
 }
 

@@ -69,6 +69,9 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if err := service.ValidatePersistedState(ctx); err != nil {
 		return err
 	}
+	if err := service.PrepareStartupDefaults(ctx); err != nil {
+		return err
+	}
 	for _, descriptor := range service.registry.Descriptors() {
 		for {
 			if err := ctx.Err(); err != nil {
