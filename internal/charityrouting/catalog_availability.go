@@ -51,6 +51,8 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
 	// Count each binding once and stop at its first eligible target. A binding
 	// can hold many equivalent keys/models; testing every target before DISTINCT
 	// repeats the authorization and quota work without changing availability.
+	// NULL lifetime limits are unlimited. A finite balance must remain positive
+	// even for a free request or a zero token reservation.
 	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
  SELECT b.id FROM charity_model_bindings b WHERE b.charity_model_id=cm.id AND EXISTS(
  SELECT 1 FROM charity_binding_targets target
@@ -67,11 +69,9 @@ func availableCandidateCountSQL(bindingID string, callerScoped bool, memberID ..
  AND k.enabled=1 AND e.enabled=1 AND ` + charityscope.AvailableUseSQL("dk.id", "target.native_service_mask", "cm.model_types", "target.upstream_model_id", "cx.decision_now") + `
  AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
  AND (dk.expires_at IS NULL OR dk.expires_at>cx.decision_now)
- AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>nbi_u128(0)
- AND nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>=nbi_u128(` + price + `)
- AND nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))>=nbi_u128(1)
- AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>nbi_u128(0)
- AND nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(COALESCE(dk.input_token_reserve+dk.output_token_reserve,dk.token_reserve))
+ AND (dk.price_limit_mag IS NULL OR nbi_u128_remaining(dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,nbi_u128(0))>=nbi_u128(MAX(1,` + price + `)))
+ AND (dk.call_limit_mag IS NULL OR nbi_u128_remaining(dk.call_limit_mag,dk.calls_used,dk.calls_reserved,nbi_u128(0))>=nbi_u128(1))
+ AND (dk.token_limit_mag IS NULL OR nbi_u128_remaining(dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved,nbi_u128(0))>=nbi_u128(MAX(1,COALESCE(dk.input_token_reserve+dk.output_token_reserve,dk.token_reserve))))
  AND ` + quota + `
  AND ` + donationquota.ModelAvailabilityPredicate("dk.id", "target.upstream_model_id", "cx.decision_now", price, "dk.token_reserve") + `
 	` + scope + `)
