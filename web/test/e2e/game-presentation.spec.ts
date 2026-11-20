@@ -1,7 +1,12 @@
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test, type Page } from './test';
-import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
+import {
+  collectConsoleViolations,
+  mockPublicConfig,
+  mockRoleSession,
+  userSession,
+} from './support';
 import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire, onboardingWire } from '../../src/user/games/common/testFixtures';
 
@@ -867,17 +872,22 @@ test('RPS result follows the real language and theme settings on a narrow phone 
   await page.goto(`${USER_ORIGIN}/games/rps`);
   await expect(page.locator('.rps-result')).toBeVisible();
 
-  await page.locator('.nb-menu-button').click();
-  await page.locator('.nb-user-drawer-actions .theme-select').selectOption('dark');
+  const session = userSession('user');
+  await page.route(USER_ORIGIN + '/api/me', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    expect(route.request().postDataJSON()).toEqual({ lang: 'zh' });
+    session.user.lang = 'zh';
+    await route.fulfill({ json: session });
+  });
+  await page.getByRole('button', { name: /^Account actions/ }).click();
+  const account = page.getByRole('dialog', { name: 'Account actions' });
+  await account.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.getByRole('dialog').getByRole('button', { name: 'Close navigation' }).click();
-
-  await page.goto(`${USER_ORIGIN}/privacy`);
-  const chinese = page.locator('.lang-switcher button').filter({ hasText: '中文' });
-  await expect(chinese).toBeVisible();
-  await chinese.click();
+  await account.getByRole('button', { name: '中文' }).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
-  await page.goto(`${USER_ORIGIN}/games/rps`);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /^账号操作/ })).toBeFocused();
+  await expect(page).toHaveURL(`${USER_ORIGIN}/games/rps`);
   await expect(page.locator('.rps-result')).toContainText('本局战报');
   await expect(page.locator('.rps-result')).toContainText('9,876,543,210,123,456,789.125');
   await assertNoHorizontalOverflow(page);

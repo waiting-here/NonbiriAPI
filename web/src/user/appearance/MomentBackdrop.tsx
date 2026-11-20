@@ -77,6 +77,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     } else if (expansion) {
       const margins = momentHorizontalMargins(expansion);
       root.style.setProperty('--nb-moment-width-ratio', String(1 + margins.total));
+      root.style.setProperty('--nb-moment-center', 50 * (1 + margins.left - margins.right) + '%');
       root.style.setProperty(
         '--nb-moment-height-ratio',
         String(
@@ -94,6 +95,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     }
     return () => {
       root.style.removeProperty('--nb-moment-width-ratio');
+      root.style.removeProperty('--nb-moment-center');
       root.style.removeProperty('--nb-moment-height-ratio');
       root.style.removeProperty('--nb-moment-extra-reserve');
       root.style.removeProperty('--nb-moment-right-reserve');

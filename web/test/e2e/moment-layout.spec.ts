@@ -123,7 +123,8 @@ for (const theme of ['light', 'dark'])
         if (
           process.env.NONBIRI_VISUAL_DIR &&
           examples.has(card.id) &&
-          ((viewport.width === 1440 && viewport.height === 900) ||
+          ((viewport.width === 1024 && viewport.height === 600) ||
+            (viewport.width === 1440 && viewport.height === 900) ||
             (viewport.width === 1920 && viewport.height === 600) ||
             (viewport.width === 390 && viewport.height === 844))
         )
@@ -133,6 +134,24 @@ for (const theme of ['light', 'dark'])
               `fit-${card.id}-${theme}-${viewport.width}x${viewport.height}.png`,
             ),
           });
+      }
+      if (card.id === 'a-gemini' || card.id === 'c-glm') {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByRole('button', { name: '装扮', exact: true }).click();
+        const sheet = page.getByRole('dialog', { name: '装扮', exact: true });
+        await sheet.getByRole('button', { name: '欣赏背景', exact: true }).click();
+        await expect(page.getByRole('dialog', { name: '欣赏背景' })).toBeVisible();
+        const frame = (await hero.boundingBox())!;
+        expect(frame.x).toBeGreaterThanOrEqual(0);
+        expect(frame.x + frame.width).toBeLessThanOrEqual(390);
+        expect(frame.y).toBeGreaterThanOrEqual(0);
+        expect(frame.y + frame.height).toBeLessThanOrEqual(844);
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: resolve(process.env.NONBIRI_VISUAL_DIR, `view-${card.id}-${theme}-390.png`),
+          });
+        await page.keyboard.press('Escape');
+        await sheet.getByRole('button', { name: '关闭', exact: true }).click();
       }
       if (card.id === 's-claude' || card.id === 'c-glm') {
         await page.setViewportSize({ width: 1920, height: 600 });

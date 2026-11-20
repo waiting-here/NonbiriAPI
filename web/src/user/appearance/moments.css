@@ -191,10 +191,13 @@
     .nb-art-stage
     .nb-moment-backdrop:not([data-viewport='true'])
     .nb-moment-character {
-    height: min(95%, calc(140vw / var(--nb-moment-height-ratio, 1)));
+    height: min(
+      calc(95% / var(--nb-moment-height-ratio, 1)),
+      calc(140vw / var(--nb-moment-width-ratio, 1))
+    );
     width: auto;
     right: 50%;
-    transform: translateX(50%);
+    transform: translateX(var(--nb-moment-center, 50%));
   }
 }
 
@@ -208,6 +211,6 @@
     width: auto;
     height: calc(95% / var(--nb-moment-height-ratio, 1));
     right: 50%;
-    transform: translateX(50%);
+    transform: translateX(var(--nb-moment-center, 50%));
   }
 }
