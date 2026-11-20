@@ -1,3 +1,4 @@
+import { chatProjection } from '../../../test/fixtures/resourceScopes';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
@@ -131,6 +132,7 @@ function candidate({
   sourceTypes = ['automatic'],
 } = {}) {
   return {
+    ...chatProjection,
     donation_key_id: keyID,
     donation_id: donationID,
     source: {
@@ -283,15 +285,13 @@ describe('CharityBindingPicker numbered source flow', () => {
     const candidatePager = () => screen.getAllByRole('navigation', { name: 'Pagination' })[0];
     await view.user.selectOptions(within(candidatePager()).getByRole('combobox'), '100');
     await screen.findByRole('button', { name: 'Select this page (100)' });
-    expect(screen.getAllByRole('checkbox')).toHaveLength(100);
+    expect(screen.getAllByRole('checkbox', { name: /provider\/model-/ })).toHaveLength(100);
     await view.user.click(screen.getByRole('button', { name: 'Select this page (100)' }));
     await view.user.click(within(candidatePager()).getByRole('button', { name: 'Next' }));
     await screen.findByRole('button', { name: 'Select this page (44)' });
     await view.user.click(screen.getByRole('button', { name: 'Select this page (44)' }));
-    expect(
-      screen.getByRole('heading', { name: '144 service connection(s) selected' }),
-    ).toBeVisible();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(44);
+    expect(screen.getByRole('heading', { name: 'Selected connections (144)' })).toBeVisible();
+    expect(screen.getAllByRole('checkbox', { name: /provider\/model-/ })).toHaveLength(44);
     await view.user.click(within(candidatePager()).getByRole('button', { name: 'Previous' }));
     expect(await screen.findByRole('checkbox', { name: /provider\/model-000/ })).toBeChecked();
     await view.user.click(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' }));
@@ -299,13 +299,14 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(
       screen.getByRole('button', { name: 'Remove selected provider/model-143-2026-10' }),
     );
-    expect(
-      screen.getByRole('heading', { name: '143 service connection(s) selected' }),
-    ).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Selected connections (143)' })).toBeVisible();
     expect(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' })).toHaveFocus();
     await view.user.click(screen.getByRole('button', { name: 'Clear all selections' }));
-    expect(screen.getByRole('heading', { name: '0 service connection(s) selected' })).toBeVisible();
-    expect(screen.getByRole('searchbox', { name: 'Search selected upstream IDs' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Selected connections (0)' })).toBeVisible();
+    expect(
+      screen.queryByRole('searchbox', { name: 'Search selected upstream IDs' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Selected connections (0)' })).toHaveFocus();
     expect(requests.every((url) => url.pathname.endsWith('/binding-candidates'))).toBe(true);
   });
 
@@ -364,7 +365,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     expect(requests).toContain(
       '/admin/api/charity-models/31/binding-candidates?donation_id=7&donation_key_id=21&key_state=all&include_bound=true&page=1&page_size=20',
     );
-    expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Selected connections (1)' })).toBeVisible();
   });
 
   it('keeps every source choice disabled while the parent operation is locked', async () => {
@@ -430,13 +431,11 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(await screen.findByRole('button', { name: /Custom endpoint/ }));
     await view.user.click(await screen.findByRole('button', { name: /safe key note/ }));
     await view.user.click(await screen.findByRole('checkbox', { name: /model-a/ }));
-    expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Selected connections (1)' })).toBeVisible();
 
     authorize(view.queryClient, 'next-admin');
     await waitFor(() =>
-      expect(
-        screen.getByRole('heading', { name: '0 service connection(s) selected' }),
-      ).toBeVisible(),
+      expect(screen.getByRole('heading', { name: 'Selected connections (0)' })).toBeVisible(),
     );
   });
 
@@ -522,7 +521,7 @@ describe('CharityBindingPicker numbered source flow', () => {
     await view.user.click(within(pager).getByRole('button', { name: 'Next' }));
     await waitFor(() => expect(modelCheckbox('model-21')).toBeVisible());
     await view.user.click(modelCheckbox('model-21'));
-    expect(screen.getByRole('heading', { name: '2 service connection(s) selected' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Selected connections (2)' })).toBeVisible();
 
     await view.user.click(screen.getByRole('button', { name: /Choose key/ }));
     expect(await screen.findByRole('button', { name: /safe key 22/ })).toBeVisible();
@@ -981,7 +980,7 @@ describe('CharityBindingPicker management return', () => {
       expect(screen.getByRole('checkbox', { name: /second-page-model/ })).toBeEnabled(),
     );
     expect(screen.getByRole('checkbox', { name: /second-page-model/ })).toBeChecked();
-    expect(screen.getByRole('heading', { name: '1 service connection(s) selected' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Selected connections (1)' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Manage key' })).toHaveFocus();
     expect(candidateReads).toBe(readsBeforeManagement + 1);
     expect(screen.getByText(/Updated key note/)).toBeVisible();

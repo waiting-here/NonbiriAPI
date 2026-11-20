@@ -1,9 +1,11 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { expect, test } from './test';
 
 const endpoints = Array.from({ length: 23 }, (_, index) => ({
+  ...endpointScope,
   id: String(index + 1),
   connection_id: '19',
   connector_type: 'openai-compatible',
@@ -31,6 +33,7 @@ const connections = Array.from({ length: 23 }, (_, index) => ({
 }));
 
 const keys = Array.from({ length: 12 }, (_, index) => ({
+  ...credentialGrant,
   id: String(101 + index),
   endpoint_id: '19',
   display_head: 'sk-fixture',
@@ -117,11 +120,9 @@ for (const locale of ['en', 'zh'] as const) {
       await route.fulfill({ json: body });
     });
     const searchLabel = locale === 'en' ? 'Search' : '搜索';
-    const connectionList = page.locator('section.nb-panel').filter({
-      has: page.getByRole('heading', {
-        name: locale === 'en' ? 'My services' : '我的服务',
-        exact: true,
-      }),
+    const connectionList = page.getByRole('region', {
+      name: locale === 'en' ? 'My services' : '我的服务',
+      exact: true,
     });
     await page.goto(USER_ORIGIN + '/endpoints?connections_page=2&connections_page_size=10');
     await expect(
@@ -361,7 +362,7 @@ test('personal models send all filters before pagination and preserve them throu
       ),
     )
     .toBe(true);
-  await page.getByRole('button', { name: 'Edit model', exact: true }).click();
+  await page.getByRole('button', { name: 'View model', exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('model_id')).toBe('7');
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(form.getByRole('searchbox')).toHaveValue('upstream-identifier');

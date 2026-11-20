@@ -30,12 +30,13 @@ type sqliteConnection interface {
 	sqlite.DBStatus
 }
 
-type dmlConnector struct {
+type pooledSQLiteConnector struct {
 	driver.Connector
 	observer *connectionObserverSlot
+	readOnly bool
 }
 
-func (c dmlConnector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c pooledSQLiteConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn, err := c.Connector.Connect(ctx)
 	if err != nil {
 		return nil, err
@@ -44,7 +45,11 @@ func (c dmlConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	if !ok {
 		return nil, errors.Join(errors.New("SQLite connection interfaces unavailable"), conn.Close())
 	}
-	cached := &dmlConnection{sqliteConnection: base, statements: make(map[string]*list.Element)}
+	queries := &queryConnection{sqliteConnection: base}
+	if c.readOnly {
+		return queries, nil
+	}
+	cached := &dmlConnection{queryConnection: queries, statements: make(map[string]*list.Element)}
 	if c.observer != nil {
 		return &observedConnection{sqliteConnection: cached, slot: c.observer}, nil
 	}
@@ -62,11 +67,9 @@ type dmlStatement struct {
 }
 
 type dmlConnection struct {
-	sqliteConnection
+	*queryConnection
 	statements map[string]*list.Element
 	recent     list.List
-	queries    map[string]*list.Element
-	queryLRU   list.List
 }
 
 func openSQLiteHandle(dsn, mode string) (*sql.DB, error) {
@@ -77,11 +80,15 @@ func openObservedSQLiteHandle(dsn, mode string, observer *connectionObserverSlot
 	if mode == "ro" {
 		return sql.Open("sqlite", dsn)
 	}
+	return openPooledSQLite(dsn, false, observer)
+}
+
+func openPooledSQLite(dsn string, readOnly bool, observer *connectionObserverSlot) (*sql.DB, error) {
 	connector, err := sqlite.NewConnector(dsn)
 	if err != nil {
 		return nil, err
 	}
-	return sql.OpenDB(dmlConnector{Connector: connector, observer: observer}), nil
+	return sql.OpenDB(pooledSQLiteConnector{Connector: connector, observer: observer, readOnly: readOnly}), nil
 }
 
 func reusableDML(query string) bool {
@@ -147,9 +154,9 @@ func (c *dmlConnection) remove(entry *list.Element) error {
 }
 
 func (c *dmlConnection) Close() error {
-	result := c.closeQueries()
+	var result error
 	for c.recent.Len() != 0 {
 		result = errors.Join(result, c.remove(c.recent.Back()))
 	}
-	return errors.Join(result, c.sqliteConnection.Close())
+	return errors.Join(result, c.queryConnection.Close())
 }

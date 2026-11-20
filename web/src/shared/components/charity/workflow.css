@@ -1,6 +1,5 @@
 .nb-workflow-id,
-.ops-binding-picker .charity-binding-selection strong,
-.ops-binding-picker .ops-picker-choice span {
+.ops-binding-picker .charity-binding-selection strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -223,9 +222,9 @@
   font-weight: var(--nb-font-weight-semibold);
 }
 .nb-recurring-discount .nb-recurring-discount__weekdays {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--nb-space-2) var(--nb-space-3);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+  gap: var(--nb-space-2);
   padding: 0;
   margin: 0;
   border: 0;

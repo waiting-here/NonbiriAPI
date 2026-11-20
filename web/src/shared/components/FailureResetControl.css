@@ -8,17 +8,6 @@
   overflow: auto;
   margin-block: 0.75rem;
 }
-.failure-reset-choices label {
-  display: flex;
-  align-items: start;
-  gap: 0.5rem;
-  min-width: 0;
-}
-.failure-reset-choices input {
-  width: auto;
-  flex: 0 0 auto;
-}
-.failure-reset-choices span,
 .failure-reset-control li {
   overflow-wrap: anywhere;
 }

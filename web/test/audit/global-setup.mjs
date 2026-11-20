@@ -23,9 +23,11 @@ export default async function setup() {
     if (error.code !== 'ENOENT') throw error;
   });
   const binary = await browserFixtureBinary(root, dirname(statePath));
+  // The management configuration runs more than 100 serial journeys on this server.
+  const fixtureLimit = process.env.NONBIRI_MANAGEMENT_BROWSER === '1' ? '18m' : '9m';
   const child = spawn(
     binary,
-    ['-test.run=^TestAuditBrowserFixture$', '-test.v', '-test.timeout=9m'],
+    ['-test.run=^TestAuditBrowserFixture$', '-test.v', '-test.timeout=' + fixtureLimit],
     {
       cwd: root,
       env: { ...process.env, NONBIRI_AUDIT_BROWSER_STATE: statePath },

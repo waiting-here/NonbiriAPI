@@ -267,8 +267,7 @@ test('all alert filters and retained details accept current deletion snapshots a
   await expect(page.getByText(deletionSnapshots.v2.discord_id)).toHaveCount(0);
   await openDeletionSnapshots(page);
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toBeVisible();
-  await page.getByRole('button', { name: 'Alert actions', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Resolve', exact: true }).click();
+  await page.getByRole('button', { name: 'Resolve', exact: true }).click();
   await expect(page.getByText(deletionSnapshots.v1.discord_id)).toHaveCount(0);
   expect(resolved).toBe(true);
   await page.getByLabel('Resolution status').selectOption('all');

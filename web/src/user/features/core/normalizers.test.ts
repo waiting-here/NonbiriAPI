@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../test/fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -74,6 +75,7 @@ describe('core wire normalizers', () => {
       });
       expect(
         normalizeEndpointCreateOptions({
+          native_service_options: [],
           base_connector_types: [connector_type],
           mainstream_channels: [],
         }).base_connector_types,
@@ -169,7 +171,27 @@ describe('core wire normalizers', () => {
     const key = normalizeEndpointKey(jsonFixture('internal/resources/testdata/endpoint_key.json'));
     const user = normalizeUserEnvelope(jsonFixture('internal/auth/testdata/user_envelope.json'));
 
+    const source = jsonFixture('internal/resources/testdata/bindings.json') as {
+      bindings: Record<string, unknown>[];
+      binding_revision: string;
+    };
+    const group = normalizeBindingsResponse({
+      ...source,
+      bindings: source.bindings.map((binding) => ({
+        ...binding,
+        native_services: 'irrelevant group extension',
+      })),
+    }).bindings[0]!;
+    expect(group).not.toHaveProperty('native_services');
+    expect(group.targets[0]).toMatchObject({
+      native_services: ['chat_completions', 'responses'],
+      credential_id: '7',
+    });
     expect(endpoint).toMatchObject({ id: '11', revision: '3', key_count: '2' });
+    expect(normalizeEndpoint({ ...endpoint, rerank_url: undefined })).toMatchObject({
+      id: '11',
+      rerank_path_configurable: true,
+    });
     expect(endpoint.origin).toEqual({ kind: 'custom' });
     expect(key).toMatchObject({ id: '21', endpoint_id: '11', revision: '4' });
     expect(user.user.usage.total_requests).toBe('340282366920938463463374607431768211455');
@@ -443,33 +465,40 @@ describe('core wire normalizers', () => {
 
     expect(
       normalizeEndpointCreateOptions({
+        native_service_options: [],
         base_connector_types: ['anthropic-compatible', 'openai-compatible'],
         mainstream_channels: [],
       }),
     ).toEqual({
+      native_service_options: [],
       base_connector_types: ['anthropic-compatible', 'openai-compatible'],
       mainstream_channels: [],
     });
     expect(
       normalizeEndpointCreateOptions({
+        native_service_options: [],
         base_connector_types: ['openai-compatible', 'anthropic-compatible'],
         mainstream_channels: [],
       }),
     ).toEqual({
+      native_service_options: [],
       base_connector_types: ['openai-compatible', 'anthropic-compatible'],
       mainstream_channels: [],
     });
     expect(() =>
       normalizeEndpointCreateOptions({
+        native_service_options: [],
         base_connector_types: ['openai-compatible', 'openai-compatible'],
         mainstream_channels: [],
       }),
     ).toThrow(/base connector types/i);
     expect(
       normalizeEndpointCreateOptions({
+        native_service_options: [],
         base_connector_types: ['openai-compatible'],
         mainstream_channels: [
           {
+            ...channelPreset,
             id: channelID,
             name: 'x'.repeat(129),
             connector_type: 'openai-compatible',
@@ -600,6 +629,7 @@ describe('core wire normalizers', () => {
 
   it('requires a complete, contiguous binding set', () => {
     const binding = (id: string, ord: number) => ({
+      targets: [],
       id,
       endpoint_key_id: '21',
       endpoint_base_url: 'https://example.com/v1',

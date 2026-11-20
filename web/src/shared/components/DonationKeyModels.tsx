@@ -165,39 +165,40 @@ function KeyModelPages({
       {query.data.data.length === 0 ? (
         <EmptyState title={t('common.keyModels.empty')} body={t('common.keyModels.emptyBody')} />
       ) : (
-        query.data.data.map((model) => (
-          <section className="ops-subcard" key={model.model_id}>
-            <h4 className="ops-break">{model.full_name}</h4>
-            <p>
-              {t(
-                model.enabled
-                  ? model.available_binding_count === '0'
-                    ? 'common.keyModels.unavailable'
-                    : 'common.keyModels.available'
-                  : 'common.keyModels.disabled',
-              )}
-            </p>
-            <p>
-              {t('common.keyModels.count', {
-                count: model.binding_count,
-                available: model.available_binding_count,
-              })}
-            </p>
-            <div className="ops-actions">
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                aria-expanded={expanded === model.model_id}
-                onClick={() =>
-                  setParams((previous) => {
-                    const next = new URLSearchParams(previous);
-                    if (expanded === model.model_id) next.delete(`${prefix}_expanded`);
-                    else next.set(`${prefix}_expanded`, model.model_id);
-                    return next;
-                  })
-                }
-              >
-                {t('common.keyModels.connections')}
+        <div className="nb-list">
+          {query.data.data.map((model) => (
+            <section className="nb-row nb-stack nb-stack--sm" key={model.model_id}>
+              <h4 className="ops-break">{model.full_name}</h4>
+              <p>
+                {t(
+                  model.enabled
+                    ? model.available_binding_count === '0'
+                      ? 'common.keyModels.unavailable'
+                      : 'common.keyModels.available'
+                    : 'common.keyModels.disabled',
+                )}
+              </p>
+              <p>
+                {t('common.keyModels.count', {
+                  count: model.binding_count,
+                  available: model.available_binding_count,
+                })}
+              </p>
+              <div className="ops-actions">
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  aria-expanded={expanded === model.model_id}
+                  onClick={() =>
+                    setParams((previous) => {
+                      const next = new URLSearchParams(previous);
+                      if (expanded === model.model_id) next.delete(`${prefix}_expanded`);
+                      else next.set(`${prefix}_expanded`, model.model_id);
+                      return next;
+                    })
+                  }
+                >
+                  {t('common.keyModels.connections')}
               </button>
               <button
                 className="nb-btn nb-btn--ghost"
@@ -231,7 +232,8 @@ function KeyModelPages({
               />
             ) : null}
           </section>
-        ))
+          ))}
+        </div>
       )}
       <PagePagination
         metadata={query.data.pagination}

@@ -86,7 +86,7 @@ export function PriceFields({
           </select>
         )}
       </Field>
-      <details className="nb-fold" ref={disclosure}>
+      <details className="nb-fold nb-fold--plain" ref={disclosure}>
         <summary>
           <span className="nb-fold__title">
             <strong>{translate('common.operations.management.optionalPrices')}</strong>
@@ -102,7 +102,7 @@ export function PriceFields({
           <section aria-label={t('尺寸档位价格', 'Size tier prices')} className="picturebook-stack">
             <h4>{t('尺寸档位价格', 'Size tier prices')}</h4>
             {value.tiers.map((row, index) => (
-              <fieldset className="picturebook-card" key={index}>
+              <fieldset className="picturebook-card picturebook-card--surface" key={index}>
                 <legend>
                   {t('档位价格', 'Tier price')} {index + 1}
                 </legend>
@@ -194,7 +194,7 @@ export function PriceFields({
           >
             <h4>{t('精确尺寸价格', 'Exact size prices')}</h4>
             {value.sizes.map((row, index) => (
-              <fieldset className="picturebook-card" key={index}>
+              <fieldset className="picturebook-card picturebook-card--surface" key={index}>
                 <legend>
                   {t('尺寸价格', 'Size price')} {index + 1}
                 </legend>

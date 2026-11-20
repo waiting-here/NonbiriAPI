@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,7 +42,8 @@ func TestHTTPRejectionDetailsPersistForAuthorizedReaders(t *testing.T) {
 		{"invalid JSON", "/v1/chat/completions", `{"PRIVATE_INPUT":`, "application/json", "body", "expected one valid UTF-8 JSON object"},
 		{"duplicate unknown field", "/v1/chat/completions", `{"PRIVATE_NAME":1,"PRIVATE_NAME":2}`, "application/json", "body", "duplicate top-level field"},
 		{"charity messages type", "/v1/chat/completions", `{"model":"[公益]provider/per_request","messages":{"PRIVATE_NAME":"PRIVATE_INPUT"}}`, "application/json", "messages", "expected an array of message objects"},
-		{"charity text block type", "/v1/chat/completions", `{"model":"[公益]provider/per_request","messages":[{"role":"user","content":[{"type":"text","text":123}]}]}`, "application/json", "messages[].content[]", "content block type and text must be strings"},
+		{"charity null message", "/v1/chat/completions", `{"model":"[公益]provider/per_request","messages":[{"role":"user","content":"PRIVATE_INPUT"},null]}`, "application/json", "messages[1]", "expected a message object"},
+		{"charity text block type", "/v1/chat/completions", `{"model":"[公益]provider/per_request","messages":[{"role":"user","content":[{"type":"text","text":123}]}]}`, "application/json", "messages[0].content[0]", "content block type and text must be strings"},
 		{"missing model", "/v1/chat/completions", `{"messages":[{"content":"PRIVATE_INPUT"}]}`, "application/json", "model", "required field is missing"},
 		{"model type", "/v1/chat/completions", `{"model":123,"PRIVATE_NAME":"PRIVATE_INPUT"}`, "application/json", "model", "expected a nonempty model name of at most 133 characters without control characters"},
 		{"stream value", "/v1/chat/completions", `{"model":"provider/self","stream":"PRIVATE_INPUT"}`, "application/json", "stream", "expected a boolean or null"},
@@ -239,6 +241,11 @@ FROM request_logs WHERE logical_request_id=?`, id).Scan(&diag, &attempts, &claim
 				if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &admin) != nil || admin.Request.RejectionDetail == nil || *admin.Request.RejectionDetail != *detail {
 					t.Fatal("administrator detail did not retain the persisted check", read.Code, read.Body)
 				}
+				if admin.RouteDecision == nil || !slices.ContainsFunc(admin.RouteDecision.Observations, func(o requestattempt.RouteObservation) bool {
+					return o.Reason == "protocol_rejected" && o.Match == "conversion" && o.NativeService == "chat_completions" && o.Field == "reasoning"
+				}) {
+					t.Fatalf("reverse conversion was not recorded: %+v", admin.RouteDecision)
+				}
 				steward, err := f.app.logs.GetSteward(context.Background(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{})
 				if err != nil || steward.Request.RejectionDetail == nil || *steward.Request.RejectionDetail != *detail {
 					t.Fatal("steward detail did not retain the persisted check", err)
@@ -257,5 +264,75 @@ FROM request_logs WHERE logical_request_id=?`, id).Scan(&diag, &attempts, &claim
 	defer f.mu.Unlock()
 	if len(f.upstreamRequests) != 0 {
 		t.Fatal("preflight rejection reached upstream")
+	}
+}
+
+func TestHTTPGeminiMessagePositionsReachCallerAndPersistedRoleProjections(t *testing.T) {
+	f := newModelHTTPFixture(t, nil, "google-gemini")
+	f.exec(t, "UPDATE models SET flatten_tool_calls=0")
+	f.exec(t, "UPDATE charity_models SET flatten_tool_calls=0")
+	f.exec(t, "UPDATE site_config SET value='0' WHERE key='charity_min_chars'")
+	f.exec(t, "UPDATE endpoint_keys SET force_store_false=0")
+	login := testApplicationRequest(t, f.app.handler, "POST", auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if login.Code != 200 {
+		t.Fatal(login.Code, login.Body)
+	}
+	cookies := []*http.Cookie{responseCookieNamed(t, login, auth.AdminSessionCookieName)}
+	for _, tc := range []struct{ model, lang, message, field, reason, localized string }{
+		{"provider/self", "en", `{"role":"user","content":"PRIVATE_PROMPT","PRIVATE_KEY":null}`, "messages[1]", "message contains an unsupported attribute", "unsupported attribute"},
+		{"[公益]provider/per_request", "zh", `{"role":"developer","content":"PRIVATE_INSTRUCTION"}`, "messages[1].role", "Gemini accepts system and developer instructions only before conversation turns", "只接受位于对话开头"},
+		{"[公益]provider/per_request", "en", `{"role":"assistant","tool_calls":[{"type":"function","id":"PRIVATE_ID","function":{"name":"read","arguments":"PRIVATE_ARGS"}}]}`, "messages[1].tool_calls[0].function.arguments", "function arguments must be a JSON object encoded as a string", "JSON object encoded as a string"},
+	} {
+		raw := `{"model":"` + tc.model + `","messages":[{"role":"user","content":"PRIVATE_PROMPT"},` + tc.message + "]}"
+		r, err := http.NewRequest(http.MethodPost, f.server.URL+"/v1/chat/completions", strings.NewReader(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Host = auditUserHost
+		r.Header.Set("Authorization", "Bearer "+f.caller)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept-Language", tc.lang)
+		response, err := f.server.Client().Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil || response.StatusCode != 400 || !strings.Contains(string(body), tc.field+": ") || !strings.Contains(string(body), tc.localized) || strings.Contains(string(body), "PRIVATE_") {
+			t.Fatalf("%s: %d %s %v", tc.field, response.StatusCode, body, err)
+		}
+		id := response.Header.Get("X-Request-ID")
+		read := testApplicationRequest(t, f.app.handler, "GET", auditAdminHost, "/admin/api/logs/"+id, "", cookies, nil)
+		var admin logapi.AdminLogDetail
+		if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &admin) != nil {
+			t.Fatal(read.Code, read.Body)
+		}
+		if strings.Contains(read.Body.String(), "PRIVATE_") {
+			t.Fatal("administrator log exposed a request value")
+		}
+		if admin.RouteDecision == nil || !slices.ContainsFunc(admin.RouteDecision.Observations, func(o requestattempt.RouteObservation) bool {
+			return o.Reason == "protocol_rejected" && o.Field == tc.field
+		}) {
+			t.Fatalf("missing protocol decision for %s: %+v", tc.field, admin.RouteDecision)
+		}
+		detail := admin.Request.RejectionDetail
+		if detail == nil || detail.Field != tc.field || detail.Reason != tc.reason || detail.Suggestion == "" {
+			t.Fatalf("lost administrator detail: %#v", detail)
+		}
+		steward, err := f.app.logs.GetSteward(t.Context(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{})
+		if err != nil || steward.Request.RejectionDetail == nil || *steward.Request.RejectionDetail != *detail {
+			t.Fatal("lost authorized steward projection", err)
+		}
+		if _, err = f.app.logs.GetSteward(t.Context(), f.userID, id, logapi.AttemptFilter{}, rejectionStewardReader{denied: true}); !errors.Is(err, logapi.ErrForbidden) {
+			t.Fatal("unauthorized steward accessed request", err)
+		}
+		own := string(f.ownLogJSON(t, id))
+		if !strings.Contains(own, tc.field) || !strings.Contains(own, tc.reason) || strings.Contains(own, "PRIVATE_") {
+			t.Fatal("owner did not receive safe diagnostic")
+		}
+		var attempts, charges int
+		if err := f.store.DB().QueryRow(`SELECT attempt_count,(SELECT count(*) FROM credit_operations WHERE source_type='logical_request' AND source_id=logical_request_id) FROM request_logs WHERE logical_request_id=?`, id).Scan(&attempts, &charges); err != nil || attempts != 0 || charges != 0 {
+			t.Fatal("unexpected dispatch or charge", attempts, charges, err)
+		}
 	}
 }

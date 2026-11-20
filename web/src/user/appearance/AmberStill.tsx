@@ -1,14 +1,10 @@
-import { useEffect, useState } from 'react';
-import { artSourceSet } from '../activities/gacha/art-resolution';
+import { useStageSize } from './stage-size';
+import { useBackgroundSources } from './sources';
 import { amberAppearancePlacement } from '../activities/gacha/amber/layout';
 
 export function AmberStill({ dark }: { dark: boolean }) {
-  const [size, setSize] = useState(() => [innerWidth, innerHeight]);
-  useEffect(() => {
-    const resize = () => setSize([innerWidth, innerHeight]);
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
-  }, []);
+  const size = useStageSize();
+  const artSourceSet = useBackgroundSources();
   const mode = dark ? 'dark' : 'light';
   const src = '/assets/gacha/appearances/amber-' + mode + '.webp';
   const box = amberAppearancePlacement(size[0], size[1]);
@@ -17,6 +13,7 @@ export function AmberStill({ dark }: { dark: boolean }) {
       <img
         className="nb-appearance-still"
         data-scene="amber"
+        style={{ objectPosition: box.groundAligned ? '82% bottom' : '82% top' }}
         src={src}
         srcSet={artSourceSet(src)}
         sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"

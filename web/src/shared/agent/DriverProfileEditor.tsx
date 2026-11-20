@@ -411,32 +411,30 @@ export function DriverProfileEditor({
                     )}
                   </Field>
                 ) : null}
-                <Fields>
-                  {(['temperature', 'top_p'] as const).map((name) => (
-                    <Field
-                      key={name}
-                      size="short"
-                      label={t(
-                        name === 'temperature' ? 'common.agent.temperature' : 'common.agent.topP',
-                      )}
-                    >
-                      {(props) => (
-                        <input
-                          {...props}
-                          type="number"
-                          step="any"
-                          value={draft.settings[name] ?? ''}
-                          onChange={(event) =>
-                            field(
-                              name,
-                              event.target.value === '' ? undefined : Number(event.target.value),
-                            )
-                          }
-                        />
-                      )}
-                    </Field>
-                  ))}
-                </Fields>
+                {(['temperature', 'top_p'] as const).map((name) => (
+                  <Field
+                    key={name}
+                    size="short"
+                    label={t(
+                      name === 'temperature' ? 'common.agent.temperature' : 'common.agent.topP',
+                    )}
+                  >
+                    {(props) => (
+                      <input
+                        {...props}
+                        type="number"
+                        step="any"
+                        value={draft.settings[name] ?? ''}
+                        onChange={(event) =>
+                          field(
+                            name,
+                            event.target.value === '' ? undefined : Number(event.target.value),
+                          )
+                        }
+                      />
+                    )}
+                  </Field>
+                ))}
               </>
             ) : null}
             <Field label={t('common.agent.timeout')} size="short">

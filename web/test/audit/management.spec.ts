@@ -42,7 +42,6 @@ interface Fixture {
     automatic_backoff_donation_id: string;
     recurring_discount: { donation_id: string };
     model_quotas: { donation_id: string };
-    denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
   };
 }
 function fixture(): Fixture {
@@ -127,7 +126,7 @@ test('date filters fit their fields across desktop and narrow containers', async
           for (const date of await dates.all()) {
             await expect(date).toBeVisible();
             const bounds = await date.evaluate((element) => {
-              const field = element.closest('.nb-field')!;
+              const field = element.closest('.time-input-field, .nb-field')!;
               const inputRect = element.getBoundingClientRect();
               const fieldRect = field.getBoundingClientRect();
               return {
@@ -200,6 +199,7 @@ test('independent diagnostics retain their filtered window when paging in both s
         const apiPath = role === 'admin' ? '/admin/api/diagnostics' : '/api/steward/diagnostics';
         const page = await context.newPage();
         await page.goto(origin + (role === 'admin' ? '/logs' : '/steward?tab=logs'));
+        await page.getByRole('tab', { name: 'Discovery and activity', exact: true }).click();
         const region = page.getByRole('region', { name: 'Discovery and activity diagnostics' });
         await region.getByLabel('Category', { exact: true }).selectOption('model_discovery');
         const userId = state.users.find((user) => user.level === 1)!.id;
@@ -359,10 +359,7 @@ test('owner reads donation keys and details from current API responses', async (
     for (const { id } of donations.data as { id: string }[]) {
       const detail = page.locator('a[href="/charity/donations/' + id + '"]');
       const card = panel.locator('.economy-donation-summary').filter({ has: detail });
-      await card
-        .getByRole('button', { name: copy.presentation.donationActions, exact: true })
-        .click();
-      await page.getByRole('menuitem', { name: copy.ownerPages.keys, exact: true }).click();
+      await card.getByRole('button', { name: copy.ownerPages.keys, exact: true }).click();
       const keys = panel.getByRole('region', { name: copy.ownerPages.keys, exact: true });
       const response = await read(context, state.user_url, '/api/donations/' + id);
       const key = response.keys[0];
@@ -386,7 +383,7 @@ test('administrator follows retained request identity through deletion history a
   try {
     const page = await context.newPage();
     await page.goto(state.admin_url + '/logs?request_id=' + state.management.request_ids[0]);
-    const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+    const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await expect(dialog).toContainText('Original account: ' + state.management.old_user_id);
     await expect(dialog).toContainText('Original account deleted');
     const history = dialog.getByRole('link', { name: 'View deletion history' });
@@ -673,12 +670,18 @@ test('level 6 forcibly rejects an automatic donation through one consequence con
 
 test('verified denial grants show current-language automatic labels and preserve manual notes', async ({
   browser,
+  request,
 }) => {
   const state = fixture();
+  const issued = await request.post(state.control_url + '/management-denial-grants', {
+    headers: { Authorization: 'Bearer ' + state.control_token },
+  });
+  expect(issued.ok()).toBe(true);
+  const grants = (await issued.json()) as Record<'client_rules' | 'charity' | 'manual', Cookie>;
   for (const kind of ['client_rules', 'charity', 'manual'] as const) {
     const context = await browser.newContext();
     try {
-      const cookie = state.management.denials[kind].cookie;
+      const cookie = grants[kind];
       await context.addCookies([
         {
           name: cookie.Name,
@@ -967,7 +970,7 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     const adminPage = await admin.newPage();
     await adminPage.goto(state.admin_url + '/settings?group=maintenance');
     const panel = adminPage
-      .locator('section.card')
+      .locator('section.nb-panel')
       .filter({ has: adminPage.getByRole('heading', { name: copy.adminTitle, exact: true }) });
     await panel.getByLabel(copy.reasonLabel).fill('Synthetic service restored');
     await panel.getByRole('button', { name: copy.disableAction, exact: true }).click();
@@ -1435,11 +1438,15 @@ test('charity settings keep grouped controls, readable model sources, and action
         .getByRole('button', { name: /Binding browser key 1/ })
         .click();
       await capture('sources', async () => {
-        const row = picker.locator('.nb-choice-list__items .nb-field').first();
+        const row = picker.locator('.nb-choice-list__items .nb-choice-row').first();
         await row.scrollIntoViewIfNeeded();
         const placement = await row.evaluate((node) => {
-          const label = node.querySelector('label')!.getBoundingClientRect();
-          const source = node.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          const label = node
+            .querySelector('.nb-choice-row__content > strong')!
+            .getBoundingClientRect();
+          const source = node
+            .querySelector('.nb-choice-row__content > span')!
+            .getBoundingClientRect();
           return {
             labelX: label.x,
             sourceX: source.x,

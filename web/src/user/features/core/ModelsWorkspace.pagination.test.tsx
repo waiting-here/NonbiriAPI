@@ -1,3 +1,8 @@
+import {
+  chatProjection,
+  credentialGrant,
+  endpointScope,
+} from '../../../../test/fixtures/resourceScopes';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -85,6 +90,7 @@ function modelRecord(id: string, bindingCount = '0'): Model {
 
 function endpointRecord(id: string): Endpoint {
   return {
+    ...endpointScope,
     id,
     connector_type: 'openai-compatible',
     base_url: `https://api-${id}.example.test/v1`,
@@ -100,6 +106,7 @@ function endpointRecord(id: string): Endpoint {
 
 function keyRecord(id: string, endpointId: string): EndpointKey {
   return {
+    ...credentialGrant,
     id,
     endpoint_id: endpointId,
     display_head: `sk-${id}`,
@@ -122,6 +129,7 @@ function candidateRecord(
   source: 'automatic' | 'manual',
 ): BindingCandidate {
   return {
+    ...chatProjection,
     endpoint_key_id: endpointKeyId,
     endpoint_base_url: 'https://upstream.example.test/v1',
     connector_type: 'openai-compatible',
@@ -137,6 +145,7 @@ function candidateRecord(
 function bindingRecord(index: number): Binding {
   const id = String(index + 1);
   return {
+    targets: [],
     id,
     endpoint_key_id: String(1000 + index),
     endpoint_base_url: 'https://bound.example.test/v1',
@@ -310,11 +319,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       screen.getByText('That page is no longer available. Showing page 3.'),
     ).toBeInTheDocument();
 
-    await rendered.user.click(
-      within(screen.getByText('provider-21/model-21').closest('tr')!).getByRole('button', {
-        name: 'Edit model',
-      }),
-    );
+    await rendered.user.click(screen.getByRole('button', { name: 'provider-21/model-21' }));
     await waitFor(() =>
       expect(screen.getByTestId('location-search')).toHaveTextContent('model_id=21'),
     );
@@ -385,19 +390,44 @@ describe('ModelsWorkspace numbered pagination', () => {
             numbered(filtered.slice(offset, offset + size), page, size, filtered.length),
           );
         }
-        if (method === 'POST' && url.pathname.endsWith('/bindings/batch')) {
+        if (method === 'POST' && url.pathname.endsWith('/bindings/batch-receipt')) {
           const body = JSON.parse(String(init?.body));
           bodies.push(body);
-          bound = body.selections.map((selection: BindingCandidate, index: number) => ({
-            ...candidates.find(
-              (candidate) =>
-                candidate.endpoint_key_id === selection.endpoint_key_id &&
-                candidate.upstream_model_id === selection.upstream_model_id,
-            ),
-            id: String(index + 1),
-            ord: index,
-          }));
-          return jsonResponse({ bindings: bound, binding_revision: '2' }, 201);
+          bound = body.selections.map(
+            (
+              selection: { targets: { endpoint_key_id: string; upstream_model_id: string }[] },
+              index: number,
+            ) => {
+              const target = selection.targets[0]!;
+              const source = candidates.find(
+                (candidate) =>
+                  candidate.endpoint_key_id === target.endpoint_key_id &&
+                  candidate.upstream_model_id === target.upstream_model_id,
+              )!;
+              return {
+                ...source,
+                id: String(index + 1),
+                ord: index,
+                targets: [
+                  {
+                    ...source,
+                    id: String(index + 1),
+                    revision: '1',
+                    endpoint_id: source.endpoint_key_id === '221' ? '21' : '1',
+                    base_url: source.endpoint_base_url,
+                    configuration_type: source.connector_type,
+                    credential_id: '7',
+                    credential_version: '1',
+                    grant_revision: '1',
+                  },
+                ],
+              };
+            },
+          );
+          return jsonResponse(
+            { model_id: '31', added_count: '2', binding_count: '2', binding_revision: '2' },
+            201,
+          );
         }
         throw new Error(`Unexpected request: ${method} ${url.pathname}${url.search}`);
       }),
@@ -422,7 +452,9 @@ describe('ModelsWorkspace numbered pagination', () => {
       expect(calls.some((url) => url.searchParams.get('q') === 'gpt')).toBe(true),
     );
     await within(results).findByText('gpt-1');
-    await rendered.user.click(within(results).getByRole('checkbox', { name: /^gpt-1 Fetched/ }));
+    const firstTarget = within(results).getByRole('checkbox', { name: 'gpt-1' });
+    expect(firstTarget).toHaveAccessibleDescription(/Fetched/);
+    await rendered.user.click(firstTarget);
     await rendered.user.click(screen.getByRole('button', { name: 'Change endpoint' }));
     await rendered.user.click(
       within(screen.getByRole('region', { name: 'Endpoints' })).getByRole('button', {
@@ -430,7 +462,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       }),
     );
     await rendered.user.click((await screen.findByText('endpoint-21')).closest('button')!);
-    await rendered.user.click(await within(results).findByRole('checkbox', { name: /^gpt-11 / }));
+    await rendered.user.click(await within(results).findByRole('checkbox', { name: 'gpt-11' }));
     await waitFor(() =>
       expect(
         calls.some(
@@ -449,8 +481,24 @@ describe('ModelsWorkspace numbered pagination', () => {
     expect(bodies[0]).toEqual({
       expected_binding_revision: '1',
       selections: [
-        { endpoint_key_id: '211', upstream_model_id: 'gpt-1' },
-        { endpoint_key_id: '221', upstream_model_id: 'gpt-11' },
+        {
+          targets: [
+            {
+              endpoint_key_id: '211',
+              upstream_model_id: 'gpt-1',
+              native_services: ['chat_completions'],
+            },
+          ],
+        },
+        {
+          targets: [
+            {
+              endpoint_key_id: '221',
+              upstream_model_id: 'gpt-11',
+              native_services: ['chat_completions'],
+            },
+          ],
+        },
       ],
     });
   });
@@ -511,15 +559,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await rendered.user.click(within(section!).getByRole('button', { name: 'Next' }));
     await within(section!).findByText('upstream-11');
     const row = within(section!).getByText('upstream-11').closest('li')!;
-    await rendered.user.click(
-      within(row).getByRole('button', { name: 'Source actions for upstream-11' }),
-    );
-    await rendered.user.click(
-      within(screen.getByRole('menu', { name: 'Source actions for upstream-11' })).getByRole(
-        'menuitem',
-        { name: 'Move down' },
-      ),
-    );
+    await rendered.user.click(within(row).getByRole('button', { name: 'Move down' }));
     await rendered.user.click(
       within(section!).getByRole('button', { name: 'Save complete order' }),
     );
@@ -710,7 +750,7 @@ describe('ModelsWorkspace numbered pagination', () => {
             ? jsonResponse(numbered([candidate], page, pageSize, 1))
             : jsonResponse(numbered([], page, pageSize, 0));
         }
-        if (method === 'POST' && url.pathname === '/api/models/81/bindings/batch') {
+        if (method === 'POST' && url.pathname === '/api/models/81/bindings/batch-receipt') {
           writes.push(String(init?.body));
           return jsonResponse({ error: { code: 'forbidden', message: 'forbidden' } }, 403);
         }
@@ -728,7 +768,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     );
 
     const rendered = await renderWorkspace('/models?model_id=81');
-    await rendered.user.click(await screen.findByRole('checkbox', { name: /^write-candidate / }));
+    await rendered.user.click(await screen.findByRole('checkbox', { name: 'write-candidate' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
 
     expect(writes).toHaveLength(1);
@@ -847,7 +887,7 @@ describe('ModelsWorkspace numbered pagination', () => {
     await act(async () => resolveSearch!(jsonResponse(numbered([searchedCandidate], '1', 10, 1))));
     expect(within(automaticSection).queryByText('needle-result')).not.toBeInTheDocument();
     expect(within(automaticSection).getByText('latest-result')).toBeInTheDocument();
-    expect(within(automaticSection).getByText('1 items')).toBeInTheDocument();
+    expect(within(automaticSection).getByText('1 item')).toBeInTheDocument();
   });
   it('drops source selections, search and late query results across account boundaries', async () => {
     let actor = 'first';
@@ -899,7 +939,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       }),
     );
     const view = await renderWorkspace('/models?model_id=91');
-    await view.user.click(await screen.findByRole('checkbox', { name: /^private-first / }));
+    await view.user.click(await screen.findByRole('checkbox', { name: 'private-first' }));
     await view.user.type(
       screen.getByRole('searchbox', { name: "Search this key's models" }),
       'private-search',
@@ -1013,7 +1053,14 @@ describe('ModelsWorkspace numbered pagination', () => {
           if (method === 'POST' && url.pathname.endsWith('/bindings/batch-receipt')) {
             bindingWrites.push(JSON.parse(String(init?.body)));
             identities.push(new Headers(init?.headers).get('Idempotency-Key')!);
-            bound = [{ ...candidateRecord('111', 'typed-model', 'manual'), id: '161', ord: 0 }];
+            bound = [
+              {
+                ...candidateRecord('111', 'typed-model', 'manual'),
+                targets: [],
+                id: '161',
+                ord: 0,
+              },
+            ];
             return jsonResponse(
               { model_id: '101', binding_revision: '2', added_count: '1', binding_count: '1' },
               201,
@@ -1050,7 +1097,7 @@ describe('ModelsWorkspace numbered pagination', () => {
           'false',
         ),
       );
-      const candidate = await screen.findByRole('checkbox', { name: /^typed-model / });
+      const candidate = await screen.findByRole('checkbox', { name: 'typed-model' });
       await waitFor(() => expect(candidate).toBeEnabled());
       await view.user.click(candidate);
       expect(candidate).toBeChecked();

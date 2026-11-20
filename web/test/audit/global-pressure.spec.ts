@@ -102,6 +102,7 @@ for (const role of ['admin', 5, 6] as const) {
       const value = (await response.json()) as Pressure;
       expectPressure(value);
       const section = page.getByRole('region', { name: 'Site load', exact: true });
+      await section.locator('summary').click();
       if (role === 'admin') {
         const receivedAt = Date.now();
         const refreshed = page.waitForResponse(

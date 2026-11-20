@@ -3,7 +3,9 @@ import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { Card, ErrorState, LoadingState } from '@shared/components/States';
+import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Field } from '@shared/components/ui/Field';
+import { Note } from '@shared/components/ui/Note';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import {
@@ -12,6 +14,7 @@ import {
   StationSessionChangedError,
 } from '@shared/charityManagement';
 import { directions, directionUnits, unitsToNatural, type Direction } from '@shared/lakenotes/api';
+import { GameWallets } from '../../games/common/GameWallets';
 import { formatCredits } from '../../games/common/strict';
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession, userKeys } from '../../data';
@@ -185,38 +188,41 @@ export function LakeExchange({
         }}
       >
         <fieldset disabled={locked || view.readonly || quoting}>
-          <label>
-            {text('direction')}
-            <select
-              aria-label={text('direction')}
-              value={actual}
-              onChange={(e) => {
-                setDirection(e.target.value as Direction);
-                setQuote(null);
-                setAllowance(null);
-              }}
-            >
-              {enabled.map((d) => (
-                <option key={d} value={d}>
-                  {text(d)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {text('batches')}
-            <input
-              inputMode="numeric"
-              pattern="[1-9][0-9]*"
-              maxLength={39}
-              value={quantity}
-              onChange={(e) => {
-                setQuantity(e.target.value);
-                setQuote(null);
-              }}
-              required
-            />
-          </label>
+          <Field label={text('direction')}>
+            {(props) => (
+              <select
+                {...props}
+                value={actual}
+                onChange={(e) => {
+                  setDirection(e.target.value as Direction);
+                  setQuote(null);
+                  setAllowance(null);
+                }}
+              >
+                {enabled.map((d) => (
+                  <option key={d} value={d}>
+                    {text(d)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label={text('batches')}>
+            {(props) => (
+              <input
+                {...props}
+                inputMode="numeric"
+                pattern="[1-9][0-9]*"
+                maxLength={39}
+                value={quantity}
+                onChange={(e) => {
+                  setQuantity(e.target.value);
+                  setQuote(null);
+                }}
+                required
+              />
+            )}
+          </Field>
           <button type="submit" className="nb-btn nb-btn--secondary">
             {text('quote')}
           </button>
@@ -373,11 +379,14 @@ function LakeContent({ account }: { account: string }) {
   if (query.isPending || query.error || !query.data)
     return (
       <div className="page lake-page">
-        <div className="lake-platform-toolbar">
-          <Link className="lake-back" to="/games">
-            {text('back')}
-          </Link>
-        </div>
+        <PageHeader
+          back={
+            <Link className="game-back-link lake-back" to="/games">
+              {text('back')}
+            </Link>
+          }
+          title={text('title')}
+        />
         {query.isPending ? (
           <LoadingState />
         ) : (
@@ -411,17 +420,29 @@ function LakeContent({ account }: { account: string }) {
   };
   return (
     <div className="page lake-page">
-      <div className="lake-platform-toolbar">
-        <Link className="lake-back" to="/games">
-          {text('back')}
-        </Link>
-        <p>
-          {Object.values(view.settings.exchanges).some((direction) => direction.enabled)
+      <PageHeader
+        back={
+          <Link className="game-back-link lake-back" to="/games">
+            {text('back')}
+          </Link>
+        }
+        title={text('title')}
+        actions={
+          <GameWallets
+            wallets={{
+              balance: formatCredits(unitsToNatural(view.wallet.general_milli, 'general')),
+              gameBalance: formatCredits(unitsToNatural(view.wallet.game_milli, 'game')),
+            }}
+          />
+        }
+      />
+      <Note tone="info">
+        {view.readonly
+          ? text('closed')
+          : Object.values(view.settings.exchanges).some((direction) => direction.enabled)
             ? text('exchangeAvailable')
             : text('exchangeUnavailable')}
-        </p>
-      </div>
-      {view.readonly ? <p role="status">{text('closed')}</p> : null}
+      </Note>
       <NativeLake
         bridge={{
           language,
@@ -450,7 +471,7 @@ function LakeContent({ account }: { account: string }) {
           text,
         }}
       />
-      <div className="lake-platform-controls">
+      <Card className="lake-platform-controls">
         {collection.error ? <ErrorState error={collection.error} /> : null}
         {collection.outcome === 'unknown' ? (
           <button
@@ -511,7 +532,7 @@ function LakeContent({ account }: { account: string }) {
             </button>
           </div>
         ) : null}
-      </div>
+      </Card>
       <LakeExchange view={view} account={account} text={text} />
     </div>
   );

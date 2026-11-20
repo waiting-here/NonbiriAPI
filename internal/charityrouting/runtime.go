@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
@@ -302,11 +304,32 @@ func (s *Service) SnapshotForCaller(ctx context.Context, userID, modelID, decisi
 	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet, operation, userID)
 }
 
+// Most snapshots only read. Check due work in the same WAL snapshot as routing.
+// When expiry is due, release the reader and make all routing and access
+// decisions inside the writer transaction that owns expiry materialization.
+func (s *Service) beginRoutingSnapshot(ctx context.Context, now int64) (*sql.Tx, func(error), bool, error) {
+	tx, finish, err := observability.BeginMeasuredTx(ctx, s.readDB, &sql.TxOptions{ReadOnly: true}, "charity_snapshot")
+	if err != nil {
+		return nil, nil, false, err
+	}
+	var due bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 `+donationstate.DueExpiryFrom+`)`, now).Scan(&due)
+	if err == nil && !due {
+		return tx, finish, false, nil
+	}
+	finish(err)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	tx, finish, err = observability.BeginMeasuredTx(ctx, s.db, nil, "charity_snapshot_expiry")
+	return tx, finish, true, err
+}
+
 func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}, operation connectorcontract.Operation, callers ...int64) (_ RuntimeSnapshot, resultErr error) {
-	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
+	if s == nil || s.readDB == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
-	tx, finish, err := observability.BeginMeasuredTx(ctx, s.db, nil, "charity_snapshot")
+	tx, finish, expiryDue, err := s.beginRoutingSnapshot(ctx, decisionNow)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
 	}
@@ -330,8 +353,10 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 	if admissionErr != nil && !errors.Is(admissionErr, ErrUnavailable) {
 		return RuntimeSnapshot{}, admissionErr
 	}
-	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
-		return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
+	if expiryDue {
+		if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
+			return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit runtime snapshot: %w", err)
@@ -405,7 +430,7 @@ dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.token
 `+smartbackoff.EffectiveUntilSQL("dk.id")+`,
 EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.upstream_model_id='' AND qr.current_epoch IS NOT NULL),
 (EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=dk.id AND mq.upstream_model_id=t.upstream_model_id
- AND (mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+ AND (mq.price_limit_mag IS NOT NULL OR mq.call_limit_mag IS NOT NULL OR mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
  OR EXISTS(SELECT 1 FROM donation_quota_rules qr WHERE qr.donation_key_id=dk.id AND qr.upstream_model_id=t.upstream_model_id AND qr.current_epoch IS NOT NULL))
 FROM charity_model_bindings b
 JOIN charity_binding_targets t ON t.binding_id=b.id
@@ -430,6 +455,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 	weighted := make([]weightedRuntimeCandidate, 0, MaxRuntimeCandidates)
 	type keyQuota struct {
 		reservation        donationquota.TokenVector
+		amounts            donationquota.Amounts
 		budgetAvailable    bool
 		recurringChecked   bool
 		recurringAvailable bool
@@ -443,6 +469,11 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 	}
 	modelQuotas := make(map[modelQuotaKey]bool)
 	sawRecurringLimit := false
+	var skipped requestattempt.AdmissionCause
+	var listed []int64
+	if requestattempt.CurrentID(ctx) != "" && len(operations) == 1 && operations[0] != "" {
+		listed = []int64{}
+	}
 	for rows.Next() {
 		var candidate RuntimeCandidate
 		var connector string
@@ -459,6 +490,9 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			&tokensUsed, &tokensInflight, &rateLimitedUntil, &hasCurrentQuotaRules, &hasModelQuotaLimits); err != nil {
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
 		}
+		if listed != nil {
+			listed = append(listed, candidate.Authorization.TargetID)
+		}
 		candidate.ConnectorType = connectorcontract.Type(connector)
 		if !candidate.ConnectorType.Valid() {
 			return RuntimeSnapshot{}, ErrInvariant
@@ -472,9 +506,13 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			skipped = skipped.Combine(requestattempt.AdmissionUnavailable)
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "expired")
 			continue
 		}
 		if rateLimitedUntil.Valid && rateLimitedUntil.Int64 > decisionNow {
+			skipped = skipped.Combine(requestattempt.AdmissionCooldown)
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "cooldown")
 			sawRecurringLimit = true
 			continue
 		}
@@ -496,6 +534,8 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.budgetAvailable {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "capacity")
 			continue
 		}
 		tokenReserve = quota.reservation.Total
@@ -510,23 +550,24 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			return RuntimeSnapshot{}, err
 		}
 		if !eligible {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "capacity")
 			continue
 		}
 		candidate.Policy.ForceStoreFalse = forceStore == 1
-		quotaPrice, err := db.U128FromBig(big.NewInt(priceReserve))
-		if err != nil {
-			return RuntimeSnapshot{}, ErrInvariant
-		}
-		quotaCalls, _ := db.U128FromBig(big.NewInt(1))
 		if !quota.recurringChecked {
-			amounts := quota.reservation.Amounts()
-			amounts.Calls, amounts.Credits = quotaCalls, quotaPrice
+			quota.amounts = quota.reservation.Amounts()
+			quota.amounts.Calls, _ = db.U128FromBig(big.NewInt(1))
+			quota.amounts.Credits, err = db.U128FromBig(big.NewInt(priceReserve))
+			if err != nil {
+				return RuntimeSnapshot{}, ErrInvariant
+			}
 			// The joined key and rule-presence check use this transaction's
 			// snapshot. Empty current rules need no separate epoch read;
 			// token-vector and cumulative budgets were still checked above.
 			quota.recurringAvailable = true
 			if hasCurrentQuotaRules {
-				quota.recurringAvailable, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, amounts)
+				quota.recurringAvailable, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, quota.amounts)
 				if err != nil {
 					return RuntimeSnapshot{}, err
 				}
@@ -535,6 +576,8 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			quotas[candidate.DonationKeyID] = quota
 		}
 		if !quota.recurringAvailable {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "quota")
 			sawRecurringLimit = true
 			continue
 		}
@@ -543,7 +586,7 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		if !checked {
 			modelAvailable = true
 			if hasModelQuotaLimits {
-				modelAvailable, err = donationquota.ModelAvailable(ctx, tx, candidate.DonationKeyID, decisionNow, candidate.UpstreamModelID, quota.reservation)
+				modelAvailable, err = donationquota.ModelAvailable(ctx, tx, candidate.DonationKeyID, decisionNow, candidate.UpstreamModelID, quota.amounts)
 				if err != nil {
 					return RuntimeSnapshot{}, err
 				}
@@ -551,6 +594,8 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 			modelQuotas[modelKey] = modelAvailable
 		}
 		if !modelAvailable {
+			skipped = skipped.Combine(requestattempt.AdmissionBudget)
+			observeBinding(ctx, candidate.BindingID, candidate.NativeServices, "quota")
 			sawRecurringLimit = true
 			continue
 		}
@@ -568,10 +613,13 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: close runtime candidates: %w", err)
 	}
 	if len(weighted) == 0 {
-		if sawRecurringLimit {
-			return RuntimeSnapshot{}, donationquota.ErrLimited
+		if listed != nil {
+			observeUnlistedTargets(ctx, tx, modelID, listed)
 		}
-		return RuntimeSnapshot{}, ErrUnavailable
+		if sawRecurringLimit {
+			return RuntimeSnapshot{}, skipped.Wrap(donationquota.ErrLimited)
+		}
+		return RuntimeSnapshot{}, skipped.Wrap(ErrUnavailable)
 	}
 	var operation connectorcontract.Operation
 	if len(operations) > 1 {
@@ -581,7 +629,15 @@ ORDER BY b.ord,b.id,t.ord,t.id LIMIT ?`, modelID, callerID, callerID, callerID, 
 		operation = operations[0]
 	}
 	snapshot.candidates, err = authorizedServiceTargetsTx(ctx, tx, weighted, connectorSet, operation, decisionNow)
+	if listed != nil && !slices.ContainsFunc(snapshot.candidates, func(c RuntimeCandidate) bool {
+		return c.Authorization.NativeService == connectorcontract.NativeService(operation)
+	}) {
+		observeUnlistedTargets(ctx, tx, modelID, listed)
+	}
 	if err != nil {
+		if cause := requestattempt.AdmissionCauseOf(err); cause != "" {
+			err = skipped.Combine(cause).Wrap(err)
+		}
 		return RuntimeSnapshot{}, err
 	}
 	if len(snapshot.candidates) == 0 {

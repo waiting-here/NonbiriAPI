@@ -54,17 +54,19 @@ export function DeletedAccountCard({
   return (
     <div className="ops-stack">
       <Card>
-        <div className="ops-actions">
+        <div className="nb-stack nb-stack--sm">
+          <div className="nb-actions">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              ← {label.close}
+            </Button>
+          </div>
           <h2>{label.deleted}</h2>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            {label.close}
-          </Button>
         </div>
-        <dl className="ops-kv">
+        <dl className="nb-facts nb-facts--inline">
           <dt>{label.formerID}</dt>
-          <dd>{show(account.former_user_id)}</dd>
+          <dd className="nb-amount">{show(account.former_user_id)}</dd>
           <dt>{label.discord}</dt>
-          <dd>{show(account.discord_id)}</dd>
+          <dd className="mono">{show(account.discord_id)}</dd>
           <dt>{label.registered}</dt>
           <dd>{time(account.registered_at)}</dd>
           <dt>{label.deletedAt}</dt>
@@ -88,15 +90,15 @@ export function DeletedAccountCard({
             </>
           ) : null}
           <dt>{label.general}</dt>
-          <dd>{show(account.general_balance)}</dd>
+          <dd className="nb-amount">{show(account.general_balance)}</dd>
           <dt>{label.game}</dt>
-          <dd>{show(account.game_balance)}</dd>
+          <dd className="nb-amount">{show(account.game_balance)}</dd>
           <dt>{label.donation}</dt>
-          <dd>{show(account.donation_credit)}</dd>
+          <dd className="nb-amount">{show(account.donation_credit)}</dd>
           <dt>{label.paper}</dt>
-          <dd>{show(account.sketch_paper)}</dd>
+          <dd className="nb-amount">{show(account.sketch_paper)}</dd>
           <dt>{label.brush}</dt>
-          <dd>{show(account.sketch_brush)}</dd>
+          <dd className="nb-amount">{show(account.sketch_brush)}</dd>
         </dl>
         <p>{history.coverage}</p>
         {account.discord_id ? <Link to={sameIdentityPath}>{label.sameIdentity}</Link> : null}

@@ -6,14 +6,18 @@ import (
 )
 
 type bindingTargetRequest struct {
-	EndpointKeyID   requestField[string]                   `json:"endpoint_key_id"`
-	UpstreamModelID requestField[string]                   `json:"upstream_model_id"`
-	NativeServices  requestField[[]contract.NativeService] `json:"native_services"`
+	CatalogEntryID       requestField[string]                   `json:"catalog_entry_id"`
+	ExpectedPairRevision requestField[string]                   `json:"expected_pair_revision"`
+	EndpointKeyID        requestField[string]                   `json:"endpoint_key_id"`
+	UpstreamModelID      requestField[string]                   `json:"upstream_model_id"`
+	NativeServices       requestField[[]contract.NativeService] `json:"native_services"`
 }
 type bindingTargetCanonical struct {
-	EndpointKeyID   string                   `json:"endpoint_key_id"`
-	UpstreamModelID string                   `json:"upstream_model_id"`
-	NativeServices  []contract.NativeService `json:"native_services"`
+	CatalogEntryID       string                   `json:"catalog_entry_id,omitempty"`
+	ExpectedPairRevision string                   `json:"expected_pair_revision,omitempty"`
+	EndpointKeyID        string                   `json:"endpoint_key_id"`
+	UpstreamModelID      string                   `json:"upstream_model_id"`
+	NativeServices       []contract.NativeService `json:"native_services"`
 }
 
 func parseBindingTargetRequests(items []bindingTargetRequest) ([]BindingTargetSelection, []bindingTargetCanonical, bool) {
@@ -29,6 +33,15 @@ func parseBindingTargetRequests(items []bindingTargetRequest) ([]BindingTargetSe
 		}
 		targets[i] = BindingTargetSelection{EndpointKeyID: keyID, UpstreamModelID: item.UpstreamModelID.Value, NativeServices: item.NativeServices.Value}
 		canonical[i] = bindingTargetCanonical{EndpointKeyID: item.EndpointKeyID.Value, UpstreamModelID: item.UpstreamModelID.Value, NativeServices: item.NativeServices.Value}
+		if item.CatalogEntryID.Set || item.ExpectedPairRevision.Set {
+			entryID, entryErr := parseDecimalID(item.CatalogEntryID.Value)
+			revision, valid := canonicalExpectedRevision(item.ExpectedPairRevision)
+			if entryErr != nil || !valid {
+				return nil, nil, false
+			}
+			targets[i].CatalogEntryID, targets[i].ExpectedPairRevision = entryID, revision
+			canonical[i].CatalogEntryID, canonical[i].ExpectedPairRevision = item.CatalogEntryID.Value, item.ExpectedPairRevision.Value
+		}
 	}
 	return targets, canonical, validTargetSelections(targets)
 }

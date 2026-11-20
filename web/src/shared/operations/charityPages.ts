@@ -171,11 +171,7 @@ function normalizeCandidatePage(
   if (root.next_cursor !== null) invalidResponse(`${role} binding candidate cursor`);
   const metadata = normalizePageMetadata(root.pagination);
   const data = array(root.data, `${role} binding candidate data`, 100).map((entry, index) =>
-    normalizeCharityBindingCandidate(
-      entry,
-      `${role} binding candidate ${index + 1}`,
-      normalizedFilters.include_bound,
-    ),
+    normalizeCharityBindingCandidate(entry, `${role} binding candidate ${index + 1}`),
   );
   validatePageResponse(metadata, page, pageSize);
   if (

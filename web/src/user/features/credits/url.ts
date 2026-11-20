@@ -63,7 +63,6 @@ export interface CreditHistoryFilterDraft {
 }
 
 export interface CreditHistoryUrlController extends CreditHistoryUrlState {
-  refreshRevision: number;
   setPage: (page: string, anchor?: string | null) => void;
   setPageSize: (pageSize: PageSize, anchor?: string | null) => void;
   apply: (draft: CreditHistoryFilterDraft) => boolean;
@@ -237,7 +236,6 @@ function validDraft(draft: CreditHistoryFilterDraft): boolean {
 
 export function useCreditHistoryUrl(scopeReset = false): CreditHistoryUrlController {
   const [searchParams, setSearchParams] = useSearchState();
-  const [refreshRevision, setRefreshRevision] = useState(0);
   const [pendingScopeReset, setPendingScopeReset] = useState(scopeReset);
   if (scopeReset && !pendingScopeReset) setPendingScopeReset(true);
   const rawSearch = searchParams.toString();
@@ -349,7 +347,6 @@ export function useCreditHistoryUrl(scopeReset = false): CreditHistoryUrlControl
   }, [updateSearch]);
 
   const refresh = useCallback(() => {
-    setRefreshRevision((value) => value + 1);
     updateSearch(
       (current) => ({
         ...valuesFromState(current),
@@ -365,7 +362,6 @@ export function useCreditHistoryUrl(scopeReset = false): CreditHistoryUrlControl
 
   return {
     ...parsed,
-    refreshRevision,
     setPage,
     setPageSize,
     apply,

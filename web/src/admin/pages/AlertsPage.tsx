@@ -1,21 +1,23 @@
+import { InspectionWorkspace } from '@shared/components/log/InspectionWorkspace';
+import { TableCheckbox } from '@shared/components/ui/TableCheckbox';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
-import { DataTable, Field, FilterBar, Fold, MoreMenu } from '@shared/components/ui';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { DataTable, Field, FilterBar, Fold, StatusBadge } from '@shared/components/ui';
 import './alerts.css';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { queryPath } from '@shared/operations/api';
+import {
+  AttemptReason,
+  AttemptService,
+  FailureStreak,
+} from '@shared/components/log/ManagementAttemptFailures';
+import { ATTEMPT_SEQ_PARAM } from '@shared/components/log/managementFailures';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useDisplayTimeContext } from '@shared/components/timeContextValue';
@@ -38,6 +40,8 @@ import {
   useAdminAlertDetail,
   useAdminTargetDiagnostic,
   validAlertID,
+  type AdminAlertDetail,
+  type AlertTriggerAttempt,
   type AlertTarget,
   type DiagnosticTargetKind,
 } from '../features/operations/alertDetail';
@@ -113,6 +117,64 @@ function targetPath(target: AlertTarget, targets: AlertTarget[]): string | null 
   }
 }
 
+function disablementDescriptionKey(detail: AdminAlertDetail): string {
+  if (detail.context_version > 0) {
+    if (detail.occurred_facts.some((fact) => fact.key === 'use_id' && validAlertID(fact.value))) {
+      return 'admin.alerts.disablement.service';
+    }
+    if (
+      /^donation-key:[1-9]\d*:(?:generation:[1-9]\d*:fold:[1-9]\d*|policy:[1-9]\d*)$/.test(
+        detail.alert.ref ?? '',
+      )
+    ) {
+      return 'admin.alerts.disablement.key';
+    }
+  }
+  return 'admin.alerts.kindDescription.donationFailureDisabled';
+}
+
+function TriggerAttempt({ attempt, returnTo }: { attempt: AlertTriggerAttempt; returnTo: string }) {
+  const { t } = useTranslation();
+  return (
+    <section className="nb-stack nb-stack--sm" aria-label={t('admin.alerts.triggerAttempt.title')}>
+      <h3>{t('admin.alerts.triggerAttempt.title')}</h3>
+      <dl className="nb-facts nb-facts--inline">
+        <div>
+          <dt>{t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}</dt>
+          <dd>
+            <AttemptService observation={attempt} />
+          </dd>
+        </div>
+        <div>
+          <dt>{t('common.operations.logs.failureReason')}</dt>
+          <dd>
+            <AttemptReason failure={attempt} />
+          </dd>
+        </div>
+      </dl>
+      <p className="alert-trigger-streak">
+        <FailureStreak observation={attempt} />
+      </p>
+      {attempt.available ? (
+        <div className="nb-actions">
+          <Link
+            className="nb-btn nb-btn--secondary"
+            to={queryPath('/logs', {
+              request_id: attempt.request_id,
+              return_to: returnTo,
+              [ATTEMPT_SEQ_PARAM]: attempt.attempt_seq,
+            })}
+          >
+            {t('admin.alerts.triggerAttempt.view')}
+          </Link>
+        </div>
+      ) : (
+        <p className="nb-muted">{t('admin.alerts.triggerAttempt.unavailable')}</p>
+      )}
+    </section>
+  );
+}
+
 export function AlertsPage() {
   const formatDateTime = useDateTimeFormatter();
   const timeContext = useDisplayTimeContext();
@@ -122,6 +184,7 @@ export function AlertsPage() {
   const session = useAdminSession();
   const [searchParams, setSearchParams] = useSearchState();
   const resolved = resolvedFilter(searchParams);
+  const alertPath = '/alerts?' + searchParams.toString();
   const rawKind = searchParams.get('kind');
   const kind: AlertKindFilter = ALERT_KINDS.includes(rawKind as AdminAlert['kind'])
     ? (rawKind as AdminAlert['kind'])
@@ -243,10 +306,19 @@ export function AlertsPage() {
         return client.invalidateQueries({ queryKey: adminAlertPageKeys.root });
     },
   });
+  const resetFilters = () =>
+    setSearchParams((previous) => {
+      for (const name of ['kind', 'alert_id', 'return_to', 'target_kind', 'target_id'])
+        previous.delete(name);
+      previous.set(RESOLVED_PARAM, 'false');
+      previous.set('page', '1');
+      return previous;
+    });
   const selectKind = (value: string) => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set('kind', value);
+      for (const name of ['alert_id', 'return_to', 'target_kind', 'target_id']) next.delete(name);
       next.set('page', '1');
       return next;
     });
@@ -297,6 +369,7 @@ export function AlertsPage() {
       const next = new URLSearchParams(previous);
       next.delete(RESOLVED_PARAM);
       next.set(RESOLVED_PARAM, nextResolved);
+      for (const name of ['alert_id', 'return_to', 'target_kind', 'target_id']) next.delete(name);
       next.delete('page');
       next.set('page', '1');
       next.delete('page_size');
@@ -356,6 +429,31 @@ export function AlertsPage() {
     invariant_violation: t('admin.alerts.kindDescription.invariantViolation'),
     account_deleted: t('admin.alerts.kindDescription.accountDeleted'),
   };
+  const disablement =
+    detail.data?.alert.kind === 'donation_failure_disabled' ? detail.data : undefined;
+  const trigger = disablement?.trigger_attempt;
+  const structuredDisablement =
+    disablement !== undefined &&
+    (trigger !== undefined ||
+      (disablement.context_version > 0 && disablement.occurred_facts.length > 0));
+  const eventFacts =
+    detail.data?.occurred_facts.filter(
+      (fact) =>
+        !trigger ||
+        !(
+          (fact.key === 'failure_streak' && fact.value === trigger.streak_after) ||
+          (fact.key === 'failure_threshold' && fact.value === trigger.threshold)
+        ),
+    ) ?? [];
+  const originalMessage = <p className="alert-original-message">{detail.data?.alert.message}</p>;
+  const technicalReference = (
+    <div>
+      <dt>{copy.technicalReference}</dt>
+      <dd>
+        <code className="alert-technical-reference">{detail.data?.alert.ref ?? '—'}</code>
+      </dd>
+    </div>
+  );
   const pageData = result.data;
   const busy = session.isFetching || result.isFetching;
   const actionDisabled = busy || result.isPlaceholderData || mutation.isPending || bulk.isPending;
@@ -391,449 +489,502 @@ export function AlertsPage() {
   return (
     <div className="page ops-page alerts-page">
       <PageHeader title={t('admin.alerts.title')} description={t('admin.alerts.description')} />
-      <p className="field-help time-context-notice" role="status">
-        {timeContext.mode === 'site' && timeContext.offset_minutes !== null
-          ? t('common.time.zone', { zone: fixedOffsetZone(timeContext.offset_minutes) })
-          : t('common.time.siteUnavailable')}
-      </p>
-      {focusedID ? (
-        <Card>
-          <div className="ops-actions">
-            <h2>
-              {copy.details} #{focusedID}
-            </h2>
-            <button className="nb-btn nb-btn--ghost" type="button" onClick={() => focusAlert(null)}>
-              {copy.close}
-            </button>
-            {returnTo ? <Link to={returnTo}>{copy.back}</Link> : null}
-          </div>
-          {detail.isPending ? (
-            <LoadingState />
-          ) : detail.error ? (
-            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-          ) : detail.data ? (
-            <div className="ops-stack">
-              <p>
-                {detail.data.alert.subtype === 'return_detected'
-                  ? `${t('admin.alerts.kindValue.returnDetected')} · ${t('admin.alerts.kindDescription.returnDetected')}`
-                  : `${kindLabels[detail.data.alert.kind]} · ${kindDescriptions[detail.data.alert.kind]}`}
-              </p>
-              <p className="alert-original-message">{detail.data.alert.message}</p>
-              <dl className="ops-kv">
-                <dt>{copy.occurred}</dt>
-                <dd>{formatDateTime(detail.data.alert.created_at)}</dd>
-                <dt>{copy.resolution}</dt>
-                <dd>
-                  {detail.data.alert.resolved
-                    ? `${t('admin.alerts.resolvedValue')} ${detail.data.alert.resolved_at !== null ? formatDateTime(detail.data.alert.resolved_at) : ''} ${detail.data.resolution_kind}`
-                    : copy.unresolved}
-                </dd>
-                <dt>{copy.technicalReference}</dt>
-                <dd>
-                  <code>{detail.data.alert.ref ?? '—'}</code>
-                </dd>
-              </dl>
-              <h3>{copy.facts}</h3>
-              {detail.data.occurred_facts.length === 0 ? (
-                <p>{copy.noFacts}</p>
-              ) : (
-                <dl className="ops-kv">
-                  {detail.data.occurred_facts.map((fact, index) => (
-                    <div key={`${fact.key}:${index}`}>
-                      <dt>
-                        {detail.data.alert.subtype === 'return_detected'
-                          ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, {
-                              defaultValue: fact.key,
-                            })
-                          : (copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key)}
-                      </dt>
-                      <dd>
-                        {detail.data.alert.subtype === 'return_detected' && fact.key === 'subtype'
-                          ? t('admin.alerts.kindValue.returnDetected')
-                          : detail.data.alert.subtype === 'return_detected' &&
-                              fact.key === 'marker_issued_at'
-                            ? formatDateTime(Number(fact.value))
-                            : fact.value}
-                      </dd>
-                    </div>
-                  ))}
+      <InspectionWorkspace
+        selected={focusedID}
+        title={copy.details + ' #' + focusedID}
+        closeLabel={copy.close}
+        onClose={() => focusAlert(null)}
+        detail={
+          <div className="ops-stack">
+            {returnTo && (
+              <Link className="nb-btn nb-btn--secondary nb-btn--sm" to={returnTo}>
+                {copy.back}
+              </Link>
+            )}
+            {detail.isPending ? (
+              <LoadingState />
+            ) : detail.error ? (
+              <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+            ) : detail.data ? (
+              <div className="ops-stack">
+                <p>
+                  {disablement
+                    ? t(disablementDescriptionKey(disablement))
+                    : detail.data.alert.subtype === 'return_detected'
+                      ? `${t('admin.alerts.kindValue.returnDetected')} · ${t('admin.alerts.kindDescription.returnDetected')}`
+                      : `${kindLabels[detail.data.alert.kind]} · ${kindDescriptions[detail.data.alert.kind]}`}
+                </p>
+                {trigger && <TriggerAttempt attempt={trigger} returnTo={alertPath} />}
+                {!structuredDisablement && originalMessage}
+                <dl className="nb-facts nb-facts--inline">
+                  <div>
+                    <dt>{copy.occurred}</dt>
+                    <dd>{formatDateTime(detail.data.alert.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy.resolution}</dt>
+                    <dd>
+                      {detail.data.alert.resolved
+                        ? `${t('admin.alerts.resolvedValue')} ${detail.data.alert.resolved_at !== null ? formatDateTime(detail.data.alert.resolved_at) : ''} ${detail.data.resolution_kind}`
+                        : copy.unresolved}
+                    </dd>
+                  </div>
+                  {!structuredDisablement && technicalReference}
                 </dl>
-              )}
-              <h3>{copy.targets}</h3>
-              {detail.data.targets.length === 0 ? (
-                <p>{copy.noTarget}</p>
+                {eventFacts.length > 0 ? (
+                  <>
+                    <h3>{copy.facts}</h3>
+                    <dl className="nb-facts nb-facts--inline">
+                      {eventFacts.map((fact, index) => (
+                        <div key={`${fact.key}:${index}`}>
+                          <dt>
+                            {detail.data.alert.subtype === 'return_detected'
+                              ? t(`admin.alerts.returnDetectedFacts.${fact.key}`, {
+                                  defaultValue: fact.key,
+                                })
+                              : (copy.factNames[fact.key as keyof typeof copy.factNames] ??
+                                fact.key)}
+                          </dt>
+                          <dd>
+                            {detail.data.alert.subtype === 'return_detected' &&
+                            fact.key === 'subtype'
+                              ? t('admin.alerts.kindValue.returnDetected')
+                              : detail.data.alert.subtype === 'return_detected' &&
+                                  fact.key === 'marker_issued_at'
+                                ? formatDateTime(Number(fact.value))
+                                : fact.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                ) : !trigger ? (
+                  <>
+                    <h3>{copy.facts}</h3>
+                    <p className="nb-muted">{copy.noFacts}</p>
+                  </>
+                ) : null}
+                <h3>{copy.targets}</h3>
+                {detail.data.targets.length === 0 ? (
+                  <p className="nb-muted">{copy.noTarget}</p>
+                ) : (
+                  <ul className="ops-stack">
+                    {detail.data.targets.map((target) => {
+                      const path = targetPath(target, detail.data.targets);
+                      const issueUser =
+                        detail.data.alert.kind === 'issue_projection_incomplete' &&
+                        target.kind === 'user' &&
+                        target.available &&
+                        isDiagnosticTarget('issue_user', target.id);
+                      return (
+                        <li key={`${target.kind}:${target.id}`}>
+                          {copy.targetNames[target.kind]} #{target.id} ·{' '}
+                          {target.available ? target.status : copy.missing}{' '}
+                          {path ? (
+                            <Link
+                              to={
+                                target.kind === 'request_log'
+                                  ? path + '&return_to=' + encodeURIComponent(alertPath)
+                                  : path
+                              }
+                              state={{ returnTo: alertPath }}
+                            >
+                              {copy.openObject}
+                            </Link>
+                          ) : null}{' '}
+                          {target.available && isDiagnosticTarget(target.kind, target.id) ? (
+                            <button
+                              className="nb-btn nb-btn--secondary nb-btn--sm"
+                              type="button"
+                              onClick={() => focusTarget(target)}
+                            >
+                              {copy.inspectObject}
+                            </button>
+                          ) : null}{' '}
+                          {issueUser ? (
+                            <button
+                              className="nb-btn nb-btn--secondary nb-btn--sm"
+                              type="button"
+                              onClick={() => focusTarget(target, 'issue_user')}
+                            >
+                              {copy.projectionDiagnostic}
+                            </button>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {selectedTarget ? (
+                  <Card>
+                    <div className="ops-toolbar">
+                      <h3>
+                        {copy.diagnostic}: {copy.targetNames[selectedTarget.kind]} #
+                        {selectedTarget.id}
+                      </h3>
+                      <button
+                        className="nb-btn nb-btn--ghost nb-btn--sm"
+                        type="button"
+                        onClick={() => focusTarget(null)}
+                      >
+                        {copy.closeDiagnostic}
+                      </button>
+                    </div>
+                    {diagnostic.isPending ? (
+                      <LoadingState />
+                    ) : diagnostic.error ? (
+                      <ErrorState
+                        error={diagnostic.error}
+                        onRetry={() => void diagnostic.refetch()}
+                      />
+                    ) : diagnostic.data ? (
+                      <>
+                        <dl className="nb-facts nb-facts--inline">
+                          {diagnostic.data.facts.map((fact) => (
+                            <div key={fact.key}>
+                              <dt>
+                                {copy.factNames[fact.key as keyof typeof copy.factNames] ??
+                                  fact.key}
+                              </dt>
+                              <dd>
+                                {fact.key === 'projection_phase'
+                                  ? (copy.projectionPhases[
+                                      fact.value as keyof typeof copy.projectionPhases
+                                    ] ?? copy.unknown)
+                                  : /_at$/.test(fact.key) && /^[0-9]+$/.test(fact.value)
+                                    ? formatDateTime(Number(fact.value))
+                                    : fact.value}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {diagnosticKind === 'issue_user' ? (
+                          <>
+                            <h4>{copy.relatedIssues}</h4>
+                            {diagnostic.data.related_issue_ids.length === 0 ? (
+                              <p className="nb-muted">{copy.noRelatedIssues}</p>
+                            ) : (
+                              <ul>
+                                {diagnostic.data.related_issue_ids.map((id) => (
+                                  <li key={id}>
+                                    <code>{id}</code>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </Card>
+                ) : null}
+                {detail.data.current_state.length > 0 ? (
+                  <>
+                    <h3>{copy.current}</h3>
+                    <dl className="nb-facts nb-facts--inline">
+                      {detail.data.current_state.map((fact, index) => (
+                        <div key={`${fact.key}:${index}`}>
+                          <dt>
+                            {copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key}
+                          </dt>
+                          <dd>
+                            {fact.value === 'unknown'
+                              ? copy.unknown
+                              : /_at$/.test(fact.key) && /^[0-9]+$/.test(fact.value)
+                                ? formatDateTime(Number(fact.value))
+                                : fact.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                ) : null}
+                {detail.data.alert.kind === 'donation_failure_disabled' ? (
+                  <>
+                    <h3>{copy.logs}</h3>
+                    {detail.data.related_logs?.available ? (
+                      <p>
+                        <Link
+                          to={`/logs?endpoint_key_id=${detail.data.related_logs.endpoint_key_id}&from=${detail.data.related_logs.from}&to=${detail.data.related_logs.to}&return_to=${encodeURIComponent(alertPath)}`}
+                        >
+                          {copy.eventWindow}
+                        </Link>
+                      </p>
+                    ) : (
+                      <p className="nb-muted">{copy.noLogs}</p>
+                    )}
+                  </>
+                ) : null}
+                {structuredDisablement && (
+                  <Fold
+                    key={detail.data.alert.id}
+                    plain
+                    title={t('common.operations.logs.presentation.technical')}
+                  >
+                    {originalMessage}
+                    <dl className="nb-facts nb-facts--inline">{technicalReference}</dl>
+                  </Fold>
+                )}
+              </div>
+            ) : null}
+          </div>
+        }
+      >
+        <Card>
+          <FilterBar
+            query={result}
+            activeCount={Number(resolved !== 'false') + Number(kind !== 'all')}
+            onSubmit={() => {}}
+            footer={
+              resolved !== 'false' || kind !== 'all' ? (
+                <button className="nb-btn nb-btn--secondary" type="button" onClick={resetFilters}>
+                  {t('common.resetFilter')}
+                </button>
+              ) : undefined
+            }
+            search={
+              <>
+                <Field size="short" label={t('admin.alerts.filterResolved')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={resolved}
+                      onChange={(event) =>
+                        selectResolved(event.target.value as AdminAlertResolvedFilter)
+                      }
+                    >
+                      <option value="false">{t('admin.alerts.open')}</option>
+                      <option value="true">{t('admin.alerts.resolvedValue')}</option>
+                      <option value="all">{t('common.all')}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field label={t('admin.alerts.filterKind')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={kind}
+                      onChange={(event) => selectKind(event.target.value)}
+                    >
+                      <option value="all">{t('common.all')}</option>
+                      {kindGroups.map((group) => (
+                        <optgroup key={group.label} label={group.label}>
+                          {group.kinds.map((value) => (
+                            <option key={value} value={value}>
+                              {value === 'forward_error'
+                                ? t('admin.alerts.filterForwardErrorsAndReturns')
+                                : kindLabels[value]}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              </>
+            }
+          />
+          <div className="alerts-bulk-bar">
+            <div className="nb-actions">
+              {selected.length > 0 ? (
+                <button
+                  className="nb-btn nb-btn--secondary nb-btn--sm"
+                  type="button"
+                  disabled={actionDisabled}
+                  onClick={() => bulk.mutate(selected)}
+                >
+                  {t('admin.alerts.resolveSelected', { count: selected.length })}
+                </button>
+              ) : null}
+            </div>
+            <p className="field-help time-context-notice" role="status">
+              {timeContext.mode === 'site' && timeContext.offset_minutes !== null
+                ? t('common.time.zone', { zone: fixedOffsetZone(timeContext.offset_minutes) })
+                : t('common.time.siteUnavailable')}
+            </p>
+          </div>
+          {bulk.error && !isAuthorityError(bulk.error) ? <ErrorState error={bulk.error} /> : null}
+          {mutation.error && !isAuthorityError(mutation.error) ? (
+            <ErrorState error={mutation.error} />
+          ) : null}
+          {sessionError ? (
+            <ErrorState error={sessionError} onRetry={() => void session.refetch()} />
+          ) : !session.data || session.isPending ? (
+            <LoadingState />
+          ) : result.error ? (
+            <ErrorState error={result.error} onRetry={() => void result.refetch()} />
+          ) : !pageData ? (
+            <LoadingState />
+          ) : (
+            <div aria-busy={busy}>
+              {busy ? <LoadingState /> : null}
+              {pageData.data.length === 0 ? (
+                <EmptyState title={t('admin.alerts.empty')} body={t('admin.alerts.emptyBody')} />
               ) : (
-                <ul>
-                  {detail.data.targets.map((target) => {
-                    const path = targetPath(target, detail.data.targets);
-                    const issueUser =
-                      detail.data.alert.kind === 'issue_projection_incomplete' &&
-                      target.kind === 'user' &&
-                      target.available &&
-                      isDiagnosticTarget('issue_user', target.id);
-                    return (
-                      <li key={`${target.kind}:${target.id}`}>
-                        {copy.targetNames[target.kind]} #{target.id} ·{' '}
-                        {target.available ? target.status : copy.missing}{' '}
-                        {path ? <Link to={path}>{copy.open}</Link> : null}{' '}
-                        {target.available && isDiagnosticTarget(target.kind, target.id) ? (
+                <DataTable
+                  caption={t('admin.alerts.title')}
+                  rows={pageData.data}
+                  rowKey={(alert) => alert.id}
+                  columns={[
+                    {
+                      key: 'select',
+                      header: (
+                        <TableCheckbox
+                          title={t('admin.alerts.selectPage')}
+                          text={t('admin.alerts.selectPage')}
+                          indeterminate={selected.length > 0 && selected.length < selectable.length}
+                          aria-label={t('admin.alerts.selectPage')}
+                          disabled={actionDisabled || selectable.length === 0}
+                          checked={selectable.length > 0 && selected.length === selectable.length}
+                          onChange={() =>
+                            setSelection({
+                              scope: selectionScope,
+                              ids: selected.length === selectable.length ? [] : selectable,
+                            })
+                          }
+                        />
+                      ),
+                      cell: 'select',
+                      render: (alert) => (
+                        <TableCheckbox
+                          aria-label={t('admin.alerts.selectAlert', { id: alert.id })}
+                          checked={selected.includes(alert.id)}
+                          disabled={actionDisabled || alert.resolved}
+                          onChange={() => toggleSelection(alert.id)}
+                        />
+                      ),
+                    },
+                    {
+                      key: 'kind',
+                      header: t('admin.alerts.kind'),
+                      cell: 'title',
+                      render: (alert) =>
+                        alert.subtype === 'return_detected'
+                          ? t('admin.alerts.kindValue.returnDetected')
+                          : kindLabels[alert.kind],
+                    },
+                    {
+                      key: 'message',
+                      header: t('admin.alerts.message'),
+                      mobileLabel: t('admin.alerts.message'),
+                      cell: 'meta',
+                      render: (alert) => (
+                        <div>
+                          <p className="alert-description">
+                            {alert.subtype === 'return_detected'
+                              ? t('admin.alerts.kindDescription.returnDetected')
+                              : kindDescriptions[alert.kind]}
+                          </p>
+                          {alert.account_deletion ? (
+                            <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
+                              <p>{t('admin.alerts.deletionSnapshot')}</p>
+                              <dl className="nb-facts nb-facts--inline alert-deletion-facts">
+                                <div>
+                                  <dt>Discord ID</dt>
+                                  <dd>{alert.account_deletion.discord_id || '—'}</dd>
+                                </div>
+                                <div>
+                                  <dt>{t('admin.alerts.deletedUser')}</dt>
+                                  <dd>{alert.account_deletion.user_id}</dd>
+                                </div>
+                                <div>
+                                  <dt>{t('admin.alerts.generalBalance')}</dt>
+                                  <dd>{alert.account_deletion.general_balance}</dd>
+                                </div>
+                                <div>
+                                  <dt>{t('admin.alerts.gameBalance')}</dt>
+                                  <dd>{alert.account_deletion.game_balance}</dd>
+                                </div>
+                                <div>
+                                  <dt>{t('admin.alerts.donationCredit')}</dt>
+                                  <dd>{alert.account_deletion.donation_credit}</dd>
+                                </div>
+                                <div>
+                                  <dt>{t('admin.alerts.sketchAssets')}</dt>
+                                  <dd>
+                                    {alert.account_deletion.sketch_paper} /{' '}
+                                    {alert.account_deletion.sketch_brush}
+                                  </dd>
+                                </div>
+                              </dl>
+                            </Fold>
+                          ) : null}
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'subject',
+                      header: t('admin.alerts.subject'),
+                      mobileLabel: t('admin.alerts.subject'),
+                      cell: 'meta',
+                      render: (alert) =>
+                        alert.subject_user_id === null
+                          ? '—'
+                          : t('admin.alerts.subjectUser', { id: alert.subject_user_id }),
+                    },
+                    {
+                      key: 'created',
+                      header: t('admin.alerts.created'),
+                      mobileLabel: t('admin.alerts.created'),
+                      cell: 'meta',
+                      render: (alert) => formatDateTime(alert.created_at),
+                    },
+                    {
+                      key: 'resolved',
+                      header: t('admin.alerts.resolved'),
+                      cell: 'status',
+                      render: (alert) => (
+                        <StatusBadge tone={alert.resolved ? 'neutral' : 'warn'}>
+                          {alert.resolved
+                            ? `${t('admin.alerts.resolvedValue')}${alert.resolved_at !== null ? ` · ${formatDateTime(alert.resolved_at)}` : ''}`
+                            : t('admin.alerts.open')}
+                        </StatusBadge>
+                      ),
+                    },
+                    {
+                      key: 'action',
+                      header: t('admin.alerts.action'),
+                      cell: 'action',
+                      align: 'action',
+                      render: (alert) => (
+                        <div className="alert-actions">
                           <button
-                            className="nb-btn nb-btn--secondary"
+                            className="nb-btn nb-btn--secondary nb-btn--sm"
                             type="button"
-                            onClick={() => focusTarget(target)}
+                            data-inspect-trigger=""
+                            data-inspect-id={alert.id}
+                            aria-current={focusedID === alert.id || undefined}
+                            onClick={() => focusAlert(alert.id)}
                           >
                             {copy.open}
                           </button>
-                        ) : null}{' '}
-                        {issueUser ? (
                           <button
-                            className="nb-btn nb-btn--secondary"
+                            className="nb-btn nb-btn--secondary nb-btn--sm"
                             type="button"
-                            onClick={() => focusTarget(target, 'issue_user')}
+                            disabled={actionDisabled}
+                            onClick={() =>
+                              mutation.mutate({ id: alert.id, value: !alert.resolved })
+                            }
                           >
-                            {copy.projectionDiagnostic}
+                            {alert.resolved ? t('admin.alerts.reopen') : t('admin.alerts.resolve')}
                           </button>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
               )}
-              {selectedTarget ? (
-                <Card>
-                  <div className="ops-actions">
-                    <h3>
-                      {copy.diagnostic}: {copy.targetNames[selectedTarget.kind]} #
-                      {selectedTarget.id}
-                    </h3>
-                    <button
-                      className="nb-btn nb-btn--ghost"
-                      type="button"
-                      onClick={() => focusTarget(null)}
-                    >
-                      {copy.closeDiagnostic}
-                    </button>
-                  </div>
-                  {diagnostic.isPending ? (
-                    <LoadingState />
-                  ) : diagnostic.error ? (
-                    <ErrorState
-                      error={diagnostic.error}
-                      onRetry={() => void diagnostic.refetch()}
-                    />
-                  ) : diagnostic.data ? (
-                    <>
-                      <dl className="ops-kv">
-                        {diagnostic.data.facts.map((fact) => (
-                          <div key={fact.key}>
-                            <dt>
-                              {copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key}
-                            </dt>
-                            <dd>
-                              {fact.key === 'projection_phase'
-                                ? (copy.projectionPhases[
-                                    fact.value as keyof typeof copy.projectionPhases
-                                  ] ?? copy.unknown)
-                                : /_at$/.test(fact.key) && /^[0-9]+$/.test(fact.value)
-                                  ? formatDateTime(Number(fact.value))
-                                  : fact.value}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                      {diagnosticKind === 'issue_user' ? (
-                        <>
-                          <h4>{copy.relatedIssues}</h4>
-                          {diagnostic.data.related_issue_ids.length === 0 ? (
-                            <p>{copy.noRelatedIssues}</p>
-                          ) : (
-                            <ul>
-                              {diagnostic.data.related_issue_ids.map((id) => (
-                                <li key={id}>
-                                  <code>{id}</code>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </>
-                      ) : null}
-                    </>
-                  ) : null}
-                </Card>
-              ) : null}
-              {detail.data.current_state.length > 0 ? (
-                <>
-                  <h3>{copy.current}</h3>
-                  <dl className="ops-kv">
-                    {detail.data.current_state.map((fact, index) => (
-                      <div key={`${fact.key}:${index}`}>
-                        <dt>
-                          {copy.factNames[fact.key as keyof typeof copy.factNames] ?? fact.key}
-                        </dt>
-                        <dd>
-                          {fact.value === 'unknown'
-                            ? copy.unknown
-                            : /_at$/.test(fact.key) && /^[0-9]+$/.test(fact.value)
-                              ? formatDateTime(Number(fact.value))
-                              : fact.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </>
-              ) : null}
-              {detail.data.alert.kind === 'donation_failure_disabled' ? (
-                <>
-                  <h3>{copy.logs}</h3>
-                  {detail.data.related_logs?.available ? (
-                    <p>
-                      <Link
-                        to={`/logs?endpoint_key_id=${detail.data.related_logs.endpoint_key_id}&from=${detail.data.related_logs.from}&to=${detail.data.related_logs.to}`}
-                      >
-                        {copy.eventWindow}
-                      </Link>
-                    </p>
-                  ) : (
-                    <p>{copy.noLogs}</p>
-                  )}
-                </>
-              ) : null}
+              <PagePagination
+                metadata={pageData.pagination}
+                requestedPage={pager.page}
+                busy={busy}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+              />
             </div>
-          ) : null}
+          )}
         </Card>
-      ) : null}
-      <Card>
-        <FilterBar
-          query={result}
-          activeCount={Number(resolved !== 'false') + Number(kind !== 'all')}
-          onSubmit={() => {}}
-          search={
-            <>
-              <Field size="short" label={t('admin.alerts.filterResolved')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={resolved}
-                    onChange={(event) =>
-                      selectResolved(event.target.value as AdminAlertResolvedFilter)
-                    }
-                  >
-                    <option value="false">{t('admin.alerts.open')}</option>
-                    <option value="true">{t('admin.alerts.resolvedValue')}</option>
-                    <option value="all">{t('common.all')}</option>
-                  </select>
-                )}
-              </Field>
-              <Field label={t('admin.alerts.filterKind')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={kind}
-                    onChange={(event) => selectKind(event.target.value)}
-                  >
-                    <option value="all">{t('common.all')}</option>
-                    {kindGroups.map((group) => (
-                      <optgroup key={group.label} label={group.label}>
-                        {group.kinds.map((value) => (
-                          <option key={value} value={value}>
-                            {kindLabels[value]}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            </>
-          }
-        />
-        <div className="ops-actions">
-          <Field size="short" label={t('admin.alerts.selectPage')}>
-            {(props) => (
-              <input
-                {...props}
-                type="checkbox"
-                aria-label={t('admin.alerts.selectPage')}
-                disabled={actionDisabled || selectable.length === 0}
-                checked={selectable.length > 0 && selected.length === selectable.length}
-                onChange={() =>
-                  setSelection({
-                    scope: selectionScope,
-                    ids: selected.length === selectable.length ? [] : selectable,
-                  })
-                }
-              />
-            )}
-          </Field>
-          {selected.length > 0 ? (
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              disabled={actionDisabled}
-              onClick={() => bulk.mutate(selected)}
-            >
-              {t('admin.alerts.resolveSelected', { count: selected.length })}
-            </button>
-          ) : null}
-        </div>
-        {bulk.error && !isAuthorityError(bulk.error) ? <ErrorState error={bulk.error} /> : null}
-        {mutation.error && !isAuthorityError(mutation.error) ? (
-          <ErrorState error={mutation.error} />
-        ) : null}
-        {sessionError ? (
-          <ErrorState error={sessionError} onRetry={() => void session.refetch()} />
-        ) : !session.data || session.isPending ? (
-          <LoadingState />
-        ) : result.error ? (
-          <ErrorState error={result.error} onRetry={() => void result.refetch()} />
-        ) : !pageData ? (
-          <LoadingState />
-        ) : (
-          <div aria-busy={busy}>
-            {busy ? <LoadingState /> : null}
-            {pageData.data.length === 0 ? (
-              <EmptyState title={t('admin.alerts.empty')} body={t('admin.alerts.emptyBody')} />
-            ) : (
-              <DataTable
-                caption={t('admin.alerts.title')}
-                rows={pageData.data}
-                rowKey={(alert) => alert.id}
-                columns={[
-                  {
-                    key: 'select',
-                    header: t('admin.alerts.select'),
-                    cell: 'meta',
-                    render: (alert) => (
-                      <input
-                        type="checkbox"
-                        aria-label={t('admin.alerts.selectAlert', { id: alert.id })}
-                        checked={selected.includes(alert.id)}
-                        disabled={actionDisabled || alert.resolved}
-                        onChange={() => toggleSelection(alert.id)}
-                      />
-                    ),
-                  },
-                  {
-                    key: 'kind',
-                    header: t('admin.alerts.kind'),
-                    cell: 'title',
-                    render: (alert) =>
-                      alert.subtype === 'return_detected'
-                        ? t('admin.alerts.kindValue.returnDetected')
-                        : kindLabels[alert.kind],
-                  },
-                  {
-                    key: 'message',
-                    header: t('admin.alerts.message'),
-                    mobileLabel: t('admin.alerts.message'),
-                    cell: 'meta',
-                    render: (alert) => (
-                      <div>
-                        <p className="alert-description">
-                          {alert.subtype === 'return_detected'
-                            ? t('admin.alerts.kindDescription.returnDetected')
-                            : kindDescriptions[alert.kind]}
-                        </p>
-                        {alert.account_deletion ? (
-                          <Fold plain title={t('admin.alerts.presentation.deletionSnapshot')}>
-                            <p>{t('admin.alerts.deletionSnapshot')}</p>
-                            <dl className="ops-kv alert-deletion-facts">
-                              <dt>Discord ID</dt>
-                              <dd>{alert.account_deletion.discord_id || '—'}</dd>
-                              <dt>{t('admin.alerts.deletedUser')}</dt>
-                              <dd>{alert.account_deletion.user_id}</dd>
-                              <dt>{t('admin.alerts.generalBalance')}</dt>
-                              <dd>{alert.account_deletion.general_balance}</dd>
-                              <dt>{t('admin.alerts.gameBalance')}</dt>
-                              <dd>{alert.account_deletion.game_balance}</dd>
-                              <dt>{t('admin.alerts.donationCredit')}</dt>
-                              <dd>{alert.account_deletion.donation_credit}</dd>
-                              <dt>{t('admin.alerts.sketchAssets')}</dt>
-                              <dd>
-                                {alert.account_deletion.sketch_paper} /{' '}
-                                {alert.account_deletion.sketch_brush}
-                              </dd>
-                            </dl>
-                          </Fold>
-                        ) : null}
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'subject',
-                    header: t('admin.alerts.subject'),
-                    mobileLabel: t('admin.alerts.subject'),
-                    cell: 'meta',
-                    render: (alert) =>
-                      alert.subject_user_id === null
-                        ? '—'
-                        : t('admin.alerts.subjectUser', { id: alert.subject_user_id }),
-                  },
-                  {
-                    key: 'created',
-                    header: t('admin.alerts.created'),
-                    mobileLabel: t('admin.alerts.created'),
-                    cell: 'meta',
-                    render: (alert) => formatDateTime(alert.created_at),
-                  },
-                  {
-                    key: 'resolved',
-                    header: t('admin.alerts.resolved'),
-                    cell: 'status',
-                    render: (alert) => (
-                      <StatusBadge
-                        active={alert.resolved}
-                        label={
-                          alert.resolved
-                            ? `${t('admin.alerts.resolvedValue')} ${alert.resolved_at !== null ? formatDateTime(alert.resolved_at) : ''}`
-                            : t('admin.alerts.open')
-                        }
-                      />
-                    ),
-                  },
-                  {
-                    key: 'action',
-                    header: t('admin.alerts.action'),
-                    cell: 'action',
-                    align: 'action',
-                    render: (alert) => (
-                      <div className="alert-actions">
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          onClick={() => focusAlert(alert.id)}
-                        >
-                          {copy.open}
-                        </button>
-                        <MoreMenu
-                          label={t('admin.alerts.presentation.actions')}
-                          items={[
-                            {
-                              label: alert.resolved
-                                ? t('admin.alerts.reopen')
-                                : t('admin.alerts.resolve'),
-                              disabled: actionDisabled,
-                              onSelect: () =>
-                                mutation.mutate({ id: alert.id, value: !alert.resolved }),
-                            },
-                          ]}
-                        />
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-            )}
-            <PagePagination
-              metadata={pageData.pagination}
-              requestedPage={pager.page}
-              busy={busy}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-            />
-          </div>
-        )}
-      </Card>
+      </InspectionWorkspace>
     </div>
   );
 }

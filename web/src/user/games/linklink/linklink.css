@@ -286,7 +286,15 @@
 .linklink-modal h2 {
   margin-top: 0;
 }
-@media (max-width: 700px) {
+.linklink-ranks-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.linklink-ranks-scroll table {
+  width: 100%;
+  min-width: 0;
+}
+@media (width < 48rem) {
   .linklink-specs {
     grid-template-columns: 1fr;
   }

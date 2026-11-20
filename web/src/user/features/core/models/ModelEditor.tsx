@@ -22,11 +22,10 @@ import type { TransportRule } from '@shared/transportRule';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createModel, getModel, patchModel } from '../api';
-import { CoreErrorPanel, SafeCopyValue } from '../components';
+import { CoreErrorPanel } from '../components';
 import { useCoreCopy } from '../copy';
 import { validateLogicalName, validatePersonalProviderName } from '../normalizers';
 import { coreKeys, invalidateResourceDependents } from '../queries';
-import { useQuickstartCopy } from '../quickstartCopy';
 import { isOutcomeUnknown } from '../request';
 import { readResourceResult, resourceStatus } from '../resourceOperation';
 import type { Model, ModelCreateInput, ModelPatchInput, RouteStrategy } from '../types';
@@ -74,6 +73,7 @@ export function ModelRoleSummary({ policy }: { policy?: RolePolicy }) {
 export function ModelEditor({
   accountId,
   initial,
+  inSheet = false,
   onCancel,
   onSaved,
   onCapabilityLoss,
@@ -82,6 +82,7 @@ export function ModelEditor({
 }: {
   accountId: string;
   initial?: Model;
+  inSheet?: boolean;
   initialStrategy?: RouteStrategy;
   sources?: (
     strategy: RouteStrategy,
@@ -118,7 +119,7 @@ export function ModelEditor({
   const roleResult = buildRolePolicy(roleDraft);
   const textModel = useModelText();
   const formRef = useRef<HTMLFormElement>(null);
-  const { t: text } = useQuickstartCopy();
+  const { t: text } = useTranslation();
   const [validation, setValidation] = useState(false);
   const [permissionLost, setPermissionLost] = useState<unknown>(null);
   const savedResult = useRef<Model | null>(null);
@@ -278,6 +279,7 @@ export function ModelEditor({
       ].filter(Boolean).length
     : 0;
   const isDefault =
+    cloudflareProxy &&
     sessionHeaders.length === 0 &&
     !silentRetry &&
     !flattenTools &&
@@ -298,68 +300,80 @@ export function ModelEditor({
     setFlattenTools(initial.flatten_tool_calls);
     setRoleDraft(draftFromRolePolicy(initial.role_policy));
   };
+  const basicFields = (
+    <>
+      <Fields columns={2}>
+        <Field label={t('models.provider')} help={textModel('prefixHelp')}>
+          {(props) => (
+            <input
+              {...props}
+              className="core-mono"
+              value={provider}
+              maxLength={128}
+              required
+              disabled={hasAttempt}
+              onChange={(event) => setProvider(event.target.value)}
+            />
+          )}
+        </Field>
+        <Field label={t('models.model')}>
+          {(props) => (
+            <input
+              {...props}
+              className="core-mono"
+              value={modelName}
+              maxLength={128}
+              required
+              disabled={hasAttempt}
+              onChange={(event) => setModelName(event.target.value)}
+            />
+          )}
+        </Field>
+      </Fields>
+      <ModelTypesField
+        value={modelTypes}
+        onChange={setModelTypes}
+        disabled={hasAttempt}
+        showError={showTypeError}
+      />
+      {provider.trim() && modelName.trim() ? (
+        <div className="core-model-preview">
+          <span>{textModel('clientValue')}</span>
+          <code>
+            {provider}/{modelName}
+          </code>
+        </div>
+      ) : null}
+    </>
+  );
   return (
     <form ref={formRef} className="model-editor core-form" onSubmit={(event) => void submit(event)}>
-      <Panel>
-        <PanelHead
-          title={initial ? textModel('callName') : t('models.create')}
-          actions={
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={hasAttempt}
-              onClick={onCancel}
-            >
-              {t('common.cancel')}
-            </button>
-          }
-        />
-        <PanelBody>
-          <Fields>
-            <Field label={t('models.provider')} help={textModel('prefixHelp')}>
-              {(props) => (
-                <input
-                  {...props}
-                  className="core-mono"
-                  value={provider}
-                  maxLength={128}
-                  required
-                  disabled={hasAttempt}
-                  onChange={(event) => setProvider(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label={t('models.model')}>
-              {(props) => (
-                <input
-                  {...props}
-                  className="core-mono"
-                  value={modelName}
-                  maxLength={128}
-                  required
-                  disabled={hasAttempt}
-                  onChange={(event) => setModelName(event.target.value)}
-                />
-              )}
-            </Field>
-          </Fields>
-          <ModelTypesField
-            value={modelTypes}
-            onChange={setModelTypes}
-            disabled={hasAttempt}
-            showError={showTypeError}
+      {inSheet ? (
+        <div className="nb-stack">
+          <p className="nb-small nb-muted model-create-intro">{textModel('createHelp')}</p>
+          {basicFields}
+        </div>
+      ) : (
+        <Panel>
+          <PanelHead
+            title={initial ? textModel('callName') : t('models.create')}
+            actions={
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                disabled={hasAttempt}
+                onClick={onCancel}
+              >
+                {t('common.cancel')}
+              </button>
+            }
           />
-          <div className="core-model-preview">
-            <span>{textModel('clientValue')}</span>
-            <SafeCopyValue
-              value={`${provider || t('models.provider')}/${modelName || t('models.model')}`}
-              label={textModel('callName')}
-            />
-          </div>
-        </PanelBody>
-      </Panel>
+          <PanelBody>{basicFields}</PanelBody>
+        </Panel>
+      )}
       {initial ? sources?.(strategy, setStrategy, hasAttempt) : null}
       <Fold
+        plain={inSheet}
         title={textModel('advanced')}
         summary={textModel('advancedHelp')}
         defaultOpen={Boolean(sessionHeaders.length || headersInvalid)}
@@ -430,12 +444,22 @@ export function ModelEditor({
         />
       ) : (
         <FormActions>
+          {inSheet ? (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={hasAttempt}
+              onClick={onCancel}
+            >
+              {t('common.cancel')}
+            </button>
+          ) : null}
           <button
             type="submit"
             className="nb-btn nb-btn--primary"
             disabled={busy || (!hasAttempt && (!!roleResult.error || headersInvalid))}
           >
-            {busy ? t('common.working') : hasAttempt ? text('checkResult') : t('common.save')}
+            {busy ? t('common.working') : hasAttempt ? text('user.quickstart.checkResult') : t('common.save')}
           </button>
         </FormActions>
       )}

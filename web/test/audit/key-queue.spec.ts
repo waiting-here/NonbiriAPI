@@ -155,7 +155,11 @@ test('donor edits shared queue limits, returns to the donation, and management r
       );
       await link.click();
       await expect(page).toHaveURL(
-        state.user_url + `/endpoints/${endpointID}?focus_key_id=${physicalKeyID}&edit_key=1`,
+        (url) =>
+          url.searchParams.get('focus_key_id') === physicalKeyID &&
+          url.searchParams.get('edit_key') === '1' &&
+          (url.pathname === '/endpoints/' + endpointID ||
+            url.searchParams.get('endpoint_id') === endpointID),
       );
       const editor = page.getByRole('region', { name: userEn.user.services.editKey, exact: true });
       await expect(editor).toBeVisible();

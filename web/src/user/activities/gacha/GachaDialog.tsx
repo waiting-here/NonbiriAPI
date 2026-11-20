@@ -34,7 +34,17 @@ export function GachaDialog({
           ) {
             onSurfaceClick();
           }
-        } else if (event.target === event.currentTarget) onClose();
+        } else if (event.target === event.currentTarget) {
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+          ) {
+            onClose();
+          }
+        }
       }}
     >
       <div className="gacha-dialog__inner">

@@ -1,28 +1,26 @@
-.lake-platform-toolbar,
 .lake-platform-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--nb-space-3);
 }
-.lake-platform-toolbar p,
 .lake-platform-controls p {
   margin: 0;
 }
-.lake-platform-toolbar {
-  padding: 0.5rem 0;
-}
 .lake-back {
-  font-weight: 700;
-}
-.lake-platform-toolbar p {
-  font-weight: 600;
+  font-weight: var(--nb-font-weight-semibold);
 }
 .lake-form fieldset {
   display: flex;
-  gap: 0.75rem;
-  align-items: end;
+  gap: var(--nb-space-3);
+  align-items: flex-end;
   flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lake-form fieldset .nb-field {
+  min-width: min(100%, 14rem);
 }
 .lake-save-note,
 .lake-exchange-hint {

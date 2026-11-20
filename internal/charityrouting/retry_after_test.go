@@ -9,6 +9,7 @@ import (
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func TestRetryAfterCandidateExpiryAndUnavailableClassification(t *testing.T) {
@@ -26,7 +27,7 @@ func TestRetryAfterCandidateExpiryAndUnavailableClassification(t *testing.T) {
 		t.Fatal(err)
 	}
 	connectors := []contract.Type{contract.TypeOpenAICompatible}
-	if _, err := e.service.chatSnapshot(context.Background(), id, routingTestNow+59, connectors); !errors.Is(err, donationquota.ErrLimited) {
+	if _, err := e.service.chatSnapshot(context.Background(), id, routingTestNow+59, connectors); !errors.Is(err, donationquota.ErrLimited) || requestattempt.AdmissionCauseOf(err) != requestattempt.AdmissionCooldown {
 		t.Fatalf("cooldown must retain 429 classification: %v", err)
 	}
 	snapshot, err := e.service.chatSnapshot(context.Background(), id, routingTestNow+60, connectors)

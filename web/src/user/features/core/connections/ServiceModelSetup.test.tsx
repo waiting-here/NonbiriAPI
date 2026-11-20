@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
+import userEn from '../../../i18n/en.json';
 import { ServiceModelSetup } from './ServiceModelSetup';
 
 const fixture = (name: string) =>
@@ -62,4 +63,57 @@ it('keeps retained models and manual maintenance reachable after a failed fetch'
   expect(screen.getByLabelText('Draft model name')).toHaveValue('Keep my edits');
   await view.user.click(screen.getByText('Manual models', { selector: 'strong' }));
   expect(screen.getByText('Manual catalog editor')).toBeVisible();
+});
+
+it.each(['region', 'unavailable'] as const)(
+  'reports the safe %s reason and retries only catalog discovery',
+  async (reason) => {
+    catalog.evidence.safe_class = reason;
+    try {
+      run.mockClear();
+      const view = await renderWithProviders(
+        <ServiceModelSetup
+          accountId="1"
+          entry={fixture('endpoint.json')}
+          entryKey={fixture('endpoint_key.json')}
+        />,
+        { station: 'user', role: 'user', locale: 'en' },
+      );
+      expect(
+        screen.getByText(
+          userEn.user.core[
+            reason === 'region'
+              ? 'endpoints.discoveryReasonRegion'
+              : 'endpoints.discoveryReasonUnavailable'
+          ],
+        ),
+      ).toBeVisible();
+      await view.user.click(screen.getByRole('button', { name: 'Fetch models' }));
+      expect(run).toHaveBeenCalledExactlyOnceWith({
+        kind: 'refresh',
+        endpointId: '11',
+        keyId: '21',
+      });
+    } finally {
+      catalog.evidence.safe_class = 'unavailable';
+    }
+  },
+);
+
+it('opens manual entry for a new key without an automatic catalog', async () => {
+  await renderWithProviders(
+    <ServiceModelSetup
+      accountId="1"
+      entry={fixture('endpoint.json')}
+      entryKey={{ ...fixture('endpoint_key.json'), discovery_source_id: null }}
+      autoRefresh
+    />,
+    { station: 'user', role: 'user', locale: 'en' },
+  );
+  expect(screen.getByRole('tab', { name: 'Manual models' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  expect(screen.getByText('Manual catalog editor')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Fetch models' })).not.toBeInTheDocument();
 });

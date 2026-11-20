@@ -5,7 +5,10 @@ import { expect, test } from '@playwright/test';
 interface Fixture {
   user_url: string;
   users: { id: string; cookie: { Name: string; Value: string } }[];
-  management: { account_export: { user_id: string; elevated_token: string } };
+  management: {
+    account_export: { user_id: string; elevated_token: string };
+    model_quotas: { donation_id: string; key_id: string; upstream_models: string[] };
+  };
 }
 
 test.skip(
@@ -13,7 +16,7 @@ test.skip(
   'Requires the optional management fixture.',
 );
 
-test('account page downloads the current export with personal session-header settings', async ({
+test('account page downloads the current export with personal session-header settings and donated model usage', async ({
   browser,
 }) => {
   const state = JSON.parse(
@@ -59,7 +62,7 @@ test('account page downloads the current export with personal session-header set
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const filename = 'nonbiriapi-account-export-v36.json';
+    const filename = 'nonbiriapi-account-export-v38.json';
     const [, download] = await Promise.all([
       page
         .waitForResponse(
@@ -79,10 +82,24 @@ test('account page downloads the current export with personal session-header set
     expect(download.suggestedFilename()).toBe(filename);
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8')) as {
       schema_version: number;
+      donations: {
+        id: string;
+        keys: { id: string; model_limits: { upstream_model_id: string }[] }[];
+      }[];
       user: { id: string };
       models: { id: string; session_headers: unknown }[];
     };
-    expect(exported.schema_version).toBe(36);
+    expect(exported.schema_version).toBe(38);
+    const quota = state.management.model_quotas;
+    const donated = exported.donations.find((donation) => donation.id === quota.donation_id);
+    const key = donated?.keys.find((key) => key.id === quota.key_id);
+    expect(
+      key?.model_limits.find((limit) => limit.upstream_model_id === quota.upstream_models[0]),
+    ).toMatchObject({
+      used: { credits: '1.125', calls: '2', tokens: '5' },
+      reserved: { credits: '0', calls: '0' },
+      historical_costs_partial: false,
+    });
     expect(exported.user.id).toBe(account.user_id);
     expect(exported.models.find((entry) => entry.id === model.id)?.session_headers).toEqual(
       sessionHeaders,

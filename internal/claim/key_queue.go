@@ -7,6 +7,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 const keyQueueRecheck = time.Second
@@ -138,6 +140,12 @@ func (s *Service) WaitForKey(ctx context.Context, candidates []ClaimInput) (Hand
 	seen := make(map[int64]bool)
 	var fallback *ClaimInput
 	last := error(ErrKeyRateLimited)
+	var skipped requestattempt.AdmissionCause
+	recordSkip := func(input ClaimInput, err error) {
+		last = err
+		skipped = skipped.Combine(AdmissionReason(err))
+		observeCandidateAdmission(ctx, input, "queue", err)
+	}
 	for _, input := range candidates {
 		if input.queueFallback != nil {
 			fallback = input.queueFallback
@@ -153,7 +161,7 @@ func (s *Service) WaitForKey(ctx context.Context, candidates []ClaimInput) (Hand
 		state, err := s.probeKeyQueue(ctx, input)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
-				last = err
+				recordSkip(input, err)
 				continue
 			}
 			return Handle{}, err
@@ -171,9 +179,16 @@ func (s *Service) WaitForKey(ctx context.Context, candidates []ClaimInput) (Hand
 			reason |= state.enabled(entry.reason())
 			waiting = entry.waiters.Len()
 		}
-		if !state.queueAllowed(reason) || !state.queueFits(reason, waiting) {
+		var cause requestattempt.AdmissionCause
+		switch {
+		case !state.queueAllowed(reason):
+			cause = state.blocked.admissionCause()
+		case !state.queueFits(reason, waiting):
+			cause = requestattempt.AdmissionQueueFull
+		}
+		if cause != "" {
 			q.mu.Unlock()
-			last = ErrKeyRateLimited
+			recordSkip(input, cause.Wrap(ErrKeyRateLimited))
 			continue
 		}
 		if entry == nil {
@@ -193,19 +208,24 @@ func (s *Service) WaitForKey(ctx context.Context, candidates []ClaimInput) (Hand
 		}
 		s.removeKeyWaiter(ticket)
 		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrKeyRateLimited) {
-			last = err
+			recordSkip(input, err)
 			continue
 		}
+		observeCandidateAdmission(ctx, input, "queue", err)
 		return Handle{}, err
 	}
 	if fallback != nil {
 		handle, err := s.Claim(ctx, *fallback)
 		if queued := KeyQueueCandidates(err); len(queued) > 0 {
-			return s.WaitForKey(ctx, queued)
+			prior := KeyQueueSkippedReason(err)
+			handle, err = s.WaitForKey(ctx, queued)
+			if errors.Is(err, ErrKeyRateLimited) || errors.Is(err, ErrNotFound) {
+				err = prior.Combine(AdmissionReason(err)).Wrap(err)
+			}
 		}
 		return handle, err
 	}
-	return Handle{}, last
+	return Handle{}, skipped.Wrap(last)
 }
 
 func (s *Service) awaitKey(ctx context.Context, ticket *keyWaiter) (Handle, error) {
@@ -226,7 +246,7 @@ func (s *Service) awaitKey(ctx context.Context, ticket *keyWaiter) (Handle, erro
 		if !head {
 			select {
 			case <-ctx.Done():
-				return Handle{}, ctx.Err()
+				return Handle{}, queueWaitEnded(ctx)
 			case <-changed:
 				continue
 			}
@@ -236,7 +256,7 @@ func (s *Service) awaitKey(ctx context.Context, ticket *keyWaiter) (Handle, erro
 			return Handle{}, err
 		}
 		if !state.queueAllowed(state.blocked) {
-			return Handle{}, ErrKeyRateLimited
+			return Handle{}, state.blocked.admissionCause().Wrap(ErrKeyRateLimited)
 		}
 		if state.blocked == 0 {
 			input := ticket.input
@@ -259,12 +279,21 @@ func (s *Service) awaitKey(ctx context.Context, ticket *keyWaiter) (Handle, erro
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return Handle{}, ctx.Err()
+			return Handle{}, queueWaitEnded(ctx)
 		case <-changed:
 			timer.Stop()
 		case <-timer.C:
 		}
 	}
+}
+
+// Only a deadline reached in a queue wait is reported as a queue timeout.
+func queueWaitEnded(ctx context.Context) error {
+	err := ctx.Err()
+	if errors.Is(err, context.DeadlineExceeded) {
+		return requestattempt.AdmissionQueueTimeout.Wrap(err)
+	}
+	return err
 }
 
 func (s *Service) probeKeyQueue(ctx context.Context, input ClaimInput) (keyLimitState, error) {

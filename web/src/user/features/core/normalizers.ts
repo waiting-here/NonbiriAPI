@@ -692,14 +692,13 @@ export function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
   invalid('endpoint origin');
 }
 
-function normalizeLegacyMainstreamChannelOption(value: unknown): MainstreamChannelOption {
-  const record = responseRecord(
-    value,
-    ['id', 'name', 'connector_type', 'base_url'],
-    [],
-    'mainstream channel option',
-  );
+export function normalizeMainstreamChannelOption(value: unknown): MainstreamChannelOption {
+  const record = asRecord(value, 'mainstream channel option');
   return {
+    revision: decimal(record.revision, 'channel revision', true),
+    entries: boundedArray(record.entries, normalizeMainstreamEntry, 'channel entries', 32),
+    discovery_source: normalizeDiscoveryPreset(record.discovery_source),
+    model_mappings: normalizeModelMappings(record.model_mappings),
     id: opaqueID(record.id, 'mch_', 'mainstream channel option id'),
     name: scalarString(record.name, 'mainstream channel option name', {
       rejectEdgeWhitespace: true,
@@ -709,13 +708,8 @@ function normalizeLegacyMainstreamChannelOption(value: unknown): MainstreamChann
   };
 }
 
-function normalizeLegacyEndpointCreateOptions(value: unknown): EndpointCreateOptions {
-  const record = responseRecord(
-    value,
-    ['base_connector_types', 'mainstream_channels'],
-    [],
-    'endpoint creation options',
-  );
+export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
+  const record = asRecord(value, 'endpoint creation options');
   const baseConnectorTypes = boundedArray(
     record.base_connector_types,
     (item) => connectorType(item),
@@ -729,10 +723,28 @@ function normalizeLegacyEndpointCreateOptions(value: unknown): EndpointCreateOpt
     'mainstream channel options',
   );
   uniqueBy(mainstreamChannels, (item) => item.id, 'mainstream channel option ids');
-  if (mainstreamChannels.some((item) => !baseConnectorTypes.includes(item.connector_type))) {
-    invalid('mainstream channel option connector type');
-  }
   return {
+    native_service_options: boundedArray(
+      record.native_service_options,
+      normalizeNativeServiceOption,
+      'native service options',
+    ),
+    ...(record.matching_mainstream_entries === undefined
+      ? {}
+      : {
+          matching_mainstream_entries: boundedArray(
+            record.matching_mainstream_entries,
+            (value) => {
+              const match = asRecord(value, 'mainstream entry match');
+              return {
+                channel_id: opaqueID(match.channel_id, 'mch_', 'matched channel id'),
+                entry_id: id(match.entry_id, 'matched entry id'),
+              };
+            },
+            'mainstream entry matches',
+            3200,
+          ),
+        }),
     base_connector_types: baseConnectorTypes,
     mainstream_channels: mainstreamChannels,
   };
@@ -951,24 +963,8 @@ function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: str
   return { available_binding_count: availableBindingCount, preview };
 }
 
-function normalizeLegacyEndpoint(value: unknown): Endpoint {
-  const record = responseRecord(
-    value,
-    [
-      'id',
-      'connector_type',
-      'base_url',
-      'origin',
-      'note',
-      'enabled',
-      'revision',
-      'key_count',
-      'created_at',
-      'updated_at',
-    ],
-    ['browse'],
-    'endpoint',
-  );
+export function normalizeEndpoint(value: unknown): Endpoint {
+  const record = asRecord(value, 'endpoint');
   const createdAt = unixTime(record.created_at, 'endpoint creation time');
   const updatedAt = unixTime(record.updated_at, 'endpoint update time');
   if (updatedAt < createdAt) invalid('endpoint update time');
@@ -979,6 +975,20 @@ function normalizeLegacyEndpoint(value: unknown): Endpoint {
     ? normalizeEndpointBrowse(record.browse)
     : undefined;
   return {
+    connection_id:
+      record.connection_id === null ? null : id(record.connection_id, 'endpoint connection'),
+    connection_name: scalarString(record.connection_name, 'service name', { allowEmpty: true }),
+    configuration_type: connectorType(record.configuration_type),
+    native_services: normalizeNativeServices(record.native_services),
+    rerank_format: normalizeRerankFormat(record.rerank_format),
+    rerank_path: scalarString(record.rerank_path, 'rerank path', { allowEmpty: true }),
+    ...(typeof record.rerank_url === 'string' && !hasForbiddenScalar(record.rerank_url)
+      ? { rerank_url: record.rerank_url }
+      : {}),
+    rerank_path_configurable: exactBoolean(
+      record.rerank_path_configurable,
+      'rerank path configurable',
+    ),
     id: endpointID,
     connector_type: connectorType(record.connector_type),
     base_url: normalizeBaseURL(record.base_url, 'endpoint base URL'),
@@ -993,25 +1003,8 @@ function normalizeLegacyEndpoint(value: unknown): Endpoint {
   };
 }
 
-function normalizeLegacyEndpointKey(value: unknown): EndpointKey {
-  const record = responseRecord(
-    value,
-    [
-      'id',
-      'endpoint_id',
-      'display_head',
-      'display_tail',
-      'note',
-      'enabled',
-      'force_store_false',
-      'suspension_state',
-      'revision',
-      'created_at',
-      'updated_at',
-    ],
-    ['max_concurrency', 'max_rpm', 'browse', ...keyQueueFields],
-    'endpoint key',
-  );
+export function normalizeEndpointKey(value: unknown): EndpointKey {
+  const record = asRecord(value, 'endpoint key');
   if (record.suspension_state !== 'none' && record.suspension_state !== 'security_processing') {
     invalid('endpoint key suspension state');
   }
@@ -1024,6 +1017,20 @@ function normalizeLegacyEndpointKey(value: unknown): EndpointKey {
     ? normalizeEndpointKeyBrowse(record.browse, endpointID, keyID)
     : undefined;
   return {
+    credential_available: exactBoolean(record.credential_available, 'credential available'),
+    credential_id: id(record.credential_id, 'key credential'),
+    ...(record.credential_note === undefined
+      ? {}
+      : {
+          credential_note: scalarString(record.credential_note, 'key name', { allowEmpty: true }),
+        }),
+    credential_version: decimal(record.credential_version, 'key version', true),
+    grant_revision: decimal(record.grant_revision, 'key grant revision', true),
+    native_services: normalizeNativeServices(record.native_services),
+    discovery_source_id:
+      record.discovery_source_id === null
+        ? null
+        : id(record.discovery_source_id, 'key discovery source'),
     id: keyID,
     endpoint_id: endpointID,
     display_head: asciiFragment(record.display_head, 'key display head'),
@@ -1278,7 +1285,7 @@ export function normalizeCatalogEntry(value: unknown): CatalogEntry {
       'created_at',
       'updated_at',
     ],
-    [],
+    ['native_services'],
     'catalog entry',
   );
   const sourceType = catalogSource(record.source_type);
@@ -1286,6 +1293,9 @@ export function normalizeCatalogEntry(value: unknown): CatalogEntry {
   const updatedAt = unixTime(record.updated_at, 'catalog update time');
   if (updatedAt < createdAt) invalid('catalog update time');
   return {
+    ...(record.native_services === undefined
+      ? {}
+      : { native_services: normalizeNativeServices(record.native_services) }),
     id: id(record.id, 'catalog entry id'),
     source_type: sourceType,
     upstream_model_id: manualValue(record.upstream_model_id, false, 'upstream model id'),
@@ -1420,73 +1430,8 @@ function normalizeSourceTypes(value: unknown): CatalogSourceType[] {
   return result;
 }
 
-function normalizeLegacyBindingCandidate(value: unknown): BindingCandidate {
-  const record = responseRecord(
-    value,
-    [
-      'endpoint_key_id',
-      'endpoint_base_url',
-      'connector_type',
-      'endpoint_note',
-      'endpoint_key_display_head',
-      'endpoint_key_display_tail',
-      'endpoint_key_note',
-      'upstream_model_id',
-      'source_types',
-    ],
-    [],
-    'binding candidate',
-  );
+function bindingIdentity(record: Record<string, unknown>) {
   return {
-    endpoint_key_id: id(record.endpoint_key_id, 'candidate endpoint key id'),
-    endpoint_base_url: normalizeBaseURL(record.endpoint_base_url, 'candidate endpoint base URL'),
-    connector_type: connectorType(record.connector_type),
-    endpoint_note: scalarString(record.endpoint_note, 'candidate endpoint note', {
-      allowEmpty: true,
-    }),
-    endpoint_key_display_head: asciiFragment(
-      record.endpoint_key_display_head,
-      'candidate key display head',
-    ),
-    endpoint_key_display_tail: asciiFragment(
-      record.endpoint_key_display_tail,
-      'candidate key display tail',
-    ),
-    endpoint_key_note: scalarString(record.endpoint_key_note, 'candidate key note', {
-      allowEmpty: true,
-    }),
-    upstream_model_id: manualValue(record.upstream_model_id, false, 'candidate upstream model id'),
-    source_types: normalizeSourceTypes(record.source_types),
-  };
-}
-
-function normalizeLegacyBinding(value: unknown): Binding {
-  const record = responseRecord(
-    value,
-    [
-      'id',
-      'endpoint_key_id',
-      'endpoint_base_url',
-      'connector_type',
-      'endpoint_note',
-      'endpoint_key_display_head',
-      'endpoint_key_display_tail',
-      'endpoint_key_note',
-      'upstream_model_id',
-      'ord',
-    ],
-    [],
-    'binding',
-  );
-  if (
-    !Number.isSafeInteger(record.ord) ||
-    (record.ord as number) < 0 ||
-    (record.ord as number) > 255
-  ) {
-    invalid('binding order');
-  }
-  return {
-    id: id(record.id, 'binding id'),
     endpoint_key_id: id(record.endpoint_key_id, 'binding endpoint key id'),
     endpoint_base_url: normalizeBaseURL(record.endpoint_base_url, 'binding endpoint base URL'),
     connector_type: connectorType(record.connector_type),
@@ -1505,6 +1450,31 @@ function normalizeLegacyBinding(value: unknown): Binding {
       allowEmpty: true,
     }),
     upstream_model_id: manualValue(record.upstream_model_id, false, 'binding upstream model id'),
+  };
+}
+
+export function normalizeBindingCandidate(value: unknown): BindingCandidate {
+  const record = asRecord(value, 'binding candidate');
+  return {
+    ...bindingIdentity(record),
+    ...normalizeServiceProjection(record),
+    source_types: normalizeSourceTypes(record.source_types),
+  };
+}
+
+export function normalizeBinding(value: unknown): Binding {
+  const record = asRecord(value, 'binding');
+  if (
+    !Number.isSafeInteger(record.ord) ||
+    (record.ord as number) < 0 ||
+    (record.ord as number) > 255
+  ) {
+    invalid('binding order');
+  }
+  return {
+    id: id(record.id, 'binding id'),
+    ...bindingIdentity(record),
+    targets: boundedArray(record.targets, normalizeBindingTarget, 'binding targets', 256),
     ord: record.ord as number,
   };
 }
@@ -1765,153 +1735,6 @@ export function normalizeAuthorizationURL(value: unknown): string {
   return httpsURL(record.authorization_url, 'elevation authorization URL');
 }
 
-export function normalizeEndpoint(value: unknown): Endpoint {
-  const result = normalizeLegacyEndpoint(value);
-  const source = asRecord(value, 'endpoint');
-  return {
-    ...result,
-    ...(source.connection_name === undefined
-      ? {}
-      : {
-          connection_name: scalarString(source.connection_name, 'service name', {
-            allowEmpty: true,
-          }),
-        }),
-    ...(Object.hasOwn(source, 'connection_id')
-      ? {
-          connection_id:
-            source.connection_id === null ? null : id(source.connection_id, 'endpoint connection'),
-        }
-      : {}),
-    ...(Object.hasOwn(source, 'configuration_type')
-      ? { configuration_type: connectorType(source.configuration_type) }
-      : {}),
-    ...(Object.hasOwn(source, 'native_services')
-      ? { native_services: normalizeNativeServices(source.native_services) }
-      : {}),
-    ...(Object.hasOwn(source, 'rerank_format')
-      ? { rerank_format: normalizeRerankFormat(source.rerank_format) }
-      : {}),
-    ...(source.rerank_path === undefined
-      ? {}
-      : { rerank_path: scalarString(source.rerank_path, 'rerank path', { allowEmpty: true }) }),
-    ...(source.rerank_url === undefined
-      ? {}
-      : { rerank_url: scalarString(source.rerank_url, 'rerank URL', { allowEmpty: true }) }),
-    ...(source.rerank_path_configurable === undefined
-      ? {}
-      : {
-          rerank_path_configurable: exactBoolean(
-            source.rerank_path_configurable,
-            'rerank path configurable',
-          ),
-        }),
-  };
-}
-export function normalizeEndpointKey(value: unknown): EndpointKey {
-  const result = normalizeLegacyEndpointKey(value);
-  const source = asRecord(value, 'endpoint key');
-  return {
-    ...result,
-    ...(source.credential_available === undefined
-      ? {}
-      : {
-          credential_available: exactBoolean(source.credential_available, 'credential available'),
-        }),
-    ...(Object.hasOwn(source, 'discovery_source_id')
-      ? {
-          discovery_source_id:
-            source.discovery_source_id === null
-              ? null
-              : id(source.discovery_source_id, 'key discovery source'),
-        }
-      : {}),
-    ...(Object.hasOwn(source, 'credential_id')
-      ? { credential_id: id(source.credential_id, 'key credential') }
-      : {}),
-    ...(Object.hasOwn(source, 'credential_note')
-      ? { credential_note: scalarString(source.credential_note, 'key name', { allowEmpty: true }) }
-      : {}),
-    ...(Object.hasOwn(source, 'credential_version')
-      ? { credential_version: decimal(source.credential_version, 'key version', true) }
-      : {}),
-    ...(Object.hasOwn(source, 'grant_revision')
-      ? { grant_revision: decimal(source.grant_revision, 'key grant revision', true) }
-      : {}),
-    ...(Object.hasOwn(source, 'native_services')
-      ? { native_services: normalizeNativeServices(source.native_services) }
-      : {}),
-  };
-}
-export function normalizeMainstreamChannelOption(value: unknown): MainstreamChannelOption {
-  const result = normalizeLegacyMainstreamChannelOption(value);
-  const source = asRecord(value, 'mainstream channel option');
-  return {
-    ...result,
-    ...(Object.hasOwn(source, 'revision')
-      ? { revision: decimal(source.revision, 'channel revision', true) }
-      : {}),
-    ...(Object.hasOwn(source, 'entries')
-      ? { entries: boundedArray(source.entries, normalizeMainstreamEntry, 'channel entries', 32) }
-      : {}),
-    ...(Object.hasOwn(source, 'discovery_source')
-      ? { discovery_source: normalizeDiscoveryPreset(source.discovery_source) }
-      : {}),
-    ...(Object.hasOwn(source, 'model_mappings')
-      ? { model_mappings: normalizeModelMappings(source.model_mappings) }
-      : {}),
-  };
-}
-export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
-  const result = normalizeLegacyEndpointCreateOptions(value);
-  const source = asRecord(value, 'endpoint create options');
-  const matches = Object.hasOwn(source, 'matching_mainstream_entries')
-    ? boundedArray(
-        source.matching_mainstream_entries,
-        (value) => {
-          const match = responseRecord(
-            value,
-            ['channel_id', 'entry_id'],
-            [],
-            'mainstream entry match',
-          );
-          const channelID = opaqueID(match.channel_id, 'mch_', 'matched channel id');
-          const entryID = id(match.entry_id, 'matched entry id');
-          if (
-            !result.mainstream_channels.some(
-              (channel) =>
-                channel.id === channelID &&
-                channel.entries?.some((entry) => entry.id === entryID && entry.enabled),
-            )
-          )
-            invalid('mainstream entry match');
-          return { channel_id: channelID, entry_id: entryID };
-        },
-        'mainstream entry matches',
-        3200,
-      )
-    : undefined;
-  if (matches)
-    uniqueBy(
-      matches,
-      (match) => match.channel_id + ':' + match.entry_id,
-      'mainstream entry matches',
-    );
-  return {
-    ...result,
-    ...(matches === undefined ? {} : { matching_mainstream_entries: matches }),
-    ...(Object.hasOwn(source, 'native_service_options')
-      ? {
-          native_service_options: boundedArray(
-            source.native_service_options,
-            normalizeNativeServiceOption,
-            'native service options',
-          ),
-        }
-      : {}),
-  };
-}
-
 export function normalizeBindingTarget(value: unknown): BindingTarget {
   const source = asRecord(value, 'binding target');
   return {
@@ -1927,24 +1750,5 @@ export function normalizeBindingTarget(value: unknown): BindingTarget {
     credential_id: id(source.credential_id, 'target credential'),
     credential_version: decimal(source.credential_version, 'target credential version', true),
     grant_revision: decimal(source.grant_revision, 'target grant revision', true),
-  };
-}
-export function normalizeBindingCandidate(value: unknown): BindingCandidate {
-  const result = normalizeLegacyBindingCandidate(value);
-  const source = asRecord(value, 'binding candidate');
-  return {
-    ...result,
-    ...(Object.hasOwn(source, 'native_services') ? normalizeServiceProjection(value) : {}),
-  };
-}
-export function normalizeBinding(value: unknown): Binding {
-  const result = normalizeLegacyBinding(value);
-  const source = asRecord(value, 'binding');
-  return {
-    ...result,
-    ...(Object.hasOwn(source, 'native_services') ? normalizeServiceProjection(value) : {}),
-    ...(Object.hasOwn(source, 'targets')
-      ? { targets: boundedArray(source.targets, normalizeBindingTarget, 'binding targets', 256) }
-      : {}),
   };
 }

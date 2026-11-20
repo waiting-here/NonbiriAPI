@@ -1,3 +1,4 @@
+import { adaptationTarget } from '../fixtures/resourceScopes';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { USER_ORIGIN } from './ports';
@@ -44,6 +45,7 @@ for (const width of [1440, 390]) {
           body = {
             bindings: [
               {
+                targets: [adaptationTarget('1', 'ai-sdk-gateway-v3')],
                 id: '1',
                 endpoint_key_id: '1',
                 endpoint_base_url: 'https://example.test',

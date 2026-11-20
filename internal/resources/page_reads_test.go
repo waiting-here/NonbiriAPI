@@ -164,6 +164,32 @@ func TestNestedCatalogAndCandidatePagesCountTheirOwnFilteredOwnerSet(t *testing.
 	if err != nil || automatic.Pagination.TotalItems != "0" || automatic.Pagination.Page != "1" || len(automatic.ManualEntries) != 0 {
 		t.Fatalf("automatic=%+v err=%v", automatic, err)
 	}
+	filtered, err := env.repository.SearchCatalogPage(context.Background(), owner, eid, kid, "manual", "MANUAL-22", w)
+	if err != nil || filtered.Pagination.TotalItems != "1" || filtered.ManualEntries[0].UpstreamModelID != "manual-22" {
+		t.Fatalf("filtered catalog=%+v err=%v", filtered, err)
+	}
+	if _, err := env.repository.SearchCatalogPage(context.Background(), other, eid, kid, "manual", "manual-22", w); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign search=%v", err)
+	}
+	revision := resourceTestID(t, manual.Evidence.Revision)
+	matches, err := env.repository.selectCatalogMatches(context.Background(), owner, eid, kid, "manual", "MANUAL-", manual.SelectionRevision, 23, revision)
+	if err != nil || len(matches) != 23 || matches[22].ID != filtered.ManualEntries[0].ID {
+		t.Fatalf("selected catalog=%+v err=%v", matches, err)
+	}
+	for _, tc := range []struct {
+		user, count, revision int64
+		want                  error
+	}{{owner, 22, revision, ErrConflict}, {owner, 23, revision + 1, ErrConflict}, {other, 23, revision, ErrNotFound}, {owner, maxBindingBatch + 1, revision, ErrInvalidRequest}} {
+		if _, err := env.repository.selectCatalogMatches(context.Background(), tc.user, eid, kid, "manual", "manual-", manual.SelectionRevision, tc.count, tc.revision); !errors.Is(err, tc.want) {
+			t.Errorf("selection count=%d revision=%d err=%v (want %v)", tc.count, tc.revision, err, tc.want)
+		}
+	}
+	if _, err := env.store.DB().Exec("UPDATE model_pair_catalog SET pair_revision=pair_revision+1 WHERE endpoint_key_id=? AND normalized_model_id='manual-22'", kid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.repository.selectCatalogMatches(context.Background(), owner, eid, kid, "manual", "manual-", manual.SelectionRevision, 23, revision); !errors.Is(err, ErrConflict) {
+		t.Fatalf("same-count change accepted: %v", err)
+	}
 	query := CandidateQuery{EndpointID: eid, KeyID: kid, Source: "manual", Query: "manual-1"}
 	candidates, err := env.repository.BindingCandidatesPage(context.Background(), owner, mid, query, w)
 	if err != nil || candidates.Pagination.TotalItems != "10" || candidates.Pagination.Page != "1" || len(candidates.Data) != 10 {
@@ -188,6 +214,16 @@ func TestNestedCatalogAndCandidatePagesCountTheirOwnFilteredOwnerSet(t *testing.
 	query.KeyID = 0
 	if _, err = env.repository.BindingCandidatesPage(context.Background(), owner, mid, query, w); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign candidate parent=%v", err)
+	}
+	exactKey, err := env.repository.GetEndpointKeyDetail(context.Background(), owner, eid, kid)
+	if err != nil || exactKey.ID != key.ID || exactKey.Browse == nil {
+		t.Fatalf("exact own key=%+v err=%v", exactKey, err)
+	}
+	if _, err := env.repository.GetEndpointKeyDetail(context.Background(), other, eid, kid); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign exact key=%v", err)
+	}
+	if _, err := env.repository.GetEndpointKeyDetail(context.Background(), owner, resourceTestID(t, otherEP.ID), kid); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("mismatched key parent=%v", err)
 	}
 	keys, err := env.repository.ListEndpointKeysPage(context.Background(), owner, eid, w)
 	if err != nil || keys.Pagination.TotalItems != "1" || keys.Data[0].ID != key.ID {

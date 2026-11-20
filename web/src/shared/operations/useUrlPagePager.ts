@@ -23,6 +23,8 @@ export interface UseUrlPagePagerOptions {
   /** Stable query parameter names for the page and page size. */
   pageParam?: string;
   pageSizeParam?: string;
+  /** A focused item parameter cleared when the user changes the page window. */
+  clearOnWindowChange?: string;
 }
 
 interface UrlPagerIdentity {
@@ -120,6 +122,7 @@ export function useUrlPagePager({
   resetKey,
   pageParam,
   pageSizeParam,
+  clearOnWindowChange,
 }: UseUrlPagePagerOptions): PagePager {
   const resolvedPageParam = resolvedParamName(pageParam, DEFAULT_PAGE_PARAM);
   const resolvedPageSizeParam = resolvedParamName(pageSizeParam, DEFAULT_PAGE_SIZE_PARAM);
@@ -250,10 +253,17 @@ export function useUrlPagePager({
         next.delete(resolvedPageSizeParam);
         const pendingSize = parsePageSize(previous.get(resolvedPageSizeParam) ?? undefined);
         next.set(resolvedPageSizeParam, String(pendingSize ?? parsed.pageSize));
+        if (clearOnWindowChange) next.delete(clearOnWindowChange);
         return next;
       });
     },
-    [parsed.pageSize, resolvedPageParam, resolvedPageSizeParam, setSearchParams],
+    [
+      clearOnWindowChange,
+      parsed.pageSize,
+      resolvedPageParam,
+      resolvedPageSizeParam,
+      setSearchParams,
+    ],
   );
 
   const setPageSize = useCallback(
@@ -266,10 +276,18 @@ export function useUrlPagePager({
         next.set(resolvedPageParam, DEFAULT_PAGE);
         next.delete(resolvedPageSizeParam);
         next.set(resolvedPageSizeParam, String(nextPageSize));
+        if (clearOnWindowChange) next.delete(clearOnWindowChange);
         return next;
       });
     },
-    [listType, resolvedPageParam, resolvedPageSizeParam, setSearchParams, station],
+    [
+      clearOnWindowChange,
+      listType,
+      resolvedPageParam,
+      resolvedPageSizeParam,
+      setSearchParams,
+      station,
+    ],
   );
 
   const reset = useCallback(() => {

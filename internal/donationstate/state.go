@@ -13,6 +13,12 @@ func Valid(value string) bool {
 
 func Filtered(value string) bool { return value != "" && value != "all" }
 
+// Drive both reads from the partial expiry index. Without statistics SQLite
+// otherwise visits every active donation to find that no keys are due.
+const DueExpiryFrom = `FROM donation_keys dk CROSS JOIN donations d ON d.id=dk.donation_id
+WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
+ AND dk.expires_at IS NOT NULL AND dk.expires_at<=?`
+
 const PhysicalJoins = ` LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id LEFT JOIN endpoints e ON e.id=k.endpoint_id `
 
 // SQL uses repository-owned dk/d/k/e aliases. Its four time placeholders

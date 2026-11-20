@@ -3,40 +3,40 @@ package charity
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
-func foldFailureOutcome(streak db.U128, disabled int, threshold db.U128, state string, success sql.NullInt64, disposition, origin sql.NullString, apply bool) (db.U128, int, bool, error) {
+func foldFailureOutcome(streak db.U128, disabled int, threshold db.U128, state string, success sql.NullInt64, disposition, origin sql.NullString, apply bool) (db.U128, int, string, error) {
 	if !disposition.Valid || !origin.Valid || !contract.ValidOutcome(contract.StreakDisposition(disposition.String), contract.FailureOrigin(origin.String)) || (state != "committed" && state != "released") {
-		return streak, disabled, false, claim.ErrInvariant
+		return streak, disabled, "", claim.ErrInvariant
 	}
 	if disposition.String != "success" && disposition.String != "upstream_failure" {
-		return streak, disabled, false, nil
+		return streak, disabled, "unchanged", nil
 	}
 	if state != "committed" || !success.Valid || (disposition.String == "upstream_failure" && success.Int64 != 0) {
-		return streak, disabled, false, claim.ErrInvariant
+		return streak, disabled, "", claim.ErrInvariant
 	}
 	if !apply {
-		return streak, disabled, false, nil
+		return streak, disabled, "", nil
 	}
 	if disposition.String == "success" {
-		return db.U128{}, disabled, false, nil
+		return db.U128{}, disabled, "reset", nil
 	}
 	next, err := addU128(streak, big.NewInt(1))
 	if err != nil {
-		return streak, disabled, false, err
+		return streak, disabled, "", err
 	}
 	if disabled == 0 && threshold != (db.U128{}) && next.Big().Cmp(threshold.Big()) >= 0 {
-		return next, 1, true, nil
+		disabled = 1
 	}
-	return next, disabled, false, nil
+	return next, disabled, "incremented", nil
 }
 
 func foldServiceStreak(ctx context.Context, tx *sql.Tx, claimID string, at int64) error {
@@ -49,7 +49,14 @@ FROM dispatch_service_health m JOIN donation_service_health h ON h.id=m.health_i
 JOIN donation_uses u ON u.id=h.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id
 WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &donationID, &keyID, &endpointKeyID, &currentGeneration, &eventGeneration, &nextBlob, &streakBlob, &disabled, &thresholdText)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+		// A detached service marker or ended member can no longer fold.
+		// Unmarked reservations still belong to their physical key's cursor.
+		_, err = tx.ExecContext(ctx, `UPDATE request_attempts SET streak_effect='unchanged'
+WHERE claim_id=? AND streak_effect='pending' AND (
+ EXISTS(SELECT 1 FROM dispatch_service_health m WHERE m.claim_id=request_attempts.claim_id)
+ OR NOT EXISTS(SELECT 1 FROM donation_usage_reservations r JOIN donation_keys k ON k.id=r.donation_key_id
+ WHERE r.claim_id=request_attempts.claim_id AND r.streak_generation=k.streak_generation))`, claimID)
+		return err
 	}
 	if err != nil {
 		return err
@@ -63,7 +70,8 @@ WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &d
 		return err
 	}
 	if generation != event {
-		return nil
+		_, err := tx.ExecContext(ctx, "UPDATE request_attempts SET streak_effect='unchanged' WHERE claim_id=? AND streak_effect='pending'", claimID)
+		return err
 	}
 	next, err := decodeU128(nextBlob)
 	if err != nil {
@@ -77,19 +85,18 @@ WHERE m.claim_id=? AND dk.ended_at IS NULL`, claimID).Scan(&healthID, &useID, &d
 	if err != nil {
 		return claim.ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT m.claim_seq,r.state,r.protocol_success,r.streak_disposition,r.failure_origin,1
+	rows, err := tx.QueryContext(ctx, `SELECT m.claim_id,m.claim_seq,r.state,r.protocol_success,r.streak_disposition,r.failure_origin,1
 FROM dispatch_service_health m JOIN donation_usage_reservations r ON r.claim_id=m.claim_id
 WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER BY m.claim_seq`,
 		healthID, currentGeneration, db.EncodeU128(next))
 	if err != nil {
 		return err
 	}
-	folded, err := foldFailureRows(rows, next, streak, threshold, disabled)
+	folded, err := foldFailureRows(ctx, tx, rows, next, streak, threshold, disabled)
 	if err != nil {
 		return err
 	}
 	next, streak, disabled = folded.next, folded.streak, folded.disabled
-	disabledNow, disablingStreak, disablingFold := folded.disabledNow, folded.disablingStreak, folded.disablingFold
 
 	result, err := tx.ExecContext(ctx, `UPDATE donation_service_health SET next_fold_seq=?,failure_streak=?,failure_disabled=?,updated_at=? WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`, db.EncodeU128(next), db.EncodeU128(streak), disabled, at, healthID, currentGeneration, nextBlob, streakBlob)
 	if err != nil {
@@ -98,30 +105,12 @@ WHERE m.health_id_snapshot=? AND m.streak_generation=? AND m.claim_seq>=? ORDER 
 	if err := requireOne(result); err != nil {
 		return err
 	}
-	if !disabledNow {
+	if folded.crossing == nil {
 		return nil
 	}
-	ref := fmt.Sprintf("donation-use:%d:health:%d:generation:%s:fold:%s", useID, healthID, generation.Decimal(), disablingFold.Decimal())
-	type target struct {
-		Kind string `json:"kind"`
-		ID   string `json:"id"`
-	}
-	type fact struct {
-		Key   string `json:"key"`
-		Value string `json:"value"`
-	}
-	body, err := json.Marshal(struct {
-		Targets []target `json:"targets"`
-		Facts   []fact   `json:"occurred_facts"`
-	}{
-		Targets: []target{{"donation", fmt.Sprint(donationID)}, {"donation_key", fmt.Sprint(keyID)}, {"endpoint_key", fmt.Sprint(endpointKeyID)}},
-		Facts:   []fact{{"donation_id", fmt.Sprint(donationID)}, {"donation_key_id", fmt.Sprint(keyID)}, {"endpoint_key_id", fmt.Sprint(endpointKeyID)}, {"use_id", fmt.Sprint(useID)}, {"failure_streak", disablingStreak.Decimal()}, {"failure_threshold", thresholdText}, {"generation", generation.Decimal()}, {"fold", disablingFold.Decimal()}},
+	return adminalerts.RecordDonationFailureTx(ctx, tx, adminalerts.DonationFailure{
+		DonationID: donationID, KeyID: keyID, EndpointKeyID: endpointKeyID,
+		UseID: useID, Generation: generation, OccurredAt: at, Crossing: *folded.crossing,
+		Ref: fmt.Sprintf("donation-use:%d:health:%d:generation:%s:fold:%s", useID, healthID, generation.Decimal(), folded.crossing.Fold.Decimal()),
 	})
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved,context_version,context_json)
-SELECT 'donation_failure_disabled','charity donation service disabled after consecutive protocol failures',?,?,0,1,?
-WHERE NOT EXISTS(SELECT 1 FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?)`, ref, at, string(body), ref)
-	return err
 }

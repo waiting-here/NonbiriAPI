@@ -33,9 +33,18 @@ func TestGatewayBindingPolicyUsesExactTargetAndStewardScope(t *testing.T) {
 			if _, err := e.store.DB().Exec(`INSERT INTO gateway_model_capabilities(base_url,model,policy_json,revision,updated_at) VALUES('https://g.routing.test/v1','upstream',?,1,1)`, raw); err != nil {
 				t.Fatal(err)
 			}
+			// An alternative target on the same key has its own declaration.
+			if _, err := e.store.DB().Exec(`INSERT INTO charity_binding_targets(binding_id,donation_key_id,upstream_model_id,native_service_mask,selection_origin,ord,revision,created_at,updated_at)
+SELECT binding_id,donation_key_id,'unconfigured',native_service_mask,selection_origin,1,1,created_at,updated_at FROM charity_binding_targets WHERE binding_id=?`, before.Bindings[0].ID); err != nil {
+				t.Fatal(err)
+			}
 			got, err := e.service.GetBindingsSteward(ctx, steward, mid)
 			if err != nil || len(got.Bindings) != 1 || got.Bindings[0].GatewayCapabilities == nil || got.Bindings[0].GatewayCapabilities.Cache != "anthropic" {
 				t.Fatalf("scoped policy: %+v %v", got, err)
+			}
+			targets := got.Bindings[0].Targets
+			if len(targets) != 2 || targets[0].GatewayCapabilities == nil || targets[0].GatewayCapabilities.Cache != "anthropic" || targets[1].GatewayCapabilities != nil {
+				t.Fatalf("target policy inherited from sibling: %+v", targets)
 			}
 			if _, err := e.service.GetBindingsSteward(ctx, owner, mid); !errors.Is(err, ErrForbidden) {
 				t.Fatalf("ordinary user read management policy: %v", err)

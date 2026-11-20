@@ -32,6 +32,7 @@ export default defineConfig({
     'model-quotas.spec.ts',
     'key-queue.spec.ts',
     'request-rejections.spec.ts',
+    'failure-trace.spec.ts',
     'charity-binding-batch.spec.ts',
     'connection-experience.spec.ts',
     'closeout-controls.spec.ts',

@@ -45,12 +45,12 @@ export function InferenceLimitFields({
 export function InferenceLimitSummary({ user }: { user: AdminUser }) {
   const { t } = useTranslation();
   return (
-    <dl className="nb-kv">
+    <dl className="nb-facts nb-facts--inline">
       {INFERENCE_LIMITS.map(({ key, label }) => (
         <Fragment key={key}>
           <dt>{t(label)}</dt>
           <dd>
-            <span className="nb-num">
+            <span className="nb-amount">
               {formatCount(user[('effective_' + key) as keyof AdminUser] as string).display}
             </span>
             {user[key] === null ? ' · ' + t('management.users.inheritLimit') : ''}

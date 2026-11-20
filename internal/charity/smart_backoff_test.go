@@ -25,7 +25,12 @@ type backoffEnv struct {
 
 func newBackoffEnv(t *testing.T) *backoffEnv {
 	t.Helper()
-	e := &backoffEnv{charityTestEnv: newCharityTestEnv(t)}
+	return newBackoffEnvAt(t, "https://charity.example.test/v1")
+}
+
+func newBackoffEnvAt(t *testing.T, baseURL string) *backoffEnv {
+	t.Helper()
+	e := &backoffEnv{charityTestEnv: newCharityTestEnvAt(t, baseURL)}
 	e.clock.Store(charityTestNow + 30)
 	e.billingRail(t)
 	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
@@ -144,6 +149,11 @@ func TestSmartBackoffNeutralProgressionAndHeaderPrecedence(t *testing.T) {
 		e.complete(t, h, quotaOutcome(period))
 		e.wantWaiting(t, delay)
 		var streak []byte
+		reason := "smart_quota"
+		if index > 0 {
+			reason = "smart_trial"
+		}
+		e.assertAttemptBackoff(t, h, reason, "service", period, e.clock.Load()+delay)
 		if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_keys WHERE id=?", e.donationKey).Scan(&streak); err != nil {
 			t.Fatal(err)
 		}
@@ -235,6 +245,7 @@ func TestSmartBackoffTrialFailuresKeepStageAndRecoveryReleasesLease(t *testing.T
 			}
 			e.wantWaiting(t, 900)
 			var streak []byte
+			e.assertAttemptBackoff(t, trial, "smart_trial", "service", "five_hour", e.clock.Load()+900)
 			if err := e.store.DB().QueryRow("SELECT failure_streak FROM donation_service_health WHERE id=?", e.serviceHealthID(t, trial)).Scan(&streak); err != nil {
 				t.Fatal(err)
 			}
@@ -303,6 +314,7 @@ func TestSmartBackoffLateResultsCannotChangeNewEpisode(t *testing.T) {
 	e.complete(t, first, quotaOutcome("five_hour"))
 	before := *e.status(t)
 	e.complete(t, old, quotaOutcome("month"))
+	e.assertAttemptBackoff(t, old, "", "", "", 0)
 	if got := e.status(t); got == nil || *got != before {
 		t.Fatal("older nontrial advanced episode", got)
 	}
@@ -315,6 +327,7 @@ func TestSmartBackoffLateResultsCannotChangeNewEpisode(t *testing.T) {
 	e.complete(t, newer, quotaOutcome("day"))
 	before = *e.status(t)
 	e.complete(t, oldTrial, quotaOutcome("month"))
+	e.assertAttemptBackoff(t, oldTrial, "", "", "", 0)
 	if got := e.status(t); got == nil || *got != before {
 		t.Fatal("accepted old trial changed newer episode", got)
 	}
@@ -341,6 +354,28 @@ func TestSmartBackoffExplicitResetAndEndedKeyCannotRevive(t *testing.T) {
 	if got := e.status(t); got == nil || *got != before {
 		t.Fatal("ended key mutated", got)
 	}
+}
+
+func TestLegacyTrialBackoffReceiptsKeepKeyScope(t *testing.T) {
+	e := newBackoffEnv(t)
+	now := e.clock.Load()
+	if _, err := e.store.DB().Exec(`INSERT INTO donation_key_backoffs(donation_key_id,generation,episode,period,source,stage,retry_at,updated_at)
+VALUES(?,1,1,'day','builtin',0,?,?)`, e.donationKey, now, now); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := e.dispatch(t)
+	e.complete(t, first, quotaOutcome("day"))
+	e.ready(t)
+	until := e.clock.Load() + 60
+	second, _ := e.dispatch(t)
+	if err := e.rail.ObserveResponseHeaders(t.Context(), second, contract.ResponseObservation{
+		HasRetryAfter: true, Status: 429, ObservedAt: e.clock.Load(), RateLimitedUntil: until,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e.complete(t, second, quotaOutcome("week"))
+	e.assertAttemptBackoff(t, first, "smart_trial", "key", "day", now+1800)
+	e.assertAttemptBackoff(t, second, "retry_header", "key", "", until)
 }
 
 func TestAutomaticBackoffExpiredHeadersSuppressFirstEpisode(t *testing.T) {

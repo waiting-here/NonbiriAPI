@@ -5,23 +5,35 @@ import { mkdirSync } from 'node:fs';
 import { test, expect } from './test';
 import { FIXTURE_ORIGIN } from './ports';
 
+const fixtureURL = FIXTURE_ORIGIN + '/__aria-test/';
 const assets = new Map<string, { body: string | Uint8Array; contentType: string }>();
 test.beforeAll(async () => {
-  const output = await build({
-    configFile: false,
-    logLevel: 'error',
-    plugins: [react()],
-    resolve: { alias: { '@shared': resolve('src/shared') } },
-    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
-    build: {
-      write: false,
-      lib: {
-        entry: resolve('test/fixtures/aria-controls.tsx'),
-        formats: ['es'],
-        fileName: () => 'controls.js',
+  const previousNodeEnv = process.env.NODE_ENV;
+  const buildNodeEnv = 'production';
+  let output: Awaited<ReturnType<typeof build>>;
+  try {
+    // A Vite dev server in an earlier spec can leave NODE_ENV=development in this worker.
+    // Keep Vite's JSX transform and the bundled React runtime in the same mode.
+    process.env.NODE_ENV = buildNodeEnv;
+    output = await build({
+      configFile: false,
+      logLevel: 'error',
+      plugins: [react()],
+      resolve: { alias: { '@shared': resolve('src/shared') } },
+      define: { 'process.env.NODE_ENV': JSON.stringify(buildNodeEnv) },
+      build: {
+        write: false,
+        lib: {
+          entry: resolve('test/fixtures/aria-controls.tsx'),
+          formats: ['es'],
+          fileName: () => 'controls.js',
+        },
       },
-    },
-  });
+    });
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
   for (const bundle of Array.isArray(output) ? output : [output]) {
     if (!('output' in bundle)) continue;
     for (const file of bundle.output)
@@ -45,7 +57,19 @@ for (const width of [1440, 390])
         await page.mouse.click(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
       };
       const violations: string[] = [];
-      page.on('pageerror', (error) => violations.push(error.message));
+      page.on('pageerror', (error) => {
+        violations.push(error.message);
+        console.error('React Aria fixture page error', error.message);
+      });
+      page.on('requestfailed', (request) => {
+        if (request.resourceType() === 'script' && request.url().startsWith(fixtureURL)) {
+          console.error(
+            'React Aria fixture module load failed',
+            request.url(),
+            request.failure()?.errorText,
+          );
+        }
+      });
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.route('**/__aria-test/**', (route) => {
@@ -93,7 +117,7 @@ for (const width of [1440, 390])
           );
         }),
       );
-      await page.goto(FIXTURE_ORIGIN + '/__aria-test/index.html');
+      await page.goto(fixtureURL + 'index.html');
       const trigger = page.getByRole('button', { name: 'Edit service' });
       await trigger.click();
       const sheet = page.getByRole('dialog', { name: 'Service', exact: true });

@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from './test';
@@ -8,11 +9,15 @@ import zh from '../../src/user/i18n/zh.json' with { type: 'json' };
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 import { createOptions } from './connection-fixtures';
+import { charityControlCopy } from '../../src/shared/components/charityControlCopy';
 
 const NOW = 1_800_000_000;
-const EXPIRY = Date.parse('2030-01-01T05:00:00Z') / 1000;
+const BROWSER_ZONE = 'America/New_York';
+const LOCAL_EXPIRY = '2030-01-01T00:00:00';
+const EXPIRY = Date.parse(LOCAL_EXPIRY + '-05:00') / 1000;
 function endpoint(id: number) {
   return {
+    ...endpointScope,
     id: String(id),
     connection_id: String(id),
     native_services: ['chat_completions', 'responses'],
@@ -32,6 +37,7 @@ function endpointKey(id: number, parent: number, submitted: boolean) {
     id: String(id),
     endpoint_id: String(parent),
     credential_id: String(id + 1000),
+    credential_available: true,
     credential_version: '1',
     grant_revision: '1',
     native_services: ['chat_completions', 'responses'],
@@ -86,10 +92,11 @@ function pageWindow(rows: unknown[], params: URLSearchParams) {
 }
 
 test.describe('donation resource submission', () => {
-  test.use({ timezoneId: 'America/New_York' });
+  test.use({ timezoneId: BROWSER_ZONE });
   for (const [width, locale, theme] of [
     [320, 'en', 'light'],
     [390, 'zh', 'dark'],
+    [1440, 'en', 'light'],
   ] as const) {
     test(`retains every selected key and local expiry across pages at ${width} ${locale}`, async ({
       page,
@@ -97,6 +104,7 @@ test.describe('donation resource submission', () => {
       const copy = (locale === 'en' ? en : zh).user.charity;
       const workflows = (locale === 'en' ? en : zh).user.workflows;
       const common = (locale === 'en' ? commonEn : commonZh).common;
+      const controls = charityControlCopy(locale);
       const errors = collectConsoleViolations(page);
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -144,13 +152,15 @@ test.describe('donation resource submission', () => {
               : { state: 'no_models', models: [], donation_intake: 'open', server_now: NOW },
           });
         if (url.pathname === '/api/time/resolve') {
-          expect(url.searchParams.get('local')).toBe('2030-01-01T00:00:00');
-          expect(url.searchParams.get('time_zone')).toBe('America/New_York');
+          expect(request.method()).toBe('GET');
+          expect(url.searchParams.size).toBe(2);
+          expect(url.searchParams.get('local')).toBe(LOCAL_EXPIRY);
+          expect(url.searchParams.get('time_zone')).toBe(BROWSER_ZONE);
           return route.fulfill({
             json: {
               instant: EXPIRY,
-              local: '2030-01-01T00:00:00',
-              time_zone: 'America/New_York',
+              local: LOCAL_EXPIRY,
+              time_zone: BROWSER_ZONE,
               offset_seconds: -18000,
               adjustment: 'none',
             },
@@ -235,51 +245,80 @@ test.describe('donation resource submission', () => {
         return route.fallback();
       });
       await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
-      await page.getByRole('button', { name: copy.presentation.openPicker, exact: true }).click();
-      const picker = page.locator('.donation-resource-picker');
-      const sources = picker.locator('.donation-resource-picker__section').first();
-      await sources.getByRole('button', { name: /^Source 1 / }).click();
-      const keys = picker.locator('.donation-resource-picker__section').nth(1);
-      await keys.getByRole('checkbox', { name: /^Key 101 / }).check();
-      await picker
-        .locator('.economy-key-expiry')
-        .first()
-        .locator('summary')
-        .filter({ hasText: workflows.donationOptions })
-        .click();
-      const expiry = picker.locator('input[type="datetime-local"]');
-      await expiry.fill('2030-01-01T00:00');
+      const openPicker = page.getByRole('button', {
+        name: copy.presentation.openPicker,
+        exact: true,
+      });
+      const picker = page
+        .getByRole('region', { name: copy.presentation.chooseKeys, exact: true })
+        .filter({
+          has: page.getByRole('heading', { name: copy.resourcePicker.title, exact: true }),
+        });
+      const sources = picker.locator('section').filter({
+        has: page.getByRole('heading', { name: copy.resourcePicker.endpointTitle, exact: true }),
+      });
+      const firstServiceKeys = picker.locator('section').filter({
+        has: page.getByRole('heading', {
+          name: copy.resourcePicker.keyTitle.replace('{{endpoint}}', 'Source 1'),
+          exact: true,
+        }),
+      });
+      await openPicker.click();
       await expect(
-        picker.locator('..').getByText(common.smartBackoff.automaticHelp, { exact: true }),
+        picker.getByText(common.smartBackoff.automaticHelp, { exact: true }),
       ).toBeVisible();
-      await keys.getByRole('button', { name: common.next, exact: true }).click();
-      await keys.getByRole('checkbox', { name: /^Key 121 / }).check();
+      await sources.getByRole('button', { name: /^Source 1 / }).click();
+      await firstServiceKeys.getByRole('checkbox', { name: /^Key 101 / }).check();
+      await firstServiceKeys.getByRole('button', { name: common.next, exact: true }).click();
+      await firstServiceKeys.getByRole('checkbox', { name: /^Key 121 / }).check();
+      await picker
+        .getByRole('button', { name: copy.resourcePicker.backToEndpoints, exact: true })
+        .click();
+      await expect(firstServiceKeys).toBeHidden();
       await sources.getByRole('button', { name: common.next, exact: true }).click();
       await sources.getByRole('button', { name: /^Source 21 / }).click();
-      await keys.getByRole('checkbox', { name: /^Key 201 / }).check();
-      await expect(
-        picker
-          .locator('.donation-resource-picker__selected-list')
-          .getByRole('checkbox', { name: common.modelTypes.chat_completions, exact: true }),
-      ).toHaveCount(0);
-      await page
-        .getByRole('button', { name: copy.presentation.selectionDone, exact: true })
+      await picker.getByRole('checkbox', { name: /^Key 201 / }).check();
+      const selected = picker.getByRole('region', {
+        name: copy.resourcePicker.selectedTitle,
+        exact: true,
+      });
+      await expect(selected.getByRole('checkbox')).toHaveCount(0);
+      await picker.getByRole('button', { name: common.close, exact: true }).click();
+      await expect(picker).toBeHidden();
+
+      const composer = page.getByRole('region', { name: copy.submitDonation, exact: true });
+      await composer
+        .getByRole('listitem')
+        .filter({ hasText: 'Source 1 · Key 101' })
+        .getByText(workflows.donationOptions, { exact: true })
         .click();
-      await page
-        .getByRole('textbox', { name: copy.donationDescription, exact: true })
-        .fill('Cross-page contribution');
-      await page.getByRole('checkbox', { name: copy.ownershipAuthorization, exact: true }).check();
+      const expiry = composer.getByLabel(copy.keyExpiryFor.replace('{{key}}', 'head101…tail'), {
+        exact: true,
+      });
+      const resolved = page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.origin === USER_ORIGIN && url.pathname === '/api/time/resolve';
+      });
+      await expiry.fill(LOCAL_EXPIRY.slice(0, 16));
+      expect((await resolved).ok()).toBe(true);
+      const description = composer.getByRole('textbox', {
+        name: copy.donationDescription,
+        exact: true,
+      });
+      await description.fill('Cross-page contribution');
+      await composer
+        .getByRole('checkbox', { name: copy.ownershipAuthorization, exact: true })
+        .check();
       await page.getByRole('tab', { name: copy.tabs.models, exact: true }).click();
       await page.getByRole('tab', { name: copy.tabs.donate, exact: true }).click();
-      await page.getByRole('button', { name: copy.presentation.openPicker, exact: true }).click();
-      await expect(picker.locator('input[type="datetime-local"]').first()).toHaveValue(
-        '2030-01-01T00:00',
-      );
-      await expect(page).toHaveURL(/endpoint_page=2/);
-      await expect(picker.locator('.smart-backoff-input')).toHaveCount(0);
+      await expect(description).toHaveValue('Cross-page contribution');
+      await expect(expiry).toHaveValue(LOCAL_EXPIRY.slice(0, 16));
+      await openPicker.click();
+      await expect(page).toHaveURL((url) => url.searchParams.get('endpoint_page') === '2');
+      for (const key of ['head101…tail', 'head121…tail', 'head201…tail']) {
+        await expect(selected.getByText(key, { exact: true })).toBeVisible();
+      }
       await expect(sources.getByRole('button', { name: /^Source 1 / })).toHaveCount(0);
-      await expect(picker.getByText('head101…tail', { exact: true })).toBeVisible();
-      await expect(picker.getByText('head121…tail', { exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
@@ -303,18 +342,17 @@ test.describe('donation resource submission', () => {
           fullPage: true,
         });
       }
-      const submit = page.getByRole('button', { name: copy.submit, exact: true });
-      await page
+      const submit = composer.getByRole('button', { name: copy.submit, exact: true });
+      await picker
         .getByRole('button', { name: copy.presentation.selectionDone, exact: true })
         .click();
-      await expect(submit).toBeDisabled();
-      await page
-        .getByRole('radiogroup', {
-          name: locale === 'en' ? 'Accept a public Discord thank-you' : '是否接受 Discord 公屏感谢',
-        })
-        .getByText(locale === 'en' ? 'No' : '否', { exact: true })
-        .click();
-      await expect(submit).toBeEnabled();
+      await expect(expiry).toHaveValue(LOCAL_EXPIRY.slice(0, 16));
+      await submit.click();
+      await expect(composer.getByRole('alert').filter({ hasText: controls.thanks })).toBeVisible();
+      expect(posts).toHaveLength(0);
+      const thanks = composer.getByRole('radiogroup', { name: controls.thanks, exact: true });
+      await thanks.getByText(controls.no, { exact: true }).click();
+      await expect(thanks.getByRole('radio', { name: controls.no, exact: true })).toBeChecked();
       await submit.click();
       await expect(page.getByText(copy.submitted, { exact: true })).toBeVisible();
       expect(posts).toEqual([
@@ -353,10 +391,18 @@ test.describe('donation resource submission', () => {
           ],
         },
       ]);
-      await page.getByRole('button', { name: copy.presentation.openPicker, exact: true }).click();
-      await expect(picker.getByText(copy.resourcePicker.noSelected, { exact: true })).toBeVisible();
-      expect(reads.some((path) => path.includes('page=2'))).toBe(true);
-      expect(reads.every((path) => !path.includes('limit='))).toBe(true);
+      await openPicker.click();
+      await expect(
+        selected.getByText(copy.resourcePicker.noSelected, { exact: true }),
+      ).toBeVisible();
+      for (const pathname of ['/api/endpoints', '/api/endpoints/1/keys']) {
+        expect(
+          reads.some((path) => {
+            const url = new URL(path, USER_ORIGIN);
+            return url.pathname === pathname && url.searchParams.get('page') === '2';
+          }),
+        ).toBe(true);
+      }
       errors.assertNone();
     });
   }

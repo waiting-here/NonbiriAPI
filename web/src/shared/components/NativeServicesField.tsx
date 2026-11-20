@@ -8,7 +8,7 @@ import {
   type RerankFormat,
 } from '@shared/nativeServices';
 import './ModelTypesField.css';
-import { Field } from './ui';
+import { ChoiceRow, Field } from './ui';
 
 export interface NativeServicesFieldProps {
   options: readonly NativeService[];
@@ -19,6 +19,7 @@ export interface NativeServicesFieldProps {
   label?: ReactNode;
   help?: ReactNode;
   error?: ReactNode;
+  describeService?: (service: NativeService) => ReactNode;
   rerankFormats?: readonly RerankFormat[];
   rerankFormat?: RerankFormat | null;
   onRerankFormatChange?: (next: RerankFormat | null) => void;
@@ -33,6 +34,7 @@ export function NativeServicesField({
   label,
   help,
   error,
+  describeService,
   rerankFormats,
   rerankFormat,
   onRerankFormatChange,
@@ -71,23 +73,19 @@ export function NativeServicesField({
       <div className="nb-stack">
         <div className="model-types-field__choices" data-count={options.length}>
           {options.map((service) => (
-            <Field key={service} label={t(NATIVE_SERVICE_LABEL_KEYS[service])}>
-              {(props) => (
-                <input
-                  {...props}
-                  type="checkbox"
-                  checked={value.includes(service)}
-                  aria-readonly={readOnly || undefined}
-                  onChange={(event) => {
-                    if (locked) return;
-                    const next = new Set(value);
-                    if (event.currentTarget.checked) next.add(service);
-                    else next.delete(service);
-                    onChange(NATIVE_SERVICES.filter((item) => next.has(item)));
-                  }}
-                />
-              )}
-            </Field>
+            <ChoiceRow
+              key={service}
+              label={t(NATIVE_SERVICE_LABEL_KEYS[service])}
+              description={describeService?.(service)}
+              disabled={locked}
+              checked={value.includes(service)}
+              onChange={(checked) => {
+                const next = new Set(value);
+                if (checked) next.add(service);
+                else next.delete(service);
+                onChange(NATIVE_SERVICES.filter((item) => next.has(item)));
+              }}
+            />
           ))}
         </div>
         {selectionText ? (

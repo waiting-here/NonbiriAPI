@@ -336,6 +336,7 @@ func TestRecurringLimitsUseDurableMarkerAndOriginalBillingDuringRecovery(t *test
 					}
 				}
 				e.setQuota(t, rules...)
+				e.setModelQuota(t, "upstream-model", donationquota.ModelLimits{}, rules...)
 				request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
 				handle := e.billingDispatch(t, rail, request.ID, 1)
 				if started {
@@ -355,6 +356,10 @@ func TestRecurringLimitsUseDurableMarkerAndOriginalBillingDuringRecovery(t *test
 					}
 				}
 				v := e.quotaViews(t)
+				scoped, err := donationquota.ModelViews(t.Context(), e.store.DB(), e.donationKey, charityTestNow+30, "upstream-model")
+				if err != nil || len(scoped) != len(v) {
+					t.Fatal(scoped, err)
+				}
 				if err := e.service.ValidateRecurringState(db.ActiveRecoveryContext(context.Background())); err != nil {
 					t.Fatal(err)
 				}
@@ -363,9 +368,13 @@ func TestRecurringLimitsUseDurableMarkerAndOriginalBillingDuringRecovery(t *test
 					want = []string{"1", "3", "5"}
 				}
 				for i, value := range v {
-					if value.Used != want[i] || value.Reserved != "0" {
+					if value.Used != want[i] || value.Reserved != "0" || scoped[i].Used != want[i] || scoped[i].Reserved != "0" {
 						t.Fatal(v)
 					}
+				}
+				total := e.modelUsage(t, "upstream-model")
+				if total.Used.Calls != want[0] || total.Used.Credits != want[1] || total.Reserved.Calls != "0" || total.Reserved.Credits != "0" {
+					t.Fatal(total)
 				}
 				charge := int64(0)
 				if started {

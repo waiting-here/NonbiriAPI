@@ -146,19 +146,13 @@ for (const mode of ['light', 'dark'])
         return route.fulfill({ json: appearance });
       });
       const openAppearance = async () => {
-        if (width < 1024) {
-          const navigation = page.locator('button[aria-controls="user-navigation"]');
-          if ((await navigation.getAttribute('aria-expanded')) === 'false') {
-            await expect(navigation).toBeVisible();
-            await navigation.click();
-          }
-        }
-        await page.getByRole('button', { name: '外观', exact: true }).click();
+        await page.getByRole('button', { name: '装扮', exact: true }).click();
       };
       await page.goto(USER_ORIGIN + '/activities');
       await openAppearance();
       await page.locator('input[name="appearance"][value="heart-moment"]').check();
-      await page.getByRole('button', { name: '应用装扮', exact: true }).click();
+      await page.getByRole('button', { name: '设为心动时刻', exact: true }).click();
+      await page.getByRole('button', { name: '关闭', exact: true }).click();
       await expect(page.locator('.nb-moment-backdrop')).toHaveAttribute(
         'data-moment',
         'cover:permanent',
@@ -194,11 +188,8 @@ for (const mode of ['light', 'dark'])
       await picker.getByRole('tab', { name: '卡牌', exact: true }).click();
       await expect(picker.getByRole('radio')).toHaveCount(ownedCards.length);
       await picker.getByRole('textbox').fill('不存在的素材');
-      await expect(picker.getByRole('radio')).toHaveCount(ownedCards.length);
-      await picker.getByRole('button', { name: '搜索', exact: true }).click();
       await expect(picker.getByRole('radio')).toHaveCount(0);
       await picker.getByRole('textbox').fill('ChatGPT');
-      await picker.getByRole('button', { name: '搜索', exact: true }).click();
       await expect(picker.getByRole('radio')).toHaveCount(3);
       await page.goto(USER_ORIGIN + '/activities');
       await expect(page.locator('.nb-moment-backdrop')).toHaveAttribute(
@@ -216,12 +207,13 @@ for (const mode of ['light', 'dark'])
       ).toBe('');
       await openAppearance();
       await page.locator('input[name="appearance"][value="heart-moment"]').check();
-      await page.getByRole('button', { name: '应用装扮', exact: true }).click();
+      await page.getByRole('button', { name: '设为心动时刻', exact: true }).click();
       await page.reload();
       await expect(page.locator('.nb-moment-backdrop')).toHaveAttribute(
         'data-moment',
         'card:l-chatgpt',
       );
+      if (width === 390) await openAppearance();
       await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
       await expect(page.getByRole('dialog', { name: '欣赏背景', exact: true })).toBeVisible();
       await expect(page.locator('.nb-user-shell')).toBeHidden();
@@ -249,6 +241,11 @@ for (const mode of ['light', 'dark'])
           ),
         });
       await page.getByRole('button', { name: '返回页面', exact: true }).click();
+      if (width === 390)
+        await page
+          .getByRole('dialog', { name: '装扮', exact: true })
+          .getByRole('button', { name: '关闭', exact: true })
+          .click();
       await expect(page.locator('.loan-card')).toBeVisible();
       if (process.env.NONBIRI_VISUAL_DIR)
         await page.screenshot({

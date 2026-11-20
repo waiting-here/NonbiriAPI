@@ -1,5 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { artSourceSet } from '../activities/gacha/art-resolution';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useBackgroundSources } from './sources';
+import { startBackground } from './start-background';
+import { useStageSize } from './stage-size';
+import { useBackgroundPlayback } from './playback-context';
 import { isRare } from '../activities/gacha/catalog';
 import {
   momentFrameStyle,
@@ -10,7 +13,7 @@ import { useMomentExpansion } from '../activities/gacha/moment-registration';
 import { viewportMomentLayout } from '../activities/gacha/viewport-moment';
 import { defaultMoment, momentByKey, momentArtworkKeys } from './moments';
 import { useArtworkPolicy } from '@shared/artwork/context';
-import { useArtworkHue } from './artwork-hue';
+import { momentHue } from './artwork-hue';
 import './moments.css';
 
 export function MomentBackdrop({ moment }: { moment?: string }) {
@@ -27,9 +30,10 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     scene: expandedScene,
     ready: registrationReady,
   } = useMomentExpansion(card?.id);
-  const [viewportSize, setViewportSize] = useState(() => [window.innerWidth, window.innerHeight]);
+  const viewportSize = useStageSize();
+  const { playback, animated } = useBackgroundPlayback();
+  const artSourceSet = useBackgroundSources();
   const fullScene = expandedScene?.viewport;
-  const hasFullScene = !!fullScene;
   const viewport = useMemo(
     () =>
       expandedScene?.viewport
@@ -37,18 +41,6 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
         : undefined,
     [expandedScene, viewportSize],
   );
-  useLayoutEffect(() => {
-    if (!hasFullScene) return;
-    const measure = () =>
-      setViewportSize((current) =>
-        current[0] === window.innerWidth && current[1] === window.innerHeight
-          ? current
-          : [window.innerWidth, window.innerHeight],
-      );
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [hasFullScene]);
   const expandedStyle = expansion ? momentFrameStyle(expansion) : undefined;
   const asset = (path: string) => '/assets/gacha/' + path;
   const expandedHero = expansion?.hero ? asset(expansion.hero) : undefined;
@@ -61,8 +53,13 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       : momentImageSizes(expansion!)
     : characterSizes;
   const canvas = useRef<HTMLCanvasElement>(null);
-  const scene = useRef<HTMLImageElement>(null);
-  useArtworkHue(scene, `${artwork.key}:${expandedScene?.path ?? ''}:${registrationReady}`);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--nb-moment-hue', momentHue(artwork) + 'deg');
+    return () => {
+      root.style.removeProperty('--nb-moment-hue');
+    };
+  }, [artwork]);
   const hero =
     expandedHero ??
     (card
@@ -80,6 +77,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     } else if (expansion) {
       const margins = momentHorizontalMargins(expansion);
       root.style.setProperty('--nb-moment-width-ratio', String(1 + margins.total));
+      root.style.setProperty('--nb-moment-center', 50 * (1 + margins.left - margins.right) + '%');
       root.style.setProperty(
         '--nb-moment-height-ratio',
         String(
@@ -97,6 +95,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
     }
     return () => {
       root.style.removeProperty('--nb-moment-width-ratio');
+      root.style.removeProperty('--nb-moment-center');
       root.style.removeProperty('--nb-moment-height-ratio');
       root.style.removeProperty('--nb-moment-extra-reserve');
       root.style.removeProperty('--nb-moment-right-reserve');
@@ -105,63 +104,43 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
   }, [expansion, viewport]);
   useEffect(() => {
     const surface = canvas.current;
-    if (!surface || !card || !rare || !registrationReady) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let controller: AbortController | undefined;
-    let release: (() => void) | undefined;
-    let highResolution = false;
-    const update = () => {
-      controller?.abort();
-      release?.();
-      release = undefined;
-      surface.dataset.ready = 'false';
-      if (reduced.matches) return;
-      const next = new AbortController();
-      controller = next;
-      highResolution =
-        surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) >
+    if (!surface || !card || !rare || !registrationReady || !animated) return;
+    const high = () =>
+      playback.highest ||
+      surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) >
         (expansion?.canvas[0] ?? 1024);
-      void import('../activities/gacha/ssr-renderer')
-        .then(({ renderSSR }) =>
-          renderSSR(surface, card.id, undefined, undefined, highResolution, {
+    let highResolution = high();
+    const start = () =>
+      startBackground(
+        surface,
+        playback,
+        async (signal) => {
+          const { renderSSR } = await import('../activities/gacha/ssr-renderer');
+          return renderSSR(surface, card.id, undefined, undefined, highResolution, {
             characterOnly: true,
             momentFrame: expansion,
-            signal: next.signal,
-          }),
-        )
-        .then((stop) => {
-          if (next.signal.aborted) stop();
-          else {
-            release = stop;
-            surface.dataset.ready = 'true';
-          }
-        })
-        .catch(() => {
-          /* The transparent static character remains visible. */
-        });
-    };
+            signal,
+            playback,
+          });
+        },
+        true,
+      );
+    let stop = start();
     const resize = () => {
-      if (
-        !reduced.matches &&
-        surface.getBoundingClientRect().width * (window.devicePixelRatio || 1) >
-          (expansion?.canvas[0] ?? 1024) !==
-          highResolution
-      )
-        update();
+      if (highResolution === high()) return;
+      stop();
+      highResolution = high();
+      stop = start();
     };
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize);
     observer?.observe(surface);
     window.addEventListener('resize', resize);
-    reduced.addEventListener('change', update);
-    update();
     return () => {
       window.removeEventListener('resize', resize);
       observer?.disconnect();
-      reduced.removeEventListener('change', update);
-      controller?.abort();
-      release?.();
+      stop();
     };
-  }, [card, rare, expansion, registrationReady]);
+  }, [card, rare, expansion, registrationReady, playback, animated]);
   const background =
     expandedBackground ??
     (card ? '/assets/gacha/backgrounds/' + card.theme + '.webp' : artwork.art);
@@ -176,7 +155,6 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
       data-viewport={!!viewport}
     >
       <img
-        ref={expandedScene && !viewport ? undefined : scene}
         className="nb-moment-backdrop__scene"
         style={
           viewport ? { ...viewport.background, position: 'absolute', maxWidth: 'none' } : undefined
@@ -198,23 +176,6 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
           data-expanded={Boolean(expansion || expandedScene)}
           style={viewport ? viewport.character : undefined}
         >
-          {expandedScene && expandedBackground && !viewport && (
-            <img
-              ref={scene}
-              className="nb-moment-character__scene"
-              style={momentFrameStyle(expandedScene)}
-              src={expandedBackground}
-              srcSet={artSourceSet(
-                expandedBackground,
-                expandedScene.canvas[0],
-                expandedScene.highResolutionWidth ?? expandedScene.canvas[0] * 2.5,
-              )}
-              sizes={
-                'max(100vw, ' + (100 * expandedScene.canvas[0]) / expandedScene.canvas[1] + 'dvh)'
-              }
-              alt=""
-            />
-          )}
           {fullScene?.shadow && (
             <img
               className="nb-moment-character__shadow"
@@ -238,6 +199,7 @@ function PermittedMomentBackdrop({ artwork }: { artwork: typeof defaultMoment })
           />
           {rare && (
             <canvas
+              key={playback.sceneKey}
               style={expandedStyle}
               ref={canvas}
               width="768"

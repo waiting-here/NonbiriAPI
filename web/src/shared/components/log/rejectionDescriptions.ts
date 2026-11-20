@@ -1,4 +1,117 @@
 export const rejectionDescriptionKeys: Record<string, string> = {
+  'expected a number from -2 to 2': 'logs.rejectionDescriptions.expected a number from -2 to 2',
+  'Set the penalty to a number from -2 through 2.':
+    'logs.rejectionSuggestions.Set the penalty to a number from -2 through 2.',
+  'expected 1 to 4096 messages': 'logs.rejectionDescriptions.expected 1 to 4096 messages',
+  'message attribute cannot be preserved by Gemini':
+    'logs.rejectionDescriptions.message attribute cannot be preserved by Gemini',
+  'message contains an unsupported attribute':
+    'logs.rejectionDescriptions.message contains an unsupported attribute',
+  'expected a supported message role':
+    'logs.rejectionDescriptions.expected a supported message role',
+  'tool results must follow their assistant call before the next turn':
+    'logs.rejectionDescriptions.tool results must follow their assistant call before the next turn',
+  'Gemini accepts system and developer instructions only before conversation turns':
+    'logs.rejectionDescriptions.Gemini accepts system and developer instructions only before conversation turns',
+  'message attribute is not valid for this role':
+    'logs.rejectionDescriptions.message attribute is not valid for this role',
+  'tool result must match an unanswered tool call':
+    'logs.rejectionDescriptions.tool result must match an unanswered tool call',
+  'tool result content must be a string':
+    'logs.rejectionDescriptions.tool result content must be a string',
+  'assistant reasoning content must be a string':
+    'logs.rejectionDescriptions.assistant reasoning content must be a string',
+  'invalid Google continuation metadata':
+    'logs.rejectionDescriptions.invalid Google continuation metadata',
+  'thought signature has no matching message part':
+    'logs.rejectionDescriptions.thought signature has no matching message part',
+  'expected an array of up to 128 function calls':
+    'logs.rejectionDescriptions.expected an array of up to 128 function calls',
+  'expected a function call with supported attributes':
+    'logs.rejectionDescriptions.expected a function call with supported attributes',
+  'expected a unique nonempty tool call ID of at most 128 bytes':
+    'logs.rejectionDescriptions.expected a unique nonempty tool call ID of at most 128 bytes',
+  'expected a function object containing name and arguments':
+    'logs.rejectionDescriptions.expected a function object containing name and arguments',
+  'expected a supported function name':
+    'logs.rejectionDescriptions.expected a supported function name',
+  'function arguments must be a JSON object encoded as a string':
+    'logs.rejectionDescriptions.function arguments must be a JSON object encoded as a string',
+  'Google continuation parts do not match the assistant history':
+    'logs.rejectionDescriptions.Google continuation parts do not match the assistant history',
+  'a conversation turn needs content or an assistant tool call':
+    'logs.rejectionDescriptions.a conversation turn needs content or an assistant tool call',
+  'assistant tool calls are missing one or more results':
+    'logs.rejectionDescriptions.assistant tool calls are missing one or more results',
+  'at least one conversation turn must follow the instructions':
+    'logs.rejectionDescriptions.at least one conversation turn must follow the instructions',
+  'expected text or an array of supported content blocks':
+    'logs.rejectionDescriptions.expected text or an array of supported content blocks',
+  'expected a content block object': 'logs.rejectionDescriptions.expected a content block object',
+  'content block contains an unsupported attribute':
+    'logs.rejectionDescriptions.content block contains an unsupported attribute',
+  'text block must contain a string': 'logs.rejectionDescriptions.text block must contain a string',
+  'unsupported Gemini content block type':
+    'logs.rejectionDescriptions.unsupported Gemini content block type',
+  'image content requires a user message':
+    'logs.rejectionDescriptions.image content requires a user message',
+  'expected an image URL object containing url and optional detail':
+    'logs.rejectionDescriptions.expected an image URL object containing url and optional detail',
+  'Gemini image detail must be auto or omitted':
+    'logs.rejectionDescriptions.Gemini image detail must be auto or omitted',
+  'Gemini requires an inline base64 PNG, JPEG, GIF or WebP image':
+    'logs.rejectionDescriptions.Gemini requires an inline base64 PNG, JPEG, GIF or WebP image',
+  'reasoning effort conflicts with native thinking settings':
+    'logs.rejectionDescriptions.reasoning effort conflicts with native thinking settings',
+  'sampling parameter is not supported by this model':
+    'logs.rejectionDescriptions.sampling parameter is not supported by this model',
+  'expected a number from -2 inclusive to 2 exclusive':
+    'logs.rejectionDescriptions.expected a number from -2 inclusive to 2 exclusive',
+  'expected a signed 32-bit integer': 'logs.rejectionDescriptions.expected a signed 32-bit integer',
+  'native thinking setting is not supported by this model':
+    'logs.rejectionDescriptions.native thinking setting is not supported by this model',
+  'Send a nonempty messages array with at most 4096 entries.':
+    'logs.rejectionSuggestions.Send a nonempty messages array with at most 4096 entries.',
+  'Remove the unsupported attribute if it is optional, or choose a protocol that preserves it.':
+    'logs.rejectionSuggestions.Remove the unsupported attribute if it is optional, or choose a protocol that preserves it.',
+  'Use user, assistant, tool, system or developer under the configured role policy.':
+    'logs.rejectionSuggestions.Use user, assistant, tool, system or developer under the configured role policy.',
+  'Keep initial instructions at the start. For instructions that must take effect mid-conversation, choose a protocol that supports that position.':
+    'logs.rejectionSuggestions.Keep initial instructions at the start. For instructions that must take effect mid-conversation, choose a protocol that supports that position.',
+  'Place tool calls and reasoning on assistant messages, and tool_call_id on the matching tool result.':
+    'logs.rejectionSuggestions.Place tool calls and reasoning on assistant messages, and tool_call_id on the matching tool result.',
+  'Return one tool message per call ID, immediately after the assistant call and before the next turn.':
+    'logs.rejectionSuggestions.Return one tool message per call ID, immediately after the assistant call and before the next turn.',
+  'Send the tool output as a string, serializing any structured result as JSON.':
+    'logs.rejectionSuggestions.Send the tool output as a string, serializing any structured result as JSON.',
+  'Send reasoning_content as text or omit the empty field.':
+    'logs.rejectionSuggestions.Send reasoning_content as text or omit the empty field.',
+  'Replay the original assistant response with its matching Google parts, tool calls and signatures.':
+    'logs.rejectionSuggestions.Replay the original assistant response with its matching Google parts, tool calls and signatures.',
+  'Use a tool_calls array of function entries with an ID, function name and arguments.':
+    'logs.rejectionSuggestions.Use a tool_calls array of function entries with an ID, function name and arguments.',
+  'Use 1 to 64 ASCII letters, digits, underscores, dots, colons or hyphens, starting with a letter or underscore.':
+    'logs.rejectionSuggestions.Use 1 to 64 ASCII letters, digits, underscores, dots, colons or hyphens, starting with a letter or underscore.',
+  'Serialize the function arguments as one JSON object, using {} for no arguments.':
+    'logs.rejectionSuggestions.Serialize the function arguments as one JSON object, using {} for no arguments.',
+  'Include a conversation turn with text, supported content blocks or an assistant tool call.':
+    'logs.rejectionSuggestions.Include a conversation turn with text, supported content blocks or an assistant tool call.',
+  'Send text or an array of text blocks and supported user image_url blocks.':
+    'logs.rejectionSuggestions.Send text or an array of text blocks and supported user image_url blocks.',
+  'Put the image in a user message or choose a protocol that supports images in this role.':
+    'logs.rejectionSuggestions.Put the image in a user message or choose a protocol that supports images in this role.',
+  'Use image_url.url with a base64 data URL for a PNG, JPEG, GIF or WebP image.':
+    'logs.rejectionSuggestions.Use image_url.url with a base64 data URL for a PNG, JPEG, GIF or WebP image.',
+  'Set image_url.detail to auto or omit it, or use a protocol supporting the requested detail.':
+    'logs.rejectionSuggestions.Set image_url.detail to auto or omit it, or use a protocol supporting the requested detail.',
+  'Keep either reasoning_effort or the native thinking level or budget.':
+    'logs.rejectionSuggestions.Keep either reasoning_effort or the native thinking level or budget.',
+  'Omit the setting or choose a model that supports it.':
+    'logs.rejectionSuggestions.Omit the setting or choose a model that supports it.',
+  'Set the penalty to a number greater than or equal to -2 and less than 2.':
+    'logs.rejectionSuggestions.Set the penalty to a number greater than or equal to -2 and less than 2.',
+  'Use an integer from -2147483648 through 2147483647.':
+    'logs.rejectionSuggestions.Use an integer from -2147483648 through 2147483647.',
   'This entry did not record the unsupported field name. Retry the request to capture its location.':
     'logs.rejectionDescriptions.This entry did not record the unsupported field name. Retry the request to capture its location.',
   'The field name is omitted for privacy. Check its position in the top-level request fields after configured overrides; numbering starts at 1.':
@@ -310,8 +423,53 @@ export const rejectionDescriptionKeys: Record<string, string> = {
     'logs.rejectionSuggestions.Use a supported streaming value and valid stream options.',
   'Correct the field type or value according to the stated requirement.':
     'logs.rejectionSuggestions.Correct the field type or value according to the stated requirement.',
+  "Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.":
+    "logs.rejectionSuggestions.Omit this option. To keep it, choose a model that supports it or ask an operator to check the model's upstream bindings.",
+  'Use complete Chat messages or choose a model with native Responses support.':
+    'logs.rejectionSuggestions.Use complete Chat messages or choose a model with native Responses support.',
+  'Turn off tool flattening or choose a model with a source that supports it.':
+    'logs.rejectionSuggestions.Turn off tool flattening or choose a model with a source that supports it.',
   'no usable model resource is available for this request':
     'logs.rejectionDescriptions.no usable model resource is available for this request',
+  'the model connection has reached its per-minute request limit':
+    'logs.rejectionDescriptions.the model connection has reached its per-minute request limit',
+  'the model connection has reached its concurrent request limit':
+    'logs.rejectionDescriptions.the model connection has reached its concurrent request limit',
+  'the model connection has reached both its per-minute and concurrent request limits':
+    'logs.rejectionDescriptions.the model connection has reached both its per-minute and concurrent request limits',
+  'the waiting queue for the model connection is full':
+    'logs.rejectionDescriptions.the waiting queue for the model connection is full',
+  'the request deadline expired while waiting for a model connection':
+    'logs.rejectionDescriptions.the request deadline expired while waiting for a model connection',
+  'the model usage budget could not cover this request':
+    'logs.rejectionDescriptions.the model usage budget could not cover this request',
+  'the model connection is temporarily in cooldown':
+    'logs.rejectionDescriptions.the model connection is temporarily in cooldown',
+  'the model connections were unavailable for different reasons':
+    'logs.rejectionDescriptions.the model connections were unavailable for different reasons',
+  'the platform could not reserve routing space for this request':
+    'logs.rejectionDescriptions.the platform could not reserve routing space for this request',
+  'the platform could not record a new usage reservation':
+    'logs.rejectionDescriptions.the platform could not record a new usage reservation',
+  'the accounting service was busy while processing this request':
+    'logs.rejectionDescriptions.the accounting service was busy while processing this request',
+  'the accounting service has no room for a new reservation':
+    'logs.rejectionDescriptions.the accounting service has no room for a new reservation',
+  'Space out requests and retry after the rate window advances.':
+    'logs.rejectionSuggestions.Space out requests and retry after the rate window advances.',
+  'Wait for an active request to finish or choose another available model.':
+    'logs.rejectionSuggestions.Wait for an active request to finish or choose another available model.',
+  'Reduce parallel requests and retry after the rate window advances.':
+    'logs.rejectionSuggestions.Reduce parallel requests and retry after the rate window advances.',
+  'Wait before retrying or choose another available model.':
+    'logs.rejectionSuggestions.Wait before retrying or choose another available model.',
+  'Choose another available model or ask an operator to check the model usage budget.':
+    'logs.rejectionSuggestions.Choose another available model or ask an operator to check the model usage budget.',
+  'Retry later. If this persists, share the request ID with an operator.':
+    'logs.rejectionSuggestions.Retry later. If this persists, share the request ID with an operator.',
+  'Wait briefly before retrying.': 'logs.rejectionSuggestions.Wait briefly before retrying.',
+  'Share the request ID with an operator so they can check accounting storage.':
+    'logs.rejectionSuggestions.Share the request ID with an operator so they can check accounting storage.',
   'shared model resources are temporarily at capacity':
     'logs.rejectionDescriptions.shared model resources are temporarily at capacity',
   'No upstream request was sent. Retry later or choose another available model.':

@@ -24,6 +24,14 @@ export const REPORT_STATUSES = [
   'expired',
 ] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
+export const reportStatusTone = {
+  pending_indexing: 'info',
+  pending_review: 'warn',
+  approved_processing: 'info',
+  approved: 'ok',
+  rejected: 'neutral',
+  expired: 'neutral',
+} as const satisfies Record<ReportStatus, import('@shared/components/ui/StatusBadge').StatusTone>;
 
 export interface ReportBadge {
   total: string;

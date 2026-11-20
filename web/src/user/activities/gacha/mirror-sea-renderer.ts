@@ -1,3 +1,10 @@
+import {
+  artworkActivity,
+  displayDensity,
+  graphicsLimit,
+  layerDensity,
+  type ArtworkPlayback,
+} from '@shared/animation/artwork-playback';
 import { expandMomentView, momentReferenceSize, type MomentFrame } from './moment-frame';
 import { blinkAt, PaintCadence, eyelidProfileWidth } from '@shared/animation/illustration';
 import { highResolutionArt } from './art-resolution';
@@ -22,6 +29,7 @@ type Options = {
   variant?: 'card' | 'cover' | 'illustration' | 'appearance';
   frozenTime?: number;
   paused?: () => boolean;
+  playback?: ArtworkPlayback;
   signal?: AbortSignal;
   /** Page background: paint less often while the user types or scrolls. */
   ambient?: boolean;
@@ -53,9 +61,8 @@ function image(src: string, signal?: AbortSignal) {
 }
 
 export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Options = {}) {
-  const frozenTime =
-    options.frozenTime ??
-    (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : undefined);
+  const activity = artworkActivity(options.playback);
+  const frozenTime = options.frozenTime ?? (activity.systemMotion?.matches ? 0 : undefined);
   const base = '/assets/gacha/motion/n-gemini/';
   const source = (name: string) => {
     const url = base + name + '.webp';
@@ -84,6 +91,7 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     materials?.dispose();
     throw new Error('renderer-unavailable');
   }
+  const limits = options.playback?.highest ? graphicsLimit(gl) : undefined;
   const shaders: WebGLShader[] = [],
     textures: WebGLTexture[] = [];
   const program = gl.createProgram(),
@@ -93,14 +101,20 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
     time = 0,
     last = performance.now(),
     painted = false;
+  function lost(event: Event) {
+    event.preventDefault();
+    options.playback?.setFailed(true);
+    dispose();
+  }
   const observer = new ResizeObserver(() => resize());
-  const cadence = new PaintCadence(undefined, options.ambient);
+  const cadence = new PaintCadence(undefined, options.ambient, options.playback?.highest);
   const dispose = () => {
     if (stopped) return;
     stopped = true;
     cancelAnimationFrame(raf);
     observer.disconnect();
-    document.removeEventListener('visibilitychange', visibility);
+    activity.unlisten(visibility);
+    layer.removeEventListener('webglcontextlost', lost);
     options.signal?.removeEventListener('abort', dispose);
     textures.forEach((texture) => gl.deleteTexture(texture));
     shaders.forEach((shader) => gl.deleteShader(shader));
@@ -209,25 +223,6 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
             : 1.5);
     const momentFrame = options.characterOnly ? options.momentFrame : undefined;
     const reference = momentReferenceSize(width, height, momentFrame);
-    const density = options.exportSize
-      ? 1
-      : Math.min(
-          window.devicePixelRatio || 1,
-          (options.landscape
-            ? 3840
-            : momentFrame
-              ? (2560 * momentFrame.canvas[0]) / momentFrame.originalRegion.width
-              : 2560) / width,
-        );
-    canvas.width = Math.round(width * density);
-    canvas.height = Math.round(height * density);
-    const sampleCap =
-      2048 * (momentFrame ? momentFrame.canvas[0] / momentFrame.originalRegion.width : 1);
-    const sampling =
-      options.polished && !options.exportSize ? Math.min(2, sampleCap / canvas.width) : 1;
-    layer.width = Math.round(canvas.width * sampling);
-    layer.height = Math.round(canvas.height * sampling);
-    gl.viewport(0, 0, layer.width, layer.height);
     const plate = options.characterPlate || options.appearanceLayer;
     const layout =
       plate || (options.backgroundOnly && options.variant === 'appearance')
@@ -240,6 +235,39 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
             options.variant === 'appearance',
           );
     const view = expandMomentView(layout.view, momentFrame);
+    const native = Math.max(
+      layerDensity(background, width / view[2], height / view[3]),
+      layerDensity(
+        hero,
+        (width * layout.heroBox[2]) / view[2],
+        (height * layout.heroBox[3]) / view[3],
+      ),
+    );
+    const density = options.playback?.highest
+      ? displayDensity(width, height, native, limits)
+      : options.exportSize
+        ? 1
+        : Math.min(
+            window.devicePixelRatio || 1,
+            (options.landscape
+              ? 3840
+              : momentFrame
+                ? (2560 * momentFrame.canvas[0]) / momentFrame.originalRegion.width
+                : 2560) / width,
+          );
+    canvas.width = Math.round(width * density);
+    canvas.height = Math.round(height * density);
+    const sampleCap =
+      2048 * (momentFrame ? momentFrame.canvas[0] / momentFrame.originalRegion.width : 1);
+    const sampling = options.playback?.highest
+      ? displayDensity(canvas.width, canvas.height, native / density, limits, 2)
+      : options.polished && !options.exportSize
+        ? Math.min(2, sampleCap / canvas.width)
+        : 1;
+    layer.width = Math.round(canvas.width * sampling);
+    layer.height = Math.round(canvas.height * sampling);
+    gl.viewport(0, 0, layer.width, layer.height);
+
     gl.uniform4fv(uniform('view'), view);
     gl.uniform4fv(uniform('heroBox'), layout.heroBox);
     materials?.setResolution(
@@ -272,18 +300,19 @@ export async function renderMirrorSea(canvas: HTMLCanvasElement, options: Option
       canvas.dataset.time = t.toFixed(3);
       canvas.dataset.blink = (options.blink ?? blinkAt(t)).toFixed(3);
     }
-    if (frozenTime === undefined && !document.hidden) raf = requestAnimationFrame(frame);
+    if (frozenTime === undefined && !activity.hidden) raf = requestAnimationFrame(frame);
   }
   function visibility() {
     cancelAnimationFrame(raf);
-    if (!document.hidden && !stopped && frozenTime === undefined) {
+    if (!activity.hidden && !stopped && frozenTime === undefined) {
       last = performance.now();
       cadence.reset();
       raf = requestAnimationFrame(frame);
     }
   }
   observer.observe(canvas);
-  document.addEventListener('visibilitychange', visibility);
+  activity.listen(visibility);
+  layer.addEventListener('webglcontextlost', lost);
   options.signal?.addEventListener('abort', dispose, { once: true });
   resize();
   if (frozenTime === undefined) frame(last);

@@ -3,6 +3,7 @@ import { isAISDKGateway } from '@shared/operations/connectorPolicy';
 import { CloudflareProxySummary } from '@shared/components/CloudflareProxyField';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { CopyValue } from '@shared/components/CopyValue';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { PageHeader } from '@shared/components/States';
 import { TransportRuleSummary } from '@shared/components/TransportRuleField';
@@ -28,7 +29,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { useTranslation } from 'react-i18next';
 import { deleteModel, getModel } from './api';
-import { CoreEmpty, CoreErrorPanel, CoreLoading, SafeCopyValue } from './components';
+import { CoreEmpty, CoreErrorPanel, CoreLoading } from './components';
 import { useCoreCopy } from './copy';
 import { useNumberedModels } from './modelNumberedQueries';
 import { useModelText } from './models/copy';
@@ -85,9 +86,8 @@ function ModelDetail({
   const model = useModel(accountId, modelId);
   // ModelSources owns this complete query; observe its cache without another read.
   const bindings = useBindings(accountId, modelId, false);
-  const targetConnectors = bindings.data?.bindings.flatMap(
-    (binding) =>
-      binding.targets?.map((target) => target.connector_type) ?? [binding.connector_type],
+  const targetConnectors = bindings.data?.bindings.flatMap((binding) =>
+    binding.targets.map((target) => target.connector_type),
   );
   const connectorType = targetConnectors?.[0];
   const adaptationConnectorType =
@@ -166,32 +166,30 @@ function ModelDetail({
   const accessLossError =
     (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
     (isAccessLoss(model.error) ? model.error : null);
+  const back = (
+    <button type="button" className="nb-btn nb-btn--ghost" onClick={onBack}>
+      {t('common.back')}
+    </button>
+  );
 
   if (accessLossError)
     return (
-      <div className="page core-page core-stack models-workspace">
-        <PageHeader
-          icon="models"
-          title={t('models.detailTitle')}
-          description={t('models.detailDescription')}
-          back={
-            <button type="button" className="nb-btn nb-btn--ghost" onClick={onBack}>
-              {t('common.back')}
-            </button>
-          }
-        />
+      <div className="page page--detail core-page core-stack models-workspace">
+        <PageHeader title={t('models.detailTitle')} back={back} />
         <CoreErrorPanel error={accessLossError} />
       </div>
     );
   if (model.isPending && !model.data)
     return (
-      <div className="page core-page models-workspace">
+      <div className="page page--detail core-page core-stack models-workspace">
+        <PageHeader title={t('models.detailTitle')} back={back} />
         <CoreLoading />
       </div>
     );
   if (!model.data)
     return (
-      <div className="page core-page models-workspace">
+      <div className="page page--detail core-page core-stack models-workspace">
+        <PageHeader title={t('models.detailTitle')} back={back} />
         <CoreErrorPanel
           error={model.error ?? new Error('The model details are unavailable.')}
           onRetry={() => void model.refetch()}
@@ -200,24 +198,28 @@ function ModelDetail({
     );
 
   return (
-    <div className="page core-page core-stack models-workspace">
+    <div className="page page--detail core-page core-stack models-workspace">
       <PageHeader
-        icon="models"
+        className="model-detail-heading"
         title={model.data.full_name}
-        back={
-          <button type="button" className="nb-btn nb-btn--ghost" onClick={onBack}>
-            {t('common.back')}
-          </button>
-        }
+        back={back}
         actions={
-          <button
-            type="button"
-            className="nb-btn nb-btn--secondary"
-            disabled={reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() => setEditing(model.data ?? null)}
-          >
-            {t('models.editModel')}
-          </button>
+          <div className="nb-actions model-detail-actions">
+            <CopyValue
+              value={model.data.full_name}
+              label={textModel('callName')}
+              showValue={false}
+              variant="secondary"
+            />
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={reconciliationRequired || Boolean(replayAttempt)}
+              onClick={() => setEditing(model.data ?? null)}
+            >
+              {t('models.editModel')}
+            </button>
+          </div>
         }
       />
       <div className="model-detail-body">
@@ -248,43 +250,6 @@ function ModelDetail({
           />
         ) : (
           <div className="model-detail-layout">
-            <div className="model-detail-aside">
-              <Panel>
-                <PanelHead title={textModel('callName')} />
-                <PanelBody>
-                  <SafeCopyValue value={model.data.full_name} label={textModel('callName')} />
-                  <ModelTypesSummary value={model.data.model_types} />
-                  <dl className="core-detail-list">
-                    <CloudflareProxySummary
-                      enabled={model.data.cloudflare_proxy_enabled}
-                      mode={model.data.cloudflare_proxy_mode}
-                    />
-                  </dl>
-                </PanelBody>
-              </Panel>
-              <Fold lazy title={textModel('advanced')} summary={textModel('advancedHelp')}>
-                <dl className="core-detail-list">
-                  <div>
-                    <dt>{t('models.silentRetry')}</dt>
-                    <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
-                  </div>
-                  {model.data.model_types.includes('chat_completions') ||
-                  model.data.model_types.includes('responses') ? (
-                    <>
-                      <TransportRuleSummary value={model.data.transport_rule} />
-                      <div>
-                        <dt>{t('models.flattenTools')}</dt>
-                        <dd>{model.data.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
-                      </div>
-                    </>
-                  ) : null}
-                </dl>
-                {model.data.model_types.includes('chat_completions') ||
-                model.data.model_types.includes('responses') ? (
-                  <ModelRoleSummary policy={model.data.role_policy} />
-                ) : null}
-              </Fold>
-            </div>
             <div className="model-detail-main">
               <ModelSources
                 accountId={accountId}
@@ -311,6 +276,45 @@ function ModelDetail({
                   gatewayCacheDefaults={gatewayCacheDefaults}
                   editable={!reconciliationRequired && !replayAttempt}
                 />
+              </Fold>
+            </div>
+            <div className="model-detail-aside">
+              <Panel>
+                <PanelHead title={textModel('settingsSummary')} />
+                <PanelBody>
+                  <ModelTypesSummary value={model.data.model_types} />
+                  <dl className="core-detail-list">
+                    <CloudflareProxySummary
+                      enabled={model.data.cloudflare_proxy_enabled}
+                      mode={model.data.cloudflare_proxy_mode}
+                    />
+                  </dl>
+                  <Link className="nb-btn nb-btn--secondary" to="/keys#client">
+                    {textModel('clientValue')}
+                  </Link>
+                </PanelBody>
+              </Panel>
+              <Fold lazy title={textModel('advanced')} summary={textModel('advancedHelp')}>
+                <dl className="core-detail-list">
+                  <div>
+                    <dt>{t('models.silentRetry')}</dt>
+                    <dd>{model.data.silent_retry ? t('common.yes') : t('common.no')}</dd>
+                  </div>
+                  {model.data.model_types.includes('chat_completions') ||
+                  model.data.model_types.includes('responses') ? (
+                    <>
+                      <TransportRuleSummary value={model.data.transport_rule} />
+                      <div>
+                        <dt>{t('models.flattenTools')}</dt>
+                        <dd>{model.data.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
+                      </div>
+                    </>
+                  ) : null}
+                </dl>
+                {model.data.model_types.includes('chat_completions') ||
+                model.data.model_types.includes('responses') ? (
+                  <ModelRoleSummary policy={model.data.role_policy} />
+                ) : null}
               </Fold>
             </div>
           </div>
@@ -379,7 +383,7 @@ function ModelDetail({
 export function ModelsWorkspace({ user }: { user: UserProfile }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const returnTo = listReturnPath(location.state, '/models');
+  const returnTo = listReturnPath(location.state, '/models', '/issues');
   const { t } = useCoreCopy();
   const textModel = useModelText();
   const [sourceFocusId, setSourceFocusId] = useState<string | null>(null);
@@ -455,6 +459,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           >
             {model.full_name}
           </button>
+          <CopyValue value={model.full_name} label={model.full_name} showValue={false} />
           <ModelTypesSummary value={model.model_types} />
           <span className="nb-sub">
             {textModel(
@@ -520,14 +525,14 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
           disabled={models.isFetching || Boolean(models.error)}
           onClick={() => setSelectedModelID(model.id)}
         >
-          {t('models.editModel')}
+          {textModel('open')}
         </button>
       ),
     },
   ];
   if (!scopeReady) {
     return (
-      <div className="page core-page models-workspace">
+      <div className="page page--workspace core-page models-workspace">
         {session.error ? <CoreErrorPanel error={session.error} /> : <CoreLoading />}
       </div>
     );
@@ -556,7 +561,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
 
   if (accessLossError) {
     return (
-      <div className="page core-page core-stack models-workspace">
+      <div className="page page--workspace core-page core-stack models-workspace">
         <PageHeader
           icon="models"
           title={t('models.title')}
@@ -568,7 +573,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
   }
 
   return (
-    <div className="page core-page core-stack models-workspace">
+    <div className="page page--workspace core-page core-stack models-workspace">
       <PageHeader
         icon="models"
         title={t('models.title')}
@@ -595,6 +600,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
         <ModelEditor
           key={`${user.id}:${creationVersion}`}
           accountId={user.id}
+          inSheet
           onCancel={() => setCreating(false)}
           onCapabilityLoss={(error) => setPermissionLost({ scope: user.id, error })}
           onSaved={(saved) => {
@@ -626,18 +632,9 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
               title={t('models.emptyTitle')}
               body={textModel('emptyBody')}
               action={
-                <span className="nb-inline">
-                  <Link className="nb-btn nb-btn--secondary" to="/endpoints?quickstart=1">
-                    {textModel('addService')}
-                  </Link>
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--primary"
-                    onClick={() => setCreating(true)}
-                  >
-                    {t('models.create')}
-                  </button>
-                </span>
+                <Link className="nb-btn nb-btn--secondary" to="/endpoints?quickstart=1">
+                  {textModel('addService')}
+                </Link>
               }
             />
           ) : (
@@ -656,13 +653,15 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
               }}
             />
           )}
-          <PagePagination
-            metadata={models.data.pagination}
-            requestedPage={pager.page}
-            busy={models.isFetching}
-            onPageChange={pager.setPage}
-            onPageSizeChange={pager.setPageSize}
-          />
+          {models.data.data.length ? (
+            <PagePagination
+              metadata={models.data.pagination}
+              requestedPage={pager.page}
+              busy={models.isFetching}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+            />
+          ) : null}
         </section>
       ) : (
         <CoreLoading />

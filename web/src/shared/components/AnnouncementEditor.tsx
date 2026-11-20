@@ -3,8 +3,8 @@ import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { Button } from '@shared/components/ui/Button';
 import { Fold } from '@shared/components/ui/Fold';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
@@ -19,7 +19,15 @@ import {
   StatusBadge,
 } from '@shared/components/States';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
+import { createTimeDraft, timeDraftValue } from '@shared/time';
+import {
+  draftChanged,
+  fromAuthority,
+  mergeDraft,
+  type AnnouncementSaveInput,
+  type DraftField,
+  type DraftState,
+} from '@shared/operations/announcementDraft';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { SafeAnnouncementBody } from '../../user/features/operations/SafeAnnouncementBody';
 import {
@@ -30,46 +38,17 @@ import {
   previewAnnouncement,
   publishAnnouncement,
   withdrawAnnouncement,
-  type AdminAnnouncement,
   type AnnouncementSeverity,
   type AnnouncementState,
 } from '@shared/operations/managedAnnouncements';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
 
-interface DraftState {
-  title_zh: string;
-  body_zh: string;
-  title_en: string;
-  body_en: string;
-  severity: 'info' | 'warning' | 'important';
-  pinned: boolean;
-  dismissible: boolean;
-  expires_at: TimeDraft;
-}
-
-interface AnnouncementSaveInput {
+type LifecycleInput = {
+  action: 'publish' | 'withdraw' | 'delete';
   revision: string;
-  title_zh: string;
-  body_zh: string;
-  title_en: string;
-  body_en: string;
-  severity: DraftState['severity'];
-  pinned: boolean;
-  dismissible: boolean;
-  expires_at: number | null;
-}
-
-const fromAuthority = (item: AdminAnnouncement): DraftState => ({
-  title_zh: item.draft.zh?.title ?? '',
-  body_zh: item.draft.zh?.body ?? '',
-  title_en: item.draft.en?.title ?? '',
-  body_en: item.draft.en?.body ?? '',
-  severity: item.severity,
-  pinned: item.pinned,
-  dismissible: item.dismissible,
-  expires_at: createTimeDraft(item.expires_at, 'minute'),
-});
+  reason: string;
+};
 
 export function AnnouncementEditor({
   role,
@@ -87,9 +66,10 @@ export function AnnouncementEditor({
   embedded?: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const root = managementRoot(role);
   const navigate = useNavigate();
+  const location = useLocation();
   const client = useQueryClient();
   const authority = useQuery({
     queryKey: managedAnnouncementKeys.detail(role, account, announcementId),
@@ -98,12 +78,13 @@ export function AnnouncementEditor({
     enabled: Boolean(announcementId && account),
   });
   const [draft, setDraft] = useState<DraftState | null>(null);
-  const [loadedRevision, setLoadedRevision] = useState('');
+  const [base, setBase] = useState<{ revision: string; draft: DraftState } | null>(null);
   const [denied, setDenied] = useState<unknown>(null);
-  const [dirty, setDirty] = useState(false);
-  const [conflict, setConflict] = useState(false);
+  const [conflicts, setConflicts] = useState<DraftField[]>([]);
+  const [mergedRevision, setMergedRevision] = useState('');
+  const previewHeading = useRef<HTMLHeadingElement>(null);
   const [reason, setReason] = useState('');
-  const [confirmation, setConfirmation] = useState<'publish' | 'withdraw' | 'delete' | null>(null);
+  const [confirmation, setConfirmation] = useState<LifecycleInput | null>(null);
   const preview = useMutation({
     retry: false,
     mutationFn: (input: DraftState) =>
@@ -137,8 +118,7 @@ export function AnnouncementEditor({
         key,
         role,
       ),
-    async (_input, error, context) => {
-      if (error) context.commit(() => setConflict(true));
+    async (_input, _error, context) => {
       await client.invalidateQueries({ queryKey: managedAnnouncementKeys.pages(role) });
       context.assertCurrent();
       await authority.refetch();
@@ -146,10 +126,7 @@ export function AnnouncementEditor({
     root,
   );
   const lifecycle = useRetainedOperation(
-    async (
-      input: { action: 'publish' | 'withdraw' | 'delete'; revision: string; reason: string },
-      key,
-    ) => {
+    async (input: LifecycleInput, key) => {
       if (input.action === 'publish')
         return publishAnnouncement(announcementId, input.revision, key, role);
       if (input.action === 'withdraw')
@@ -178,17 +155,36 @@ export function AnnouncementEditor({
   );
   const resetPreview = preview.reset;
 
+  const saveUnknown = save.outcome === 'unknown';
+  const lifecycleUnknown = lifecycle.outcome === 'unknown';
+  const writing = save.isPending || lifecycle.isPending;
+  const writeLocked = writing || saveUnknown || lifecycleUnknown;
   if (
     authority.data &&
+    !denied &&
     !authority.error &&
     !authority.isFetching &&
-    authority.data.revision !== loadedRevision
+    !writeLocked &&
+    (!base || BigInt(authority.data.revision) > BigInt(base.revision))
   ) {
-    if (!dirty && (!draft || draft.expires_at.text === draft.expires_at.originalText)) {
-      setLoadedRevision(authority.data.revision);
-      setDraft(fromAuthority(authority.data));
+    const latest = fromAuthority(authority.data);
+    if (base && draft && draftChanged(base.draft, draft)) {
+      const merged = mergeDraft(base.draft, draft, latest, conflicts);
+      setDraft(merged.draft);
+      setConflicts(merged.conflicts);
+      setMergedRevision(authority.data.revision);
+    } else {
+      setDraft(latest);
+      setConflicts([]);
     }
+    setBase({ revision: authority.data.revision, draft: latest });
   }
+  useEffect(() => {
+    if (preview.data) {
+      previewHeading.current?.focus({ preventScroll: true });
+      previewHeading.current?.scrollIntoView?.({ block: 'center', behavior: 'instant' });
+    }
+  }, [preview.data]);
   useEffect(() => {
     const error = authority.error ?? preview.error ?? save.error ?? lifecycle.error;
     if (error) {
@@ -199,6 +195,8 @@ export function AnnouncementEditor({
     // Capability loss must synchronously discard the private draft and preview state.
     if (isUnauthorized(error) || isForbidden(error)) {
       setDenied(error);
+      setBase(null);
+      setConflicts([]);
       if (onAuthorityLoss) onAuthorityLoss();
       else if (isUnauthorized(error)) clearStationSession(client, role);
       setDraft(null);
@@ -206,6 +204,7 @@ export function AnnouncementEditor({
       setConfirmation(null);
       resetPreview();
     } else if (isNotFoundError(authority.error)) {
+      setBase(null);
       setDraft(null);
       setReason('');
       setConfirmation(null);
@@ -224,9 +223,7 @@ export function AnnouncementEditor({
   const update = <K extends keyof DraftState>(key: K, value: DraftState[K]) => {
     if (!draft) return;
     setDraft({ ...draft, [key]: value });
-    setDirty(true);
-    setConflict(false);
-    preview.reset();
+    if (key.startsWith('title_') || key.startsWith('body_')) preview.reset();
   };
   const stateLabels: Record<AnnouncementState, string> = {
     draft: t('management.announcements.state.draft'),
@@ -241,16 +238,22 @@ export function AnnouncementEditor({
   };
 
   const awaitingAuthority = authority.isPending || !draft || !authority.data;
+  const preferZh = Boolean(i18n.resolvedLanguage?.startsWith('zh'));
   const title =
     denied || awaitingAuthority
       ? t('management.announcements.detail.loadingTitle')
-      : draft.title_en || draft.title_zh || t('management.announcements.detail.untitled');
+      : (preferZh ? draft.title_zh || draft.title_en : draft.title_en || draft.title_zh) ||
+        t('management.announcements.detail.untitled');
   const description = t(
     awaitingAuthority
       ? 'management.announcements.detail.loadingDescription'
       : 'management.announcements.detail.description',
   );
-  const back = <Link to={backTo}>{t('management.announcements.detail.back')}</Link>;
+  const back = (
+    <Link to={backTo} state={{ announcementSource: location.state?.announcementSource }}>
+      {t('management.announcements.detail.back')}
+    </Link>
+  );
   const header = embedded ? (
     <div className="ops-stack">
       <div className="nb-page-header__back">{back}</div>
@@ -260,7 +263,7 @@ export function AnnouncementEditor({
     <PageHeader title={title} description={description} back={back} />
   );
   const pageClassName = embedded ? 'ops-page' : 'page ops-page';
-  if (denied || authority.isPending || !draft || !authority.data)
+  if (denied || authority.isPending || !base || !draft || !authority.data)
     return (
       <div className={pageClassName}>
         {header}
@@ -281,7 +284,7 @@ export function AnnouncementEditor({
     Boolean(draft.title_en.trim()) === Boolean(draft.body_en.trim());
   const expiry = timeDraftValue(draft.expires_at);
   const expiryValid = expiry !== undefined;
-  const draftDirty = dirty || draft.expires_at.text !== draft.expires_at.originalText;
+  const draftDirty = draftChanged(base.draft, draft);
   const draftValid =
     languagePairsValid && zhBodyBytes <= 65_536 && enBodyBytes <= 65_536 && expiryValid;
   const complete =
@@ -290,43 +293,67 @@ export function AnnouncementEditor({
       (draft.title_zh.trim() && draft.body_zh.trim()) ||
       (draft.title_en.trim() && draft.body_en.trim()),
     );
-  const submitSave = () => {
-    const expiresAt = timeDraftValue(draft.expires_at);
-    if (!draftDirty || expiresAt === undefined) return;
-    save.mutate(
-      {
-        revision: conflict ? item.revision : loadedRevision,
-        title_zh: draft.title_zh,
-        body_zh: draft.body_zh,
-        title_en: draft.title_en,
-        body_en: draft.body_en,
-        severity: draft.severity,
-        pinned: draft.pinned,
-        dismissible: draft.dismissible,
-        expires_at: expiresAt,
+  const submitSave = (input: AnnouncementSaveInput) => {
+    save.mutate(input, {
+      onSuccess: (receipt) => {
+        const current = client.getQueryData<typeof item>(
+          managedAnnouncementKeys.detail(role, account, announcementId),
+        );
+        const latest =
+          current && BigInt(current.revision) >= BigInt(receipt.revision) ? current : null;
+        const saved = latest
+          ? fromAuthority(latest)
+          : { ...draft, expires_at: createTimeDraft(input.expires_at, 'minute') };
+        setDraft(saved);
+        setBase({ revision: latest?.revision ?? receipt.revision, draft: saved });
+        setConflicts([]);
+        setMergedRevision('');
       },
-      {
-        onSuccess: (receipt) => {
-          setLoadedRevision(receipt.revision);
-          setDirty(false);
-          setConflict(false);
-          setDraft((current) =>
-            current ? { ...current, expires_at: createTimeDraft(expiresAt, 'minute') } : current,
-          );
-        },
-      },
-    );
+    });
   };
-  const authorityBlocked = Boolean(authority.error) || authority.isFetching;
+  const fieldLabels: Record<DraftField, string> = {
+    title_zh: t('management.announcements.chineseTitle'),
+    body_zh: t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes }),
+    title_en: t('management.announcements.englishTitle'),
+    body_en: t('management.announcements.englishMarkdown', { bytes: enBodyBytes }),
+    severity: t('management.announcements.severityLabel'),
+    pinned: t('management.announcements.pinned'),
+    dismissible: t('management.announcements.dismissible'),
+    expires_at: t('management.announcements.expiry'),
+  };
+  const displayField = (key: DraftField, values: DraftState) => {
+    if (key === 'expires_at') {
+      const time = timeDraftValue(values.expires_at);
+      return time
+        ? formatDateTime(time)
+        : values.expires_at.text || t('management.announcements.detail.emptyValue');
+    }
+    if (key === 'severity') return severityLabels[values.severity];
+    const value = values[key];
+    if (typeof value === 'boolean') return value ? t('common.yes') : t('common.no');
+    return value || t('management.announcements.detail.emptyValue');
+  };
+  const authorityBlocked =
+    Boolean(authority.error) || authority.isFetching || item.revision !== base.revision;
+  const requestLifecycle = (action: LifecycleInput['action']) =>
+    setConfirmation({ action, revision: base.revision, reason: reason.trim() });
+  const previewCurrent =
+    preview.variables?.title_zh === draft.title_zh &&
+    preview.variables?.title_en === draft.title_en &&
+    preview.variables?.body_zh === draft.body_zh &&
+    preview.variables?.body_en === draft.body_en;
   return (
     <div className={pageClassName}>
       {header}
       <Card>
-        <div className="ops-toolbar">
+        <div className="ops-toolbar announcement-editor-head">
+          <h2>{t('management.announcements.detail.editorTitle')}</h2>
           <StatusBadge active={item.state === 'published'} label={stateLabels[item.state]} />
           <Fold plain title={t('common.operations.management.details')}>
             <span>
-              {t('management.announcements.detail.authorityRevision', { revision: item.revision })}
+              {t('management.announcements.detail.authorityRevision', {
+                revision: item.revision,
+              })}
             </span>
             {item.published ? (
               <span>
@@ -340,15 +367,48 @@ export function AnnouncementEditor({
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
         ) : null}
-        {conflict || loadedRevision !== item.revision ? (
-          <p className="inline-notice">
-            {t('management.announcements.detail.conflict', { revision: item.revision })}
+        {mergedRevision ? (
+          <p className="inline-notice" role="status">
+            {t('management.announcements.detail.conflict', { revision: mergedRevision })}
           </p>
         ) : null}
-      </Card>
-      <Card>
-        <h2>{t('management.announcements.detail.editorTitle')}</h2>
-        <fieldset disabled={save.isPending || lifecycle.isPending}>
+        {conflicts.map((key) => (
+          <section
+            className="ops-subcard announcement-conflict"
+            key={key}
+            aria-label={fieldLabels[key]}
+          >
+            <h3>{fieldLabels[key]}</h3>
+            <dl className="announcement-conflict__versions">
+              <div>
+                <dt>{t('management.announcements.detail.yourVersion')}</dt>
+                <dd>
+                  <div className="announcement-conflict__value">{displayField(key, draft)}</div>
+                  <Button onClick={() => setConflicts(conflicts.filter((field) => field !== key))}>
+                    {t('management.announcements.detail.keepMine')}
+                  </Button>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('management.announcements.detail.latestVersion')}</dt>
+                <dd>
+                  <div className="announcement-conflict__value">
+                    {displayField(key, base.draft)}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      update(key, base.draft[key]);
+                      setConflicts(conflicts.filter((field) => field !== key));
+                    }}
+                  >
+                    {t('management.announcements.detail.useLatest')}
+                  </Button>
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ))}
+        <fieldset disabled={writeLocked}>
           <Fields>
             <Field label={t('management.announcements.chineseTitle')} size="medium">
               {(field) => (
@@ -372,7 +432,7 @@ export function AnnouncementEditor({
             </Field>
           </Fields>
         </fieldset>
-        <fieldset disabled={save.isPending || lifecycle.isPending}>
+        <fieldset disabled={writeLocked}>
           <Fields>
             <Field
               label={t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes })}
@@ -381,6 +441,7 @@ export function AnnouncementEditor({
               {(field) => (
                 <textarea
                   {...field}
+                  rows={6}
                   value={draft.body_zh}
                   onChange={(event) => update('body_zh', event.target.value)}
                 />
@@ -393,6 +454,7 @@ export function AnnouncementEditor({
               {(field) => (
                 <textarea
                   {...field}
+                  rows={6}
                   value={draft.body_en}
                   onChange={(event) => update('body_en', event.target.value)}
                 />
@@ -405,7 +467,7 @@ export function AnnouncementEditor({
             {t('management.announcements.validation')}
           </p>
         ) : null}
-        <fieldset disabled={save.isPending || lifecycle.isPending}>
+        <fieldset disabled={writeLocked}>
           <Fields>
             <Field label={t('management.announcements.severityLabel')} size="short">
               {(field) => (
@@ -454,44 +516,44 @@ export function AnnouncementEditor({
             </Field>
           </Fields>
         </fieldset>
-        {save.error ? <ErrorState error={save.error} /> : null}
+        {save.error && !(save.outcome === 'conflict' && mergedRevision) ? (
+          <ErrorState error={save.error} />
+        ) : null}
+        {saveUnknown && save.variables ? (
+          <Button disabled={writing} onClick={() => save.variables && submitSave(save.variables)}>
+            {t('management.announcements.detail.retrySave')}
+          </Button>
+        ) : null}
         <FormActions>
           <Button
             variant="primary"
             type="button"
             disabled={
-              authorityBlocked ||
-              !draftDirty ||
-              !draftValid ||
-              save.isPending ||
-              lifecycle.isPending
+              authorityBlocked || !draftDirty || !draftValid || writeLocked || conflicts.length > 0
             }
-            onClick={submitSave}
+            onClick={() => {
+              if (expiry !== undefined)
+                submitSave({ ...draft, expires_at: expiry, revision: base.revision });
+            }}
           >
             {t('management.announcements.detail.saveDraft')}
           </Button>
           <Button
             type="button"
-            disabled={
-              authorityBlocked ||
-              !complete ||
-              preview.isPending ||
-              save.isPending ||
-              lifecycle.isPending
-            }
+            disabled={authorityBlocked || !complete || preview.isPending || writeLocked}
             onClick={() => preview.mutate(draft)}
           >
             {t('management.announcements.detail.preview')}
           </Button>
           <Button
-            variant="link"
+            variant="ghost"
             type="button"
-            disabled={save.isPending || lifecycle.isPending}
+            disabled={(!draftDirty && conflicts.length === 0) || writeLocked}
             onClick={() => {
-              setDraft(fromAuthority(item));
-              setLoadedRevision(item.revision);
-              setDirty(false);
-              setConflict(false);
+              setDraft(base.draft);
+              setMergedRevision('');
+              setConflicts([]);
+              save.reset();
               preview.reset();
             }}
           >
@@ -499,25 +561,36 @@ export function AnnouncementEditor({
           </Button>
         </FormActions>
       </Card>
-      {preview.error ? (
-        <ErrorState error={preview.error} />
-      ) : preview.data ? (
-        <Card>
-          <h2>
+      {preview.error && previewCurrent ? (
+        <ErrorState error={preview.error} onRetry={() => preview.mutate(draft)} />
+      ) : preview.data && previewCurrent ? (
+        <Card className="announcement-preview">
+          <h2 tabIndex={-1} ref={previewHeading}>
             {t('management.announcements.detail.serverPreview', {
               version: preview.data.render_profile_version,
             })}
           </h2>
+          <p>{t('management.announcements.detail.previewScope')}</p>
           <div className="ops-grid">
             {preview.data.rendered_zh ? (
-              <section>
-                <h3>{t('management.announcements.detail.chinese')}</h3>
+              <section lang="zh">
+                {preview.data.rendered_en && (
+                  <p className="nb-small nb-muted" lang={i18n.resolvedLanguage}>
+                    {t('management.announcements.detail.chinese')}
+                  </p>
+                )}
+                <h3>{draft.title_zh}</h3>
                 <SafeAnnouncementBody html={preview.data.rendered_zh} />
               </section>
             ) : null}
             {preview.data.rendered_en ? (
-              <section>
-                <h3>{t('management.announcements.detail.english')}</h3>
+              <section lang="en">
+                {preview.data.rendered_zh && (
+                  <p className="nb-small nb-muted" lang={i18n.resolvedLanguage}>
+                    {t('management.announcements.detail.english')}
+                  </p>
+                )}
+                <h3>{draft.title_en}</h3>
                 <SafeAnnouncementBody html={preview.data.rendered_en} />
               </section>
             ) : null}
@@ -548,27 +621,29 @@ export function AnnouncementEditor({
           </div>
         </Card>
       ) : null}
-      <Card className="ops-danger">
+      <Card>
         <h2>{t('management.announcements.detail.lifecycleTitle')}</h2>
-        {lifecycle.error ? <ErrorState error={lifecycle.error} /> : null}
-        <Field label={t('management.announcements.detail.reason')} size="long">
-          {(field) => (
-            <input
-              {...field}
-              value={reason}
-              maxLength={1024}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          )}
-        </Field>
+        {lifecycle.error ? (
+          <ErrorState
+            error={lifecycle.error}
+            onRetry={
+              lifecycleUnknown && !writing && lifecycle.variables
+                ? () => lifecycle.variables && lifecycle.mutate(lifecycle.variables)
+                : undefined
+            }
+          />
+        ) : null}
+        {lifecycle.outcome === 'conflict' ? (
+          <p className="inline-notice">{t('management.announcements.detail.lifecycleConflict')}</p>
+        ) : null}
         <FormActions>
           <Button
             variant="primary"
             type="button"
             disabled={
-              authorityBlocked || !complete || draftDirty || lifecycle.isPending || save.isPending
+              authorityBlocked || !complete || draftDirty || conflicts.length > 0 || writeLocked
             }
-            onClick={() => setConfirmation('publish')}
+            onClick={() => requestLifecycle('publish')}
           >
             {item.state === 'published'
               ? t('management.announcements.detail.publishUpdate')
@@ -576,12 +651,27 @@ export function AnnouncementEditor({
                 ? t('management.announcements.detail.republish')
                 : t('management.announcements.detail.publish')}
           </Button>
+        </FormActions>
+      </Card>
+      <Card className="ops-danger">
+        <Field label={t('management.announcements.detail.reason')} size="long">
+          {(field) => (
+            <input
+              {...field}
+              value={reason}
+              disabled={writeLocked}
+              maxLength={1024}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          )}
+        </Field>
+        <FormActions>
           {item.state === 'published' ? (
             <Button
-              variant="danger"
+              variant="danger-outline"
               type="button"
-              disabled={authorityBlocked || !reason.trim() || lifecycle.isPending || save.isPending}
-              onClick={() => setConfirmation('withdraw')}
+              disabled={authorityBlocked || !reason.trim() || writeLocked}
+              onClick={() => requestLifecycle('withdraw')}
             >
               {t('management.announcements.detail.withdraw')}
             </Button>
@@ -589,8 +679,8 @@ export function AnnouncementEditor({
           <Button
             variant="danger"
             type="button"
-            disabled={authorityBlocked || !reason.trim() || lifecycle.isPending || save.isPending}
-            onClick={() => setConfirmation('delete')}
+            disabled={authorityBlocked || !reason.trim() || writeLocked}
+            onClick={() => requestLifecycle('delete')}
           >
             {t('management.announcements.detail.permanentlyDelete')}
           </Button>
@@ -600,35 +690,34 @@ export function AnnouncementEditor({
         <ConfirmDialog
           open
           title={
-            confirmation === 'delete'
+            confirmation.action === 'delete'
               ? t('management.announcements.detail.confirmDeleteTitle')
-              : confirmation === 'withdraw'
+              : confirmation.action === 'withdraw'
                 ? t('management.announcements.detail.confirmWithdrawTitle')
                 : item.state === 'published'
                   ? t('management.announcements.detail.confirmUpdateTitle')
                   : t('management.announcements.detail.confirmPublishTitle')
           }
           description={
-            confirmation === 'delete'
+            confirmation.action === 'delete'
               ? t('management.announcements.detail.confirmDeleteBody')
-              : confirmation === 'withdraw'
+              : confirmation.action === 'withdraw'
                 ? t('management.announcements.detail.confirmWithdrawBody')
                 : t('management.announcements.detail.confirmPublishBody')
           }
           confirmLabel={
-            confirmation === 'delete'
+            confirmation.action === 'delete'
               ? t('management.announcements.detail.confirmDelete')
-              : confirmation === 'withdraw'
+              : confirmation.action === 'withdraw'
                 ? t('management.announcements.detail.withdraw')
                 : t('management.announcements.detail.publish')
           }
-          danger={confirmation !== 'publish'}
+          danger={confirmation.action !== 'publish'}
           busy={lifecycle.isPending}
           onCancel={() => setConfirmation(null)}
           onConfirm={() => {
-            const action = confirmation;
             setConfirmation(null);
-            lifecycle.mutate({ action, revision: item.revision, reason: reason.trim() });
+            lifecycle.mutate(confirmation);
           }}
         />
       ) : null}

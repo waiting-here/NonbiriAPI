@@ -10,7 +10,7 @@ describe('AccountMenu keyboard contract', () => {
       <AccountMenu displayName="fixture-user" signOutLabel="Sign out" onSignOut={vi.fn()} />,
       { station: 'user', role: 'user' },
     );
-    const trigger = screen.getByRole('button', { name: 'fixture-user' });
+    const trigger = screen.getByRole('button', { name: 'Account actions · fixture-user' });
     await rendered.user.click(trigger);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe('AccountMenu keyboard contract', () => {
       />,
       { station: 'admin', role: 'admin' },
     );
-    await rendered.user.click(screen.getByRole('button', { name: 'fixture-admin' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Account actions · fixture-admin' }));
     expect(screen.getByRole('link', { name: 'Site settings' })).toHaveAttribute(
       'href',
       '/settings',

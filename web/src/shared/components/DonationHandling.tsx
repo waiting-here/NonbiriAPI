@@ -12,7 +12,8 @@ import {
 } from '@shared/operations/charity';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { ErrorState, StatusBadge } from './States';
+import { ErrorState } from './States';
+import { StatusBadge } from './ui';
 import {
   donationHandlingStateKey,
   donationHandlingHelpKey,
@@ -22,12 +23,9 @@ import {
 
 export function DonationHandlingStatus({ handling }: { handling: DonationHandling }) {
   const { t } = useTranslation();
-  return (
-    <StatusBadge
-      active={handling.state === 'pending'}
-      label={t(donationHandlingStateKey[handling.state])}
-    />
-  );
+  const tone =
+    handling.state === 'pending' ? 'warn' : handling.state === 'processed' ? 'ok' : 'neutral';
+  return <StatusBadge tone={tone}>{t(donationHandlingStateKey[handling.state])}</StatusBadge>;
 }
 
 export function DonationHandlingControl({

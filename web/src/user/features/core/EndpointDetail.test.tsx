@@ -230,6 +230,9 @@ describe('endpoint detail numbered resource panels', () => {
       const url = new URL(raw, window.location.origin);
       const path = `${url.pathname}${url.search}`;
       requests.push(path);
+      if (path === '/api/endpoints/11/keys/21') return Promise.resolve(jsonResponse(endpointKey));
+      if (path === '/api/endpoints/11/keys/22')
+        return Promise.resolve(jsonResponse(endpointKeyTwo));
       if (path === '/api/endpoints/11/request-adaptation') {
         return Promise.resolve(
           jsonResponse({
@@ -283,7 +286,9 @@ describe('endpoint detail numbered resource panels', () => {
       },
     );
 
-    await screen.findByRole('combobox', { name: 'Current key' });
+    const firstKey = (await screen.findByText('key note')).closest('tr')!;
+    expect(screen.getByText('second key note')).toBeVisible();
+    await rendered.user.click(within(firstKey).getByRole('button', { name: 'View models' }));
     expect(requests).not.toContain(
       '/api/endpoints/11/keys/22/models?page=3&page_size=100&source=manual',
     );
@@ -295,7 +300,9 @@ describe('endpoint detail numbered resource panels', () => {
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('manual_21_page=2'),
     );
-    await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'Current key' }), '22');
+    await rendered.user.click(screen.getByRole('link', { name: 'Key' }));
+    const secondKey = (await screen.findByText('second key note')).closest('tr')!;
+    await rendered.user.click(within(secondKey).getByRole('button', { name: 'View models' }));
     await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
     expect(await screen.findByText('Vendor/Second')).toBeVisible();
     expect(requests).toContain(
@@ -379,14 +386,12 @@ describe('key model operation feedback', () => {
   it('opens the donated key editor directly with its current shared queue settings', async () => {
     await renderKeyFeedback(async (input) => {
       const url = new URL(String(input), 'https://app.example');
-      if (url.pathname === '/api/endpoints/11/keys')
-        return jsonResponse(
-          keyPage({
-            ...endpointKey,
-            concurrency_overflow: 'queue',
-            concurrency_queue_limit: 7,
-          }),
-        );
+      if (url.pathname === '/api/endpoints/11/keys/21')
+        return jsonResponse({
+          ...endpointKey,
+          concurrency_overflow: 'queue',
+          concurrency_queue_limit: 7,
+        });
       throw Error('Unexpected ' + url.pathname);
     }, '/endpoints/11?focus_key_id=21&edit_key=1');
     const editor = await screen.findByRole('region', { name: 'Edit note and limits' });

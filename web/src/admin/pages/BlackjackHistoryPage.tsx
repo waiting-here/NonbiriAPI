@@ -1,12 +1,15 @@
 import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { CreditNumber } from '@shared/components/CreditNumber';
 import { retainQueryScope } from '@shared/query/retain';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Field, FilterBar, Fold, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
+import { formatCredits } from '../../user/games/common/strict';
 import { useAdminSession } from '../data';
 import { useGameAdminText } from '../features/games/copy';
 import {
@@ -19,7 +22,6 @@ import { BlackjackBoard, BlackjackSettlement } from '../../user/games/blackjack/
 import '../../user/games/bidding/bidding.css';
 import '../../user/games/blackjack/blackjack.css';
 import '@shared/operations/operations.css';
-import './history.css';
 
 function Detail({
   dataset,
@@ -38,17 +40,19 @@ function Detail({
     retry: false,
   });
   return (
-    <Card>
-      <button className="nb-btn nb-btn--secondary" onClick={back}>
-        {t('返回列表', 'Back to list')}
-      </button>
+    <div className="nb-stack">
+      <div className="nb-actions">
+        <button type="button" className="nb-btn nb-btn--secondary" onClick={back}>
+          ← {t('返回列表', 'Back to list')}
+        </button>
+      </div>
       {detail.isPending ? (
         <LoadingState />
       ) : detail.error ? (
         <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
       ) : (
         <>
-          <p>{detail.data.id}</p>
+          <p className="mono nb-small nb-muted">{detail.data.id}</p>
           <div className="bidding-game blackjack-game">
             <BlackjackBoard
               table={{
@@ -76,32 +80,40 @@ function Detail({
             )}
           </div>
           {detail.data.recent && (
-            <section>
+            <section className="nb-stack nb-stack--sm">
               <h3>{t('近期参与及账务', 'Recent participants and accounting')}</h3>
               {detail.data.recent.participants.map((p) => (
-                <details key={p.seat}>
-                  <summary>
-                    #{p.seat + 1} ·{' '}
-                    {p.user_id === null
-                      ? t('已去身份', 'Deidentified')
-                      : `${t('用户', 'User')} ${p.user_id}`}{' '}
-                    · {t('游戏', 'Game')} {p.payment.game} / {t('通用', 'General')}{' '}
-                    {p.payment.general}
-                  </summary>
+                <Fold
+                  plain
+                  key={p.seat}
+                  title={
+                    <>
+                      #{p.seat + 1} ·{' '}
+                      {p.user_id === null
+                        ? t('已去身份', 'Deidentified')
+                        : `${t('用户', 'User')} ${p.user_id}`}{' '}
+                      · {t('游戏', 'Game')}{' '}
+                      <CreditNumber value={formatCredits(p.payment.game)} />{' '}
+                      {t('积分', 'credits')} / {t('通用', 'General')}{' '}
+                      <CreditNumber value={formatCredits(p.payment.general)} />{' '}
+                      {t('积分', 'credits')}
+                    </>
+                  }
+                >
                   <ul>
-                    {p.operations.map((id) => (
-                      <li key={id}>
-                        <code>{id}</code>
+                    {p.operations.map((opId) => (
+                      <li key={opId}>
+                        <code>{opId}</code>
                       </li>
                     ))}
                   </ul>
-                </details>
+                </Fold>
               ))}
             </section>
           )}
         </>
       )}
-    </Card>
+    </div>
   );
 }
 export function BlackjackHistoryPage() {
@@ -126,7 +138,7 @@ export function BlackjackHistoryPage() {
     retry: false,
   });
   return (
-    <main className="page ops-page">
+    <div className="page ops-page">
       <PageHeader
         back={<Link to="/games">{t('返回游戏配置', 'Back to game settings')}</Link>}
         title={t('二十一点历史与导出', 'Blackjack history and exports')}
@@ -135,77 +147,93 @@ export function BlackjackHistoryPage() {
           'Recent history lasts 30 days. Anonymous records omit accounts, original table IDs, absolute times and payment sources.',
         )}
       />
-      <Card>
-        <label className="ops-form-field admin-history-filter">
-          {t('资料范围', 'Dataset')}{' '}
-          <select
-            value={dataset}
-            onChange={(e) => {
-              setDataset(e.target.value as BlackjackDataset);
-              setCursors([null]);
-              setSelected(null);
-            }}
-          >
-            <option value="recent">{t('近期', 'Recent')}</option>
-            <option value="anonymous">{t('匿名留存', 'Anonymous')}</option>
-          </select>
-        </label>
-      </Card>
-      {selected ? (
-        <Detail dataset={dataset} id={selected} back={() => setSelected(null)} />
-      ) : (
-        <Card>
-          <QueryFeedback query={page} />
-          {page.isPending ? (
-            <LoadingState />
-          ) : page.error ? (
-            <ErrorState error={page.error} onRetry={() => void page.refetch()} />
+      <Panel>
+        <PanelHead title={t('二十一点历史', 'Blackjack history')} />
+        <PanelBody>
+          <FilterBar
+            activeCount={dataset !== 'recent' ? 1 : 0}
+            onSubmit={() => {}}
+            search={
+              <Field size="short" label={t('资料范围', 'Dataset')}>
+                {(props) => (
+                  <select
+                    {...props}
+                    value={dataset}
+                    onChange={(e) => {
+                      setDataset(e.target.value as BlackjackDataset);
+                      setCursors([null]);
+                      setSelected(null);
+                    }}
+                  >
+                    <option value="recent">{t('近期', 'Recent')}</option>
+                    <option value="anonymous">{t('匿名留存', 'Anonymous')}</option>
+                  </select>
+                )}
+              </Field>
+            }
+          />
+          {selected ? (
+            <Detail dataset={dataset} id={selected} back={() => setSelected(null)} />
           ) : (
             <>
-              <div className="bj-history-list">
-                {page.data.items.map((h) => (
-                  <button
-                    className="nb-btn nb-btn--secondary"
-                    key={h.id}
-                    onClick={() => setSelected(h.id)}
-                  >
-                    <span>
-                      {h.started_at === null
-                        ? text('admin.gameHistory.anonymousMatch')
-                        : formatDateTime(h.started_at)}
-                    </span>
-                    <span>
-                      {text('admin.gameHistory.players', { count: h.seats })} ·{' '}
-                      {h.phase === 'cancelled'
-                        ? t('已取消', 'Cancelled')
-                        : `${t('到账', 'Paid')} ${h.net}`}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {!page.data.items.length && (
-                <EmptyState
-                  title={text('admin.gameHistory.emptyTitle')}
-                  body={text('admin.gameHistory.emptyBody')}
-                />
+              <QueryFeedback query={page} />
+              {page.isPending ? (
+                <LoadingState />
+              ) : page.error ? (
+                <ErrorState error={page.error} onRetry={() => void page.refetch()} />
+              ) : (
+                <>
+                  <div className="bj-history-list">
+                    {page.data.items.map((h) => (
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--secondary"
+                        key={h.id}
+                        onClick={() => setSelected(h.id)}
+                      >
+                        <span>
+                          {h.started_at === null
+                            ? text('admin.gameHistory.anonymousMatch')
+                            : formatDateTime(h.started_at)}
+                        </span>
+                        <span>
+                          {text('admin.gameHistory.players', { count: h.seats })} ·{' '}
+                          {h.phase === 'cancelled' ? (
+                            t('已取消', 'Cancelled')
+                          ) : (
+                            <>
+                              {t('到账', 'Paid')}{' '}
+                              <CreditNumber value={formatCredits(h.net)} />{' '}
+                              {t('积分', 'credits')}
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {!page.data.items.length && (
+                    <EmptyState
+                      title={text('admin.gameHistory.emptyTitle')}
+                      body={text('admin.gameHistory.emptyBody')}
+                    />
+                  )}
+                </>
               )}
+              <SimplePager
+                disabled={page.isFetching}
+                page={cursors.length}
+                hasMore={Boolean(page.data?.next_cursor)}
+                onPrev={() => setCursors((v) => v.slice(0, -1))}
+                onNext={() => {
+                  if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
+                }}
+                labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
+              />
             </>
           )}
-          <SimplePager
-            disabled={page.isFetching}
-            page={cursors.length}
-            hasMore={Boolean(page.data?.next_cursor)}
-            onPrev={() => setCursors((v) => v.slice(0, -1))}
-            onNext={() => {
-              if (page.data?.next_cursor) setCursors((v) => [...v, page.data.next_cursor]);
-            }}
-            labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
-          />
-        </Card>
-      )}
-      <Card>
-        <ExportPanel game="blackjack" dataset={dataset} />
-      </Card>
-    </main>
+        </PanelBody>
+      </Panel>
+      <ExportPanel game="blackjack" dataset={dataset} />
+    </div>
   );
 }

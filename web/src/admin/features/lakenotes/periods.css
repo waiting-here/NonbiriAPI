@@ -1,7 +1,7 @@
 .lake-period-form,
 .lake-period-form fieldset {
   display: grid;
-  gap: 1rem;
+  gap: var(--nb-space-4);
   min-width: 0;
 }
 .lake-period-form fieldset {
@@ -10,31 +10,40 @@
 }
 .lake-period-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nb-space-4);
+}
+@media (width < 48rem) {
+  .lake-period-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .lake-period-actions,
 .lake-period-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--nb-space-3);
   flex-wrap: wrap;
 }
+.lake-period-heading > h3 {
+  margin: 0;
+}
 .lake-period-actions {
-  margin-block: 1rem;
+  margin-block: var(--nb-space-4);
   justify-content: flex-start;
 }
 .lake-exchange-setting,
 .lake-period-list article {
+  background: var(--nb-color-surface-alt);
   border: 1px solid var(--nb-color-border);
-  border-radius: 0.75rem;
-  padding: 1rem;
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
   display: grid;
-  gap: 0.6rem;
+  gap: var(--nb-space-3);
 }
 .lake-period-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
-  gap: 1rem;
+  gap: var(--nb-space-4);
 }

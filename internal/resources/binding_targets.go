@@ -12,9 +12,10 @@ import (
 )
 
 type BindingTargetSelection struct {
-	EndpointKeyID   int64
-	UpstreamModelID string
-	NativeServices  []contract.NativeService
+	CatalogEntryID, ExpectedPairRevision int64
+	EndpointKeyID                        int64
+	UpstreamModelID                      string
+	NativeServices                       []contract.NativeService
 }
 
 func listBindingsTx(ctx context.Context, tx *sql.Tx, userID, modelID int64) ([]Binding, error) {
@@ -123,6 +124,18 @@ func verifyBindingTargetTx(ctx context.Context, tx *sql.Tx, userID int64, target
 	services, err := contract.ParseNativeServices(target.NativeServices)
 	if err != nil || services.Empty() || !services.IsSubsetOf(grant.EffectiveServices) || contract.ValidateNativeServices(grant.ConfiguredType, services, grant.RerankFormat) != nil {
 		return contract.NativeServiceSet{}, ErrInvalidRequest
+	}
+	if target.CatalogEntryID != 0 {
+		var present bool
+		err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoint_key_catalog_entries c
+ JOIN model_pair_catalog p ON p.endpoint_key_id=c.endpoint_key_id AND p.normalized_model_id=c.normalized_model_id
+ WHERE c.endpoint_key_id=? AND c.id=? AND c.normalized_model_id=? AND p.pair_revision=?)`, target.EndpointKeyID, target.CatalogEntryID, target.UpstreamModelID, target.ExpectedPairRevision).Scan(&present)
+		if err != nil {
+			return contract.NativeServiceSet{}, err
+		}
+		if !present {
+			return contract.NativeServiceSet{}, ErrConflict
+		}
 	}
 	_, eligible, err := bindingSelectionConnectorTx(ctx, tx, userID, target.EndpointKeyID, target.UpstreamModelID)
 	if err != nil {

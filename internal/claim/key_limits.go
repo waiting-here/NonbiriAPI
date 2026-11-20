@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 // ErrKeyRateLimited means no attempt was admitted. Callers may try another
@@ -61,6 +63,20 @@ const (
 	keyRPM
 )
 
+func (r keyLimitReason) admissionCause() requestattempt.AdmissionCause {
+	switch r {
+	case keyConcurrency:
+		return requestattempt.AdmissionConcurrency
+	case keyRPM:
+		return requestattempt.AdmissionRPM
+	case keyConcurrency | keyRPM:
+		return requestattempt.AdmissionBoth
+	default:
+		// FIFO handoff can block a newcomer after the measured limits clear.
+		return requestattempt.AdmissionUnavailable
+	}
+}
+
 type keyLimitState struct {
 	concurrency, rpm           int64
 	concurrencyQueue, rpmQueue bool
@@ -90,7 +106,20 @@ func (state keyLimitState) queueFits(reason keyLimitReason, waiting int) bool {
 
 // Only this error carries queue eligibility. Health and backoff limits keep
 // their ordinary sentinel and must never create a key waiter.
-type keyQueueError struct{ candidates []ClaimInput }
+type keyQueueError struct {
+	candidates []ClaimInput
+	// Nonqueueable candidates already examined by the balanced selector.
+	skipped requestattempt.AdmissionCause
+}
+
+// KeyQueueSkippedReason retains nonqueueable alternatives while the caller waits.
+func KeyQueueSkippedReason(err error) requestattempt.AdmissionCause {
+	var blocked *keyQueueError
+	if errors.As(err, &blocked) {
+		return blocked.skipped
+	}
+	return ""
+}
 
 func (*keyQueueError) Error() string { return ErrKeyRateLimited.Error() }
 func (*keyQueueError) Unwrap() error { return ErrKeyRateLimited }
@@ -130,9 +159,9 @@ func (s *Service) checkKeyLimitsTx(ctx context.Context, tx *sql.Tx, input ClaimI
 		} else {
 			reason |= state.enabled(entry.reason())
 			if state.queueAllowed(reason) {
-				return &keyQueueError{candidates: []ClaimInput{input}}
+				return state.blocked.admissionCause().Wrap(&keyQueueError{candidates: []ClaimInput{input}})
 			}
-			return ErrKeyRateLimited
+			return state.blocked.admissionCause().Wrap(ErrKeyRateLimited)
 		}
 	} else if input.queueTicket != nil {
 		return ErrConflict
@@ -141,7 +170,7 @@ func (s *Service) checkKeyLimitsTx(ctx context.Context, tx *sql.Tx, input ClaimI
 		return nil
 	}
 	if state.queueAllowed(reason) {
-		return &keyQueueError{candidates: []ClaimInput{input}}
+		return reason.admissionCause().Wrap(&keyQueueError{candidates: []ClaimInput{input}})
 	}
-	return ErrKeyRateLimited
+	return reason.admissionCause().Wrap(ErrKeyRateLimited)
 }

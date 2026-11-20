@@ -4,7 +4,10 @@
   margin-inline: auto;
 }
 
-@media (width >= 80rem) {
+.economy-charity-page {
+  container: charity-page / inline-size;
+}
+@container charity-page (width >= 64rem) {
   .economy-model-workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
@@ -30,6 +33,10 @@
   gap: var(--nb-space-5);
   min-width: 0;
   align-content: start;
+}
+
+.economy-charity-sidebar > .progression-ranking {
+  margin-top: 0;
 }
 
 .economy-capability-card,
@@ -82,26 +89,6 @@
 .economy-owner-rule-preview {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.economy-owner-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: var(--nb-space-3);
-  min-width: 0;
-}
-
-.economy-owner-filters label {
-  display: grid;
-  flex: 1 1 12rem;
-  min-width: 0;
-  gap: var(--nb-space-1);
-}
-
-.economy-owner-filters :where(input, select) {
-  width: 100%;
-  min-width: 0;
 }
 
 .economy-donation-notice {
@@ -233,6 +220,11 @@
   padding-block: var(--nb-space-2);
 }
 
+.economy-review-result > summary > .nb-fold__meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .economy-key-details[open] > summary {
   margin-bottom: var(--nb-space-3);
 }
@@ -329,7 +321,7 @@
 }
 
 .economy-countdown strong {
-  font-size: 1.25rem;
+  font-size: var(--nb-font-size-xl);
 }
 
 .economy-countdown small {
@@ -362,7 +354,7 @@
   margin-bottom: var(--nb-space-4);
 }
 
-@media (width <= 48rem) {
+@media (width < 48rem) {
   .economy-capability-grid,
   .economy-activities-grid,
   .economy-limit-grid,
@@ -416,4 +408,23 @@
 }
 .economy-charity-page > section[hidden] {
   display: none;
+}
+
+.donation-review-keys {
+  display: grid;
+  gap: var(--nb-space-3);
+  padding: 0;
+  list-style: none;
+}
+.donation-review-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--nb-space-2);
+  padding-block: var(--nb-space-2);
+  border-block-end: 1px solid var(--nb-color-border);
+  overflow-wrap: anywhere;
+}
+.donation-review-key > .nb-fold {
+  grid-column: 1 / -1;
 }

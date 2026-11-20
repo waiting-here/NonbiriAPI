@@ -51,7 +51,7 @@ func scanEpoch(row scanner) (epoch, error) {
 		}
 	}
 	e.rule.Limit = formatMagnitude(e.rule.Metric, e.limit)
-	if Validate(e.rule) != nil || (e.model != "" && !tokenMetric(e.rule.Metric)) {
+	if Validate(e.rule) != nil {
 		return e, ErrInvariant
 	}
 	return e, nil
@@ -99,9 +99,6 @@ func ReplaceModel(ctx context.Context, tx *sql.Tx, keyID, now int64, model strin
 	seen := make(map[string]bool)
 	split := false
 	for _, rule := range input {
-		if model != "" && !tokenMetric(rule.Metric) {
-			return ErrInvalid
-		}
 		if err := Validate(rule); err != nil {
 			return err
 		}

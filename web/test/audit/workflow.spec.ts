@@ -145,7 +145,6 @@ test('charity request and attempt shortcuts preserve the log window for administ
         })),
       ).toEqual(data.shortcut_attempt_targets);
       const search = new URLSearchParams({
-        ...(role === 'admin' ? {} : { tab: 'logs' }),
         charity_model: model.full_name,
         page: '1',
         page_size: '10',
@@ -156,11 +155,12 @@ test('charity request and attempt shortcuts preserve the log window for administ
         attempt_page_size: '20',
       });
       await page.goto(origin + (role === 'admin' ? '/logs?' : '/steward?') + search);
-      const panel = page.locator('.nb-expandable-panel:not([hidden])');
+      const panel = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
       await expect(
         panel.getByRole('link', { name: common.common.operations.logs.manageCharityModel }),
       ).toBeVisible();
-      const original = page.url();
+      const original = new URL(page.url());
+      if (role !== 'admin') original.searchParams.set('tab', 'logs');
       await panel
         .getByRole('link', { name: common.common.operations.logs.manageCharityModel })
         .click();
@@ -171,7 +171,7 @@ test('charity request and attempt shortcuts preserve the log window for administ
       await page
         .getByRole('link', { name: common.common.operations.logs.returnToLogs, exact: true })
         .click();
-      await expect(page).toHaveURL(original);
+      await expect(page).toHaveURL(original.href);
       for (let index = 0; index < data.shortcut_attempt_targets.length; index++) {
         const toggle = panel
           .locator('summary')
@@ -221,7 +221,7 @@ test('charity request and attempt shortcuts preserve the log window for administ
         await page
           .getByRole('button', { name: common.common.operations.logs.returnToLogs, exact: true })
           .click();
-        await expect(page).toHaveURL(original);
+        await expect(page).toHaveURL(original.href);
       }
     } finally {
       await context.close();
@@ -239,6 +239,37 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
+    const modelId = data.models[0];
+    const modelPath = '/admin/api/charity-models/' + modelId;
+    const modelTypes = common.common.modelTypes;
+    const bindingServices = ['chat_completions', 'embeddings', 'images_generations'] as const;
+    await page.goto(state.admin_url + '/charity?charity_section=models&charity_model=' + modelId);
+    const types = page.getByRole('group', { name: modelTypes.title, exact: true });
+    for (const type of ['chat_completions', 'responses'] as const)
+      await expect(
+        types.getByRole('checkbox', { name: modelTypes[type], exact: true }),
+      ).toBeChecked();
+    for (const service of bindingServices.slice(1)) {
+      const option = types.getByRole('checkbox', { name: modelTypes[service], exact: true });
+      await expect(option).not.toBeChecked();
+      await option.check();
+    }
+    const savedInterfaces = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' && new URL(response.url()).pathname === modelPath,
+    );
+    await page
+      .getByRole('button', {
+        name: workflow.saveTarget.replace('{{id}}', modelId),
+        exact: true,
+      })
+      .click();
+    expect((await savedInterfaces).status()).toBe(200);
+    expect((await read(context, state.admin_url, modelPath)).model_types).toEqual([
+      ...bindingServices,
+      'responses',
+    ]);
+
     await page.goto(
       state.admin_url +
         `/charity?q=Workflow&donations_page=2&donation_id=${data.pending_donation_id}`,
@@ -384,6 +415,16 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     ).toBeEnabled();
     await expect(page.getByLabel(batch.searchSelected, { exact: true })).toBeFocused();
     await choices.getByRole('checkbox').check();
+    const selected = page.getByRole('region', { name: batch.selected, exact: true });
+    await selected.getByText(common.common.bindingGuide.editServices, { exact: true }).click();
+    const services = selected.getByRole('group', {
+      name: common.common.nativeServices.title,
+      exact: true,
+    });
+    for (const service of bindingServices)
+      await expect(
+        services.getByRole('checkbox', { name: modelTypes[service], exact: true }),
+      ).toBeChecked();
     await idSearch.fill('');
     await idSearch.press('Enter');
     await page.getByLabel(batch.searchSelected, { exact: true }).fill('');
@@ -1348,7 +1389,7 @@ test('complete headers stay lazy, preserve duplicates and physical responses, an
       await page.goto(
         origin + (role === 'admin' ? '/logs?request_id=' : '/steward?tab=logs&request_id=') + id,
       );
-      const detail = page.locator('.nb-expandable-panel:not([hidden])');
+      const detail = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
       await expect(detail).toBeVisible();
       const requestToggle = detail
         .locator('summary')

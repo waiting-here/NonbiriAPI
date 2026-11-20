@@ -3,12 +3,16 @@ package forward
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -61,7 +65,8 @@ func TestGoogleOverloadEvidenceReachesCharityCompletion(t *testing.T) {
 					}
 				}
 				c := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), GoogleAPI: true, ContainsSecret: func([]byte) bool { return false }}
-				d := c.Parse([]byte(`{"error":{"code":503,"status":"UNAVAILABLE","message":"The model is overloaded. Please try again later."}}`))
+				body := `{"error":{"code":503,"status":"UNAVAILABLE","message":"The model is overloaded. Please try again later."}}`
+				d := c.ReadResponse(ctx, &http.Response{StatusCode: 503, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))})
 				return contract.AttemptResult{Failure: contract.FailureUpstream, UpstreamStatus: 503, ErrorDetail: d, FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakUpstreamFailure}
 			}
 			r := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[{"role":"user","content":"hello"}]}`)
@@ -73,6 +78,9 @@ func TestGoogleOverloadEvidenceReachesCharityCompletion(t *testing.T) {
 				t.Fatal("overload evidence or caller status lost", f.claims.outcomes, w.Code, w.Body.String())
 			}
 			outcome := f.claims.outcomes[0]
+			if facts := diagnostic.Decode(outcome.ErrorDiagnostics); facts == nil || facts.ProviderReason != "google_model_overloaded" {
+				t.Fatalf("missing provider reason for the unsuccessful attempt: %v", facts)
+			}
 			if outcome.TemporaryBackoff.Delay(503) != 60 || outcome.UpstreamStatus != 503 || outcome.ResponseStarted || outcome.ProtocolSuccess {
 				t.Fatal("heartbeat changed upstream overload facts", outcome)
 			}

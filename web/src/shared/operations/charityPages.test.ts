@@ -1,3 +1,4 @@
+import { chatProjection, unboundCandidate } from '../../../test/fixtures/resourceScopes';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getManagedBindingCandidatesPage,
@@ -8,6 +9,8 @@ import { disposeTestProviders } from '../../../test/unit/support';
 
 function candidate(overrides: Record<string, unknown> = {}) {
   return {
+    ...chatProjection,
+    ...unboundCandidate,
     donation_key_id: '21',
     donation_id: '7',
     source: {

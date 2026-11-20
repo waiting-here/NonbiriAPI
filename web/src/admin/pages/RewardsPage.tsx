@@ -3,14 +3,18 @@ import { useState } from 'react';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { CopyValue } from '@shared/components/CopyValue';
 import {
   Button,
   Field,
   Fold,
+  FormActions,
   Note,
   Panel,
   PanelBody,
   PanelHead,
+  Segmented,
+  StatusBadge,
   Tabs,
   Toggle,
 } from '@shared/components/ui';
@@ -69,6 +73,7 @@ function RewardsContent() {
   const [error, setError] = useState<unknown>();
   const [created, setCreated] = useState<Campaign>();
   const [editing, setEditing] = useState<Campaign>();
+  const [kindFilter, setKindFilter] = useState<'all' | 'broadcast' | 'code'>('all');
   const [pending, setPending] = useState<{ input: Input; key: string; preview: Preview }>();
   const assetsQuery = useQuery({
     queryKey: [...rewardKeys.admin, 'assets'],
@@ -123,11 +128,14 @@ function RewardsContent() {
       setCursor('');
       setPages([]);
     });
+  const visibleItems = (list.data?.items ?? []).filter(
+    (item) => kindFilter === 'all' || item.kind === kindFilter,
+  );
   if (assetsQuery.isPending) return <LoadingState />;
   if (assetsQuery.error)
     return <ErrorState error={assetsQuery.error} onRetry={() => void assetsQuery.refetch()} />;
   return (
-    <div className="reward-stack">
+    <div className="page reward-stack">
       <PageHeader
         title={t('common.rewards.adminTitle')}
         description={t('common.rewards.adminIntro')}
@@ -137,13 +145,11 @@ function RewardsContent() {
         <Note tone="ok" title={t('common.rewards.created')}>
           {created.kind === 'code' ? (
             <div className="reward-code">
-              <code>{created.code}</code>
-              <Button
-                type="button"
-                onClick={() => void run(() => navigator.clipboard.writeText(created.code ?? ''))}
-              >
-                {t('common.rewards.copyCode')}
-              </Button>
+              <CopyValue
+                value={created.code ?? ''}
+                label={t('common.rewards.copyCode')}
+                variant="secondary"
+              />
             </div>
           ) : (
             t('common.rewards.deliveryQueued', { amount: formatCount(created.matched).display })
@@ -186,7 +192,11 @@ function RewardsContent() {
                 onChange={(rewards) => setDraft({ ...draft, rewards })}
                 disabled={busy}
               />
-              <Fold title={t('common.rewards.conditions')}>
+              <Fold
+                plain
+                title={t('common.rewards.conditions')}
+                summary={conditionSummary(draft.conditions, assets, english, t, time)}
+              >
                 <p>{t('common.rewards.conditionHelp')}</p>
                 <ConditionEditor
                   value={draft.conditions}
@@ -194,9 +204,6 @@ function RewardsContent() {
                   assets={assets}
                 />
               </Fold>
-              <p className="reward-summary-text">
-                {conditionSummary(draft.conditions, assets, english, t, time)}
-              </p>
               {draft.kind === 'code' && (
                 <>
                   <div className="reward-fields">
@@ -252,7 +259,7 @@ function RewardsContent() {
                   ? t('common.rewards.broadcastHelp')
                   : t('common.rewards.codeRule')}
               </Note>
-              <div>
+              <FormActions>
                 <Button
                   type="submit"
                   variant="primary"
@@ -260,7 +267,7 @@ function RewardsContent() {
                 >
                   {t('common.rewards.preview')}
                 </Button>
-              </div>
+              </FormActions>
             </Tabs>
           </form>
         </PanelBody>
@@ -275,37 +282,60 @@ function RewardsContent() {
           }
         />
         <PanelBody>
+          {(list.data?.items.length ?? 0) > 0 ? (
+            <Segmented
+              label={t('common.rewards.kind')}
+              value={kindFilter}
+              options={[
+                { value: 'all', label: t('common.all') },
+                { value: 'broadcast', label: t('common.rewards.broadcast') },
+                { value: 'code', label: t('common.rewards.code') },
+              ]}
+              onChange={setKindFilter}
+            />
+          ) : null}
           {list.isPending ? (
             <LoadingState />
           ) : list.error ? (
             <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-          ) : list.data?.items.length === 0 ? (
+          ) : visibleItems.length === 0 ? (
             <EmptyState
               title={t('common.rewards.noCampaigns')}
               body={t('common.rewards.noCampaignsHelp')}
             />
           ) : (
             <div className="reward-list">
-              {list.data?.items.map((c) => (
+              {visibleItems.map((c) => (
                 <article className="reward-entry" key={c.id}>
-                  <div>
-                    <h3>{c.title}</h3>
-                    <p>
-                      {t(rewardLabels[c.kind === 'code' ? 'code' : 'broadcast'])} ·{' '}
-                      {time(c.created_at)}
-                    </p>
+                  <div className="reward-entry__head">
+                    <div className="reward-entry__meta">
+                      <h3>{c.title}</h3>
+                      <span>{time(c.created_at)}</span>
+                    </div>
+                    <div className="reward-entry__meta">
+                      <span className="nb-badge nb-badge--plain">
+                        {t(rewardLabels[c.kind === 'code' ? 'code' : 'broadcast'])}
+                      </span>
+                      {c.kind === 'code' ? (
+                        <StatusBadge tone={c.enabled ? 'ok' : 'neutral'}>
+                          {t(rewardLabels[c.enabled ? 'enabled' : 'disabled'])}
+                        </StatusBadge>
+                      ) : (
+                        <StatusBadge
+                          tone={c.failed > 0 ? 'bad' : c.pending > 0 ? 'warn' : 'ok'}
+                        >
+                          {t(rewardLabels[c.enabled ? 'enabled' : 'disabled'])}
+                        </StatusBadge>
+                      )}
+                    </div>
                   </div>
                   {c.kind === 'code' && (
                     <div className="reward-code">
-                      <code>{c.code}</code>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => void run(() => navigator.clipboard.writeText(c.code ?? ''))}
-                      >
-                        {t('common.rewards.copyCode')}
-                      </Button>
-                      <span>{t(rewardLabels[c.enabled ? 'enabled' : 'disabled'])}</span>
+                      <CopyValue
+                        value={c.code ?? ''}
+                        label={t('common.rewards.copyCode')}
+                        variant="secondary"
+                      />
                     </div>
                   )}
                   <RewardSummary items={c.rewards} assets={assets} />
@@ -324,7 +354,7 @@ function RewardsContent() {
                         })}
                   </p>
                   {c.kind === 'code' && (
-                    <p>
+                    <p className="nb-small nb-muted">
                       {t('common.rewards.starts')}:{' '}
                       {c.starts_at != null ? time(c.starts_at) : t('common.rewards.unlimited')} ·{' '}
                       {t('common.rewards.ends')}:{' '}
@@ -390,7 +420,7 @@ function RewardsContent() {
                     </Button>
                   </div>
                   {c.failed > 0 && (
-                    <Fold title={t('common.rewards.failedRecipients')}>
+                    <Fold plain title={t('common.rewards.failedRecipients')}>
                       <DeliveryFailures campaign={c.id} />
                     </Fold>
                   )}

@@ -76,7 +76,7 @@
   margin: 0;
   color: var(--nb-color-text-muted);
 }
-.game-center-card__body :is(.btn, .nb-btn) {
+.game-center-card__body .nb-btn {
   margin-top: auto;
   align-self: flex-start;
 }
@@ -85,12 +85,18 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--nb-space-2);
 }
 
 .game-card-heading h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--nb-font-size-lg);
+}
+.game-card-cta {
+  color: var(--nb-color-accent);
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-semibold);
+  white-space: nowrap;
 }
 .game-card-detail {
   font-variant-numeric: tabular-nums;
@@ -221,7 +227,7 @@
   padding-inline-start: 1.25rem;
 }
 
-@media (max-width: 820px) {
+@media (width < 64rem) {
   .game-center-grid {
     grid-template-columns: 1fr;
   }
@@ -318,8 +324,8 @@
   }
 }
 
-@media (max-width: 540px) {
-  .game-center-card__body :is(.btn, .nb-btn) {
+@media (width < 32rem) {
+  .game-center-card__body .nb-btn {
     width: 100%;
     justify-content: center;
   }
@@ -528,10 +534,10 @@
   gap: 0.15rem;
   min-width: 0;
   white-space: nowrap;
-  font-size: var(--nb-text-xs);
+  font-size: var(--nb-font-size-xs);
 }
 .game-actionbar__cost strong {
-  font-size: var(--nb-text-md);
+  font-size: var(--nb-font-size-md);
 }
 .game-actionbar > button {
   margin-left: auto;
@@ -663,7 +669,7 @@
 }
 .likes-game .likes-heading h1,
 .bidding-game .bid-heading h1 {
-  font-size: var(--nb-text-xl);
+  font-size: var(--nb-font-size-2xl);
   letter-spacing: normal;
 }
 .likes-game .likes-heading p,
@@ -682,7 +688,7 @@
 .likes-game .likes-tutorial-invite .duel-actions button {
   padding: 0.25rem 0.5rem;
   min-height: 40px;
-  font-size: var(--nb-text-xs);
+  font-size: var(--nb-font-size-xs);
 }
 .likes-game .game-actionbar {
   background: var(--l-panel);
@@ -761,12 +767,16 @@
 .game-toolbar__label {
   display: none;
 }
-.game-toolbar .nb-more__menu :is(button, a) {
+.game-toolbar__menu {
+  color: var(--nb-color-text);
+}
+.game-toolbar__menu [role^='menuitem'] {
   display: flex;
   align-items: center;
   gap: var(--nb-space-2);
+  min-height: 2.75rem;
 }
-.game-toolbar .nb-more__menu [aria-checked='true'] {
+.game-toolbar__menu [aria-checked='true'] {
   color: var(--nb-color-accent);
   background: var(--nb-color-accent-quiet);
 }
@@ -783,3 +793,7 @@
   width: min(44rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
 }
+
+.game-whale-cover { position:relative; width:100%; height:100%; }
+.game-whale-cover img:first-child { width:100%; height:100%; object-fit:cover; }
+.game-whale-cover img:last-child { position:absolute; bottom:0; left:40%; width:30%; height:83%; object-fit:contain; }

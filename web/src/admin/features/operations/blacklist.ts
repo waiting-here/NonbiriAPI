@@ -124,39 +124,45 @@ export function getBlacklistEvents(
   role: ManagementRole,
   discordID: string,
   page: string,
+  pageSize: PageSize,
   signal?: AbortSignal,
 ) {
   return decoded(
-    queryPath(`${base(role)}/${encodeURIComponent(discordID)}/events`, { page, page_size: 20 }),
+    queryPath(`${base(role)}/${encodeURIComponent(discordID)}/events`, {
+      page,
+      page_size: pageSize,
+    }),
     (value) => {
       const root = record(value, ['data', 'next_cursor', 'pagination'], 'blacklist events');
       if (root.next_cursor !== null) invalidResponse('blacklist event cursor');
-      const data = array(root.data, 'blacklist events', 20).map((candidate): BlacklistEvent => {
-        const row = record(
-          candidate,
-          ['id', 'actor_kind', 'actor_user_id', 'reason_codes', 'safe_note', 'created_at'],
-          'blacklist event',
-        );
-        return {
-          id: decimalID(row.id, 'blacklist event id'),
-          actor_kind: oneOf(
-            row.actor_kind,
-            ['admin', 'steward5', 'steward6', 'automatic', 'unknown'],
-            'blacklist event actor',
-          ),
-          actor_user_id:
-            row.actor_user_id === null
-              ? null
-              : decimalID(row.actor_user_id, 'blacklist event actor id'),
-          reason_codes: array(row.reason_codes, 'blacklist event reasons', 2).map((code) =>
-            string(code, 'blacklist reason code', { ascii: true }),
-          ),
-          safe_note: string(row.safe_note, 'blacklist event note', { min: 1, multiline: true }),
-          created_at: unixSecond(row.created_at, 'blacklist event time'),
-        };
-      });
+      const data = array(root.data, 'blacklist events', pageSize).map(
+        (candidate): BlacklistEvent => {
+          const row = record(
+            candidate,
+            ['id', 'actor_kind', 'actor_user_id', 'reason_codes', 'safe_note', 'created_at'],
+            'blacklist event',
+          );
+          return {
+            id: decimalID(row.id, 'blacklist event id'),
+            actor_kind: oneOf(
+              row.actor_kind,
+              ['admin', 'steward5', 'steward6', 'automatic', 'unknown'],
+              'blacklist event actor',
+            ),
+            actor_user_id:
+              row.actor_user_id === null
+                ? null
+                : decimalID(row.actor_user_id, 'blacklist event actor id'),
+            reason_codes: array(row.reason_codes, 'blacklist event reasons', 2).map((code) =>
+              string(code, 'blacklist reason code', { ascii: true }),
+            ),
+            safe_note: string(row.safe_note, 'blacklist event note', { min: 1, multiline: true }),
+            created_at: unixSecond(row.created_at, 'blacklist event time'),
+          };
+        },
+      );
       const pagination = normalizePageMetadata(root.pagination);
-      validatePageResponse(pagination, page, 20);
+      validatePageResponse(pagination, page, pageSize);
       return { data, pagination };
     },
     { signal },

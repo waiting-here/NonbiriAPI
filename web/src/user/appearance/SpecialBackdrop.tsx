@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { SpecialTheme } from '../activities/gacha/special-scenes';
 import { TomorrowArtwork } from '../activities/gacha/tomorrow/Artwork';
 import { AmberStill } from './AmberStill';
@@ -6,97 +6,58 @@ import { RomanceStill } from './RomanceStill';
 import { MirrorSeaStill } from './MirrorSeaStill';
 import { useArtworkPolicy } from '@shared/artwork/context';
 
-const settings = () => ({
-  dark: document.documentElement.dataset.theme === 'dark',
-  high: Math.max(innerWidth, innerHeight) * (devicePixelRatio || 1) > 1920,
-});
+import { startBackground } from './start-background';
+import { useBackgroundPlayback } from './playback-context';
 
-export function SpecialBackdrop({ theme }: { theme: SpecialTheme }) {
-  const policy = useArtworkPolicy();
-  return policy.allowed('appearance:' + theme) ? (
-    <PermittedSpecialBackdrop key={theme} theme={theme} />
-  ) : null;
-}
-function PermittedSpecialBackdrop({ theme }: { theme: SpecialTheme }) {
+export function SpecialBackdrop({
+  theme,
+  dark,
+  high,
+}: {
+  theme: SpecialTheme;
+  dark: boolean;
+  high: boolean;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [quality, setQuality] = useState(settings);
-  useEffect(() => {
-    const update = () => {
-      const next = settings();
-      setQuality((current) =>
-        current.dark === next.dark && current.high === next.high ? current : next,
-      );
-    };
-    const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    });
-    window.addEventListener('resize', update);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, []);
+  const { playback, animated } = useBackgroundPlayback();
+  const policy = useArtworkPolicy();
+  const allowed = policy.allowed('appearance:' + theme);
   useEffect(() => {
     const surface = canvas.current;
-    if (!surface) return;
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-    let controller: AbortController | undefined;
-    let release: (() => void) | undefined;
-    const update = () => {
-      controller?.abort();
-      release?.();
-      release = undefined;
-      surface.dataset.ready = 'false';
-      if (reduced.matches) return;
-      const next = new AbortController();
-      controller = next;
-      void import('../activities/gacha/special-renderer')
-        .then(({ renderSpecial }) =>
-          renderSpecial(surface, theme, {
-            landscape: true,
-            variant: 'appearance',
-            dark: quality.dark,
-            highResolution: quality.high,
-            signal: next.signal,
-            ambient: true,
-          }),
-        )
-        .then((stop) => {
-          if (next.signal.aborted) stop();
-          else release = stop;
-        })
-        .catch(() => {
-          /* Keep the matching static painting. */
-        });
-    };
-    reduced.addEventListener('change', update);
-    update();
-    return () => {
-      reduced.removeEventListener('change', update);
-      controller?.abort();
-      release?.();
-    };
-  }, [theme, quality]);
+    if (!surface || !animated || !allowed) return;
+    return startBackground(surface, playback, async (signal) => {
+      const { renderSpecial } = await import('../activities/gacha/special-renderer');
+      return renderSpecial(surface, theme, {
+        landscape: true,
+        variant: 'appearance',
+        dark,
+        highResolution: high,
+        signal,
+        ambient: true,
+        playback,
+      });
+    });
+  }, [theme, dark, high, playback, animated, allowed]);
+  if (!allowed) return null;
   return (
     <>
       {theme === 'tomorrow' ? (
         <TomorrowArtwork
           walking
           variant="appearance"
-          dark={quality.dark}
+          dark={dark}
           animated={false}
           className="nb-tomorrow-still"
         />
       ) : theme === 'amber' ? (
-        <AmberStill dark={quality.dark} />
+        <AmberStill dark={dark} />
       ) : theme === 'elopement' || theme === 'heart-thief' ? (
-        <RomanceStill theme={theme} dark={quality.dark} />
+        <RomanceStill theme={theme} dark={dark} />
       ) : (
-        <MirrorSeaStill dark={quality.dark} />
+        <MirrorSeaStill dark={dark} />
       )}
       <canvas
+        key={playback.sceneKey}
         ref={canvas}
         className="nb-appearance-backdrop"
         data-ready="false"

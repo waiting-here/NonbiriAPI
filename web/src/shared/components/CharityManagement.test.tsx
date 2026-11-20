@@ -1,3 +1,4 @@
+import { adaptationTarget, chatProjection } from '../../../test/fixtures/resourceScopes';
 vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import type { AdminDonation, CharityModel, ManagedDonationKey } from '@shared/operations/charity';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -281,6 +282,7 @@ function bindingCandidate(
   upstreamModelId: string,
 ) {
   return {
+    ...chatProjection,
     donation_id: donation.id,
     donation_key_id: key.id,
     upstream_model_id: upstreamModelId,
@@ -756,7 +758,10 @@ describe('CharityManagement corrective controls', () => {
     'offers cache defaults only for an entirely Gateway family (mixed=%s, %s / %s)',
     async (mixed, firstConnector, secondConnector) => {
       const model = { ...charityModel(10, 20), binding_count: '2' };
-      const binding = (id: string, connector: string) => ({
+      const binding = (id: string, connector: typeof firstConnector | typeof secondConnector) => ({
+        targets: [
+          { ...adaptationTarget(id, connector), donation_id: id, donation_key_id: id, uses: [] },
+        ],
         id,
         ord: Number(id) - 1,
         donation_id: id,
@@ -1012,18 +1017,73 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(picker.getByRole('button', { name: /Choose key/ }));
     await view.user.click(await picker.findByRole('button', { name: /Second shared key/ }));
     await view.user.click(await picker.findByRole('checkbox', { name: /model-one/ }));
-    expect(picker.getByRole('heading', { name: '3 service connection(s) selected' })).toBeVisible();
+    expect(picker.getByRole('heading', { name: 'Selected connections (3)' })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Add 3 connections' }));
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]).toEqual({
       expected_binding_revision: '0',
       selections: [
-        { donation_key_id: '11', upstream_model_id: 'model-one' },
-        { donation_key_id: '11', upstream_model_id: 'model-two' },
-        { donation_key_id: '12', upstream_model_id: 'model-one' },
+        {
+          targets: [
+            {
+              native_services: ['chat_completions'],
+              donation_key_id: '11',
+              upstream_model_id: 'model-one',
+            },
+          ],
+        },
+        {
+          targets: [
+            {
+              native_services: ['chat_completions'],
+              donation_key_id: '11',
+              upstream_model_id: 'model-two',
+            },
+          ],
+        },
+        {
+          targets: [
+            {
+              native_services: ['chat_completions'],
+              donation_key_id: '12',
+              upstream_model_id: 'model-one',
+            },
+          ],
+        },
       ],
     });
   });
+  it('restores edited quotas and paired token reservations when a reviewer changes their mind', async () => {
+    installDonationFetch(approvedDonation(managedKey()));
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Review' }));
+    await screen.findByRole('heading', { name: 'Donation review' });
+    await view.user.click(screen.getByText('Quota and reserve', { selector: 'summary strong' }));
+    const limit = screen.getByRole('textbox', { name: 'Call limit' });
+    const unlimited = screen.getByRole('checkbox', { name: 'Call limit · No limit' });
+    await view.user.click(unlimited);
+    expect(limit).toHaveValue('');
+    await view.user.type(limit, '750');
+    await view.user.click(unlimited);
+    expect(limit).toBeDisabled();
+    await view.user.click(unlimited);
+    expect(limit).toHaveValue('750');
+    const split = screen.getByRole('checkbox', {
+      name: 'Reserve input and output tokens separately',
+    });
+    await view.user.click(split);
+    await view.user.type(screen.getByRole('textbox', { name: 'Input token reservation' }), '80');
+    await view.user.type(screen.getByRole('textbox', { name: 'Output token reservation' }), '20');
+    await view.user.click(split);
+    expect(screen.queryByRole('textbox', { name: 'Input token reservation' })).toBeNull();
+    await view.user.click(split);
+    expect(screen.getByRole('textbox', { name: 'Input token reservation' })).toHaveValue('80');
+    expect(screen.getByRole('textbox', { name: 'Output token reservation' })).toHaveValue('20');
+  });
+
   it('omits enabled when reset is the only switch-related operator action', async () => {
     const fixture = approvedDonation(
       managedKey({

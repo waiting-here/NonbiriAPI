@@ -9,7 +9,10 @@ export function mirrorSeaAppearancePlacement(width: number, height: number) {
   const desktop = width >= 1024;
   const heroHeight = height * (desktop ? 0.75 : 0.74);
   const heroWidth = heroHeight * (1024 / 1536);
-  const center = desktop ? width - Math.max(72, Math.min(184, (width - 1184) / 4)) : width * 0.62;
+  // Reserve the right-side hair ornament before framing the mirror around the fingertips.
+  const center = desktop
+    ? width - Math.max(72, Math.min(184, (width - 1184) / 4), heroWidth * 0.3)
+    : width * 0.62;
   const top = height * 0.975 - heroHeight;
   const left = center - heroWidth / 2;
   const vw = Math.min(1, width / height / originalAspect);

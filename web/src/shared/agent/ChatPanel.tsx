@@ -221,7 +221,65 @@ export function ChatPanel({
   }, []);
   const locked =
     operation.isPending || operation.outcome === 'unknown' || Boolean(operation.refreshError);
-  const running = activeJob(query.data?.job) || query.data?.job?.state === 'waiting_confirmation';
+  const { enabled = false, generation: chatGeneration, job } = query.data ?? {};
+  const running = activeJob(job) || job?.state === 'waiting_confirmation';
+  // Reuse history elements across draft changes.
+  const renderedHistory = useMemo(() => {
+    const editable = enabled && !locked;
+    const renderPlan = (plan: AgentPlan) => (
+      <MemoOperationPlan
+        key={plan.id}
+        role={role}
+        account={account}
+        plan={plan}
+        readOnly={!enabled}
+      />
+    );
+    return {
+      messages: rows
+        .filter((row) => !toolResults.consumed.has(row.id))
+        .map((row) => {
+          const attachedPlans = plansByMessage.get(row.id) ?? noPlans;
+          return (
+            <Fragment key={row.id}>
+              <ChatMessage
+                message={row}
+                toolResults={toolResults.results.get(row.id)}
+                plans={attachedPlans}
+                running={Boolean(
+                  running &&
+                  job &&
+                  row.generation === chatGeneration &&
+                  row.created_at >= job.created_at,
+                )}
+                editable={
+                  editable &&
+                  ((role === 'admin' && (row.role === 'user' || row.role === 'assistant')) ||
+                    (role === 'steward' && row.id === lastUser?.id))
+                }
+                onEdit={edit}
+              />
+              {attachedPlans.map(renderPlan)}
+            </Fragment>
+          );
+        }),
+      unattachedPlans: unattachedPlans.map(renderPlan),
+    };
+  }, [
+    account,
+    chatGeneration,
+    edit,
+    enabled,
+    job,
+    lastUser,
+    locked,
+    plansByMessage,
+    role,
+    rows,
+    running,
+    toolResults,
+    unattachedPlans,
+  ]);
   const compactDraft = editing?.role !== 'assistant' && compactInstructions(draft) !== null;
   const loadOlder = async () => {
     const generation = query.data?.generation;
@@ -253,6 +311,7 @@ export function ChatPanel({
     <Panel>
       <PanelHead
         title={t('common.agent.chat')}
+        description={t('common.agent.chatHelp')}
         actions={
           <Button
             variant="secondary"
@@ -270,8 +329,7 @@ export function ChatPanel({
           <AgentError error={query.error} onRetry={() => void query.refetch()} />
         ) : (
           <>
-            <Note>{t('common.agent.chatHelp')}</Note>
-            {!query.data.enabled ? <Note>{t('common.agent.chatUnavailable')}</Note> : null}
+            {!enabled ? <Note tone="warn">{t('common.agent.chatUnavailable')}</Note> : null}
             {query.data.summary ? (
               <Fold title={t('common.agent.compactedContext')}>
                 <AgentMarkdown>{query.data.summary}</AgentMarkdown>
@@ -323,51 +381,10 @@ export function ChatPanel({
               {!rows.length ? (
                 <AgentEmpty body={t('common.agent.chatEmpty')} />
               ) : (
-                rows
-                  .filter((row) => !toolResults.consumed.has(row.id))
-                  .map((row) => (
-                    <Fragment key={row.id}>
-                      <ChatMessage
-                        message={row}
-                        toolResults={toolResults.results.get(row.id)}
-                        plans={plansByMessage.get(row.id) ?? noPlans}
-                        running={Boolean(
-                          running &&
-                          query.data.job &&
-                          row.generation === query.data.generation &&
-                          row.created_at >= query.data.job.created_at,
-                        )}
-                        editable={
-                          query.data.enabled &&
-                          !locked &&
-                          ((role === 'admin' &&
-                            (row.role === 'user' || row.role === 'assistant')) ||
-                            (role === 'steward' && row.id === lastUser?.id))
-                        }
-                        onEdit={edit}
-                      />
-                      {(plansByMessage.get(row.id) ?? noPlans).map((plan) => (
-                        <MemoOperationPlan
-                          key={plan.id}
-                          role={role}
-                          account={account}
-                          plan={plan}
-                          readOnly={!query.data.enabled}
-                        />
-                      ))}
-                    </Fragment>
-                  ))
+                renderedHistory.messages
               )}
             </div>
-            {unattachedPlans.map((plan) => (
-              <MemoOperationPlan
-                key={plan.id}
-                role={role}
-                account={account}
-                plan={plan}
-                readOnly={!query.data.enabled}
-              />
-            ))}
+            {renderedHistory.unattachedPlans}
             {editing ? (
               <Note>
                 <p>{t('common.agent.editingHelp')}</p>
@@ -386,7 +403,7 @@ export function ChatPanel({
               className="agent-composer nb-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!query.data.enabled || !draft.trim() || locked) return;
+                if (!enabled || !draft.trim() || locked) return;
                 operation.mutate({
                   kind: editing ? 'edit' : 'send',
                   id: editing?.id,
@@ -398,13 +415,13 @@ export function ChatPanel({
                 });
               }}
             >
-              <Field label={t('common.agent.message')} help={t('common.agent.compactHelp')}>
+              <Field span label={t('common.agent.message')} help={t('common.agent.compactHelp')}>
                 {(props) => (
                   <textarea
                     {...props}
                     rows={4}
                     value={draft}
-                    disabled={locked || !query.data.enabled}
+                    disabled={locked || !enabled}
                     onChange={(event) => setDraft(event.target.value)}
                   />
                 )}
@@ -414,9 +431,7 @@ export function ChatPanel({
                 <Button
                   variant="primary"
                   type="submit"
-                  disabled={
-                    !query.data.enabled || locked || !draft.trim() || Boolean(running && !editing)
-                  }
+                  disabled={!enabled || locked || !draft.trim() || Boolean(running && !editing)}
                 >
                   {t(
                     compactDraft

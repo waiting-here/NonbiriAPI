@@ -287,6 +287,16 @@ func (rpsPublishReporter) ReportRPSPublishError(err error) {
 	}
 }
 
+func gameAdminAuthorization(roleAuthorizer *roleFinalTxAuthorizer) gamehost.AdminAuthorizerFunc {
+	return gamehost.AdminAuthorizerFunc(func(ctx context.Context, tx *sql.Tx) error {
+		actor, ok := auth.ActorFromContext(ctx)
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			return authz.ErrUnauthorized
+		}
+		return roleAuthorizer.AuthorizeAdminMutation(ctx, tx, actor.UserID)
+	})
+}
+
 type gameRuntimeBundle = gamebuiltin.Runtime
 
 func newGameRuntimeBundle(
@@ -307,17 +317,11 @@ func newGameRuntimeBundle(
 		pools == nil || activityEvents == nil || accountEvents == nil || sources == nil {
 		return nil, errors.New("game runtime dependencies are required")
 	}
-	adminAuthorization := gamehost.AdminAuthorizerFunc(func(ctx context.Context, tx *sql.Tx) error {
-		actor, ok := auth.ActorFromContext(ctx)
-		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
-			return authz.ErrUnauthorized
-		}
-		return roleAuthorizer.AuthorizeAdminMutation(ctx, tx, actor.UserID)
-	})
+
 	return gamebuiltin.New(gamebuiltin.Options{
 		LakeRandom: lakeRandom, LakeMotionSeed: lakeMotionSeed,
 		Now:   now,
-		Store: store, Vault: vault, UserAuthorizer: authRuntime, AdminAuthorizer: adminAuthorization,
+		Store: store, Vault: vault, UserAuthorizer: authRuntime, AdminAuthorizer: gameAdminAuthorization(roleAuthorizer),
 		Continuation: continuation, Pools: pools, AccountEvents: accountEvents, ActivityEvents: activityEvents,
 		DuelAdminAudit: func(event duel.AdminAudit) {
 			slog.Info("game history export", "actor_id", event.Actor, "role", event.Role, "game", event.Game,

@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Card, ErrorState } from '@shared/components/States';
+import { ErrorState } from '@shared/components/States';
 import { Fold } from '@shared/components/ui/Fold';
-import { Fields, FormActions, Toggle } from '@shared/components/ui';
+import { Fields, FormActions, Panel, PanelBody, PanelHead, Toggle } from '@shared/components/ui';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import {
   initialValues,
@@ -106,182 +106,196 @@ export const ModelEditor = forwardRef<
   };
   useImperativeHandle(ref, () => ({ saveDraft: submit }));
   return (
-    <Card>
-      <h3>{t('模型开放与定价', 'Model availability and pricing')}</h3>
-      <p className="picturebook-prewrap">{value.display_name || value.upstream_model_id}</p>
-      {value.description ? <p className="picturebook-prewrap">{value.description}</p> : null}
-      <p>
-        {t(
+    <Panel>
+      <PanelHead
+        level={3}
+        title={t('模型开放与定价', 'Model availability and pricing')}
+        description={t(
           '支持参数和尺寸由模型目录自动提供。价格先选精确尺寸，再选档位或默认价，最后乘生成张数。',
           'Supported parameters and sizes come from the model catalog. Pricing uses exact size, then tier or default, multiplied by image count.',
         )}
-      </p>
-      {!available ? (
-        <div role="status">
-          <p>
-            {t(
-              '当前模型暂不可用，请刷新目录或选择其他模型。',
-              'This model is currently unavailable. Refresh the catalog or choose another model.',
-            )}
-          </p>
-          {value.capability_issues.length ? (
-            <ul>
-              {value.capability_issues.map((issue, index) => (
-                <li key={index}>
-                  {issue.code === 'unsupported_metadata'
-                    ? t(
-                        '服务目录中的模型信息不完整或暂不支持。',
-                        'The catalog information for this model is incomplete or unsupported.',
-                      )
-                    : issue.safe_message}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <fieldset disabled={save.locked || saved || disabled}>
-          <Toggle
-            label={t('向用户开放此模型', 'Make this model available')}
-            checked={enabled}
-            disabled={save.locked || saved || disabled || (!available && !enabled)}
-            onChange={setEnabled}
-          />
-          <PriceFields model={value} value={prices} onChange={setPrices} />
-        </fieldset>
-        <p>
-          {t(
-            '下架模型会取消其未开始任务并退款，正在执行的任务继续结算。',
-            'Disabling a model cancels and refunds queued tasks; running tasks continue to settlement.',
-          )}
+      />
+      <PanelBody>
+        <p className="picturebook-prewrap mono">
+          {value.display_name || value.upstream_model_id}
         </p>
-        {save.uncertain ? (
-          <p role="status">
-            {t(
-              '保存结果尚未确认，请重试同一次保存。',
-              'The save result is unconfirmed. Retry the same save.',
-            )}
-          </p>
-        ) : null}
-        {saved ? (
-          <p role="status">
-            {t(
-              '模型配置已保存。正在重新读取；如未刷新，请重新读取选中模型。',
-              'Model settings saved. Reloading; use Reload selected model if needed.',
-            )}
-          </p>
-        ) : null}
-        {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
-        <FormActions>
-          <button
-            className="nb-btn nb-btn--primary"
-            type="submit"
-            disabled={save.pending || saved || disabled}
-          >
-            {save.uncertain
-              ? t('重试同一次保存', 'Retry the same save')
-              : t('保存模型配置', 'Save model settings')}
-          </button>
-        </FormActions>
-      </form>
-      <Fold title={t('试选参数与查看价格（不扣币）', 'Try parameters and prices (no charge)')}>
-        <Fields>
-          <p>
-            {t(
-              '可选的本地预览，不会调用生成服务或扣费。',
-              'An optional local preview that makes no generation call or charge.',
-            )}
-          </p>
-          {previewModel ? (
-            <>
-              <fieldset disabled={checking || save.locked || disabled}>
-                <ModelParameterFields
-                  model={previewModel}
-                  values={sampleValues}
-                  onChange={(patch) => setSampleValues((current) => ({ ...current, ...patch }))}
-                />
-              </fieldset>
-              <p role="status">
-                {t('本地预计整单', 'Local estimated total')}:{' '}
-                {previewQuote
-                  ? previewQuote.total.paper + ' / ' + previewQuote.total.brush
-                  : t('当前组合没有可用价格', 'No price for this selection')}
-              </p>
-              {previewPrepared && 'problem' in previewPrepared ? (
-                <p role="alert">{t('请检查预览参数。', 'Check the preview parameters.')}</p>
-              ) : null}
-            </>
-          ) : (
+        {value.description ? <p className="picturebook-prewrap">{value.description}</p> : null}
+        {!available ? (
+          <div role="status">
             <p>
               {t(
-                '填写有效价格后，可试选此模型支持的参数。',
-                'Enter valid prices to try this model’s supported parameters.',
+                '当前模型暂不可用，请刷新目录或选择其他模型。',
+                'This model is currently unavailable. Refresh the catalog or choose another model.',
               )}
             </p>
-          )}
-          <FormActions>
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              disabled={checking || save.locked || disabled || !previewModel}
-              onClick={() => {
-                setCheckedSignature(currentSignature);
-                if (!draft || !previewPrepared || 'problem' in previewPrepared) {
-                  setCheckError(
-                    new ApiError(
-                      'invalid_request',
-                      t('请先修正价格或预览参数。', 'Fix the prices or preview parameters first.'),
-                      400,
-                    ),
-                  );
-                  return;
-                }
-                const parameters: Partial<SubmitInput> = { ...previewPrepared.input };
-                delete parameters.model_id;
-                delete parameters.expected_model_revision;
-                delete parameters.expected_pricing_revision;
-                setChecking(true);
-                setCheckError(null);
-                setCheckResult(null);
-                void checkModel({ model_id: value.id, draft, parameters })
-                  .then(setCheckResult)
-                  .catch(setCheckError)
-                  .finally(() => setChecking(false));
-              }}
-            >
-              {checking ? t('正在检查', 'Checking') : t('检查草稿', 'Check draft')}
-            </button>
-          </FormActions>
-          {checkError && checkedSignature === currentSignature ? (
-            <ErrorState error={checkError} />
-          ) : null}
-          {checkResult && checkedSignature === currentSignature ? (
-            checkResult.valid && checkResult.quote ? (
-              <p role="status">
-                {t(
-                  '本地检查通过；未验证上游生成。',
-                  'Local check passed; upstream generation is unverified.',
-                )}{' '}
-                {t('单张', 'Per image')}: {checkResult.quote.unit.paper} /{' '}
-                {checkResult.quote.unit.brush}; {t('整单', 'Total')}:{' '}
-                {checkResult.quote.total.paper} / {checkResult.quote.total.brush}
-              </p>
-            ) : (
-              <ul role="alert">
-                {checkResult.issues.map((issue, index) => (
-                  <li key={index}>{issue.safe_message}</li>
+            {value.capability_issues.length ? (
+              <ul>
+                {value.capability_issues.map((issue, index) => (
+                  <li key={index}>
+                    {issue.code === 'unsupported_metadata'
+                      ? t(
+                          '服务目录中的模型信息不完整或暂不支持。',
+                          'The catalog information for this model is incomplete or unsupported.',
+                        )
+                      : issue.safe_message}
+                  </li>
                 ))}
               </ul>
-            )
+            ) : null}
+          </div>
+        ) : null}
+        <form
+          className="picturebook-stack"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <fieldset className="nb-fieldset" disabled={save.locked || saved || disabled}>
+            <Toggle
+              label={t('向用户开放此模型', 'Make this model available')}
+              checked={enabled}
+              disabled={save.locked || saved || disabled || (!available && !enabled)}
+              onChange={setEnabled}
+            />
+            <PriceFields model={value} value={prices} onChange={setPrices} />
+          </fieldset>
+          <p className="nb-small nb-muted">
+            {t(
+              '下架模型会取消其未开始任务并退款，正在执行的任务继续结算。',
+              'Disabling a model cancels and refunds queued tasks; running tasks continue to settlement.',
+            )}
+          </p>
+          {save.uncertain ? (
+            <p role="status">
+              {t(
+                '保存结果尚未确认，请重试同一次保存。',
+                'The save result is unconfirmed. Retry the same save.',
+              )}
+            </p>
           ) : null}
-        </Fields>
-      </Fold>
-    </Card>
+          {saved ? (
+            <p role="status">
+              {t(
+                '模型配置已保存。正在重新读取；如未刷新，请重新读取选中模型。',
+                'Model settings saved. Reloading; use Reload selected model if needed.',
+              )}
+            </p>
+          ) : null}
+          {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
+          <FormActions>
+            <button
+              className="nb-btn nb-btn--primary"
+              type="submit"
+              disabled={save.pending || saved || disabled}
+            >
+              {save.uncertain
+                ? t('重试同一次保存', 'Retry the same save')
+                : t('保存模型配置', 'Save model settings')}
+            </button>
+          </FormActions>
+        </form>
+        <Fold
+          plain
+          title={t('试选参数与查看价格（不扣币）', 'Try parameters and prices (no charge)')}
+        >
+          <Fields>
+            <p className="nb-small nb-muted">
+              {t(
+                '可选的本地预览，不会调用生成服务或扣费。',
+                'An optional local preview that makes no generation call or charge.',
+              )}
+            </p>
+            {previewModel ? (
+              <>
+                <fieldset className="nb-fieldset" disabled={checking || save.locked || disabled}>
+                  <ModelParameterFields
+                    model={previewModel}
+                    values={sampleValues}
+                    onChange={(patch) => setSampleValues((current) => ({ ...current, ...patch }))}
+                  />
+                </fieldset>
+                <p role="status">
+                  {t(
+                    '本地预计整单（草稿纸／画笔）',
+                    'Local estimated total (sketch paper / brushes)',
+                  )}
+                  :{' '}
+                  {previewQuote
+                    ? previewQuote.total.paper + ' / ' + previewQuote.total.brush
+                    : t('当前组合没有可用价格', 'No price for this selection')}
+                </p>
+                {previewPrepared && 'problem' in previewPrepared ? (
+                  <p role="alert">{t('请检查预览参数。', 'Check the preview parameters.')}</p>
+                ) : null}
+              </>
+            ) : (
+              <p>
+                {t(
+                  '填写有效价格后，可试选此模型支持的参数。',
+                  'Enter valid prices to try this model’s supported parameters.',
+                )}
+              </p>
+            )}
+            <FormActions>
+              <button
+                className="nb-btn nb-btn--secondary"
+                type="button"
+                disabled={checking || save.locked || disabled || !previewModel}
+                onClick={() => {
+                  setCheckedSignature(currentSignature);
+                  if (!draft || !previewPrepared || 'problem' in previewPrepared) {
+                    setCheckError(
+                      new ApiError(
+                        'invalid_request',
+                        t('请先修正价格或预览参数。', 'Fix the prices or preview parameters first.'),
+                        400,
+                      ),
+                    );
+                    return;
+                  }
+                  const parameters: Partial<SubmitInput> = { ...previewPrepared.input };
+                  delete parameters.model_id;
+                  delete parameters.expected_model_revision;
+                  delete parameters.expected_pricing_revision;
+                  setChecking(true);
+                  setCheckError(null);
+                  setCheckResult(null);
+                  void checkModel({ model_id: value.id, draft, parameters })
+                    .then(setCheckResult)
+                    .catch(setCheckError)
+                    .finally(() => setChecking(false));
+                }}
+              >
+                {checking ? t('正在检查', 'Checking') : t('检查草稿', 'Check draft')}
+              </button>
+            </FormActions>
+            {checkError && checkedSignature === currentSignature ? (
+              <ErrorState error={checkError} />
+            ) : null}
+            {checkResult && checkedSignature === currentSignature ? (
+              checkResult.valid && checkResult.quote ? (
+                <p role="status">
+                  {t(
+                    '本地检查通过；未验证上游生成。',
+                    'Local check passed; upstream generation is unverified.',
+                  )}{' '}
+                  {t('单张（草稿纸／画笔）', 'Per image (sketch paper / brushes)')}:{' '}
+                  {checkResult.quote.unit.paper} / {checkResult.quote.unit.brush};{' '}
+                  {t('整单', 'Total')}: {checkResult.quote.total.paper} /{' '}
+                  {checkResult.quote.total.brush}
+                </p>
+              ) : (
+                <ul role="alert">
+                  {checkResult.issues.map((issue, index) => (
+                    <li key={index}>{issue.safe_message}</li>
+                  ))}
+                </ul>
+              )
+            ) : null}
+          </Fields>
+        </Fold>
+      </PanelBody>
+    </Panel>
   );
 });

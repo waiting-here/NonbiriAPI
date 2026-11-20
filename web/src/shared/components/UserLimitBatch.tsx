@@ -114,7 +114,7 @@ export function UserLimitBatch({
     void execute(items);
   };
   return (
-    <Fold title={t('management.users.batchLimits')}>
+    <Fold plain title={t('management.users.batchLimits')}>
       <div className="nb-form">
         <p className="nb-sub">{t('management.users.batchScope')}</p>
         <div className="nb-actions">
@@ -132,7 +132,7 @@ export function UserLimitBatch({
           >
             {t('management.users.clearLimitSelection')}
           </Button>
-          <span className="nb-num">
+          <span className="nb-amount">
             {t('management.users.limitSelectionCount', { count: chosen.length })}
           </span>
         </div>
@@ -241,14 +241,14 @@ export function UserLimitBatch({
           <ErrorState error={operation.refreshError} onRetry={() => void operation.refresh()} />
         ) : null}
         {chosen.length > 0 && !locked && (
-          <Fold title={t('management.users.inferenceLimitRules')}>
+          <Fold plain title={t('management.users.inferenceLimitRules')}>
             <p>{t('management.users.inferenceLimitHelp')}</p>
             <ul>
               {chosen.map((user) => (
                 <li key={user.id}>
                   <strong>{user.username}</strong>:{' '}
                   {INFERENCE_LIMITS.map(({ key, label }, index) => (
-                    <span className="nb-num" key={key}>
+                    <span className="nb-amount" key={key}>
                       {t(label)}{' '}
                       {formatCount(user[('effective_' + key) as keyof AdminUser] as string).display}
                       {index < INFERENCE_LIMITS.length - 1 ? ' · ' : ''}

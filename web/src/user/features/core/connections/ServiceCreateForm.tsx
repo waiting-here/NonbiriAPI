@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fold, Note, Segmented } from '@shared/components/ui';
@@ -8,6 +8,7 @@ import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
 import { useQueryClient } from '@tanstack/react-query';
 import { coreKeys, coreSessionMatchesAccount, useEndpointCreateOptions } from '../queries';
+import { canonicalBaseURLPreview, validateEndpointSecret } from '../normalizers';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import type { ConnectorType, Endpoint, EndpointCreateInput, EndpointKey } from '../types';
 import type { Connection, Credential, DiscoverySource } from './types';
@@ -39,10 +40,12 @@ export function ServiceCreateForm({
   accountId,
   connection,
   onManage,
+  onReady,
 }: {
   accountId: string;
   connection?: Connection;
   onManage?: () => void;
+  onReady?: (ready: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { t: coreText } = useCoreCopy();
@@ -51,8 +54,10 @@ export function ServiceCreateForm({
   const options = useEndpointCreateOptions(accountId);
   const [mode, setMode] = useState<'custom' | 'mainstream'>('custom');
   const [channelId, setChannelId] = useState('');
-  const [connector, setConnector] = useState('openai-compatible');
+  const [chosenConnector, setConnector] = useState<string>();
   const [address, setAddress] = useState('');
+  const [addressError, setAddressError] = useState(false);
+  const addressInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState<string | null>(null);
   const [format, setFormat] = useState<RerankFormat | null>(null);
   const [rerankPath, setRerankPath] = useState('');
@@ -69,7 +74,7 @@ export function ServiceCreateForm({
   const [rpm, setRPM] = useState('0');
   const [queue, setQueue] = useState(() => keyQueueDraft());
   const activeSecret = useRef(0);
-  const [owned] = useState(true);
+  const [localError, setLocalError] = useState<Error>();
   const [busy, setBusy] = useState(false);
   const batching = useRef(false);
   const [saved, setSaved] = useState(() => setupProgress(connection));
@@ -114,6 +119,11 @@ export function ServiceCreateForm({
   const channels = options.data?.mainstream_channels ?? [];
   const channel = channels.find((row) => row.id === channelId);
   const nativeOptions = options.data?.native_service_options ?? [];
+  const connector =
+    chosenConnector ??
+    (nativeOptions.find((row) => row.connector_type === 'openai-compatible') ?? nativeOptions[0])
+      ?.connector_type ??
+    '';
   const chosenProtocol = nativeOptions.find((row) => row.connector_type === connector);
   const services = chosenProtocol?.native_services ?? [];
   const protocolServices = (type: string) =>
@@ -180,6 +190,9 @@ export function ServiceCreateForm({
         Boolean(saved.grants[row]) &&
         extraSecrets.every((_, index) => Boolean(saved.grants[row + ':' + (index + 1)])),
     );
+  useEffect(() => {
+    onReady?.(complete);
+  }, [complete, onReady]);
   const locked =
     busy ||
     operation.isPending ||
@@ -197,7 +210,6 @@ export function ServiceCreateForm({
     (mode === 'mainstream' || (chosenProtocol && address.trim() && services.length)) &&
     inputs.every(({ input }) => input.native_services?.length) &&
     (saved.credential || (credentialMode === 'existing' ? chosenCredential : secret)) &&
-    (saved.credential || owned) &&
     extraSecrets.every((value, index) => saved.extraCredentials[String(index + 1)] || value.trim()),
   );
   const run = async (row: string, intent: ConnectionIntent, requestSecret?: string) => {
@@ -206,24 +218,48 @@ export function ServiceCreateForm({
   };
   const save = async () => {
     if (locked || !ready) return;
+    const saved = progress.current;
+    let baseURL = address.trim();
+    if (mode === 'custom' && !saved.entries.custom) {
+      try {
+        baseURL = canonicalBaseURLPreview(baseURL);
+      } catch {
+        setAddressError(true);
+        addressInput.current?.focus();
+        return;
+      }
+    }
+    try {
+      if (credentialMode === 'new' && !progress.current.credential) validateEndpointSecret(secret);
+      extraSecrets.forEach((value, index) => {
+        if (!progress.current.extraCredentials[String(index + 1)]) validateEndpointSecret(value);
+      });
+    } catch (error) {
+      setLocalError(error as Error);
+      return;
+    }
+    setLocalError(undefined);
     batching.current = true;
     setBusy(true);
     const requestSecret = secret;
     const requestExtras = extraSecrets.slice();
     activeSecret.current = 0;
-    const saved = progress.current;
     try {
       if (!saved.connection)
         await run('', {
           kind: 'connection',
           input: { name: serviceName.trim(), note: '' },
         });
-      for (const item of inputs) {
-        if (!saved.entries[item.row])
-          await run(item.row, {
-            kind: 'endpoint',
-            input: { ...item.input, connection_id: saved.connection!.id },
-          });
+      for (const { row, input } of inputs) {
+        if (saved.entries[row]) continue;
+        await run(row, {
+          kind: 'endpoint',
+          input: {
+            ...input,
+            ...(input.source === 'custom' ? { base_url: baseURL } : {}),
+            connection_id: saved.connection!.id,
+          },
+        });
       }
       if (!saved.credential) {
         if (credentialMode === 'existing')
@@ -337,30 +373,32 @@ export function ServiceCreateForm({
     return <CoreErrorPanel error={options.error} onRetry={() => void options.refetch()} />;
   if (complete)
     return (
-      <div className="nb-stack">
-        <Note tone="ok">{t('user.workflows.serviceReady')}</Note>
-        <div className="nb-actions">
-          <Link
-            className="nb-btn nb-btn--secondary"
-            to={
-              '/charity?tab=donate&endpoint_id=' +
-              encodeURIComponent(Object.values(saved.entries)[0]!.id)
-            }
-          >
-            {t('user.workflows.donateService')}
-          </Link>
-          <Link
-            className="nb-btn nb-btn--ghost"
-            to={
-              '/endpoints?connection_id=' +
-              saved.connection!.id +
-              '&connection_view=entries&endpoint_id=' +
-              Object.values(saved.entries)[0]!.id
-            }
-            onClick={onManage}
-          >
-            {t('common.connections.manage')}
-          </Link>
+      <div className="nb-stack service-create-result">
+        <div className="nb-stack nb-stack--sm">
+          <Note tone="ok">{t('user.workflows.serviceReady')}</Note>
+          <div className="nb-actions">
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={
+                '/charity?tab=donate&endpoint_id=' +
+                encodeURIComponent(Object.values(saved.entries)[0]!.id)
+              }
+            >
+              {t('user.workflows.donateService')}
+            </Link>
+            <Link
+              className="nb-btn nb-btn--ghost"
+              to={
+                '/endpoints?connection_id=' +
+                saved.connection!.id +
+                '&connection_view=entries&endpoint_id=' +
+                Object.values(saved.entries)[0]!.id
+              }
+              onClick={onManage}
+            >
+              {t('common.connections.manage')}
+            </Link>
+          </div>
         </div>
         {inputs.map(({ row }) => (
           <ServiceModelSetup
@@ -399,7 +437,7 @@ export function ServiceCreateForm({
     );
   return (
     <div className="nb-stack">
-      <div className="nb-form">
+      <div className="nb-form service-create">
         {channels.length ? (
           <OptionCards
             legend={t('common.connections.entrySource')}
@@ -423,17 +461,24 @@ export function ServiceCreateForm({
         ) : null}
         {mode === 'custom' ? (
           <>
-            <Field label={t('user.services.serviceAddress')}>
+            <Field
+              label={t('user.services.serviceAddress')}
+              error={addressError ? t('user.services.serviceAddressError') : undefined}
+            >
               {(props) => (
                 <input
                   {...props}
                   form={formID}
                   type="url"
                   required
+                  ref={addressInput}
                   value={address}
                   disabled={locked || started}
                   placeholder="https://api.example.com/v1"
-                  onChange={(event) => setAddress(event.target.value)}
+                  onChange={(event) => {
+                    setAddress(event.target.value);
+                    setAddressError(false);
+                  }}
                 />
               )}
             </Field>
@@ -482,38 +527,32 @@ export function ServiceCreateForm({
               )}
             </Field>
             {channel ? (
-              <Fold title={t('common.connections.entries')}>
+              <Fold plain title={t('common.connections.entries')}>
                 {channel.entries
                   ?.filter((entry) => entry.enabled && entry.id)
                   .map((entry) => (
                     <div key={entry.id} className="nb-stack nb-stack--sm">
-                      <Field label={entry.name}>
-                        {(props) => (
-                          <input
-                            {...props}
-                            type="checkbox"
-                            checked={Boolean(selected[entry.id!])}
-                            disabled={locked || started}
-                            onChange={(event) =>
-                              setSelected((previous) => {
-                                const next = { ...previous };
-                                if (event.target.checked)
-                                  next[entry.id!] = protocolServices(entry.connector_type);
-                                else delete next[entry.id!];
-                                return next;
-                              })
-                            }
-                          />
-                        )}
-                      </Field>
+                      <label className="core-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selected[entry.id!])}
+                          disabled={locked || started}
+                          onChange={(event) =>
+                            setSelected((previous) => {
+                              const next = { ...previous };
+                              if (event.target.checked)
+                                next[entry.id!] = protocolServices(entry.connector_type);
+                              else delete next[entry.id!];
+                              return next;
+                            })
+                          }
+                        />
+                        <span>{entry.name}</span>
+                      </label>
                       {selected[entry.id!] && channel.discovery_source ? (
-                        <Field
-                          label={t('common.connections.useSuggestedCatalog')}
-                          help={<span className="mono">{channel.discovery_source.base_url}</span>}
-                        >
-                          {(props) => (
+                        <div className="nb-stack nb-stack--xs">
+                          <label className="core-checkbox">
                             <input
-                              {...props}
                               type="checkbox"
                               checked={!skipCatalog[entry.id!]}
                               disabled={locked || started}
@@ -524,8 +563,12 @@ export function ServiceCreateForm({
                                 }))
                               }
                             />
-                          )}
-                        </Field>
+                            <span>{t('common.connections.useSuggestedCatalog')}</span>
+                          </label>
+                          <p className="nb-small nb-muted mono">
+                            {channel.discovery_source.base_url}
+                          </p>
+                        </div>
                       ) : null}
                     </div>
                   ))}
@@ -606,7 +649,7 @@ export function ServiceCreateForm({
             <p className="nb-small nb-muted">{t('user.services.keyOwnership')}</p>
           </>
         )}
-        <Fold title={t('user.services.keySettings')}>
+        <Fold plain title={t('user.services.keySettings')}>
           <p className="nb-small nb-muted">{t('common.keyLimits.newKeysHint')}</p>
           <KeyLimitFields
             concurrency={concurrency}
@@ -620,7 +663,16 @@ export function ServiceCreateForm({
           />
         </Fold>
         {mode === 'custom' ? (
-          <Fold title={t('user.services.advancedSetup')} lazy>
+          <Fold
+            plain
+            title={t('user.services.advancedSetup')}
+            meta={
+              chosenProtocol
+                ? coreText(CONNECTOR_COPY_KEYS[chosenProtocol.configuration_type as ConnectorType])
+                : undefined
+            }
+            lazy
+          >
             <Field label={t('common.connections.protocol')}>
               {(props) => (
                 <select
@@ -661,25 +713,23 @@ export function ServiceCreateForm({
               baseURL={address}
               disabled={locked || started}
             />
-            <Fold title={t('common.connections.discoveryOptional')}>
-              <Field label={t('user.workflows.discoverModels')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="checkbox"
-                    checked={Boolean(customDiscovery)}
-                    disabled={locked || started}
-                    onChange={(event) =>
-                      setDiscoveryOverride(
-                        event.target.checked
-                          ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ??
-                              defaultDiscovery('openai-compatible', address))
-                          : null,
-                      )
-                    }
-                  />
-                )}
-              </Field>
+            <Fold plain title={t('common.connections.discoveryOptional')}>
+              <label className="core-checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(customDiscovery)}
+                  disabled={locked || started}
+                  onChange={(event) =>
+                    setDiscoveryOverride(
+                      event.target.checked
+                        ? (defaultDiscovery(chosenProtocol?.configuration_type, address) ??
+                            defaultDiscovery('openai-compatible', address))
+                        : null,
+                    )
+                  }
+                />
+                <span>{t('user.workflows.discoverModels')}</span>
+              </label>
               {customDiscovery ? (
                 <>
                   <Field
@@ -781,6 +831,7 @@ export function ServiceCreateForm({
             </button>
           </div>
         ) : null}
+        {localError ? <CoreErrorPanel compact error={localError} /> : null}
         <ConnectionOperationNotice operation={operation} />
         {started && !complete ? <Note>{t('user.workflows.continueSetup')}</Note> : null}
         <form

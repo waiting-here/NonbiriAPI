@@ -222,6 +222,10 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		if f.codexUpstream != nil && f.codexUpstream.control(w, r, f) {
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/management-denial-grants" && management != nil {
+			writeManagementDenialGrants(w, r, f)
+			return
+		}
 		if r.Method == http.MethodPost && r.URL.Path == "/mfa/expire" && mfaUser.ID != "" {
 			if _, err := f.store.DB().ExecContext(r.Context(), `DELETE FROM account_mfa_proofs WHERE user_id=?`, mfaUser.ID); err != nil {
 				http.Error(w, "fixture update failed", http.StatusInternalServerError)
@@ -284,6 +288,7 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	}
 	if os.Getenv("NONBIRI_REQUEST_REJECTIONS_BROWSER") == "1" {
 		state["request_rejections"] = seedRequestRejectionsBrowser(t, f)
+		state["failure_trace"] = seedBrowserFailureTrace(t, f, now-60)
 	}
 	if os.Getenv("NONBIRI_DONATION_CONTEXT_BROWSER") == "1" {
 		state["donation_context"] = seedDonationContextBrowser(t, f, now)
@@ -303,9 +308,14 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	if err := os.WriteFile(statePath, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
+	// Allow normal server cleanup before the enclosing Go test deadline.
+	lifetime := 8 * time.Minute
+	if deadline, ok := t.Deadline(); ok {
+		lifetime = time.Until(deadline) - 30*time.Second
+	}
 	select {
 	case <-stop:
-	case <-time.After(8 * time.Minute):
+	case <-time.After(lifetime):
 		t.Fatal("browser fixture was not shut down")
 	}
 }

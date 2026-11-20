@@ -1,7 +1,5 @@
 import type { ConnectorType } from './types';
-import en from '../../i18n/en.json';
-import zh from '../../i18n/zh.json';
-import { useRegisteredCopy, type CopyParameters } from '@shared/i18n/useRegisteredCopy';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 
 const keys = {
   'accountPresentation.preferences': 'user.core.accountPresentation.preferences',
@@ -329,6 +327,7 @@ const keys = {
   'account.created': 'user.core.account.created',
   'account.languageTitle': 'user.core.account.languageTitle',
   'account.languageBody': 'user.core.account.languageBody',
+  'account.languageUnsetHint': 'user.core.account.languageUnsetHint',
   'account.language': 'user.core.account.language',
   'account.zh': 'user.core.account.zh',
   'account.en': 'user.core.account.en',
@@ -357,6 +356,9 @@ const keys = {
   'account.lifecycleUnavailable': 'user.core.account.lifecycleUnavailable',
   'account.elevationFailed': 'user.core.account.elevationFailed',
   'account.exportUnknown': 'user.core.account.exportUnknown',
+  'account.exportDownloaded': 'user.core.account.exportDownloaded',
+  'account.exportReauthorize': 'user.core.account.exportReauthorize',
+  'account.exportFailed': 'user.core.account.exportFailed',
   'account.deleteUnknown': 'user.core.account.deleteUnknown',
   'account.checkAuthority': 'user.core.account.checkAuthority',
   'account.deleteStillActive': 'user.core.account.deleteStillActive',
@@ -382,20 +384,6 @@ export const CONNECTOR_COPY_KEYS = {
 } as const satisfies Record<ConnectorType, CoreCopyKey>;
 
 export const CORE_COPY_KEYS = Object.keys(keys) as CoreCopyKey[];
-export const CORE_COPY_DESCRIPTORS = CORE_COPY_KEYS.map((key) => ({
-  key,
-  en: en.user.core[key],
-  zh: zh.user.core[key],
-}));
-
-export function coreText(key: CoreCopyKey, language: 'zh' | 'en', values?: CopyParameters): string {
-  const template = (language === 'zh' ? zh : en).user.core[key];
-  if (!values) return template;
-  return template.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_match, name: string) =>
-    Object.hasOwn(values, name) ? String(values[name]) : '',
-  );
-}
-
 export function useCoreCopy() {
   return useRegisteredCopy(keys);
 }

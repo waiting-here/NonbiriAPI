@@ -33,8 +33,11 @@ export function ConnectionResourceList<T>({
   rowKey,
   searchPlaceholder,
   emptyAction,
+  emptyTitle,
+  emptyDescription,
   refetchInterval = false,
   embedded = false,
+  showHeading = true,
   restoreScroll = false,
   filters,
   filterKey = '',
@@ -49,8 +52,11 @@ export function ConnectionResourceList<T>({
   rowKey: (row: T) => string;
   searchPlaceholder: string;
   emptyAction?: ReactNode;
+  emptyTitle?: string;
+  emptyDescription?: string;
   refetchInterval?: number | false;
   embedded?: boolean;
+  showHeading?: boolean;
   restoreScroll?: boolean;
   filters?: ReactNode;
   filterKey?: string;
@@ -100,40 +106,45 @@ export function ConnectionResourceList<T>({
     refetchInterval,
   });
   useResourceListScroll(accountId, Boolean(query.data) && !query.isFetching, restoreScroll);
+  const isEmptyUnfiltered = query.data?.pagination.total_items === '0' && !q.trim() && !filterKey;
   const content = (
     <>
-      <PanelHead title={title} level={embedded ? 3 : 2} actions={actions} />
+      {showHeading || actions ? (
+        <PanelHead title={showHeading ? title : ''} level={embedded ? 3 : 2} actions={actions} />
+      ) : null}
       <PanelBody>
-        <FilterBar
-          query={query}
-          as="div"
-          activeCount={q ? 1 : 0}
-          search={
-            <>
-              <Field label={t('common.connections.search')}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="search"
-                    placeholder={searchPlaceholder}
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                  />
-                )}
-              </Field>
-            </>
-          }
-          secondary={filters}
-          onSubmit={search}
-          onReset={() => {
-            setDraft('');
-            setParams((previous) => {
-              const next = new URLSearchParams(previous);
-              next.delete(queryParam);
-              return next;
-            });
-          }}
-        />
+        {!isEmptyUnfiltered ? (
+          <FilterBar
+            query={query}
+            as="div"
+            activeCount={q ? 1 : 0}
+            search={
+              <>
+                <Field label={t('common.connections.search')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="search"
+                      placeholder={searchPlaceholder}
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                    />
+                  )}
+                </Field>
+              </>
+            }
+            secondary={filters}
+            onSubmit={search}
+            onReset={() => {
+              setDraft('');
+              setParams((previous) => {
+                const next = new URLSearchParams(previous);
+                next.delete(queryParam);
+                return next;
+              });
+            }}
+          />
+        ) : null}
         {query.error ? (
           <CoreErrorPanel error={query.error} onRetry={() => void query.refetch()} />
         ) : null}
@@ -145,10 +156,16 @@ export function ConnectionResourceList<T>({
               <DataTable caption={title} columns={columns} rows={query.data.data} rowKey={rowKey} />
             ) : (
               <CoreEmpty
-                title={t('common.connections.emptyTitle')}
-                body={q ? t('common.connections.noMatches') : t('common.connections.emptyBody')}
+                title={
+                  isEmptyUnfiltered && emptyTitle ? emptyTitle : t('common.connections.emptyTitle')
+                }
+                body={
+                  q || filterKey
+                    ? t('common.connections.noMatches')
+                    : (emptyDescription ?? t('common.connections.emptyBody'))
+                }
                 action={emptyAction}
-                illustration={q ? 'search' : 'empty'}
+                illustration={q || filterKey ? 'search' : 'empty'}
               />
             )}
             <PagePagination
@@ -166,6 +183,6 @@ export function ConnectionResourceList<T>({
   return embedded ? (
     <div className="nb-stack">{content}</div>
   ) : (
-    <Panel aria-busy={query.isFetching}>{content}</Panel>
+    <Panel aria-label={title} aria-busy={query.isFetching}>{content}</Panel>
   );
 }

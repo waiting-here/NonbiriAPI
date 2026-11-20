@@ -252,17 +252,21 @@ async function installFishingRoutes(
 async function installUserShell(
   page: import('@playwright/test').Page,
   language: 'en' | 'zh' = 'en',
+  theme: 'light' | 'dark' = 'dark',
 ) {
-  await page.addInitScript((selectedLanguage) => {
-    localStorage.setItem('nb.lang', selectedLanguage);
-    localStorage.setItem('nb.theme', 'dark');
-  }, language);
+  await page.addInitScript(
+    ({ language, theme }) => {
+      localStorage.setItem('nb.lang', language);
+      localStorage.setItem('nb.theme', theme);
+    },
+    { language, theme },
+  );
   await mockPublicConfig(page, 'user');
   await mockRoleSession(page, 'user', 'level4');
 }
 
 for (const appearance of ['default', 'celestial'])
-  for (const theme of ['light', 'dark'])
+  for (const theme of ['light', 'dark'] as const)
     for (const width of [390, 1440])
       test(`Fishing balance remains reachable ${appearance} ${theme} ${width}`, async ({
         page,
@@ -271,8 +275,7 @@ for (const appearance of ['default', 'celestial'])
         const height = width === 390 ? 844 : 900;
         await page.setViewportSize({ width, height });
         await page.emulateMedia({ reducedMotion: 'reduce' });
-        await installUserShell(page, 'zh');
-        await page.addInitScript((theme) => localStorage.setItem('nb.theme', theme), theme);
+        await installUserShell(page, 'zh', theme);
         await page.route('**/api/appearance', (route) =>
           route.fulfill({
             json: { selected: appearance, unlocked: ['default', 'celestial'], updated_at: null },
@@ -280,10 +283,13 @@ for (const appearance of ['default', 'celestial'])
         );
         await installFishingRoutes(page, fixtureWith());
         await page.goto(`${USER_ORIGIN}/games/fishing`);
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
         await expect(page.locator('html')).toHaveAttribute('data-appearance', appearance);
         const bar = page.locator('.game-actionbar');
         const start = bar.getByRole('button', { name: '开始垂钓', exact: true });
-        const balance = page.locator('.fishing-controls .fishing-totals > div').last();
+        const balance = page.locator('.nb-page-header .game-wallets > div').filter({
+          has: page.getByText('通用积分', { exact: true }),
+        });
         await expect(balance).toContainText('5,000,000');
         const evidence = process.env.NONBIRI_FISHING_LAYOUT_EVIDENCE;
         const capture = async (state: string) => {
@@ -325,11 +331,18 @@ for (const appearance of ['default', 'celestial'])
           true,
         );
         if (appearance !== 'default') {
+          if (width === 390) await page.getByRole('button', { name: '装扮', exact: true }).click();
           await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
           const view = page.getByRole('dialog', { name: '欣赏背景', exact: true });
           await expect(view).toBeVisible();
           await expect(bar).not.toBeVisible();
           await view.getByRole('button', { name: '返回页面', exact: true }).click();
+          if (width === 390) {
+            await page
+              .getByRole('dialog', { name: '装扮' })
+              .getByRole('button', { name: '关闭', exact: true })
+              .click();
+          }
           await expect(bar).toBeVisible();
         }
         guard.assertNone();
@@ -387,6 +400,85 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
   guard.assertNone();
 });
 
+for (const language of ['en', 'zh'] as const) {
+  test(`fishing keeps large settlement amounts, deductions and the catch caption readable in ${language}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await installUserShell(page, language);
+    const unit = language === 'zh' ? '积分' : 'credits';
+    const received = '1234567890123.588';
+    const deducted = '123456789012.125';
+    const gross = '1358024679135.713';
+    const rake = { platform: deducted, welfare: '0', thursday: '0' };
+    const result = {
+      ...RESULT,
+      payout_total: gross,
+      net_payout_total: received,
+      rake,
+      outcomes: [
+        {
+          ...RESULT.outcomes[0],
+          species_key: 'yellowcheek',
+          reward: gross,
+          net_reward: received,
+          rake,
+        },
+      ],
+    };
+    await installFishingRoutes(
+      page,
+      fixtureWith({ settlement_pending: null, unrevealed: result, has_more_unrevealed: false }),
+    );
+    await page.goto(USER_ORIGIN + '/games/fishing');
+    const settlement = page.locator('.fishing-result');
+    const net = settlement.locator('.fishing-totals > div > dd > .game-money');
+    await expect(net).toHaveText('1,234,567,890,123.588 ' + unit);
+    const deductions = settlement.locator('section > .fishing-rake-details');
+    await deductions.locator('summary').click();
+    const fee = deductions.getByText('123,456,789,012.125 ' + unit, { exact: true });
+    await expect(fee).toBeVisible();
+    const stage = page.locator('.fishing-stage');
+    const caption = stage.locator('figcaption');
+    await expect(caption).toHaveText(language === 'zh' ? '鳡鱼' : 'Yellowcheek');
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const value of [net, fee]) {
+        const geometry = await value.evaluate((el) => {
+          const row = el.closest('dd')!.parentElement!;
+          const label = row.querySelector('dt')!.getBoundingClientRect();
+          const box = row.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const lines = Array.from(range.getClientRects());
+          return {
+            contained: lines.every(
+              (line) => line.left >= box.left - 1 && line.right <= box.right + 1,
+            ),
+            besideLabel: lines[0].left >= label.right && lines[0].top < label.bottom,
+          };
+        });
+        expect(geometry.contained).toBe(true);
+        if (width === 1440) expect(geometry.besideLabel).toBe(true);
+      }
+      const labelBox = await caption.boundingBox();
+      const sceneBox = await stage.boundingBox();
+      expect(labelBox!.x).toBeGreaterThanOrEqual(sceneBox!.x);
+      expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(sceneBox!.x + sceneBox!.width);
+      expect(
+        await caption.evaluate((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getClientRects().length;
+        }),
+      ).toBe(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    }
+  });
+}
+
 const ART_FISH_SPECS: Readonly<Record<string, { readonly tier: string; readonly size: number }>> = {
   whitebait: { tier: 'small', size: 10 },
   gudgeon: { tier: 'small', size: 11 },
@@ -413,63 +505,18 @@ const ART_FISH_SPECS: Readonly<Record<string, { readonly tier: string; readonly 
   koi: { tier: 'legend', size: 122 },
 };
 
-const ARTWORK_RESULTS = [
-  ...fishArtwork.map((art) => {
-    const spec = ART_FISH_SPECS[art.key];
-    if (!spec) throw new Error(`Missing frozen fish fixture for ${art.key}`);
-    return {
-      ...RESULT,
-      outcomes: [
-        {
-          ordinal: 0,
-          species_key: art.key,
-          tier: spec.tier,
-          size_cm: spec.size,
-          reward: '0',
-          net_reward: '0',
-          rake: { platform: '0', welfare: '0', thursday: '0' },
-        },
-      ],
-      payout_total: '0',
-      net_payout_total: '0',
-      rake: { platform: '0', welfare: '0', thursday: '0' },
-    };
-  }),
-  ...junkArtwork.map((art) => ({
-    ...RESULT,
-    outcomes: [
-      {
-        ordinal: 0,
-        species_key: art.key,
-        tier: 'junk',
-        size_cm: 0,
-        reward: '0',
-        net_reward: '0',
-        rake: { platform: '0', welfare: '0', thursday: '0' },
-      },
-    ],
-    payout_total: '0',
-    net_payout_total: '0',
+const ARTWORK_OUTCOMES = [...fishArtwork, ...junkArtwork, ...treasureArtwork].map((art) => {
+  const spec = art.kind === 'fish' ? ART_FISH_SPECS[art.key] : { tier: art.kind, size: 0 };
+  if (!spec) throw new Error(`Missing frozen fish fixture for ${art.key}`);
+  return {
+    species_key: art.key,
+    tier: spec.tier,
+    size_cm: spec.size,
+    reward: '0',
+    net_reward: '0',
     rake: { platform: '0', welfare: '0', thursday: '0' },
-  })),
-  ...treasureArtwork.map((art) => ({
-    ...RESULT,
-    outcomes: [
-      {
-        ordinal: 0,
-        species_key: art.key,
-        tier: 'treasure',
-        size_cm: 0,
-        reward: '0',
-        net_reward: '0',
-        rake: { platform: '0', welfare: '0', thursday: '0' },
-      },
-    ],
-    payout_total: '0',
-    net_payout_total: '0',
-    rake: { platform: '0', welfare: '0', thursday: '0' },
-  })),
-];
+  };
+});
 
 test('Fishing pending survives reload, settles from authority, auto-ACKs, and permits a new batch', async ({
   context,
@@ -524,22 +571,42 @@ test('Fishing renders every frozen outcome with non-zero local artwork on the re
   await installFishingRoutes(page, fixture);
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
-  expect(ARTWORK_RESULTS).toHaveLength(34);
-  for (const result of ARTWORK_RESULTS) {
+  // The game supports one or ten casts. Exercise every drawing on a real result page.
+  expect(ARTWORK_OUTCOMES).toHaveLength(34);
+  for (let index = 0; index < ARTWORK_OUTCOMES.length;) {
+    const count = ARTWORK_OUTCOMES.length - index >= 10 ? 10 : 1;
+    const outcomes = ARTWORK_OUTCOMES.slice(index, index + count).map((outcome, ordinal) => ({
+      ...outcome,
+      ordinal,
+    }));
+    const total = count === 10 ? '25' : '2.5';
     fixture.state = {
       settlement_pending: null,
-      unrevealed: result,
+      unrevealed: {
+        ...RESULT,
+        count,
+        entry_total: total,
+        payment: { general: total, game: '0' },
+        outcomes,
+        payout_total: '0',
+        net_payout_total: '0',
+      },
       has_more_unrevealed: false,
     };
     await page.goto(`${USER_ORIGIN}/games/fishing`);
     await expect(page.getByRole('heading', { name: 'Pond fishing' })).toBeVisible();
-    const artwork = page.locator('.fishing-result .fishing-art');
-    await expect(artwork).toHaveAttribute('data-art-key', result.outcomes[0].species_key);
-    const box = await artwork.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThan(0);
-    expect(box?.height ?? 0).toBeGreaterThan(0);
-    await expect(artwork.locator('svg')).toHaveAttribute('aria-hidden', 'true');
-    expect(await artwork.locator('svg image, svg use').count()).toBe(0);
+    const drawings = page.locator('.fishing-result .fishing-art');
+    await expect(drawings).toHaveCount(count);
+    for (const outcome of outcomes) {
+      const artwork = drawings.nth(outcome.ordinal);
+      await expect(artwork).toHaveAttribute('data-art-key', outcome.species_key);
+      const box = await artwork.boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThan(0);
+      expect(box?.height ?? 0).toBeGreaterThan(0);
+      await expect(artwork.locator('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(await artwork.locator('svg image, svg use').count()).toBe(0);
+    }
+    index += count;
   }
   consoleGuard.assertNone();
 });
@@ -629,7 +696,6 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   const scrollBeforeMenu = await page.evaluate(() => window.scrollY);
   expect(scrollBeforeMenu).toBeGreaterThan(100);
   await page.getByRole('button', { name: '打开导航' }).click();
-  await expect(page.getByRole('link', { name: '账号' })).toBeVisible();
   const closeNavigation = page
     .getByRole('dialog')
     .getByRole('button', { name: '关闭导航', exact: true });
@@ -645,12 +711,21 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   );
   await expect(page.getByRole('link', { name: 'API 接入', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('hidden');
-  await page.getByRole('combobox', { name: '主题' }).selectOption('light');
+  await page.keyboard.press('Escape');
+  await expect(drawer).not.toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).not.toBe('hidden');
+  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
+
+  await page.getByRole('button', { name: /^账号操作/ }).click();
+  const account = page.getByRole('dialog', { name: '账号操作' });
+  await expect(account.getByRole('link', { name: '账号', exact: true })).toBeVisible();
+  const theme = account.getByRole('combobox', { name: '主题' });
+  await theme.selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.getByRole('combobox', { name: '主题' }).selectOption('dark');
+  await theme.selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.keyboard.press('Escape');
-  expect(await page.evaluate(() => document.documentElement.style.overflow)).not.toBe('hidden');
+  await expect(account).not.toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '首页', exact: true })).toBeInViewport();
@@ -686,8 +761,7 @@ for (const theme of ['light', 'dark'] as const)
       page.on('pageerror', (error) => faults.push(error.message));
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await installUserShell(page, 'zh');
-      await page.addInitScript((value) => localStorage.setItem('nb.theme', value), theme);
+      await installUserShell(page, 'zh', theme);
       const session = userSession('level4');
       session.user.game_profile_public = true;
       await page.route('**/api/session', (route) => route.fulfill(jsonResponse(session)));

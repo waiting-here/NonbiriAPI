@@ -166,7 +166,7 @@ describe('steward caller identity', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(discordID));
     await waitFor(() => expect(copy).toHaveTextContent('Copied'));
 
-    const dialog = await screen.findByRole('region', { name: /Log details/ });
+    const dialog = await screen.findByRole('dialog', { name: /Log details/ });
     await waitFor(() =>
       expect(within(dialog).getByText('Ada Example', { exact: true })).toBeVisible(),
     );
@@ -313,7 +313,7 @@ describe('steward caller identity', () => {
       await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
       await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
       await view.user.click(screen.getByRole('button', { name: 'Details' }));
-      await screen.findByRole('region', { name: /Log details/ });
+      await screen.findByRole('dialog', { name: /Log details/ });
       if (role === 'admin') {
         expect(screen.getByText('Caller identity', { exact: true })).toBeVisible();
       } else {
@@ -335,7 +335,7 @@ for (const role of ['admin', 'steward'] as const) {
     });
     expect(await screen.findByText(model, { exact: true })).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const drawer = await screen.findByRole('region', { name: /Log details/ });
+    const drawer = await screen.findByRole('dialog', { name: /Log details/ });
     expect(within(drawer).getByText('Called charity model')).toBeVisible();
     expect(within(drawer).getAllByText(model)[0]).toBeVisible();
     expect(drawer.querySelector('example')).toBeNull();
@@ -343,6 +343,70 @@ for (const role of ['admin', 'steward'] as const) {
 }
 
 describe('preflight rejection details', () => {
+  it('opens the exact request by ID and explains the recorded path for the steward', async () => {
+    const row = {
+      ...stewardRow(null),
+      phase: 'pre_handler',
+      rejection_stage: 'preflight',
+      rejection_reason: 'invalid_request',
+      request_method: 'POST',
+      request_path: '/v1/chat/completions',
+      caller_result_class: 'failed',
+      caller_status: 400,
+      caller_error_code: 'invalid_request',
+      attempt_count: '0',
+      usage: { ...usage, total_tokens: '0', output_tokens: '0' },
+      rejection_detail: { field: 'presence_penalty', reason: 'unsupported top-level field' },
+    };
+    installFixtures('steward', row, {
+      request: row,
+      attempts: { data: [], next_cursor: null },
+      route_decision: {
+        observations: [
+          {
+            reason: 'failure_disabled',
+            binding_id: '12',
+            native_service: 'chat_completions',
+            match: 'native',
+          },
+          {
+            reason: 'protocol_rejected',
+            binding_id: '13',
+            native_service: 'responses',
+            match: 'conversion',
+            field: 'presence_penalty',
+          },
+          { reason: 'key_queue_full', stage: 'queue', binding_id: '14' },
+          { reason: 'ledger_busy', stage: 'accept' },
+        ],
+      },
+    });
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+      station: 'user',
+      role: 'level5',
+    });
+    await view.user.type(screen.getByLabelText('Request ID'), requestID);
+    await view.user.click(screen.getByRole('button', { name: 'Open request' }));
+    const panel = await screen.findByRole('dialog', { name: /Log details/ });
+    expect(
+      await within(panel).findByText(
+        'The platform returned HTTP 400 before sending an upstream request.',
+      ),
+    ).toBeVisible();
+    const routing = await within(panel).findByRole('region', {
+      name: 'Routing decisions for this request',
+    });
+    const rows = within(routing).getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Binding #12');
+    expect(rows[0]).toHaveTextContent('repeated failures');
+    expect(rows[1]).toHaveTextContent('Protocol conversion');
+    expect(rows[1]).toHaveTextContent('presence_penalty');
+    expect(rows[2]).toHaveTextContent('Waiting for a model connection');
+    expect(rows[2]).toHaveTextContent('no room for another waiting request');
+    expect(rows[3]).toHaveTextContent('Accepting the request');
+    expect(rows[3]).toHaveTextContent('temporary write lock');
+  });
+
   it('explains an unknown top-level field by its safe position', async () => {
     const row = {
       ...stewardRow(null),
@@ -394,7 +458,10 @@ describe('preflight rejection details', () => {
         caller_error_code: 'invalid_request',
         attempt_count: '0',
         usage: { ...usage, output_tokens: '0', total_tokens: '0' },
-        rejection_detail: { field: 'stream', reason: '<img src=x onerror=alert(1)>' },
+        rejection_detail: {
+          field: 'messages[5].content[1].text',
+          reason: '<img src=x onerror=alert(1)>',
+        },
       };
       installFixtures(role, row);
       const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
@@ -402,9 +469,13 @@ describe('preflight rejection details', () => {
         role: role === 'admin' ? 'admin' : 'level6',
       });
       await view.user.click(await screen.findByRole('button', { name: 'Details' }));
-      const drawer = await screen.findByRole('region', { name: /Log details/ });
+      const drawer = await screen.findByRole('dialog', { name: /Log details/ });
       expect(within(drawer).getByText('Rejection details')).toBeInTheDocument();
-      expect(within(drawer).getByText('stream: <img src=x onerror=alert(1)>')).toBeInTheDocument();
+      expect(
+        within(drawer).getByText(
+          'Message 6, content block 2 (messages[5].content[1].text): <img src=x onerror=alert(1)>',
+        ),
+      ).toBeInTheDocument();
       expect(drawer.querySelector('img')).toBeNull();
       view.unmount();
     },
@@ -482,11 +553,36 @@ it.each(['admin', 'steward'] as const)(
     expect(await screen.findByText(mode)).toBeVisible();
     expect(screen.getByText(action)).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Details' }));
-    const dialog = await screen.findByRole('region', { name: /Log details/ });
+    const dialog = await screen.findByRole('dialog', { name: /Log details/ });
     expect(within(dialog).getByText(mode)).toBeVisible();
     expect(within(dialog).getByText(action)).toBeVisible();
   },
 );
+
+it('keeps an empty penalty history in the detail and distinguishes missing facts in the list', async () => {
+  const role = 'steward';
+  const row = { ...stewardRow(null), requested_streaming: false, automatic_actions: [] };
+  installFixtures(role, row);
+  const options = { station: 'user', role: 'level5' } as const;
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, options);
+  const table = await screen.findByRole('table');
+  expect(
+    within(table).getByText(view.i18n.t('common.operations.logs.facts.nonStreaming')),
+  ).toBeVisible();
+  const noActions = view.i18n.t('common.operations.logs.facts.noActions');
+  expect(within(table).queryByText(noActions)).toBeNull();
+  await view.user.click(within(table).getByRole('button', { name: 'Details' }));
+  expect(
+    await within(await screen.findByRole('dialog', { name: /Log details/ })).findByText(noActions),
+  ).toBeVisible();
+  view.unmount();
+
+  installFixtures(role, stewardRow(null));
+  await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, options);
+  const historical = await screen.findByRole('table');
+  expect(within(historical).getByText('Request mode unknown')).toBeVisible();
+  expect(within(historical).getByText('Penalty history unknown')).toBeVisible();
+});
 
 it.each(['en', 'zh'] as const)(
   'shows the owner safe check and correction in %s',
@@ -662,6 +758,14 @@ it.each(['en', 'zh'] as const)(
   async (locale) => {
     for (const detail of [
       {
+        field: 'messages[2].tool_calls[0].function.arguments',
+        reason: 'function arguments must be a JSON object encoded as a string',
+        chinese: '函数 arguments 须为内容是 JSON 对象的字符串',
+        suggestion:
+          'Serialize the function arguments as one JSON object, using {} for no arguments.',
+        chineseSuggestion: '将函数参数序列化为一个 JSON 对象；无参数时使用 {}。',
+      },
+      {
         field: 'thinking.budget_tokens',
         reason: 'manual thinking requires an integer budget of at least 1024',
         chinese: '手动思考预算须为不小于 1024 的整数',
@@ -691,7 +795,9 @@ it.each(['en', 'zh'] as const)(
         rejection_detail: {
           field: detail.field,
           reason: detail.reason,
-          suggestion: 'Correct the field type or value according to the stated requirement.',
+          suggestion:
+            detail.suggestion ??
+            'Correct the field type or value according to the stated requirement.',
         },
       };
       installFixtures('user', row);
@@ -705,9 +811,20 @@ it.each(['en', 'zh'] as const)(
       );
       expect(
         await screen.findByText(
-          detail.field + ': ' + (locale === 'en' ? detail.reason : detail.chinese),
+          (detail.field.startsWith('messages[')
+            ? locale === 'en'
+              ? 'Message 3, tool call 1 (' + detail.field + ')'
+              : '第 3 条消息的第 1 个工具调用（' + detail.field + '）'
+            : detail.field) +
+            ': ' +
+            (locale === 'en' ? detail.reason : detail.chinese),
         ),
       ).toBeInTheDocument();
+      if (detail.suggestion) {
+        expect(
+          screen.getByText(locale === 'en' ? detail.suggestion : detail.chineseSuggestion!),
+        ).toBeVisible();
+      }
       view.unmount();
     }
   },

@@ -13,12 +13,42 @@
   align-items: flex-end;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-block: 1rem;
+  margin-block: 0.75rem;
 }
-.rank-actions button,
 .rank-actions select,
 .rank-privacy .checkbox-label {
-  min-height: 44px;
+  min-height: 2.5rem;
+}
+.rank-heading__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  width: 100%;
+  flex-wrap: wrap;
+}
+.rank-heading__top h2 {
+  margin: 0;
+}
+.rank-empty {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: var(--nb-space-2);
+  padding: var(--nb-space-5) var(--nb-space-4);
+  margin-block: var(--nb-space-3);
+  border: 1px dashed var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+}
+.rank-empty p {
+  margin: 0;
+}
+.rank-empty .rank-empty__art {
+  width: 4.5rem;
+}
+.rank-empty__title {
+  font-weight: var(--nb-font-weight-semibold);
 }
 .rank-table-scroll {
   container-type: inline-size;
@@ -79,8 +109,7 @@
 
 .rank-switcher {
   min-width: 0;
-  max-width: 64rem;
-  margin: 1.5rem auto;
+  margin-block: 1.5rem;
   scroll-margin-top: 6rem;
 }
 .rank-tabs {
@@ -91,19 +120,14 @@
   border-bottom: 1px solid var(--nb-color-border);
   margin-bottom: 1rem;
 }
-.rank-tabs :is(.btn, .nb-btn) {
-  min-height: 44px;
+.rank-tabs .nb-btn {
+  min-height: 2.5rem;
 }
 .rank-switcher .progression-ranking {
   margin-top: 0;
 }
 .rank-switcher [role='tabpanel'] {
   min-width: 0;
-}
-.rank-switcher .fishing-board,
-.rank-switcher .progression-ranking {
-  max-width: 64rem;
-  margin-inline: auto;
 }
 
 .rank-switcher .rank-table-scroll th:first-child {

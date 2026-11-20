@@ -44,12 +44,12 @@
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  background: rgb(127 127 127 / 10%);
+  background: var(--nb-color-surface-muted);
   border-radius: 0.5em;
 }
 .nb-markdown :not(pre) > code {
   padding: 0.1em 0.3em;
-  background: rgb(127 127 127 / 10%);
+  background: var(--nb-color-surface-muted);
   border-radius: 0.25em;
 }
 .nb-markdown__table {
@@ -64,7 +64,7 @@
 .nb-markdown :is(th, td) {
   min-width: 8rem;
   padding: 0.4em 0.7em;
-  border: 1px solid rgb(127 127 127 / 30%);
+  border: 1px solid var(--nb-color-border-strong);
   text-align: start;
 }
 .nb-markdown input[type='checkbox'] {

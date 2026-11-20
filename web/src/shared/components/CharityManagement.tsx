@@ -10,6 +10,7 @@ import { StewardPermissionNotice } from './StewardPermissionNotice';
 import { DonationStatusBadge } from './UseSummary';
 import { DonationKeyUseControls } from './DonationKeyUseControls';
 import { DonationSourceContext } from './DonationSourceContext';
+import { DonationKeyDetailRole } from './charity/donationKeyNavigation';
 import { ServiceHealth } from './ResourceHealth';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import type { UseReviewResult } from '@shared/operations/donationUses';
@@ -17,20 +18,16 @@ import type { ReviewedUseLabel } from '@shared/operations/donationUsesReview';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { NullableValue } from './charity/NullableValue';
+import { QuotaAmountField } from './QuotaAmountField';
+import { ChoiceRow } from './ui/ChoiceRow';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, SectionHead } from '@shared/components/States';
 import {
   DataTable,
   FilterBar,
   Fold,
   MoreMenu,
+  StatusBadge,
   Tabs,
   Note,
   Button,
@@ -337,6 +334,10 @@ function KeyQuotaFields({
 }) {
   const { t, i18n } = useTranslation();
   const copy = charityControlCopy(i18n.language);
+  const previousReservations = useRef({ input: '', output: '' });
+  const splitRequired = value.input_tokens_limit !== null || value.output_tokens_limit !== null;
+  const split =
+    splitRequired || value.input_token_reserve !== null || value.output_token_reserve !== null;
   return (
     <>
       <fieldset className="ops-form-section">
@@ -344,6 +345,7 @@ function KeyQuotaFields({
         <Fields>
           <NullableValue
             label={t('common.operations.charity.priceLimitCredits')}
+            inputMode="decimal"
             value={value.price_limit}
             onChange={(next) => onChange({ price_limit: next })}
           />
@@ -371,18 +373,40 @@ function KeyQuotaFields({
       </fieldset>
       <fieldset className="ops-form-section">
         <legend>{copy.tokenReservations}</legend>
-        <p className="muted">{copy.splitHint}</p>
+        <ChoiceRow
+          label={copy.splitReservations}
+          description={splitRequired ? copy.splitRequired : copy.splitHint}
+          checked={split}
+          disabled={splitRequired}
+          onChange={(enabled) => {
+            if (!enabled)
+              previousReservations.current = {
+                input: value.input_token_reserve ?? '',
+                output: value.output_token_reserve ?? '',
+              };
+            onChange({
+              input_token_reserve: enabled ? previousReservations.current.input : null,
+              output_token_reserve: enabled ? previousReservations.current.output : null,
+            });
+          }}
+        />
         <Fields>
-          <NullableValue
-            label={copy.inputReserve}
-            value={value.input_token_reserve}
-            onChange={(next) => onChange({ input_token_reserve: next })}
-          />
-          <NullableValue
-            label={copy.outputReserve}
-            value={value.output_token_reserve}
-            onChange={(next) => onChange({ output_token_reserve: next })}
-          />
+          {split && (
+            <>
+              <QuotaAmountField
+                label={copy.inputReserve}
+                required
+                value={value.input_token_reserve}
+                onChange={(next) => onChange({ input_token_reserve: next })}
+              />
+              <QuotaAmountField
+                label={copy.outputReserve}
+                required
+                value={value.output_token_reserve}
+                onChange={(next) => onChange({ output_token_reserve: next })}
+              />
+            </>
+          )}
           <Field label={t('common.operations.charity.tokenReserve')} size="short">
             {(field) => (
               <input
@@ -557,20 +581,30 @@ function DonationKeySettings({
             </Link>
           </div>
         ) : (
-          <p className="muted">{t('common.operations.logs.keyLogsUnavailable')}</p>
+          <p className="nb-muted">{t('common.operations.logs.keyLogsUnavailable')}</p>
         )
       ) : null}
-      <p className="muted">
+      <p className="nb-muted">
         <GatewayConnectorLabel value={item.safe_source.connector_type} /> ·{' '}
         {item.safe_source.base_url}
       </p>
       <h5>{copy.keyUsage}</h5>
       <div className="ops-toolbar">
         <StatusBadge
-          active={item.charity_state === 'available'}
-          danger={item.streak.failure_disabled}
-          label={t(charityStateKey(item.charity_state))}
-        />
+          tone={
+            item.streak.failure_disabled ||
+            item.charity_state === 'suspended' ||
+            item.charity_state === 'exhausted'
+              ? 'bad'
+              : item.charity_state === 'available'
+                ? 'ok'
+                : item.charity_state === 'pending' || item.charity_state === 'rate_limited'
+                  ? 'warn'
+                  : 'neutral'
+          }
+        >
+          {t(charityStateKey(item.charity_state))}
+        </StatusBadge>
         <span>
           {t('common.operations.charity.physicalState', {
             state: t(item.physical_enabled ? 'common.enabled' : 'common.disabled'),
@@ -1783,7 +1817,6 @@ function DonationsPanel({
                   <>
                     <Field
                       label={t('common.donationHistory.userId')}
-                      help={t('common.donationHistory.exactId')}
                       error={
                         validDonorFilters(userDraft, '')
                           ? undefined
@@ -1809,7 +1842,6 @@ function DonationsPanel({
                     </Field>
                     <Field
                       label="Discord ID"
-                      help={t('common.donationHistory.exactId')}
                       error={
                         validDonorFilters('', discordDraft)
                           ? undefined
@@ -1935,13 +1967,14 @@ function DonationsPanel({
                 }}
               />
               <div className="charity-batch-menu">
-                <span>
-                  {t('common.operations.charity.batchActions', { defaultValue: 'Batch actions' })}
-                </span>
                 <MoreMenu
                   label={t('common.operations.charity.batchActions', {
                     defaultValue: 'Batch actions',
                   })}
+                  trigger={t('common.operations.charity.batchActions', {
+                    defaultValue: 'Batch actions',
+                  })}
+                  triggerClassName=""
                   items={[
                     {
                       label: t('common.operations.charity.batchDiscovery', {
@@ -2083,6 +2116,7 @@ function DonationsPanel({
                       header: t('common.operations.charity.keys'),
                       mobileLabel: t('common.operations.charity.keys'),
                       cell: 'meta',
+                      align: 'num',
                       render: (item) => (
                         <>
                           {item.key_count}
@@ -2096,6 +2130,7 @@ function DonationsPanel({
                       key: 'actions',
                       header: t('common.operations.charity.open'),
                       cell: 'action',
+                      align: 'action',
                       render: (item) => (
                         <button
                           type="button"
@@ -2306,14 +2341,16 @@ function CharityManagementAccount({
           ...(permissions ? { steward_permissions: permissions } : {}),
         });
   const donationsAllowed = donationScope !== 'none';
+  const canOpenDonation =
+    donationsAllowed &&
+    (has('donations.review') ||
+      has('donations.manage_keys') ||
+      has('donations.handle') ||
+      has('donations.discover') ||
+      has('donations.recurring'));
   const sectionAllowed =
     section === 'donations'
-      ? donationsAllowed &&
-        (has('donations.review') ||
-          has('donations.manage_keys') ||
-          has('donations.handle') ||
-          has('donations.discover') ||
-          has('donations.recurring'))
+      ? canOpenDonation
       : section === 'models'
         ? has('charity.read') ||
           has('charity.create') ||
@@ -2361,18 +2398,23 @@ function CharityManagementAccount({
         </p>
       </Card>
     );
-  return (
+  const workspaceContent = (
     <DraftLeaveScope onStay={() => requestAnimationFrame(revealSelectedTab)}>
       <div className="ops-stack charity-management" ref={workspace}>
-        <div className="nb-actions">
-          <Link
-            className="nb-btn nb-btn--secondary"
-            to="/charity/channel-presets"
-            state={{ returnTo: location.pathname + location.search }}
-          >
-            {t('common.bindingPresets.title')}
-          </Link>
-        </div>
+        {frame === 'steward' ? (
+          <SectionHead
+            title={t('user.steward.charityTab')}
+            actions={
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to="/charity/channel-presets"
+                state={{ returnTo: location.pathname + location.search }}
+              >
+                {t('common.bindingPresets.title')}
+              </Link>
+            }
+          />
+        ) : null}
         <Tabs
           label={t('common.operations.charity.sectionsLabel')}
           value={section}
@@ -2493,6 +2535,11 @@ function CharityManagementAccount({
         </div>
       </div>
     </DraftLeaveScope>
+  );
+  return (
+    <DonationKeyDetailRole.Provider value={canOpenDonation ? frame : null}>
+      {workspaceContent}
+    </DonationKeyDetailRole.Provider>
   );
 }
 
@@ -2628,6 +2675,9 @@ function ScopedKeyBrowser({
               accountId={accountId}
               donationId={detail.data.donation_id}
               keyId={detail.data.key_id}
+              readOnly={
+                detail.data.charity_state === 'ended' || detail.data.charity_state === 'expired'
+              }
               onSaved={() => void refresh()}
               onCapabilityLoss={onCapabilityLoss}
             />
@@ -2706,7 +2756,7 @@ function PickerKeyManager({
   );
   return (
     <div className="ops-stack">
-      <PageHeader
+      <SectionHead
         title={t('common.operations.charity.sourceBrowser.manageKey', { id: keyID })}
         back={
           <Button type="button" variant="ghost" onClick={onBack}>

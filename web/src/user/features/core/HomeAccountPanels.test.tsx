@@ -370,10 +370,14 @@ describe('home independent capability states', () => {
       'fetch',
       vi.fn(async (input: string | URL | Request) => {
         if (String(input) === '/api/me') return jsonResponse(envelope);
-        if (String(input) === `/api/announcements/${announcement.id}`)
+        if (String(input) === `/api/announcements/selected?ids=${announcement.id}`)
           return jsonResponse({
-            ...announcementDetail,
-            rendered_body: `<p>${excerpt}</p>`,
+            data: [
+              {
+                ...announcementDetail,
+                rendered_body: `<p>Confirmed maintenance window.</p><p>${excerpt}</p>`,
+              },
+            ],
           });
         throw new Error(`Unexpected request: ${String(input)}`);
       }),
@@ -403,12 +407,9 @@ describe('home independent capability states', () => {
     expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(screen.getByText('Could not load this section')).toBeVisible();
     expect(await screen.findByText('Planned maintenance')).toBeVisible();
-    expect(screen.getByText('A short confirmed summary.')).toBeVisible();
-    await waitFor(() =>
-      expect(
-        screen.getByText('A short confirmed summary.').closest('.ops-announcement-body'),
-      ).not.toBeNull(),
-    );
+    const body = await screen.findByText('Confirmed maintenance window.');
+    expect(body).toBeVisible();
+    expect(body.closest('.ops-announcement-body')).not.toBeNull();
   });
 
   it('hides successful empty game and announcement summaries', async () => {
@@ -897,49 +898,57 @@ describe('account language commit boundary', () => {
     expect(screen.getByText(/Could not confirm the result/)).toBeVisible();
   });
 
-  it('GET-reconciles a lost language response and explicitly reuses the exact operation identity', async () => {
-    const envelope = canonicalEnvelope();
-    const updated: UserEnvelope = {
-      user: { ...envelope.user, lang: 'zh', updated_at: envelope.user.updated_at + 1 },
-    };
-    let patchCount = 0;
-    const patchKeys: string[] = [];
-    const patchBodies: unknown[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        if (String(input) === '/api/me' && (init?.method ?? 'GET') === 'GET')
-          return jsonResponse(envelope);
-        if (String(input) === '/api/me' && init?.method === 'PATCH') {
-          patchCount += 1;
-          patchKeys.push(new Headers(init.headers).get('Idempotency-Key') ?? '');
-          patchBodies.push(JSON.parse(String(init.body)));
-          return patchCount === 1
-            ? jsonResponse({ error: { code: 'internal', message: 'safe uncertain response' } }, 503)
-            : jsonResponse(updated);
-        }
-        throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${String(input)}`);
-      }),
-    );
-    const rendered = await renderWithProviders(<AccountLanguageForm user={envelope.user} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
-    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(envelope.user));
+  it.each(['en', ''] as const)(
+    'reconciles a lost language write against the saved preference %j',
+    async (saved) => {
+      const envelope = canonicalEnvelope();
+      envelope.user.lang = saved;
+      const updated: UserEnvelope = {
+        user: { ...envelope.user, lang: 'zh', updated_at: envelope.user.updated_at + 1 },
+      };
+      let patchCount = 0;
+      const patchKeys: string[] = [];
+      const patchBodies: unknown[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+          if (String(input) === '/api/me' && (init?.method ?? 'GET') === 'GET')
+            return jsonResponse(envelope);
+          if (String(input) === '/api/me' && init?.method === 'PATCH') {
+            patchCount += 1;
+            patchKeys.push(new Headers(init.headers).get('Idempotency-Key') ?? '');
+            patchBodies.push(JSON.parse(String(init.body)));
+            return patchCount === 1
+              ? jsonResponse(
+                  { error: { code: 'internal', message: 'safe uncertain response' } },
+                  503,
+                )
+              : jsonResponse(updated);
+          }
+          throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${String(input)}`);
+        }),
+      );
+      const rendered = await renderWithProviders(<AccountLanguageForm user={envelope.user} />, {
+        station: 'user',
+        role: 'user',
+        locale: saved === '' ? 'zh' : 'en',
+      });
+      rendered.queryClient.setQueryData(coreKeys.session, sharedSession(envelope.user));
 
-    await rendered.user.click(screen.getByRole('radio', { name: '中文' }));
-    const replay = await screen.findByRole('button', { name: 'Retry' });
-    expect(screen.getByRole('radio', { name: 'English' })).toBeChecked();
-    expect(document.documentElement.lang).toBe('en');
+      await rendered.user.click(screen.getByRole('radio', { name: '中文' }));
+      const replay = await screen.findByRole('button', { name: saved === '' ? '重试' : 'Retry' });
+      expect(screen.getByRole('radio', { name: '中文' })).not.toBeChecked();
+      if (saved === 'en') expect(screen.getByRole('radio', { name: 'English' })).toBeChecked();
+      else expect(screen.getByRole('radio', { name: 'English' })).not.toBeChecked();
 
-    await rendered.user.click(replay);
+      await rendered.user.click(replay);
 
-    expect(await screen.findByText('已保存。')).toBeVisible();
-    expect(patchKeys).toHaveLength(2);
-    expect(patchKeys[0]).toBe(patchKeys[1]);
-    expect(patchBodies).toEqual([{ lang: 'zh' }, { lang: 'zh' }]);
-  });
+      expect(await screen.findByText('已保存。')).toBeVisible();
+      expect(patchKeys).toHaveLength(2);
+      expect(patchKeys[0]).toBe(patchKeys[1]);
+      expect(patchBodies).toEqual([{ lang: 'zh' }, { lang: 'zh' }]);
+    },
+  );
 
   it('discards a late PATCH response after the real session switches accounts', async () => {
     const envelope = canonicalEnvelope();

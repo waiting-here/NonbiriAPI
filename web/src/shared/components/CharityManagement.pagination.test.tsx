@@ -286,6 +286,7 @@ function installBindingNavigation(
           binding_revision: '1',
           bindings: [
             {
+              targets: [],
               id: '3',
               ord: 0,
               donation_id: '7',

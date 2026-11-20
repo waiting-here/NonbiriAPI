@@ -14,13 +14,16 @@ export function FilterBar({
   secondaryLabel,
   secondaryAlwaysVisible = false,
   activeCount,
+  footer,
   chips,
+  chipsLabel,
   onClearAll,
   clearAllLabel,
   onSubmit,
   onReset,
   submitLabel,
   submitDisabled,
+  resetLabel,
   resetDisabled,
   role,
 }: {
@@ -40,10 +43,14 @@ export function FilterBar({
   secondaryLabel?: string;
   secondaryAlwaysVisible?: boolean;
   activeCount: number;
+  /** Actions or search feedback following all fields, including the disclosure. */
+  footer?: ReactNode;
   chips?: readonly { key: string; label: ReactNode; onRemove: () => void; removeLabel: string }[];
+  chipsLabel?: string;
   onClearAll?: () => void;
   clearAllLabel?: string;
-  onSubmit: () => void;
+  /** Omit for local filters that update the results as the user types. */
+  onSubmit?: () => void;
   /**
    * When set, the bar renders its own Search and Reset buttons after the search slot, so
    * pages share one wording. Selects and toggles should still apply on change.
@@ -53,6 +60,7 @@ export function FilterBar({
   submitLabel?: string;
   /** Disables Search while a request or input check runs. */
   submitDisabled?: boolean;
+  resetLabel?: string;
   /** Disables Reset during an in-flight request, independently of invalid input. */
   resetDisabled?: boolean;
   role?: 'search';
@@ -73,7 +81,11 @@ export function FilterBar({
         onKeyDown={(event) => {
           if (
             Tag === 'div' &&
+            onSubmit &&
             event.key === 'Enter' &&
+            !event.defaultPrevented &&
+            !event.nativeEvent.isComposing &&
+            event.nativeEvent.keyCode !== 229 &&
             (event.target as HTMLElement).tagName === 'INPUT'
           ) {
             event.preventDefault();
@@ -85,7 +97,7 @@ export function FilterBar({
         aria-label={ariaLabel}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!submitDisabled) onSubmit();
+          if (!submitDisabled) onSubmit?.();
         }}
       >
         <div className="nb-filter__row">
@@ -93,20 +105,22 @@ export function FilterBar({
             {search}
             {onReset ? (
               <>
-                <Button
-                  type={Tag === 'form' ? 'submit' : 'button'}
-                  disabled={submitDisabled}
-                  onClick={Tag === 'div' ? onSubmit : undefined}
-                >
-                  {submitLabel ?? t('common.search')}
-                </Button>
+                {onSubmit && (
+                  <Button
+                    type={Tag === 'form' ? 'submit' : 'button'}
+                    disabled={submitDisabled}
+                    onClick={Tag === 'div' ? onSubmit : undefined}
+                  >
+                    {submitLabel ?? t('common.search')}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="secondary"
                   disabled={resetDisabled}
                   onClick={onReset}
                 >
-                  {t('common.resetFilter')}
+                  {resetLabel ?? t('common.resetFilter')}
                 </Button>
               </>
             ) : null}
@@ -139,12 +153,31 @@ export function FilterBar({
         {secondary && secondaryAlwaysVisible ? (
           <div className="nb-filter__fields">{secondary}</div>
         ) : null}
+        {footer}
         {chips && chips.length ? (
-          <div className="nb-chips">
+          <div className="nb-chips" role={chipsLabel ? 'group' : undefined} aria-label={chipsLabel}>
+            {chipsLabel && <span className="nb-small nb-muted">{chipsLabel}</span>}
             {chips.map((chip) => (
               <span key={chip.key} className="nb-chip">
-                {chip.label}
-                <button type="button" aria-label={chip.removeLabel} onClick={chip.onRemove}>
+                <span>{chip.label}</span>
+                <button
+                  type="button"
+                  aria-label={chip.removeLabel}
+                  onClick={(event) => {
+                    const button = event.currentTarget;
+                    if (button === document.activeElement) {
+                      const item = button.parentElement;
+                      const next =
+                        item?.nextElementSibling?.querySelector('button') ??
+                        item?.previousElementSibling?.querySelector('button') ??
+                        button
+                          .closest('.nb-filter')
+                          ?.querySelector<HTMLElement>('input, select, button');
+                      next?.focus();
+                    }
+                    chip.onRemove();
+                  }}
+                >
                   ×
                 </button>
               </span>

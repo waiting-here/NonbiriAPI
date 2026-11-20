@@ -1,3 +1,4 @@
+import type { ArtworkPlayback } from '@shared/animation/artwork-playback';
 import type { MomentFrame } from './moment-frame';
 import type { SpecialTheme } from './special-scenes';
 
@@ -16,6 +17,7 @@ export async function renderSpecial(
     frozenTime?: number;
     paused?: () => boolean;
     signal?: AbortSignal;
+    playback?: ArtworkPlayback;
     ambient?: boolean;
     exportSize?: boolean;
     blink?: number;

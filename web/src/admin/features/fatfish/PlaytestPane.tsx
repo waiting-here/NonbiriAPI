@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { captureStationSession, stationSessionMatches } from '@shared/charityManagement';
 import { ErrorState } from '@shared/components/States';
+import { Fold } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useFatFishText } from './copy';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -161,19 +162,30 @@ function PlaytestPane({ versionID, contentHash }, ref) {
     <h3>{text('no_charge_playtest')}</h3>
     <p>{text('playtesting_verifies_a_fixed_version_without_charges_or_rewards_start_')}</p>
     {supportError ? <p role="alert">{supportError}</p> : null}
-    {current ? <p>{current.level_title} · {text('version')} {current.version_number ?? '—'} · {current.state}</p> : null}
-    {versionID && contentHash ? <button type="button" disabled={working || !!supportError} onClick={() => void preparation.mutateAsync({ id: versionID, content_hash: contentHash }).catch(() => undefined)}>
-      {text('prepare_playtest')}</button> : null}
-    {current && !controller ? <button type="button" disabled={working} onClick={() => {
-      void inspection.mutateAsync('continue').catch(() => undefined);
-    }}>{text('continue_current_playtest')}</button> : null}
-    {current || (snapshot?.challenge && !finished(snapshot.challenge.state)) ? <button type="button" disabled={working} onClick={() => {
-      void inspection.mutateAsync('abandon').catch(() => undefined);
-    }}>{text('abandon_playtest')}</button> : null}
-    {snapshot?.challenge?.state === 'prepared' ? <button type="button" disabled={working || snapshot.phase === 'read_only'} onClick={() => void start()}>{text('start_playtest')}</button> : null}
+    {current ? (
+      <p>
+        {current.level_title} · {text('version')} {current.version_number ?? '—'} ·{' '}
+        {current.state === 'active'
+          ? text('playtest_active')
+          : current.state === 'prepared'
+            ? text('playtest_prepared')
+            : current.state}
+      </p>
+    ) : null}
+    <div className="fatfish-actions">
+      {versionID && contentHash ? <button type="button" disabled={working || !!supportError} onClick={() => void preparation.mutateAsync({ id: versionID, content_hash: contentHash }).catch(() => undefined)}>
+        {text('prepare_playtest')}</button> : null}
+      {current && !controller ? <button type="button" disabled={working} onClick={() => {
+        void inspection.mutateAsync('continue').catch(() => undefined);
+      }}>{text('continue_current_playtest')}</button> : null}
+      {current || (snapshot?.challenge && !finished(snapshot.challenge.state)) ? <button type="button" disabled={working} onClick={() => {
+        void inspection.mutateAsync('abandon').catch(() => undefined);
+      }}>{text('abandon_playtest')}</button> : null}
+      {snapshot?.challenge?.state === 'prepared' ? <button type="button" disabled={working || snapshot.phase === 'read_only'} onClick={() => void start()}>{text('start_playtest')}</button> : null}
+    </div>
     {controller ? <FatFishPlayer controller={controller} mode="playtest" onTerminal={verified} /> : null}
     {snapshot?.phase === 'verifying' ? <p role="status">{text('verification_is_in_progress_wait_for_this_result_before_starting_anoth')}</p> : null}
-    {snapshot?.challenge ? <details><summary>{text('version_details')}</summary><code>{snapshot.challenge.content_hash}</code></details> : null}
+    {snapshot?.challenge ? <Fold plain title={text('version_details')}><code>{snapshot.challenge.content_hash}</code></Fold> : null}
     {error || inspection.error ? <ErrorState error={error ?? inspection.error} /> : null}
     <ConfirmDialog open={confirmation} title={text('abandon_the_current_playtest')}
       description={text('this_playtest_will_end_without_a_pass_proof_you_can_then_prepare_anoth')}

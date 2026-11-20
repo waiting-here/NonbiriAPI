@@ -1,12 +1,25 @@
+.picturebook-workspace {
+  display: grid;
+  gap: var(--nb-space-5);
+  min-width: 0;
+}
+@media (width >= 64rem) {
+  .picturebook-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 25rem);
+    align-items: start;
+  }
+}
+.picturebook-main,
+.picturebook-side,
 .picturebook-stack,
 .picturebook-form {
   display: grid;
-  gap: 1rem;
+  gap: var(--nb-space-4);
   min-width: 0;
 }
 .picturebook-form fieldset {
   display: grid;
-  gap: 1rem;
+  gap: var(--nb-space-4);
   min-width: 0;
   border: 0;
   margin: 0;
@@ -14,7 +27,7 @@
 }
 .picturebook-form label {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--nb-space-1);
   min-width: 0;
 }
 .picturebook-form input,
@@ -30,43 +43,73 @@
   font: inherit;
 }
 .picturebook-form .picturebook-json {
-  font-family: monospace;
+  font-family: var(--nb-font-mono);
+  font-size: var(--nb-font-size-sm);
   min-height: 12rem;
 }
 .picturebook-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-  gap: 1rem;
+  gap: var(--nb-space-4);
 }
 .picturebook-price-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
-  gap: 0.75rem;
+  gap: var(--nb-space-3);
 }
 .picturebook-form fieldset.picturebook-card {
   border: 1px solid var(--nb-color-border);
-  border-radius: 0.6rem;
-  padding: 1rem;
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
 }
 .picturebook-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: var(--nb-space-2);
   align-items: center;
 }
 .picturebook-facts {
   display: grid;
   grid-template-columns: minmax(6rem, auto) minmax(0, 1fr);
-  gap: 0.4rem 1rem;
-  margin: 0.5rem 0;
+  gap: var(--nb-space-2) var(--nb-space-4);
+  margin: 0;
+}
+.picturebook-facts dt {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
 }
 .picturebook-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.picturebook-checkout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--nb-space-4);
+  padding: var(--nb-space-4);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  border: 1px solid var(--nb-color-border);
+}
+.picturebook-checkout .nb-form-actions {
+  padding-top: 0;
 }
 .picturebook-notice {
-  border-inline-start: 0.2rem solid var(--nb-color-accent);
-  padding-inline-start: 1rem;
+  display: grid;
+  gap: var(--nb-space-2);
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-inline-start: 3px solid var(--nb-color-accent);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.picturebook-notice > p {
+  margin: 0;
 }
 .picturebook-prewrap {
   white-space: pre-wrap;
@@ -85,43 +128,100 @@
 }
 .picturebook-images figcaption {
   display: grid;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-2);
 }
 .picturebook-checkbox {
   display: flex !important;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--nb-space-2);
 }
 .picturebook-checkbox input {
   width: auto;
 }
 .picturebook-card {
   border: 1px solid var(--nb-color-border);
-  border-radius: 0.6rem;
-  padding: 1rem;
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
   min-width: 0;
 }
-
+.picturebook-card--surface {
+  background: var(--nb-color-surface-alt);
+}
+.picturebook-catalog-list {
+  display: grid;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  overflow: hidden;
+}
+.picturebook-catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-4);
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border-bottom: 1px solid var(--nb-color-border);
+  background: var(--nb-color-surface);
+}
+.picturebook-catalog-row:last-child {
+  border-bottom: 0;
+}
+.picturebook-catalog-row.is-selected {
+  background: var(--nb-color-accent-quiet);
+}
+.picturebook-catalog-row > .nb-field {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--nb-space-2);
+  margin: 0;
+}
+.picturebook-catalog-row > .nb-field > .nb-field__label {
+  margin: 0;
+  font-family: var(--nb-font-mono);
+  font-size: var(--nb-font-size-sm);
+  overflow-wrap: anywhere;
+}
+.picturebook-catalog-row > .nb-field > input[type='checkbox'] {
+  width: auto;
+  flex: 0 0 auto;
+}
+.picturebook-task-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-3);
+  padding: var(--nb-space-3) var(--nb-space-4);
+  background: var(--nb-color-surface-alt);
+}
+.picturebook-task-item > p {
+  margin: 0;
+  font-size: var(--nb-font-size-sm);
+}
+.picturebook-queue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--nb-space-2);
+}
 .picturebook-field {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--nb-space-1);
   min-width: 0;
 }
-
 .picturebook-dimensions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 16rem));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 16rem));
+  gap: var(--nb-space-4);
 }
-.picturebook-field textarea {
-  max-inline-size: 44rem;
-}
-
 .picturebook-discovery-error {
   border: 1px solid var(--nb-color-danger);
   border-radius: var(--nb-radius-sm);
-  padding: 1rem;
+  padding: var(--nb-space-4);
   overflow-wrap: anywhere;
 }
 .picturebook-discovery-error h3 {
@@ -129,12 +229,11 @@
 }
 .picturebook-help {
   color: var(--nb-color-text-muted);
-  font-size: 0.92rem;
+  font-size: var(--nb-font-size-sm);
 }
 .picturebook-help code {
   overflow-wrap: anywhere;
 }
-
 .picturebook-resource-cost {
   display: inline-flex;
   flex-wrap: wrap;
@@ -144,7 +243,6 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-
 .picturebook-field--number {
   width: 100%;
   max-width: 16rem;

@@ -15,7 +15,7 @@ async function readableText(page: Page, adaptive: boolean) {
     const root = document.documentElement;
     const original = root.style.getPropertyValue('--nb-moment-hue');
     const probe = document.createElement('span');
-    document.body.append(probe);
+    (document.querySelector('.nb-page-header, .nb-panel, .card') ?? document.body).append(probe);
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
     const context = canvas.getContext('2d', { willReadFrequently: true })!;
@@ -96,9 +96,12 @@ for (const design of ['celestial', 'wandering', 'heart-moment'])
           await list.locator('summary').first().click();
           await list.locator('summary').first().scrollIntoViewIfNeeded();
           await capture(page, 'donation-details-' + suffix);
-          await list.getByRole('button', { name: '捐赠操作', exact: true }).first().click();
-          await expect(page.getByRole('menu')).toBeVisible();
-          await capture(page, 'donation-menu-' + suffix);
+          await expect(
+            list.getByRole('button', { name: '查看捐赠密钥', exact: true }).first(),
+          ).toBeVisible();
+          await page.locator('.nb-account-trigger').click();
+          await expect(page.getByRole('dialog', { name: '账号操作', exact: true })).toBeVisible();
+          await capture(page, 'account-menu-' + suffix);
           await page.keyboard.press('Escape');
 
           for (const [path, selector, label] of [
@@ -134,10 +137,10 @@ for (const design of ['celestial', 'wandering', 'heart-moment'])
               )
               .not.toBe('');
           }
-          const appearance = page.getByRole('button', { name: '外观', exact: true });
-          if (width < 1024) await page.locator('button[aria-controls="user-navigation"]').click();
+          const appearance = page.getByRole('button', { name: '装扮', exact: true });
+
           await appearance.click();
-          await expect(page.getByRole('alertdialog')).toBeVisible();
+          await expect(page.getByRole('dialog', { name: '装扮', exact: true })).toBeVisible();
           await capture(page, 'appearance-dialog-' + suffix);
           guard.assertNone();
         },

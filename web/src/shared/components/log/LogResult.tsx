@@ -1,3 +1,4 @@
+import { rejectionFieldLabel } from './rejectionField';
 import { useTranslation } from 'react-i18next';
 import type { RoleLogRow } from './data';
 
@@ -44,7 +45,7 @@ const userResultKeys = {
   cancelled: 'user.logs.result.cancelled',
   credits: 'user.logs.result.credits',
   missingModel: 'user.logs.result.missingModel',
-  noUsableKey: 'user.logs.result.noUsableKey',
+  noUsableKey: 'common.operations.logs.presentation.result.noUsableKey',
   rejected: 'user.logs.result.rejected',
   keyRejected: 'user.logs.result.keyRejected',
   rateLimited: 'user.logs.result.rateLimited',
@@ -72,18 +73,44 @@ const resultKeys = {
 export function logResultCopyKey(
   role: RoleLogRow['role'],
   key: ReturnType<typeof logResult>['key'],
+  reason?: string | null,
 ) {
+  if ((key === 'rejected' || key === 'failed') && reason && Object.hasOwn(platformResults, reason))
+    return platformResults[reason];
   return (role === 'user' ? userResultKeys : resultKeys)[key];
 }
+
+const platformResults: Record<string, string> = {
+  unauthorized: 'logs.platformResult.unauthorized',
+  forbidden: 'logs.platformResult.forbidden',
+  charity_suspended: 'logs.platformResult.charitySuspended',
+  feature_disabled: 'logs.platformResult.featureDisabled',
+  maintenance: 'logs.platformResult.maintenance',
+  invalid_request: 'logs.platformResult.invalidRequest',
+  user_rpm: 'logs.platformResult.userRate',
+  global_rpm: 'logs.platformResult.siteRate',
+  shared_rpm: 'logs.platformResult.sharedRate',
+  concurrency: 'logs.platformResult.concurrency',
+  content_too_short: 'logs.platformResult.contentTooShort',
+  payload_too_large: 'logs.platformResult.payloadTooLarge',
+  resource_limit_exceeded: 'logs.platformResult.resourceLimit',
+  service_unavailable: 'logs.platformResult.serviceUnavailable',
+};
 
 export function LogResultBadge({ row }: { row: RoleLogRow }) {
   const { t } = useTranslation();
   const result = logResult(row);
+  const field = row.rejection_detail?.field;
   return (
     <span className="log-result">
       <span className={`nb-badge nb-badge--${result.tone}`}>
-        {t(logResultCopyKey(row.role, result.key), { status: row.caller_status ?? '—' })}
+        {t(logResultCopyKey(row.role, result.key, row.rejection_reason ?? row.caller_error_code), {
+          status: row.caller_status ?? '—',
+        })}
       </span>
+      {field && field !== 'request' && (
+        <small className="log-result__field">{rejectionFieldLabel(field, t)}</small>
+      )}
     </span>
   );
 }

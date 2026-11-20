@@ -85,14 +85,14 @@ async function visuals(page: Page, info: TestInfo, name: string, focus: () => Pr
       }
       if (name === 'binding-current-marker') {
         await expect(page.getByText(batch.boundHere, { exact: true })).toBeInViewport();
-        const lines = await page.locator('.ops-picker-context > *').evaluateAll((nodes) =>
-          nodes.map((node) => {
-            const { top, bottom } = node.getBoundingClientRect();
-            return { top, bottom };
-          }),
+        const context = page.locator('.binding-current-source');
+        const source = (await context.locator('.binding-choice-identity').boundingBox())!;
+        const key = (await context.locator('.binding-current-key').boundingBox())!;
+        expect(source.width).toBeGreaterThan(0);
+        expect(key.width).toBeGreaterThan(0);
+        expect(key.y >= source.y + source.height - 1 || key.x >= source.x + source.width - 1).toBe(
+          true,
         );
-        expect(lines[1]!.top).toBeGreaterThanOrEqual(lines[0]!.bottom);
-        expect(lines[2]!.top).toBeGreaterThanOrEqual(lines[1]!.bottom);
       }
       if (name === 'binding-revision-conflict') {
         await expect(
@@ -180,6 +180,27 @@ test('model-centric binding picker reaches bound keys through the general source
         .locator('..')
         .getByText(batch.boundHere, { exact: true }),
     ).toBeVisible();
+    const candidate = picker.getByRole('checkbox', { name: 'binding-up-1', exact: true });
+    const row = candidate.locator('xpath=ancestor::li[1]');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await row.scrollIntoViewIfNeeded();
+      const { width: rowWidth, height: rowHeight } = (await row.boundingBox())!;
+      await row.click({
+        position: { x: Math.floor(rowWidth) - 12, y: Math.floor(rowHeight) - 10 },
+      });
+      await expect(candidate).toBeChecked();
+      await candidate.press('Space');
+      await expect(candidate).not.toBeChecked();
+    }
+    const labels = common.common.operations.charity;
+    await picker.getByRole('button', { name: labels.chooseKey, exact: true }).click();
+    await expect(picker.getByRole('button', { name: /Binding browser key 1/ })).toBeFocused();
+    await picker.getByRole('button', { name: labels.chooseSource, exact: true }).click();
+    await expect(
+      picker.getByRole('button').filter({ hasText: 'Binding browser service' }),
+    ).toBeFocused();
+    await expect(search).toHaveValue('Binding browser service');
     expect(sourceReads.length).toBeGreaterThan(1);
     expect(sourceReads.every((url) => !url.searchParams.has('include_bound'))).toBe(true);
   } finally {
@@ -210,6 +231,46 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
       page.getByText(batch.boundHere, { exact: true }).scrollIntoViewIfNeeded(),
     );
     await page.getByRole('checkbox', { name: /binding-up-1/ }).check();
+    const selection = page.getByRole('region', { name: batch.selected });
+    const serviceEditor = selection
+      .locator('details')
+      .filter({ hasText: common.common.bindingGuide.editServices });
+    await serviceEditor.locator('summary').click();
+    const chatService = serviceEditor.getByRole('checkbox', {
+      name: common.common.modelTypes.chat_completions,
+      exact: true,
+    });
+    await expect(chatService).toBeChecked();
+    const card = chatService.locator('..');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      const bounds = (await card.boundingBox())!;
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      await card.click({
+        position: { x: Math.floor(bounds.width) - 8, y: Math.floor(bounds.height) - 8 },
+      });
+      await expect(chatService).not.toBeChecked();
+      await chatService.press('Space');
+      await expect(chatService).toBeChecked();
+    }
+    await card
+      .getByText(
+        common.common.bindingGuide.servesDirect.replace(
+          '{{interfaces}}',
+          common.common.modelTypes.chat_completions,
+        ),
+        { exact: true },
+      )
+      .click();
+    await expect(chatService).not.toBeChecked();
+    await expect(
+      serviceEditor.getByText(common.common.bindingGuide.uncovered, { exact: true }).first(),
+    ).toBeVisible();
+    await chatService.check();
+    await expect(serviceEditor.getByText('/v1/chat/completions', { exact: true })).toBeVisible();
+    await visuals(page, info, 'binding-service-choice', () =>
+      serviceEditor.scrollIntoViewIfNeeded(),
+    );
     await page.getByRole('button', { name: batch.backTargets }).click();
     await page
       .getByRole('row')

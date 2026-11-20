@@ -66,17 +66,19 @@ export function UserMfaReset({ user }: { user: AdminUser }) {
           <>
             <p>{t(status.data.enrolled ? 'mfa.enabled' : 'mfa.notEnabled')}</p>
             {status.data.enrolled ? (
-              <Button
-                type="button"
-                variant="danger-outline"
-                onClick={() => {
-                  setOpen(true);
-                  setError(null);
-                  setDone(false);
-                }}
-              >
-                {t('mfa.reset')}
-              </Button>
+              <div className="nb-actions">
+                <Button
+                  type="button"
+                  variant="danger-outline"
+                  onClick={() => {
+                    setOpen(true);
+                    setError(null);
+                    setDone(false);
+                  }}
+                >
+                  {t('mfa.reset')}
+                </Button>
+              </div>
             ) : null}
           </>
         )}

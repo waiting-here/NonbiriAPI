@@ -1,0 +1,68 @@
+.binding-service-description {
+  display: grid;
+  gap: var(--nb-space-1);
+}
+.binding-service-description .nb-badge {
+  justify-self: start;
+}
+.binding-key-health-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding-block: var(--nb-space-1);
+}
+.binding-coverage,
+.binding-routes {
+  display: grid;
+  gap: var(--nb-space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.binding-coverage {
+  margin-block: var(--nb-space-3);
+}
+.binding-coverage h4,
+.binding-coverage p,
+.binding-routes p,
+.binding-routes ul,
+.binding-coverage ul {
+  margin: 0;
+}
+.binding-routes ul,
+.binding-coverage ul {
+  padding: 0;
+  list-style: none;
+}
+.binding-coverage > ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: var(--nb-space-3);
+}
+.binding-coverage > ul > li,
+.binding-routes__interface {
+  border-inline-start: 2px solid var(--nb-color-border-strong);
+  padding-inline-start: var(--nb-space-3);
+}
+.binding-coverage > ul > li,
+.binding-routes__interface,
+.binding-routes__interface ul {
+  display: grid;
+  align-content: start;
+  gap: var(--nb-space-1);
+}
+.binding-coverage > ul > li > span,
+.binding-routes__interface code {
+  font-weight: var(--nb-font-weight-semibold);
+}
+.binding-coverage p,
+.binding-coverage ul ul,
+.binding-routes p {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.binding-routes__attention {
+  display: inline-block;
+  margin-inline-start: var(--nb-space-2);
+  color: var(--nb-color-text);
+  font-size: var(--nb-font-size-sm);
+}

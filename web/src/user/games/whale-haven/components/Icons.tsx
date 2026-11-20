@@ -1,0 +1,42 @@
+import type { SVGProps } from 'react';
+import { Icon, type IconName } from '@shared/components/Icon';
+function glyph(name: IconName) {
+  return function Glyph({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+    return <Icon width={size} height={size} aria-hidden {...props} name={name} />;
+  };
+}
+export const BellRing = glyph('alerts');
+export const Camera = glyph('viewfinder');
+export const ChevronDown = glyph('chevron-down');
+export const Compass = glyph('search');
+export const Dices = glyph('games');
+export const Edit3 = glyph('settings');
+export const Gem = glyph('credits');
+export const HelpCircle = glyph('help');
+export const Home = glyph('home');
+export const Image = glyph('image');
+export const MessageCircle = glyph('chat');
+export const Moon = glyph('moon');
+export const PanelBottom = glyph('panel-bottom');
+export const PanelRight = glyph('panel-right');
+export const Plus = glyph('plus');
+export const RotateCcw = glyph('history');
+export const Send = glyph('external-link');
+export const ShieldAlert = glyph('shield');
+export const Shirt = glyph('shirt');
+export const Soup = glyph('bowl');
+export const Star = glyph('spark');
+export const Sun = glyph('sun');
+export const Trash2 = glyph('close');
+export const Upload = glyph('image');
+export const Users = glyph('users');
+export const Volume2 = glyph('sound-on');
+export const VolumeX = glyph('sound-off');
+export const Waves = glyph('activities');
+export const ArrowRightLeft = glyph('credits');
+export const Footprints = glyph('users');
+export const ScrollText = glyph('logs');
+export const Settings = glyph('settings');
+export const ShoppingBag = glyph('bag');
+export const X = glyph('close');
+export const Sparkles = glyph('spark');

@@ -4,14 +4,15 @@ import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { writePageSizePreference } from '@shared/operations/usePagePager';
+import { QUERY_DEFAULTS } from '@shared/query/client';
 import { renderWithProviders } from '../../../test/unit/support';
 import { CreditsPage } from './CreditsPage';
 
-const testSession = vi.hoisted(() => ({ accountID: '1', walletError: false }));
+const testSession = vi.hoisted(() => ({ accountID: '1', walletError: false, paper: '42' }));
 vi.mock('@shared/limitedactivities/api', () => ({
   getWallet: vi.fn(async () => {
     if (testSession.walletError) throw new Error('Wallet unavailable');
-    return { general: '100', sketch_paper: '42', sketch_brush: '8' };
+    return { general: '100', sketch_paper: testSession.paper, sketch_brush: '8' };
   }),
 }));
 function SessionCredits() {
@@ -127,6 +128,7 @@ afterEach(() => {
   window.localStorage.removeItem('nonbiri:user:credit-history-page-size:v1');
   testSession.accountID = '1';
   testSession.walletError = false;
+  testSession.paper = '42';
 });
 
 describe('credit history numbered page controls', () => {
@@ -230,7 +232,9 @@ describe('credit history numbered page controls', () => {
         }),
       ).not.toBeInTheDocument();
       await view.user.click(assets.getByRole('radio', { name: labels.paper }));
-      await view.user.click(screen.getByText(locale === 'zh' ? '更多筛选' : 'More filters'));
+      await view.user.click(
+        screen.getByText(locale === 'zh' ? /^更多筛选 · 1$/ : /^More filters · 1$/),
+      );
       await view.user.selectOptions(
         screen.getByRole('combobox', { name: labels.category }),
         'picture_book',
@@ -277,6 +281,61 @@ describe('credit history numbered page controls', () => {
       expect(within(stat).getByText('—')).toBeVisible();
       expect(within(stat).queryByText('0')).not.toBeInTheDocument();
     }
+  });
+
+  it('refreshes both the first credit page and the activity wallet after returning to the page', async () => {
+    let amount = '1';
+    let reads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        if (requestPath(input) === '/api/time-zones') {
+          return jsonResponse({ version: 'go1.26.6-zoneinfo', zones: ['UTC'] });
+        }
+        reads += 1;
+        return jsonResponse(historyPage([entry(1, 'checkin_award', amount)], '1', 20, 1));
+      }),
+    );
+    function Workspace() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(!open)}>
+            {open ? 'Leave' : 'Return'}
+          </button>
+          {open ? <SessionCredits /> : null}
+        </>
+      );
+    }
+    const view = await renderWithProviders(<Workspace />, {
+      station: 'user',
+      role: 'user',
+      route: '/credits',
+    });
+    await screen.findByRole('cell', { name: '+1' });
+    const defaults = view.queryClient.getDefaultOptions();
+    view.queryClient.setDefaultOptions({
+      ...defaults,
+      queries: { ...defaults.queries, staleTime: QUERY_DEFAULTS.staleTime },
+    });
+    amount = '2';
+    await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await screen.findByRole('cell', { name: '+2' });
+    expect(reads).toBe(2);
+
+    await view.user.click(screen.getByRole('button', { name: 'Leave' }));
+    amount = '3';
+    testSession.paper = '44';
+    await view.user.click(screen.getByRole('button', { name: 'Return' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled());
+    expect(reads).toBe(2);
+    // One click must make a fresh read on the already-cached first page.
+    const before = reads;
+    await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await screen.findByRole('cell', { name: '+3' });
+    expect(reads).toBe(before + 1);
+    const overview = view.container.querySelector('.credit-history__overview') as HTMLElement;
+    await waitFor(() => expect(within(overview).getByText('44')).toBeVisible());
   });
 
   it('shows both asset lines and resets the page and anchor when the asset changes', async () => {

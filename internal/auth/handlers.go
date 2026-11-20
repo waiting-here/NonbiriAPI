@@ -107,7 +107,14 @@ func parseCallbackQuery(req *http.Request) (string, string, bool) {
 			return "", "", false
 		}
 	}
-	// Error responses cannot authorize a session, even when mixed with a code.
+	states := q["state"]
+	if len(states) != 1 || !validateOAuthStateText(states[0]) {
+		return "", "", false
+	}
+	// A denial carries state for the return page and never enters the code exchange.
+	if denied := q["error"]; len(denied) == 1 && denied[0] == "access_denied" && !q.Has("code") {
+		return "", states[0], true
+	}
 	for _, key := range []string{"error", "error_description", "error_uri"} {
 		if _, present := q[key]; present {
 			return "", "", false
@@ -115,8 +122,7 @@ func parseCallbackQuery(req *http.Request) (string, string, bool) {
 	}
 	// RFC 6749 section 4.1.2 requires ignoring unrecognized response parameters.
 	codes, okCode := q["code"]
-	states, okState := q["state"]
-	if !okCode || !okState || len(codes) != 1 || len(states) != 1 || !validateOAuthCode(codes[0]) || !validateOAuthStateText(states[0]) {
+	if !okCode || len(codes) != 1 || !validateOAuthCode(codes[0]) {
 		return "", "", false
 	}
 	return codes[0], states[0], true
@@ -160,12 +166,18 @@ func (r *Runtime) oauthCallback(w http.ResponseWriter, req *http.Request) {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
 	}
-	cookie, ok := cookieValue(req, OAuthStateCookieName)
-	if !ok {
-		writeAuthFailure(w, ErrStateInvalid)
+	cookie, _ := cookieValue(req, OAuthStateCookieName)
+	claims, err := r.states.ConsumeClaims(state, cookie, StationUser)
+	if code == "" {
+		session, hasSession := cookieValue(req, UserSessionCookieName)
+		if err == nil && claims.Intent == OAuthIntentElevate && claims.RouteID == "account" && hasSession &&
+			hmacStringEqual(sessionLookupHash(session), claims.Binding) {
+			clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
+			httperr.SetBrowserReason(w, httperr.BrowserReasonElevationCanceled)
+		}
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
 	}
-	claims, err := r.states.ConsumeClaims(state, cookie, StationUser)
 	if err != nil {
 		writeAuthFailure(w, err)
 		return

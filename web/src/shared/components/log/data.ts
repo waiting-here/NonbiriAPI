@@ -1,4 +1,14 @@
 import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
+import { NATIVE_SERVICES, type NativeService } from '@shared/nativeServices';
+import { normalizeRouteDecision, type RouteDecision } from './routeDecision';
+import {
+  normalizeAttemptHealthImpact,
+  normalizeFailureDisablement,
+  normalizeFailureSummary,
+  type AttemptHealthImpact,
+  type FailureDisablement,
+  type FailureGroup,
+} from './managementFailures';
 import {
   normalizeFailure,
   normalizeDelivery,
@@ -205,17 +215,19 @@ export interface UserLogAttempt extends LogAttemptCommon {
   key_note: string;
 }
 
-export interface AdminLogAttempt extends LogAttemptCommon {
+interface ManagementLogAttempt extends LogAttemptCommon {
+  failure_disablement?: FailureDisablement;
+  health_impact?: AttemptHealthImpact;
+  native_service?: NativeService;
   donation_id?: string | null;
   donation_key_id?: string | null;
-  role: 'admin';
   usage_total_mismatch: boolean;
 }
-export interface StewardLogAttempt extends LogAttemptCommon {
-  donation_id?: string | null;
-  donation_key_id?: string | null;
+export interface AdminLogAttempt extends ManagementLogAttempt {
+  role: 'admin';
+}
+export interface StewardLogAttempt extends ManagementLogAttempt {
   role: 'steward';
-  usage_total_mismatch: boolean;
 }
 export type RoleLogAttempt = UserLogAttempt | AdminLogAttempt | StewardLogAttempt;
 
@@ -224,11 +236,15 @@ export type UserLogDetail = { delivery?: DeliveryDiagnostics | null } & (
   | { kind: 'charity'; request: UserCharityLogRow; caller_safe_result: { class: LogResultClass } }
 );
 export interface AdminLogDetail {
+  failure_summary?: FailureGroup[];
+  route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: AdminLogRow;
   attempts: CursorPage<AdminLogAttempt>;
 }
 export interface StewardLogDetail {
+  failure_summary?: FailureGroup[];
+  route_decision?: RouteDecision;
   delivery?: DeliveryDiagnostics | null;
   request: StewardLogRow;
   attempts: CursorPage<StewardLogAttempt>;
@@ -245,6 +261,7 @@ export interface LogFiltersValue {
   operation?: LogOperation;
   error_category?: string;
   error_phase?: string;
+  outcome?: 'success' | 'failed' | 'before_dispatch' | 'actual_backoff';
   phase?: 'handler' | 'pre_handler';
   model?: string;
   user_id?: string;
@@ -296,6 +313,16 @@ const ATTEMPT_FIELDS = [
   'usage',
   'started_at',
   'completed_at',
+] as const;
+const REQUIRED_MANAGEMENT_ATTEMPT_FIELDS = [...ATTEMPT_FIELDS, 'usage_total_mismatch'] as const;
+const MANAGEMENT_ATTEMPT_FIELDS = [
+  ...REQUIRED_MANAGEMENT_ATTEMPT_FIELDS,
+  'donation_id',
+  'donation_key_id',
+  'error_diagnostics',
+  'failure_disablement',
+  'health_impact',
+  'native_service',
 ] as const;
 
 export function normalizeLogUsage(value: unknown): LogUsage {
@@ -641,13 +668,6 @@ function managementCharityModelID(root: WireRecord, route: LogRouteKind): string
   return id;
 }
 
-function managementAttemptTarget(root: WireRecord) {
-  const donation_id = nullableDecimalID(root.donation_id ?? null, 'donation id');
-  const donation_key_id = nullableDecimalID(root.donation_key_id ?? null, 'donation key id');
-  if (Boolean(donation_id) !== Boolean(donation_key_id)) invalidResponse('donation key identity');
-  return { donation_id, donation_key_id };
-}
-
 function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
   if (value === null) return null;
   const root = record(value, ['discord_nickname', 'discord_id'], 'caller identity');
@@ -723,7 +743,9 @@ function commonAttempt(root: WireRecord, redactedDisplay = false): LogAttemptCom
   const completedAt = unixSecond(root.completed_at, 'attempt completion time');
   if (completedAt < startedAt) invalidResponse('attempt completion time');
   return {
-    error_diagnostics: normalizeFailure(root.error_diagnostics),
+    error_diagnostics: normalizeFailure(root.error_diagnostics, {
+      includeProviderReason: !redactedDisplay,
+    }),
     attempt_seq: decimal(root.attempt_seq, 'attempt sequence', { positive: true }),
     result_kind: resultKind,
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, 'endpoint key id'),
@@ -772,46 +794,28 @@ export function normalizeUserLogAttempt(value: unknown): UserLogAttempt {
   };
 }
 
-export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
-  const root = record(
-    value,
-    [
-      ...ATTEMPT_FIELDS,
-      'usage_total_mismatch',
-      'donation_id',
-      'donation_key_id',
-      'error_diagnostics',
-    ],
-    'administrator log attempt',
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
-  );
+function normalizeManagementLogAttempt(value: unknown, label: string): ManagementLogAttempt {
+  const root = record(value, MANAGEMENT_ATTEMPT_FIELDS, label, REQUIRED_MANAGEMENT_ATTEMPT_FIELDS);
+  const donation_id = nullableDecimalID(root.donation_id ?? null, 'donation id');
+  const donation_key_id = nullableDecimalID(root.donation_key_id ?? null, 'donation key id');
+  if (Boolean(donation_id) !== Boolean(donation_key_id)) invalidResponse('donation key identity');
   return {
     ...commonAttempt(root),
-    ...managementAttemptTarget(root),
-    role: 'admin',
+    donation_id,
+    donation_key_id,
+    failure_disablement: normalizeFailureDisablement(root.failure_disablement),
+    health_impact: normalizeAttemptHealthImpact(root.health_impact),
+    native_service: NATIVE_SERVICES.find((item) => item === root.native_service),
     usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
   };
 }
 
+export function normalizeAdminLogAttempt(value: unknown): AdminLogAttempt {
+  return { ...normalizeManagementLogAttempt(value, 'administrator log attempt'), role: 'admin' };
+}
+
 export function normalizeStewardLogAttempt(value: unknown): StewardLogAttempt {
-  const root = record(
-    value,
-    [
-      ...ATTEMPT_FIELDS,
-      'usage_total_mismatch',
-      'donation_id',
-      'donation_key_id',
-      'error_diagnostics',
-    ],
-    'steward log attempt',
-    [...ATTEMPT_FIELDS, 'usage_total_mismatch'],
-  );
-  return {
-    ...commonAttempt(root),
-    ...managementAttemptTarget(root),
-    role: 'steward',
-    usage_total_mismatch: boolean(root.usage_total_mismatch, 'usage total mismatch marker'),
-  };
+  return { ...normalizeManagementLogAttempt(value, 'steward log attempt'), role: 'steward' };
 }
 
 export function normalizeUserLogDetail(value: unknown): UserLogDetail {
@@ -850,11 +854,15 @@ export function normalizeUserLogDetail(value: unknown): UserLogDetail {
 }
 
 export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
-  const root = record(value, ['request', 'attempts', 'delivery'], 'administrator log detail', [
-    'request',
-    'attempts',
-  ]);
+  const root = record(
+    value,
+    ['request', 'attempts', 'delivery', 'route_decision', 'failure_summary'],
+    'administrator log detail',
+    ['request', 'attempts'],
+  );
   return {
+    route_decision: normalizeRouteDecision(root.route_decision),
+    failure_summary: normalizeFailureSummary(root.failure_summary),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeAdminLogRow(root.request),
     attempts: page(root.attempts, 'administrator log attempts', normalizeAdminLogAttempt),
@@ -862,11 +870,15 @@ export function normalizeAdminLogDetail(value: unknown): AdminLogDetail {
 }
 
 export function normalizeStewardLogDetail(value: unknown): StewardLogDetail {
-  const root = record(value, ['request', 'attempts', 'delivery'], 'steward log detail', [
-    'request',
-    'attempts',
-  ]);
+  const root = record(
+    value,
+    ['request', 'attempts', 'delivery', 'route_decision', 'failure_summary'],
+    'steward log detail',
+    ['request', 'attempts'],
+  );
   return {
+    route_decision: normalizeRouteDecision(root.route_decision),
+    failure_summary: normalizeFailureSummary(root.failure_summary),
     delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts: page(root.attempts, 'steward log attempts', normalizeStewardLogAttempt),
@@ -959,12 +971,32 @@ export function adminLogExportPath(filter: LogFiltersValue, format: 'csv' | 'jso
   return roleLogExportPath('admin', filter, format);
 }
 
+export function logRequestID(value: unknown): string | null {
+  return typeof value === 'string' && /^req_[A-Za-z0-9_-]{21}[AQgw]$/.test(value) ? value : null;
+}
+
 export function validLogDiscordID(value: string): boolean {
   return /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18_446_744_073_709_551_615n;
 }
 
+export function validLogResourceID(value: string): boolean {
+  return /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n;
+}
+
+export function isLogOutcome(
+  role: LogRole,
+  value: unknown,
+): value is NonNullable<LogFiltersValue['outcome']> {
+  return (
+    value === 'success' ||
+    value === 'failed' ||
+    (role !== 'user' && (value === 'before_dispatch' || value === 'actual_backoff'))
+  );
+}
+
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
   const result: LogFiltersValue = {};
+  if (isLogOutcome(role, raw.outcome)) result.outcome = raw.outcome;
   if (isLogOperation(raw.operation)) result.operation = raw.operation;
   if (raw.phase === 'handler' || raw.phase === 'pre_handler') result.phase = raw.phase;
   const assign = (key: keyof LogFiltersValue, max: number) => {
@@ -986,8 +1018,7 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
     assign('upstream_model', 512);
     assign('charity_model', 512);
     const keyID = raw.endpoint_key_id?.trim();
-    if (keyID && /^[1-9][0-9]{0,18}$/.test(keyID) && BigInt(keyID) <= 9_223_372_036_854_775_807n)
-      result.endpoint_key_id = keyID;
+    if (keyID && validLogResourceID(keyID)) result.endpoint_key_id = keyID;
   }
   assign('error_code', 96);
   const status = raw.status?.trim();

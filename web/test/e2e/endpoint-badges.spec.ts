@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { mockConnectionResources } from './connection-fixtures';
 import { numberedPage } from './numbered-fixtures';
 import { USER_ORIGIN } from './ports';
@@ -18,6 +19,7 @@ for (const width of [1440, 390]) {
       let current = true;
       const entries = () =>
         ['subscription', 'api_platform'].map((category, index) => ({
+          ...endpointScope,
           id: String(index + 1),
           connection_id: '1',
           native_services: ['chat_completions', 'responses'],

@@ -105,7 +105,7 @@
 }
 
 /* Illustrated states: the drawing replaces the icon tile. */
-.nb-state__art {
+.nb-state .nb-state__icon.nb-state__art {
   width: auto;
   height: auto;
   border-radius: 0;
@@ -115,6 +115,18 @@
 
 .nb-state__art .nb-illustration {
   width: 6.5rem;
+}
+
+.notice-page.nb-state {
+  width: min(100%, 40rem);
+  margin-inline: auto;
+}
+
+.nb-state:not(.empty-state) .state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+  margin-top: var(--nb-space-3);
 }
 
 .empty-state.nb-state {
@@ -127,6 +139,14 @@
   border-style: dashed;
   border-color: var(--nb-color-border-strong);
   background: var(--nb-color-surface-alt);
+}
+
+/* Inside a Panel or Card the parent already frames the region; avoid a nested dashed box. */
+:is(.nb-panel__body, .card, .core-card) .empty-state.nb-state {
+  border: 0;
+  border-radius: var(--nb-radius-md);
+  background: transparent;
+  padding-block: var(--nb-space-6);
 }
 
 .empty-state.nb-state > div {

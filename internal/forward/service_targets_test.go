@@ -24,7 +24,7 @@ func TestServiceTargetsPreferNativeWithinOriginalBinding(t *testing.T) {
 	converted := serviceTarget(t, 10, 101, 0, 0, contract.NativeServiceResponses)
 	native := serviceTarget(t, 10, 102, 0, 1, contract.NativeServiceChatCompletions)
 	other := serviceTarget(t, 20, 201, 1, 0, contract.NativeServiceChatCompletions)
-	expanded, err := expandServiceTargets([]RouteCandidate{converted, native, other}, contract.OperationChatCompletions)
+	expanded, err := expandServiceTargets(t.Context(), []RouteCandidate{converted, native, other}, contract.OperationChatCompletions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestServiceTargetsPreferNativeWithinOriginalBinding(t *testing.T) {
 func TestServiceTargetsDoNotMoveNativeAcrossBindings(t *testing.T) {
 	first := serviceTarget(t, 10, 101, 0, 0, contract.NativeServiceResponses)
 	second := serviceTarget(t, 20, 201, 1, 0, contract.NativeServiceChatCompletions)
-	got, err := expandServiceTargets([]RouteCandidate{second, first}, contract.OperationChatCompletions)
+	got, err := expandServiceTargets(t.Context(), []RouteCandidate{second, first}, contract.OperationChatCompletions)
 	if err != nil || len(got) != 2 || got[0].BindingID != 10 || got[1].BindingID != 20 {
 		t.Fatalf("native preference changed cross-binding order: %v, %+v", err, got)
 	}
@@ -66,7 +66,7 @@ func TestServiceTargetsKeepApprovedServiceVersion(t *testing.T) {
 	chatUse.Authorization.NativeService = contract.NativeServiceChatCompletions
 	chatUse.Authorization.UseID, chatUse.Authorization.UseRevisionID = 41, 401
 	chatUse.Authorization.CredentialVersionID = 1001
-	got, err := expandServiceTargets([]RouteCandidate{responseUse, chatUse}, contract.OperationChatCompletions)
+	got, err := expandServiceTargets(t.Context(), []RouteCandidate{responseUse, chatUse}, contract.OperationChatCompletions)
 	if err != nil || len(got) != 2 {
 		t.Fatalf("expand exact use versions: %v, %+v", err, got)
 	}
@@ -79,7 +79,7 @@ func TestServiceTargetsKeepApprovedServiceVersion(t *testing.T) {
 func TestServiceTargetsRejectMissingAuthorization(t *testing.T) {
 	candidate := serviceTarget(t, 10, 101, 0, 0, contract.NativeServiceChatCompletions)
 	candidate.Authorization.TargetRevision = 0
-	if _, err := expandServiceTargets([]RouteCandidate{candidate}, contract.OperationChatCompletions); !errors.Is(err, ErrInternal) {
+	if _, err := expandServiceTargets(t.Context(), []RouteCandidate{candidate}, contract.OperationChatCompletions); !errors.Is(err, ErrInternal) {
 		t.Fatalf("missing target revision: %v", err)
 	}
 }

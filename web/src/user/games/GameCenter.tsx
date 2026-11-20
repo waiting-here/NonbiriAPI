@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
+import { gameRequest } from './common/request';
 import { CreditText } from '@shared/components/CreditText';
-import { Panel, PanelHead, PanelBody } from '@shared/components/ui';
+import { Panel, PanelHead, PanelBody, StatusBadge } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
 import { Link } from 'react-router';
 import { GamePrivacyControl } from './common/GamePrivacyControl';
@@ -34,7 +36,7 @@ function minimumPrice(prices: readonly string[]): string | undefined {
 
 function cardState(
   snapshot: GamesSnapshot,
-  kind: GameHeroKind,
+  kind: Exclude<GameHeroKind, 'whalehaven'>,
 ): { state: Availability; price?: string } {
   if (kind === 'lakenotes')
     return {
@@ -66,11 +68,12 @@ function cardState(
       price: minimumPrice(Object.values(snapshot.fishing.baitPrices)),
     };
   if (kind === 'linklink') {
-    const specs = Object.values(snapshot.linklink.specs).filter((spec) => spec.enabled);
+    const allSpecs = Object.values(snapshot.linklink.specs);
+    const specs = allSpecs.filter((spec) => spec.enabled);
     return {
       state:
         snapshot.gamesEnabled && snapshot.linklink.enabled && specs.length > 0 ? 'open' : 'closed',
-      price: minimumPrice(specs.map((spec) => spec.price)),
+      price: minimumPrice((specs.length > 0 ? specs : allSpecs).map((spec) => spec.price)),
     };
   }
   if (kind === 'rps')
@@ -83,13 +86,14 @@ function cardState(
           : 'closed',
     };
   const game = snapshot[kind];
-  const modes = Object.values(game.modes).filter((mode) => mode.enabled && mode.available);
+  const allModes = Object.values(game.modes);
+  const modes = allModes.filter((mode) => mode.enabled && mode.available);
   return {
     state:
       snapshot.gamesEnabled && game.enabled && game.available && modes.length > 0
         ? 'open'
         : 'closed',
-    price: minimumPrice(modes.map((mode) => mode.ticket)),
+    price: minimumPrice((modes.length > 0 ? modes : allModes).map((mode) => mode.ticket)),
   };
 }
 
@@ -103,9 +107,13 @@ function GameCard({ card }: { card: CenterCard }) {
       : text('presentation.unavailable');
   const detail =
     card.id === 'lakenotes' ? (
-      ''
+      text('center.free')
     ) : card.price === undefined ? (
-      text('center.reviewCosts')
+      card.state === 'open' ? (
+        text('center.reviewCosts')
+      ) : (
+        ''
+      )
     ) : creditsToMilli(card.price) === 0n ? (
       text('center.free')
     ) : (
@@ -115,8 +123,8 @@ function GameCard({ card }: { card: CenterCard }) {
       />
     );
   const reward = text(
-    card.id === 'lakenotes'
-      ? 'center.free'
+    card.id === 'lakenotes' || card.id === 'whalehaven'
+      ? 'center.rewardExchange'
       : card.id === 'linklink' || card.id === 'steadycatch'
         ? 'center.firstClearReward'
         : 'center.winCredits',
@@ -127,21 +135,23 @@ function GameCard({ card }: { card: CenterCard }) {
       to={card.path}
     >
       <div className="game-center-card__hero">
-        <GameHero kind={card.id} />
-        <span className={`nb-badge nb-badge--${card.state === 'open' ? 'ok' : 'plain'}`}>
-          {stateLabel}
-        </span>
+        <GameHero kind={card.id} eager />
       </div>
       <div className="game-center-card__body">
-        <h2>{text(card.title)}</h2>
+        <div className="game-card-heading">
+          <h2>{text(card.title)}</h2>
+          <StatusBadge tone={card.state === 'open' ? 'ok' : 'neutral'}>{stateLabel}</StatusBadge>
+        </div>
         <p>{text(card.body)}</p>
         <div className="game-card-foot">
           <span className="game-card-meta">
-            {card.state === 'open' && detail ? <span>{detail}</span> : null}
+            {card.state !== 'maintenance' && detail ? (
+              <span className="game-card-detail">{detail}</span>
+            ) : null}
             <span className="nb-badge nb-badge--plain">{reward}</span>
           </span>
-          <span className="nb-btn nb-btn--sm nb-btn--secondary" aria-hidden="true">
-            {text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')}
+          <span className="game-card-cta" aria-hidden="true">
+            {text(card.state === 'open' ? 'presentation.enter' : 'presentation.learn')} →
           </span>
         </div>
       </div>
@@ -152,6 +162,18 @@ function GameCard({ card }: { card: CenterCard }) {
 export function GameCenter() {
   const { text } = useGameCopy();
   const snapshot = useGamesSnapshot();
+  const whale = useQuery({
+    queryKey: ['user', 'games', 'whale-haven', 'availability'],
+    queryFn: async ({ signal }) =>
+      (
+        await gameRequest<{ enabled: boolean; exchange_enabled: boolean }>(
+          '/api/games/whale-haven/availability',
+          { signal },
+        )
+      ).data,
+    enabled: !!snapshot.data?.gamesEnabled,
+    retry: false,
+  });
   const maintenance = isMaintenance(snapshot.error);
   if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
   if (snapshot.error && !maintenance)
@@ -186,12 +208,20 @@ export function GameCenter() {
       ...availability,
     };
   });
+  if (snapshot.data?.gamesEnabled && whale.data?.enabled)
+    cards.push({
+      id: 'whalehaven',
+      path: '/games/whale-haven',
+      title: 'center.whalehaven.title',
+      body: 'center.whalehaven.body',
+      state: 'open',
+      price: '0',
+    });
   return (
     <main className="game-page game-center">
       <PageHeader
         icon="games"
         title={text('center.title')}
-        description={text('presentation.description')}
         actions={
           snapshot.data ? (
             <div className="game-center-wallet">

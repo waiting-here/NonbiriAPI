@@ -1,3 +1,5 @@
+import { rejectionFieldLabel } from './rejectionField';
+import { LogReadError, logAccessLost } from '@shared/observability/logReadAccess';
 import { useRetainedQueryData } from '@shared/query/useRetainedQueryData';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { FailureDetails, RequestDelivery } from '@shared/observability/FailureDiagnostics';
@@ -16,12 +18,13 @@ import { clearStationSession } from '@shared/charityManagement';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { formatCredits } from '../../../user/games/common/strict';
-import { Fold, Note } from '@shared/components/ui';
+import { Fold, Note, StatusBadge } from '@shared/components/ui';
 import { RawStorageSummary } from '@shared/observability/RawStorageSummary';
 import { GlobalPressure } from '@shared/observability/GlobalPressure';
 import { AttemptErrors, RequestSource } from '@shared/observability/RequestDiagnostics';
 import { type PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { isCharityRoute } from '@shared/operations/requestKind';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isApiError, isUnauthorized } from '@shared/query/http';
@@ -36,20 +39,27 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
+import { attemptHealthSummary } from './attemptHealthText';
 import { useTranslation } from 'react-i18next';
 import { CallerIdentity } from './CallerIdentity';
 import {
   roleLogExportPath,
   validateLogFilter,
   validLogDiscordID,
+  validLogResourceID,
+  logRequestID,
   type LogFiltersValue,
   type LogResultClass,
   type LogRole,
   type LogRouteKind,
   type RoleLogRow,
 } from './data';
+import { InspectionWorkspace } from './InspectionWorkspace';
+import { listReturnPath } from '@shared/operations/listReturn';
+import { CopyValue } from '@shared/components/CopyValue';
 import { LogDetailPanel } from './LogDetailPanel';
-import { LogFilters, type LogFilterField } from './LogFilters';
+import { RequestRouteDecision } from './RequestRouteDecision';
+import { LogFilters, LogSearch, type LogFilterField } from './LogFilters';
 import { LogOriginIdentity } from './LogOriginIdentity';
 import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
 import { LogTable, type LogColumn } from './LogTable';
@@ -63,6 +73,14 @@ import { rejectionDescriptionKeys } from './rejectionDescriptions';
 import { TokenBuckets } from './TokenBuckets';
 import { HeaderFacts } from './HeaderFacts';
 import { useLogUrlState } from './useLogUrlState';
+import { ATTEMPT_SEQ_PARAM, logAttemptSequence } from './managementFailures';
+import {
+  AttemptFailureSummary,
+  AttemptHealthEffects,
+  AttemptReason,
+  AttemptService,
+  FailureStreak,
+} from './ManagementAttemptFailures';
 
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   openai_chat_completions: 'common.operations.logs.route.openaiChatCompletions',
@@ -107,12 +125,7 @@ const RESULT_LABEL_KEYS: Record<LogResultClass, string> = {
   cancelled: 'common.operations.logs.resultValue.cancelled',
 };
 
-const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9_-]{22}$/;
 const LOG_DEFAULT_PAGE_SIZE: PageSize = 20;
-
-function validRequestID(value: string | null): string | null {
-  return value !== null && REQUEST_ID_PATTERN.test(value) && /[AQgw]$/.test(value) ? value : null;
-}
 
 function requestFrom(detail: NumberedRoleLogDetail): RoleLogRow {
   return detail.request;
@@ -134,14 +147,10 @@ function UsageMismatchBadge({ visible }: { visible: boolean }) {
   const label = t('common.operations.logs.usageTotalMismatch');
   const explanation = t('common.operations.logs.usageTotalMismatchExplanation');
   return (
-    <span className="status-badge" title={explanation} aria-label={`${label}. ${explanation}`}>
-      {label}
+    <span title={explanation} aria-label={`${label}. ${explanation}`}>
+      <StatusBadge tone="warn">{label}</StatusBadge>
     </span>
   );
-}
-
-function isFinalAuthorityError(error: unknown): boolean {
-  return isApiError(error) && (error.code === 'unauthorized' || error.code === 'forbidden');
 }
 
 function sessionIdentity(role: LogRole, value: unknown): string | undefined {
@@ -196,9 +205,13 @@ function AttemptTable({
   endpointKeyID,
   page,
   busy,
+  onRefresh,
   onPageChange,
   onPageSizeChange,
   logReturnTo,
+  focusAttemptSeq,
+  locatingFocus,
+  canReadModels,
 }: {
   logReturnTo: string;
   detail: NumberedRoleLogDetail;
@@ -207,32 +220,90 @@ function AttemptTable({
   endpointKeyID?: string;
   page: string;
   busy: boolean;
+  onRefresh: () => void;
   onPageChange: (page: string) => void;
   onPageSizeChange: (size: PageSize) => void;
+  focusAttemptSeq?: string;
+  locatingFocus: boolean;
+  canReadModels: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const isDiscovery = detail.request.route_kind === 'model_discovery';
+  const managedCharityRequest =
+    detail.request.role !== 'user' && isCharityRoute(detail.request.route_kind)
+      ? detail.request
+      : undefined;
+  const [previousFocus, setPreviousFocus] = useState(focusAttemptSeq);
+  const [open, setOpen] = useState(isDiscovery || focusAttemptSeq !== undefined);
+  if (focusAttemptSeq !== previousFocus) {
+    setPreviousFocus(focusAttemptSeq);
+    if (focusAttemptSeq !== undefined) setOpen(true);
+  }
+  const focusTarget = useRef<HTMLElement | null>(null);
+  const registerFocusTarget = useCallback((target: HTMLElement | null) => {
+    focusTarget.current = target;
+  }, []);
+  useEffect(() => {
+    if (!open || focusAttemptSeq === undefined || locatingFocus) return;
+    // Let the containing detail panel finish its own initial focus and scroll.
+    const frame = requestAnimationFrame(() => {
+      focusTarget.current?.scrollIntoView?.({ block: 'start' });
+      focusTarget.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusAttemptSeq, locatingFocus, open]);
   if (!('attempts' in detail)) return null;
   const attempts = detail.attempts;
-  const isDiscovery = detail.request.route_kind === 'model_discovery';
-  return (
+  const focused = attempts.data.find((attempt) => attempt.attempt_seq === focusAttemptSeq);
+  const focusMissing = focusAttemptSeq !== undefined && !locatingFocus && focused === undefined;
+  const table = (
     <div className="ops-stack" aria-busy={busy}>
-      {attempts.data.length === 0 ? (
+      {managedCharityRequest &&
+        attempts.data.some(
+          (a) => a.role !== 'user' && a.health_impact?.streak_effect === 'pending',
+        ) && (
+          <div className="ops-actions">
+            <Button type="button" size="sm" disabled={busy} onClick={onRefresh}>
+              {t('common.operations.logs.healthImpact.refresh')}
+            </Button>
+          </div>
+        )}
+      {focusMissing && (
+        <p
+          className="log-focused-attempt-heading"
+          ref={registerFocusTarget}
+          tabIndex={-1}
+          role="status"
+        >
+          {t('common.operations.logs.attemptUnavailable')}
+        </p>
+      )}
+      {locatingFocus ? (
+        <p role="status">{t('common.loading')}</p>
+      ) : attempts.data.length === 0 ? (
         <p>{t('common.operations.logs.noAttempts')}</p>
       ) : (
         <ol className="log-attempts">
           {attempts.data.map((attempt) => (
-            <li className="log-attempt" key={attempt.attempt_seq}>
+            <li
+              className="log-attempt"
+              key={attempt.attempt_seq}
+              aria-current={attempt === focused || undefined}
+            >
               <div className="log-attempt-heading">
                 {endpointKeyID && attempt.endpoint_key_id === endpointKeyID ? (
-                  <span className="status-badge">
+                  <StatusBadge tone="accent">
                     {t('common.operations.logs.matchedKeyAttempt')}
-                  </span>
+                  </StatusBadge>
                 ) : null}
-                <h3>
+                <h3
+                  ref={attempt === focused ? registerFocusTarget : undefined}
+                  tabIndex={attempt === focused ? -1 : undefined}
+                >
                   {t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}
                 </h3>
-                <span className="status-badge">
+                <StatusBadge tone={attempt.result_kind === 'synthetic' ? 'neutral' : 'info'}>
                   {t(
                     attempt.result_kind === 'synthetic'
                       ? isDiscovery
@@ -240,11 +311,26 @@ function AttemptTable({
                         : 'common.operations.logs.platformRecord'
                       : 'common.operations.logs.upstreamResponse',
                   )}
-                </span>
+                </StatusBadge>
                 {attempt.role !== 'user' ? (
                   <UsageMismatchBadge visible={attempt.usage_total_mismatch} />
                 ) : null}
               </div>
+              {attempt.role !== 'user' && attempt.failure_disablement && (
+                <div className="log-attempt-disablement">
+                  <Note tone="warn" title={t('common.operations.logs.failureDisablement')}>
+                    <p>
+                      <AttemptService observation={attempt.failure_disablement} />
+                    </p>
+                    <p>
+                      <FailureStreak observation={attempt.failure_disablement} />
+                    </p>
+                  </Note>
+                </div>
+              )}
+              {managedCharityRequest && attempt.role !== 'user' && (
+                <AttemptHealthEffects attempt={attempt} />
+              )}
               {attempt.result_kind === 'synthetic' ? (
                 <p className="log-attempt-notice">
                   {t(
@@ -254,7 +340,21 @@ function AttemptTable({
                   )}
                 </p>
               ) : null}
-              <dl>
+              <dl className="nb-facts log-attempt-facts">
+                {attempt.role !== 'user' &&
+                  attempt.error_diagnostics?.provider_reason &&
+                  (!managedCharityRequest ||
+                    attempt.health_impact?.backoff?.reason !==
+                      attempt.error_diagnostics.provider_reason) && (
+                    <div>
+                      <dt>{t('common.operations.logs.failureReason')}</dt>
+                      <dd>
+                        <AttemptReason
+                          failure={{ reason: attempt.error_diagnostics.provider_reason }}
+                        />
+                      </dd>
+                    </div>
+                  )}
                 <div>
                   <dt>{t('logs.endpointBaseUrl')}</dt>
                   <dd className="mono">{attempt.endpoint_base_url}</dd>
@@ -317,21 +417,30 @@ function AttemptTable({
                 attempt.diag ||
                 attempt.result_kind === 'synthetic' ||
                 (attempt.status_code ?? 0) >= 400) && (
-                <FailureDetails failure={attempt.error_diagnostics} />
+                <FailureDetails
+                  failure={attempt.error_diagnostics}
+                  showMissing={
+                    attempt.role === 'user' ||
+                    !managedCharityRequest ||
+                    !attempt.health_impact?.backoff
+                  }
+                />
               )}
-              {attempt.role !== 'user' &&
-              detail.request.role !== 'user' &&
-              detail.request.route_kind.startsWith('charity_') ? (
-                detail.request.charity_model_id &&
+              {attempt.role !== 'user' && managedCharityRequest && canReadModels ? (
+                managedCharityRequest.charity_model_id &&
                 attempt.donation_id &&
                 attempt.donation_key_id ? (
                   <div className="ops-actions">
                     <Link
                       className="nb-btn nb-btn--secondary"
-                      to={charityManagementPath(attempt.role, detail.request.charity_model_id, {
-                        donationID: attempt.donation_id,
-                        keyID: attempt.donation_key_id,
-                      })}
+                      to={charityManagementPath(
+                        attempt.role,
+                        managedCharityRequest.charity_model_id,
+                        {
+                          donationID: attempt.donation_id,
+                          keyID: attempt.donation_key_id,
+                        },
+                      )}
                       state={{ logReturnTo }}
                     >
                       {t('common.operations.logs.manageCharityKey')}
@@ -360,20 +469,35 @@ function AttemptTable({
           ))}
         </ol>
       )}
-      <PagePagination
-        metadata={detail.attempt_pagination}
-        requestedPage={page}
-        busy={busy}
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-      />
+      {!locatingFocus && (
+        <PagePagination
+          metadata={detail.attempt_pagination}
+          requestedPage={focusAttemptSeq === undefined ? page : undefined}
+          busy={busy}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
     </div>
+  );
+  return (
+    <Fold
+      plain
+      open={open}
+      onOpenChange={setOpen}
+      title={t('common.operations.logs.attempts')}
+      summary={'attempt_count' in detail.request ? detail.request.attempt_count : undefined}
+    >
+      {table}
+    </Fold>
   );
 }
 
 interface RoleLogPanelProps {
   role: LogRole;
   language?: string;
+  canReadUsers?: boolean;
+  canReadModels?: boolean;
   enabled?: boolean;
   onAuthorityLoss?: () => void;
   requestID?: string | null;
@@ -404,6 +528,8 @@ export function RoleLogPanel(props: RoleLogPanelProps) {
 }
 
 function ScopedRoleLogPanel({
+  canReadUsers = true,
+  canReadModels = true,
   role,
   enabled = true,
   onAuthorityLoss,
@@ -429,10 +555,6 @@ function ScopedRoleLogPanel({
         ? t(rejectionDescriptionKeys[reason])
         : reason;
   };
-  const rejectionFieldDescription = (field: string) => {
-    const position = /^request\.fields\[(\d+)\]$/.exec(field);
-    return position ? t('logs.rejectionTopLevelField', { position: position[1] }) : field;
-  };
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
   const station = role === 'admin' ? 'admin' : role === 'steward' ? 'steward' : 'user';
@@ -442,9 +564,7 @@ function ScopedRoleLogPanel({
   const invalidKeyFilter =
     role !== 'user' &&
     keyParams.length > 0 &&
-    (keyParams.length !== 1 ||
-      !/^[1-9][0-9]{0,18}$/.test(keyParams[0]) ||
-      BigInt(keyParams[0]) > 9_223_372_036_854_775_807n);
+    (keyParams.length !== 1 || !validLogResourceID(keyParams[0]));
   const discordParams = searchParams.getAll('discord_id');
   const invalidDiscordFilter =
     role !== 'user' &&
@@ -454,7 +574,7 @@ function ScopedRoleLogPanel({
   const textParams = useMemo(
     () =>
       role === 'user'
-        ? (['operation', 'model', 'error_code', 'status', 'phase'] as const)
+        ? (['outcome', 'operation', 'model', 'error_code', 'status', 'phase'] as const)
         : ([
             'operation',
             'user_id',
@@ -467,6 +587,7 @@ function ScopedRoleLogPanel({
             'status',
             'phase',
             'usage_total_mismatch',
+            'outcome',
             'error_category',
             'error_phase',
           ] as const),
@@ -480,7 +601,6 @@ function ScopedRoleLogPanel({
     const next = validateLogFilter(role, urlState.filters);
     const from = urlState.fromUnix;
     const to = urlState.toUnix;
-    if (from !== undefined && to !== undefined && from >= to) return next;
     return {
       ...next,
       ...(from === undefined ? {} : { from }),
@@ -496,7 +616,7 @@ function ScopedRoleLogPanel({
     resetKey: `${role}:${filterKey}`,
   });
   const requestIDValues = searchParams.getAll('request_id');
-  const urlRequestID = validRequestID(requestIDValues.length === 1 ? requestIDValues[0] : null);
+  const urlRequestID = logRequestID(requestIDValues.length === 1 ? requestIDValues[0] : null);
   const [selectedID, setSelectedID] = useState<string | null>(requestID ?? urlRequestID);
   const previousURLID = useRef(urlRequestID);
   const previousPropID = useRef(requestID);
@@ -521,19 +641,22 @@ function ScopedRoleLogPanel({
     scopeReady,
     pageParam: 'attempt_page',
     pageSizeParam: 'attempt_page_size',
+    clearOnWindowChange: ATTEMPT_SEQ_PARAM,
   });
+  const attemptSeqValues = searchParams.getAll(ATTEMPT_SEQ_PARAM);
+  const focusAttemptSeq =
+    role !== 'user' &&
+    selectedID !== null &&
+    selectedID === urlRequestID &&
+    attemptSeqValues.length === 1
+      ? logAttemptSequence(attemptSeqValues[0])
+      : undefined;
   const [revoked, setRevoked] = useState(false);
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
-  const observerEnabled = enabled && scopeReady && !revoked && !invalidFilter;
-  const logs = useRoleLogsPage(
-    role,
-    accountID,
-    pager.page,
-    pager.pageSize,
-    filter,
-    observerEnabled,
-  );
+  const observerEnabled = enabled && scopeReady && !revoked;
+  const listEnabled = observerEnabled && !invalidFilter;
+  const logs = useRoleLogsPage(role, accountID, pager.page, pager.pageSize, filter, listEnabled);
   const detail = useRoleLogDetailPage(
     role,
     accountID,
@@ -541,18 +664,21 @@ function ScopedRoleLogPanel({
     attemptPager.page,
     attemptPager.pageSize,
     observerEnabled,
+    focusAttemptSeq,
   );
-  const authorityError = isFinalAuthorityError(sessionError)
-    ? sessionError
-    : isFinalAuthorityError(logs.error)
-      ? logs.error
-      : isFinalAuthorityError(detail.error)
-        ? detail.error
-        : null;
+  const authorityError =
+    revokedError ??
+    (logAccessLost(sessionError)
+      ? sessionError
+      : logAccessLost(logs.error)
+        ? logs.error
+        : logAccessLost(detail.error)
+          ? detail.error
+          : null);
   const retainedLogData = useRetainedQueryData(
     { data: logs.data, error: authorityError ?? logs.error },
     [role, accountID],
-    observerEnabled,
+    listEnabled,
   );
   const authorityClosed = revoked || authorityError !== null;
 
@@ -566,13 +692,32 @@ function ScopedRoleLogPanel({
       { filters: {}, fromUnix: undefined, toUnix: undefined },
       { clearDetail: true, replace: true },
     );
+    for (const kind of ['page', 'detail-page', 'headers']) {
+      queryClient.removeQueries({ queryKey: [...numberedLogKeys.root(role), kind, accountID] });
+    }
     if (isUnauthorized(authorityError))
       clearStationSession(queryClient, role === 'admin' ? 'admin' : 'steward');
     onAuthorityLoss?.();
-  }, [authorityError, onAuthorityLoss, patchUrlState, queryClient, role]);
+  }, [accountID, authorityError, onAuthorityLoss, patchUrlState, queryClient, role]);
 
   const fields = useMemo<readonly LogFilterField[]>(() => {
     const values: LogFilterField[] = [
+      {
+        name: 'outcome',
+        label: t('logs.outcomeFilter'),
+        ariaLabel: t('logs.outcomeFilter'),
+        options: [
+          { value: '', label: t('common.all') },
+          { value: 'failed', label: t('logs.finalFailure') },
+          { value: 'success', label: t('logs.finalSuccess') },
+          ...(role === 'user'
+            ? []
+            : [
+                { value: 'before_dispatch', label: t('logs.beforeDispatch') },
+                { value: 'actual_backoff', label: t('logs.actualBackoff') },
+              ]),
+        ],
+      },
       {
         name: 'operation',
         label: t('logs.operation'),
@@ -608,8 +753,7 @@ function ScopedRoleLogPanel({
         label: t('common.userId'),
         ariaLabel: t('common.userId'),
         placeholder: t('common.operations.logs.presentation.userPlaceholder'),
-        inputType: 'number',
-        maxLength: 39,
+        inputMode: 'numeric',
       });
     if (role !== 'user') {
       values.push(
@@ -637,7 +781,7 @@ function ScopedRoleLogPanel({
         label: t('logs.callerDiscordId'),
         ariaLabel: t('logs.callerDiscordId'),
         placeholder: t('common.operations.logs.discordFilterHint'),
-        maxLength: 20,
+        inputMode: 'numeric',
       });
       values.push({
         name: 'usage_total_mismatch',
@@ -652,7 +796,7 @@ function ScopedRoleLogPanel({
         name: 'endpoint_key_id',
         label: t('common.operations.logs.endpointKeyId'),
         ariaLabel: t('common.operations.logs.endpointKeyId'),
-        maxLength: 19,
+        inputMode: 'numeric',
       });
       values.push({
         name: 'endpoint_base_url',
@@ -683,10 +827,10 @@ function ScopedRoleLogPanel({
     });
     values.push({
       name: 'status',
-      label: t('common.status'),
-      ariaLabel: t('common.status'),
-      inputType: 'number',
-      maxLength: 3,
+      label: t('logs.httpStatus'),
+      ariaLabel: t('logs.httpStatus'),
+      inputMode: 'numeric',
+      placeholder: t('logs.statusExample'),
     });
     return values;
   }, [role, t]);
@@ -698,13 +842,20 @@ function ScopedRoleLogPanel({
         ? t(RESULT_LABEL_KEYS[row.caller_result_class])
         : t('common.operations.logs.resultValue.pending');
 
+  const alertOrigin =
+    role === 'admin' && searchParams.has('return_to')
+      ? listReturnPath({ returnTo: searchParams.get('return_to') }, '/alerts')
+      : undefined;
+  const [lookupReset, setLookupReset] = useState(0);
   const clearDetailURL = () => {
     setSearchParams(
       (previous) => {
         const next = new URLSearchParams(previous);
+        next.delete('return_to');
         next.delete('request_id');
         next.delete('attempt_page');
         next.delete('attempt_page_size');
+        next.delete(ATTEMPT_SEQ_PARAM);
         const actualPage = logs.data?.pagination.page;
         if (actualPage !== undefined) next.set('page', actualPage);
         next.set('page_size', String(pager.pageSize));
@@ -722,22 +873,27 @@ function ScopedRoleLogPanel({
     setSelectedID(id);
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
+      next.delete('return_to');
       next.set('request_id', id);
       const actualPage = logs.data?.pagination.page;
       if (actualPage !== undefined) next.set('page', actualPage);
       next.set('page_size', String(pager.pageSize));
       next.delete('attempt_page');
       next.delete('attempt_page_size');
+      next.delete(ATTEMPT_SEQ_PARAM);
       return next;
     });
   };
-  const applyFilters = (next: {
-    filters: Record<string, string>;
-    fromUnix?: number;
-    toUnix?: number;
-  }) => {
+  const applyFilters = (
+    next: {
+      filters: Record<string, string>;
+      fromUnix?: number;
+      toUnix?: number;
+    },
+    keepFilters?: readonly string[],
+  ) => {
     setSelectedID(null);
-    patchUrlState({ ...next, page: 1 }, { clearDetail: true });
+    patchUrlState({ ...next, page: 1 }, { clearDetail: true, keepFilters });
   };
 
   const routeSummary = (route: LogRouteKind) =>
@@ -762,13 +918,26 @@ function ScopedRoleLogPanel({
           ) +
           ' · ' +
           routeSummary(row.route_kind);
-    return model ? (
-      <>
-        <span className="mono">{model}</span>
-        <span className="nb-sub">{kind}</span>
-      </>
-    ) : (
-      <span>{kind}</span>
+    const charity = row.route_kind.startsWith('charity_');
+    const mode =
+      charity && (row.requested_streaming == null ? t('logs.modeUnknown') : requestMode(row));
+    return (
+      <span className="log-model">
+        {model && (
+          <span className="mono" title={model}>
+            {model}
+          </span>
+        )}
+        <span className={model ? 'nb-sub' : undefined}>
+          {kind}
+          {mode && (
+            <>
+              {' '}
+              · <span>{mode}</span>
+            </>
+          )}
+        </span>
+      </span>
     );
   };
   const usageCell = (row: RoleLogRow) => {
@@ -843,6 +1012,7 @@ function ScopedRoleLogPanel({
                 <LogOriginIdentity
                   value={row}
                   role={row.role}
+                  canOpen={canReadUsers}
                   compact
                   nickname={
                     row.origin_discord_id &&
@@ -867,21 +1037,16 @@ function ScopedRoleLogPanel({
       key: 'result',
       header: t('common.operations.logs.result'),
       cell: 'status',
-      render: (row) => <LogResultBadge row={row} />,
-    },
-    {
-      key: 'request-facts',
-      header: t('common.operations.logs.facts.title'),
-      cell: 'meta',
-      render: (row) =>
-        row.route_kind.startsWith('charity_') ? (
-          <>
-            <span>{requestMode(row)}</span>
-            <span className="nb-sub">{actionText(row)}</span>
-          </>
-        ) : (
-          '—'
-        ),
+      render: (row) => (
+        <>
+          <LogResultBadge row={row} />
+          {row.route_kind.startsWith('charity_') && row.automatic_actions?.length !== 0 && (
+            <span className="nb-sub">
+              {row.automatic_actions == null ? t('logs.actionsUnknown') : actionText(row)}
+            </span>
+          )}
+        </>
+      ),
     },
     { key: 'usage', header: t('logs.tokens'), cell: 'meta', align: 'num', render: usageCell },
     {
@@ -898,7 +1063,7 @@ function ScopedRoleLogPanel({
   ];
 
   const modelManagement = (row: RoleLogRow) =>
-    row.role !== 'user' && row.route_kind.startsWith('charity_') ? (
+    canReadModels && row.role !== 'user' && row.route_kind.startsWith('charity_') ? (
       row.charity_model_id ? (
         <Link
           className="nb-btn nb-btn--secondary"
@@ -912,8 +1077,14 @@ function ScopedRoleLogPanel({
       )
     ) : null;
 
-  const resultHint = (row: RoleLogRow) => {
+  const resultHint = (row: RoleLogRow, hasFailureSummary: boolean) => {
     const result = logResult(row);
+    if (!result.hint) return null;
+    if (['keyHint', 'rateHint', 'retryHint'].includes(result.hint)) {
+      if (row.role === 'user' && row.route_kind.startsWith('charity_'))
+        return t('common.operations.logs.presentation.charityUpstreamHint');
+      if (hasFailureSummary) return null;
+    }
     const hintKeys = {
       creditsHint: 'common.operations.logs.presentation.creditsHint',
       keyHint: 'common.operations.logs.presentation.keyHint',
@@ -921,7 +1092,7 @@ function ScopedRoleLogPanel({
       retryHint: 'common.operations.logs.presentation.retryHint',
       discoveryAcceptedHint: 'common.operations.logs.discoveryAcceptedHint',
     } as const;
-    return result.hint ? t(hintKeys[result.hint]) : null;
+    return t(hintKeys[result.hint]);
   };
 
   let detailBody: ReactNode = null;
@@ -929,20 +1100,55 @@ function ScopedRoleLogPanel({
   else if (selectedID && detail.error)
     detailBody =
       isApiError(detail.error) && detail.error.code === 'not_found' ? (
-        <p role="status">{t('common.operations.logs.requestUnavailable')}</p>
+        <p role="status">
+          {t(
+            role === 'user'
+              ? 'common.operations.logs.requestUnavailable'
+              : focusAttemptSeq !== undefined
+                ? 'common.operations.logs.attemptUnavailable'
+                : 'logs.lookupMissing',
+          )}
+        </p>
       ) : (
         <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
       );
 
   const detailData = detail.error ? undefined : detail.data;
   const detailRequest = detailData ? requestFrom(detailData) : null;
+  const failureGroups =
+    role !== 'user' && detailData && 'failure_summary' in detailData
+      ? detailData.failure_summary
+      : undefined;
+  const attemptSummaries =
+    detailData && 'attempts' in detailData
+      ? detailData.attempts.data.map((attempt) => {
+          const status =
+            attempt.status_code == null
+              ? undefined
+              : attempt.result_kind === 'response'
+                ? 'HTTP ' + attempt.status_code
+                : t('common.operations.logs.recordedStatus') + ' ' + attempt.status_code;
+          return [
+            t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq }),
+            attempt.result_kind === 'synthetic'
+              ? t('common.operations.logs.platformRecord')
+              : undefined,
+            status,
+            attempt.upstream_model_id,
+            attempt.role !== 'user' && detailRequest && isCharityRoute(detailRequest.route_kind)
+              ? attemptHealthSummary(attempt, t, formatDateTime)
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+        })
+      : [];
   const detailFields =
     detailData && detailRequest
       ? [
           {
             label: t('common.operations.logs.request'),
-            technical: true,
-            value: <span className="mono">{detailRequest.id}</span>,
+            value: <CopyValue value={detailRequest.id} label={t('logs.lookupLabel')} />,
           },
           ...(role !== 'user' &&
           (detailRequest.role === 'admin' || detailRequest.role === 'steward')
@@ -953,7 +1159,13 @@ function ScopedRoleLogPanel({
                 },
                 {
                   label: t('common.history.originalIdentity'),
-                  value: <LogOriginIdentity value={detailRequest} role={detailRequest.role} />,
+                  value: (
+                    <LogOriginIdentity
+                      canOpen={canReadUsers}
+                      value={detailRequest}
+                      role={detailRequest.role}
+                    />
+                  ),
                 },
                 {
                   label: t('logs.caller'),
@@ -1013,24 +1225,6 @@ function ScopedRoleLogPanel({
                 { label: t('logs.rejectionReason'), value: detailRequest.rejection_reason },
               ]
             : []),
-          ...(detailRequest.phase === 'pre_handler' || detailRequest.rejection_detail
-            ? [
-                {
-                  label: t('logs.rejectionDetail'),
-                  value: detailRequest.rejection_detail
-                    ? `${rejectionFieldDescription(detailRequest.rejection_detail.field)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
-                    : t('logs.rejectionDetailMissing'),
-                },
-                ...(detailRequest.rejection_detail?.suggestion
-                  ? [
-                      {
-                        label: t('logs.rejectionSuggestion'),
-                        value: rejectionDescription(detailRequest.rejection_detail.suggestion),
-                      },
-                    ]
-                  : []),
-              ]
-            : []),
           ...(detailRequest.phase === 'pre_handler'
             ? [
                 {
@@ -1083,37 +1277,6 @@ function ScopedRoleLogPanel({
               </span>
             ),
           },
-          ...('attempts' in detailData
-            ? [
-                {
-                  label: t('common.operations.logs.attempts'),
-                  wide: true,
-                  value: (
-                    <Fold
-                      key={detailRequest.id}
-                      plain
-                      defaultOpen={detailRequest.route_kind === 'model_discovery'}
-                      title={t('common.operations.logs.attempts')}
-                      summary={
-                        'attempt_count' in detailRequest ? detailRequest.attempt_count : undefined
-                      }
-                    >
-                      <AttemptTable
-                        detail={detailData}
-                        logReturnTo={logReturnTo}
-                        role={role}
-                        accountID={accountID}
-                        endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
-                        page={attemptPager.page}
-                        busy={detail.isFetching}
-                        onPageChange={attemptPager.setPage}
-                        onPageSizeChange={attemptPager.setPageSize}
-                      />
-                    </Fold>
-                  ),
-                },
-              ]
-            : []),
           ...('kind' in detailData && detailData.kind === 'charity'
             ? [
                 {
@@ -1163,143 +1326,258 @@ function ScopedRoleLogPanel({
 
   const pageData = invalidFilter ? undefined : retainedLogData;
   const listBusy = logs.isFetching;
+  const exportMenu = !invalidFilter ? (
+    <details className="nb-more log-export">
+      <summary className="nb-btn nb-btn--secondary nb-btn--sm">
+        {t('common.operations.logs.presentation.export')} ▾
+      </summary>
+      <div className="nb-more__menu">
+        {(['csv', 'json'] as const).map((format) => (
+          <a key={format} href={roleLogExportPath(role, filter, format)} download>
+            {t(
+              format === 'csv'
+                ? 'common.operations.logs.presentation.exportCsv'
+                : 'common.operations.logs.presentation.exportJson',
+            )}
+          </a>
+        ))}
+      </div>
+    </details>
+  ) : null;
   return (
     <Card className={`ops-stack log-panel log-panel--${role}`}>
-      <div className="card-title-row">
-        {role !== 'user' && <h2>{title}</h2>}
-        {!invalidFilter && (
-          <details className="nb-more log-export">
-            <summary className="nb-btn nb-btn--secondary">
-              {t('common.operations.logs.presentation.export')} ▾
-            </summary>
-            <div className="nb-more__menu">
-              {(['csv', 'json'] as const).map((format) => (
-                <a key={format} href={roleLogExportPath(role, filter, format)} download>
-                  {t(
-                    format === 'csv'
-                      ? 'common.operations.logs.presentation.exportCsv'
-                      : 'common.operations.logs.presentation.exportJson',
-                  )}
-                </a>
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
+      {role === 'steward' ? (
+        <div className="card-title-row">
+          <h2>{title}</h2>
+          {exportMenu}
+        </div>
+      ) : null}
       {role !== 'user' ? <GlobalPressure role={role} accountID={accountID} /> : null}
-      <LogFilters station={station} fields={fields} state={urlState} onApply={applyFilters} />
-      {invalidFilter ? (
-        <p className="field-error" role="alert">
-          {t(
-            invalidDiscordFilter
-              ? 'common.operations.logs.invalidDiscordFilter'
-              : 'common.operations.logs.invalidKeyFilter',
-          )}
-        </p>
-      ) : null}
-      {role !== 'user' && filter.endpoint_key_id ? (
-        <p className="inline-notice" role="status">
-          {t('common.operations.logs.keyFilterNotice', { id: filter.endpoint_key_id })}
-        </p>
-      ) : null}
-      {!invalidFilter ? (
-        <QueryFeedback
-          query={{
-            ...logs,
-            data: pageData,
-            retained: logs.data === undefined && pageData !== undefined,
-          }}
-        />
-      ) : null}
-      {invalidFilter ? null : logs.error && !pageData ? (
-        <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-      ) : pageData ? (
-        <div className="ops-stack" aria-busy={listBusy}>
-          {logs.error ? (
-            <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-          ) : null}
-          {pageData.data.length === 0 ? (
-            <EmptyState title={empty} body={emptyBody} />
-          ) : (
-            <LogTable
-              caption={title}
-              columns={columns}
-              rows={pageData.data}
-              rowKey={(row) => row.id}
-              actions={(row) => (
-                <div className="ops-actions">
-                  <Button type="button" onClick={() => openDetail(row.id)}>
-                    {t('logs.details')}
-                  </Button>
-                  {modelManagement(row)}
-                </div>
-              )}
+      {alertOrigin && !selectedID && <Link to={alertOrigin}>{t('logs.returnToAlert')}</Link>}
+      <InspectionWorkspace
+        selected={selectedID}
+        title={t('logs.drawerTitle') + (selectedID ? ' ' + selectedID : '')}
+        closeLabel={t('common.close')}
+        onClose={closeDetail}
+        detail={
+          <LogReadError value={setRevokedError}>
+            {alertOrigin && (
+              <Link className="nb-btn nb-btn--secondary" to={alertOrigin}>
+                {t('logs.returnToAlert')}
+              </Link>
+            )}
+            <LogDetailPanel
+              key={selectedID}
+              fields={detailFields}
+              headers={
+                role !== 'user' && detailRequest ? (
+                  <HeaderFacts role={role} accountID={accountID} requestID={detailRequest.id} />
+                ) : null
+              }
+              diagnostics={
+                detailRequest
+                  ? {
+                      label: t('common.operations.logs.request'),
+                      text: [
+                        detailRequest.id,
+                        formatDateTime(detailRequest.started_at),
+                        resultLabel(detailRequest),
+                        detailRequest.request_path,
+                        detailRequest.caller_error_code,
+                        detailRequest.caller_status,
+                        detailRequest.rejection_detail?.field,
+                        detailRequest.rejection_detail &&
+                          rejectionDescription(detailRequest.rejection_detail.reason),
+                        ...attemptSummaries,
+                      ]
+                        .filter((value) => value != null)
+                        .join('\n'),
+                    }
+                  : undefined
+              }
+              result={
+                detailRequest ? (
+                  <>
+                    <Note
+                      tone={logResult(detailRequest).tone}
+                      title={t(
+                        logResultCopyKey(
+                          role,
+                          logResult(detailRequest).key,
+                          detailRequest.rejection_reason ?? detailRequest.caller_error_code,
+                        ),
+                        {
+                          status: detailRequest.caller_status ?? '—',
+                        },
+                      )}
+                    >
+                      {detailRequest.phase === 'pre_handler' && (
+                        <p>
+                          {t('logs.stoppedBeforeDispatch', { status: detailRequest.caller_status })}
+                        </p>
+                      )}
+                      {(detailRequest.phase === 'pre_handler' ||
+                        detailRequest.rejection_detail) && (
+                        <div className="log-outcome__reason">
+                          <strong>{t('logs.rejectionDetail')}</strong>
+                          <p>
+                            {detailRequest.rejection_detail
+                              ? `${rejectionFieldLabel(detailRequest.rejection_detail.field, t)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
+                              : t('logs.rejectionDetailMissing')}
+                          </p>
+                        </div>
+                      )}
+                      {detailRequest.rejection_detail?.suggestion ? (
+                        <div className="log-outcome__reason">
+                          <strong>{t('logs.rejectionSuggestion')}</strong>
+                          <p>{rejectionDescription(detailRequest.rejection_detail.suggestion)}</p>
+                        </div>
+                      ) : (
+                        resultHint(detailRequest, Boolean(failureGroups?.length))
+                      )}
+                    </Note>
+                    {Boolean(failureGroups?.length) && (
+                      <AttemptFailureSummary groups={failureGroups} />
+                    )}
+                    {detailData && 'route_decision' in detailData && detailData.route_decision && (
+                      <RequestRouteDecision decision={detailData.route_decision} />
+                    )}
+                    {detailData && 'attempts' in detailData && (
+                      <>
+                        {attemptSummaries.length > 0 && (
+                          <ol className="log-attempt-summary" aria-label={t('logs.attemptSummary')}>
+                            {attemptSummaries.map((line, index) => (
+                              <li key={index}>{line}</li>
+                            ))}
+                          </ol>
+                        )}
+                        <AttemptTable
+                          key={detailRequest.id}
+                          detail={detailData}
+                          logReturnTo={logReturnTo}
+                          role={role}
+                          accountID={accountID}
+                          canReadModels={canReadModels}
+                          endpointKeyID={role === 'user' ? undefined : filter.endpoint_key_id}
+                          page={attemptPager.page}
+                          busy={detail.isFetching}
+                          onRefresh={() => void detail.refetch()}
+                          focusAttemptSeq={focusAttemptSeq}
+                          locatingFocus={focusAttemptSeq !== undefined && detail.isPlaceholderData}
+                          onPageChange={attemptPager.setPage}
+                          onPageSizeChange={attemptPager.setPageSize}
+                        />
+                      </>
+                    )}
+                    {(detailRequest.phase !== 'pre_handler' ||
+                      (detailRequest.role !== 'user' && detailRequest.charity_model_id)) &&
+                      modelManagement(detailRequest)}
+                    <Fold
+                      plain
+                      title={t('common.failure.deliveryTitle')}
+                      defaultOpen={detailData?.delivery?.failed === true}
+                      key={detailRequest.id}
+                    >
+                      <RequestDelivery
+                        delivery={detailData?.delivery}
+                        result={resultLabel(detailRequest)}
+                      />
+                    </Fold>
+                  </>
+                ) : null
+              }
             />
-          )}
-          <PagePagination
-            metadata={pageData.pagination}
-            requestedPage={logs.data === undefined ? undefined : pager.page}
-            busy={listBusy}
-            onPageChange={(page) => {
-              if (logs.error && page === pager.page) void logs.refetch();
-              else pager.setPage(page);
-            }}
-            onPageSizeChange={(size) => {
-              if (logs.error && size === pager.pageSize) void logs.refetch();
-              else pager.setPageSize(size);
+          </LogReadError>
+        }
+      >
+        <LogSearch onOpenRequest={openDetail} resetKey={lookupReset}>
+          <LogFilters
+            station={station}
+            fields={fields}
+            state={urlState}
+            linkErrors={
+              invalidFilter
+                ? {
+                    ...(invalidDiscordFilter
+                      ? { discord_id: t('common.operations.logs.invalidDiscordFilter') }
+                      : {}),
+                    ...(invalidKeyFilter
+                      ? { endpoint_key_id: t('common.operations.logs.invalidKeyFilter') }
+                      : {}),
+                  }
+                : undefined
+            }
+            onResetLookup={() => setLookupReset((value) => value + 1)}
+            onApply={applyFilters}
+            toolbarActions={role !== 'steward' ? exportMenu : undefined}
+          />
+        </LogSearch>
+        {role !== 'user' && filter.endpoint_key_id ? (
+          <p className="inline-notice" role="status">
+            {t('common.operations.logs.keyFilterNotice', { id: filter.endpoint_key_id })}
+          </p>
+        ) : null}
+        {!invalidFilter ? (
+          <QueryFeedback
+            query={{
+              ...logs,
+              data: pageData,
+              retained: logs.data === undefined && pageData !== undefined,
             }}
           />
-        </div>
-      ) : logs.isPending ? (
-        <LoadingState />
-      ) : (
-        <LoadingState />
-      )}
-      {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
-      <LogDetailPanel
-        open={Boolean(selectedID) && !invalidFilter}
-        onClose={closeDetail}
-        title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
-        fields={detailFields}
-        headers={
-          role !== 'user' && detailRequest ? (
-            <HeaderFacts role={role} accountID={accountID} requestID={detailRequest.id} />
-          ) : null
-        }
-        diagnostics={
-          detailRequest
-            ? {
-                label: t('common.operations.logs.request'),
-                text: [
-                  detailRequest.id,
-                  detailRequest.caller_error_code,
-                  detailRequest.caller_status,
-                ]
-                  .filter((value) => value !== null)
-                  .join(' · '),
-              }
-            : undefined
-        }
-        result={
-          detailRequest ? (
-            <>
-              {modelManagement(detailRequest)}
-              <RequestDelivery
-                delivery={detailData?.delivery}
-                result={resultLabel(detailRequest)}
+        ) : null}
+        {invalidFilter ? null : logs.error && !pageData ? (
+          <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
+        ) : pageData ? (
+          <div className="ops-stack" aria-busy={listBusy}>
+            {logs.error ? (
+              <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
+            ) : null}
+            {pageData.data.length === 0 ? (
+              <EmptyState title={empty} body={emptyBody} />
+            ) : (
+              <LogTable
+                caption={title}
+                columns={columns}
+                rows={pageData.data}
+                rowKey={(row) => row.id}
+                actions={(row) => (
+                  <div className="ops-actions">
+                    <Button
+                      type="button"
+                      data-inspect-id={row.id}
+                      data-inspect-trigger=""
+                      aria-current={selectedID === row.id || undefined}
+                      onClick={() => openDetail(row.id)}
+                    >
+                      {t('logs.details')}
+                    </Button>
+                    {row.role !== 'user' && row.charity_model_id ? modelManagement(row) : null}
+                  </div>
+                )}
               />
-              <Note
-                tone={logResult(detailRequest).tone}
-                title={t(logResultCopyKey(role, logResult(detailRequest).key), {
-                  status: detailRequest.caller_status ?? '—',
-                })}
-              >
-                {resultHint(detailRequest)}
-              </Note>
-            </>
-          ) : null
-        }
-      />
+            )}
+            <PagePagination
+              metadata={pageData.pagination}
+              requestedPage={logs.data === undefined ? undefined : pager.page}
+              busy={listBusy}
+              onPageChange={(page) => {
+                if (logs.error && page === pager.page) void logs.refetch();
+                else pager.setPage(page);
+              }}
+              onPageSizeChange={(size) => {
+                if (logs.error && size === pager.pageSize) void logs.refetch();
+                else pager.setPageSize(size);
+              }}
+            />
+          </div>
+        ) : logs.isPending ? (
+          <LoadingState />
+        ) : (
+          <LoadingState />
+        )}
+        {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
+      </InspectionWorkspace>
     </Card>
   );
 }

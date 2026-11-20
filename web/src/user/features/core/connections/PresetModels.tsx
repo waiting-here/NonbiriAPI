@@ -1,3 +1,5 @@
+import { CoreErrorPanel } from '../components';
+import type { DiscoveryModel } from './types';
 import { Link, useLocation } from 'react-router';
 import { getModel } from '../api';
 import { useEffect, useRef, useState } from 'react';
@@ -8,7 +10,7 @@ import { MODEL_TYPES, type ModelType } from '@shared/modelTypes';
 import { ModelTypesField } from '@shared/components/ModelTypesField';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { Field, Fold, Note } from '@shared/components/ui';
-import { listModelsPage } from '../pageApi';
+import { getCatalogPage, listModelsPage } from '../pageApi';
 import { ConnectionResourceList } from './ResourceList';
 import type { Endpoint, EndpointKey, Model } from '../types';
 import { useConnectionOperation } from './useConnectionOperation';
@@ -26,10 +28,10 @@ export function PresetModels({
 }) {
   const { t } = useTranslation();
   return (
-    <Fold title={t('common.connections.adoptModelSuggestions')} lazy>
+    <Fold plain title={t('common.connections.adoptModelSuggestions')} lazy>
       <Note>{t('common.connections.suggestionsNeedSelection')}</Note>
       {mappings.map((mapping) => (
-        <Fold key={mapping.model_id} title={mapping.model_id} lazy>
+        <Fold plain key={mapping.model_id} title={mapping.model_id} lazy>
           <PresetModelRow
             accountId={accountId}
             mapping={mapping}
@@ -53,18 +55,22 @@ export function PresetModelRow({
   grants,
   rowId,
   bulk,
+  collapsed = false,
   editableUpstream = false,
   grantsByEntry = false,
   initialProvider = '',
+  catalogEntry,
   onState,
   register,
 }: {
   accountId: string;
   rowId?: string;
   bulk?: { provider: string; types: ModelType[]; generation: number };
+  collapsed?: boolean;
   editableUpstream?: boolean;
   grantsByEntry?: boolean;
   initialProvider?: string;
+  catalogEntry?: DiscoveryModel['catalogEntry'];
   onState?: (id: string, state: MappingSaveState) => void;
   register?: (id: string, save: () => Promise<boolean>) => void;
   mapping: ModelMapping;
@@ -89,6 +95,9 @@ export function PresetModelRow({
   const [catalogs, setCatalogs] = useState<Record<string, boolean>>({});
   const active = useRef('');
   const [complete, setComplete] = useState(false);
+  const [catalogProof, setCatalogProof] = useState(catalogEntry);
+  const [missingSource, setMissingSource] = useState(false);
+  const [readError, setReadError] = useState<Error>();
   if (bulk && generation !== bulk.generation) {
     setGeneration(bulk.generation);
     if (!edited && !model) {
@@ -133,7 +142,12 @@ export function PresetModelRow({
           target.key.id +
           '\u0000' +
           (names[target.entry.entry_id] ?? target.entry.upstream_model_id);
-        if (!catalogs[identity]) {
+        if (
+          (!catalogProof ||
+            (names[target.entry.entry_id] ?? target.entry.upstream_model_id) !==
+              mapping.model_id) &&
+          !catalogs[identity]
+        ) {
           active.current = identity;
           await operation.run({
             kind: 'manual',
@@ -160,6 +174,13 @@ export function PresetModelRow({
       }
       if (!saved) return false;
       const input = targets.map((target) => ({
+        ...((names[target.entry.entry_id] ?? target.entry.upstream_model_id) === mapping.model_id &&
+        catalogProof
+          ? {
+              catalog_entry_id: catalogProof.catalog_entry_id,
+              expected_pair_revision: catalogProof.expected_pair_revision,
+            }
+          : {}),
         endpoint_key_id: target.key.id,
         upstream_model_id: names[target.entry.entry_id] ?? target.entry.upstream_model_id,
         native_services: target.services,
@@ -169,14 +190,65 @@ export function PresetModelRow({
         row: mapping.model_id,
         modelId: saved.id,
         revision: saved.binding_revision,
-        selection: { ...input[0]!, targets: input },
+        selection: {
+          endpoint_key_id: input[0]!.endpoint_key_id,
+          upstream_model_id: input[0]!.upstream_model_id,
+          targets: input,
+        },
       });
       return true;
     } catch {
       return false;
     }
   };
+  const reviewCurrent = async () => {
+    if (!model) return;
+    setReadError(undefined);
+    try {
+      const current = await getModel(model.id);
+      const target = targets[0];
+      if (
+        catalogProof &&
+        target &&
+        (names[target.entry.entry_id] ?? target.entry.upstream_model_id) === mapping.model_id
+      ) {
+        const catalog = await getCatalogPage(
+          target.endpoint.id,
+          target.key.id,
+          { page: '1', pageSize: 10 },
+          catalogProof.source,
+          undefined,
+          mapping.model_id,
+          true,
+        );
+        const candidates = [...catalog.automatic_entries, ...catalog.manual_entries];
+        const row =
+          candidates.find((item) => item.id === catalogProof.catalog_entry_id) ?? candidates[0];
+        if (!row) {
+          setMissingSource(true);
+          return;
+        }
+        setCatalogProof({
+          ...catalogProof,
+          catalog_entry_id: row.id,
+          expected_pair_revision: row.pair_revision,
+        });
+        setMissingSource(false);
+      }
+      setModel(current);
+      operation.reset();
+    } catch (error) {
+      setReadError(error as Error);
+    }
+  };
   const ready =
+    !(
+      missingSource &&
+      targets.some(
+        (target) =>
+          (names[target.entry.entry_id] ?? target.entry.upstream_model_id) === mapping.model_id,
+      )
+    ) &&
     targets.length > 0 &&
     targets.every(
       (target) =>
@@ -190,6 +262,7 @@ export function PresetModelRow({
   useEffect(() => {
     register?.(identity, save);
   });
+  if (collapsed) return null;
   if (complete)
     return (
       <div className="nb-stack">
@@ -212,32 +285,28 @@ export function PresetModelRow({
         const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
         const selected = selectedServices(entry);
         return (
-          <div key={entry.entry_id}>
-            <Field
-              label={
-                (endpoint?.note || endpoint?.base_url || t('common.connections.entryNotCreated')) +
-                ' · ' +
-                entry.upstream_model_id
-              }
-            >
-              {(props) => (
-                <input
-                  {...props}
-                  type="checkbox"
-                  checked={Boolean(selected)}
-                  disabled={locked || !key}
-                  onChange={(event) =>
-                    setServices((previous) => {
-                      const next = { ...previous };
-                      if (event.target.checked)
-                        next[entry.entry_id] = key?.native_services?.slice() ?? [];
-                      else next[entry.entry_id] = null;
-                      return next;
-                    })
-                  }
-                />
-              )}
-            </Field>
+          <div key={entry.entry_id} className="nb-stack nb-stack--sm">
+            <label className="core-checkbox">
+              <input
+                type="checkbox"
+                checked={Boolean(selected)}
+                disabled={locked || !key}
+                onChange={(event) =>
+                  setServices((previous) => {
+                    const next = { ...previous };
+                    if (event.target.checked)
+                      next[entry.entry_id] = key?.native_services?.slice() ?? [];
+                    else next[entry.entry_id] = null;
+                    return next;
+                  })
+                }
+              />
+              <span>
+                {(endpoint?.note || endpoint?.base_url || t('common.connections.entryNotCreated')) +
+                  ' · ' +
+                  entry.upstream_model_id}
+              </span>
+            </label>
             {editableUpstream && selected ? (
               <Field
                 label={
@@ -295,6 +364,7 @@ export function PresetModelRow({
               scope={identity}
               listType="mapping-existing-models"
               title={t('common.connections.existingModel')}
+              emptyDescription={t('common.connections.noExistingModel')}
               searchPlaceholder={t('common.connections.modelSearch')}
               load={(window, q, signal) => listModelsPage(window, signal, { q })}
               rowKey={(row) => row.id}
@@ -363,17 +433,19 @@ export function PresetModelRow({
           {t('common.connections.modelSaved')} · {model.full_name}
         </Note>
       )}
+      {readError ? (
+        <CoreErrorPanel compact error={readError} onRetry={() => void reviewCurrent()} />
+      ) : null}
+      {missingSource ? <Note tone="warn">{t('user.services.noMatchingModels')}</Note> : null}
       <ConnectionOperationNotice operation={operation} />
+      {operation.outcome === 'conflict' && model && catalogEntry ? (
+        <Note tone="warn">{t('user.services.selectionChanged')}</Note>
+      ) : null}
       {operation.outcome === 'conflict' && model ? (
         <button
           type="button"
           className="nb-btn nb-btn--secondary"
-          onClick={() =>
-            void getModel(model.id).then((current) => {
-              setModel(current);
-              operation.reset();
-            })
-          }
+          onClick={() => void reviewCurrent()}
         >
           {t('common.connections.useCurrentRevision')}
         </button>

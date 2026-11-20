@@ -1,0 +1,869 @@
+{
+  "schemaVersion": 1,
+  "canvasWidth": 1024,
+  "canvasHeight": 1024,
+  "groundY": 920,
+  "bones": [
+    {
+      "id": "root",
+      "parent": null,
+      "pivotX": 512,
+      "pivotY": 920
+    },
+    {
+      "id": "torso",
+      "parent": "root",
+      "pivotX": 512,
+      "pivotY": 680
+    },
+    {
+      "id": "head",
+      "parent": "torso",
+      "pivotX": 512,
+      "pivotY": 520
+    },
+    {
+      "id": "ahoge",
+      "parent": "head",
+      "pivotX": 445,
+      "pivotY": 138,
+      "spring": {
+        "stiffness": 170,
+        "damping": 12,
+        "maxAngleDeg": 25
+      }
+    },
+    {
+      "id": "ear_l",
+      "parent": "head",
+      "pivotX": 300,
+      "pivotY": 390,
+      "spring": {
+        "stiffness": 130,
+        "damping": 14,
+        "maxAngleDeg": 15
+      }
+    },
+    {
+      "id": "ear_r",
+      "parent": "head",
+      "pivotX": 724,
+      "pivotY": 390,
+      "spring": {
+        "stiffness": 130,
+        "damping": 14,
+        "maxAngleDeg": 15
+      }
+    },
+    {
+      "id": "hair_back",
+      "parent": "head",
+      "pivotX": 512,
+      "pivotY": 320,
+      "spring": {
+        "stiffness": 70,
+        "damping": 18,
+        "maxAngleDeg": 10
+      }
+    },
+    {
+      "id": "hair_side_l",
+      "parent": "head",
+      "pivotX": 335,
+      "pivotY": 360,
+      "spring": {
+        "stiffness": 80,
+        "damping": 14,
+        "maxAngleDeg": 18
+      }
+    },
+    {
+      "id": "hair_side_r",
+      "parent": "head",
+      "pivotX": 689,
+      "pivotY": 360,
+      "spring": {
+        "stiffness": 80,
+        "damping": 14,
+        "maxAngleDeg": 18
+      }
+    },
+    {
+      "id": "arm_l",
+      "parent": "torso",
+      "pivotX": 436,
+      "pivotY": 578
+    },
+    {
+      "id": "arm_r",
+      "parent": "torso",
+      "pivotX": 588,
+      "pivotY": 578
+    },
+    {
+      "id": "hand_prop",
+      "parent": "arm_r",
+      "pivotX": 594,
+      "pivotY": 634
+    },
+    {
+      "id": "leg_l",
+      "parent": "torso",
+      "pivotX": 454,
+      "pivotY": 825
+    },
+    {
+      "id": "leg_r",
+      "parent": "torso",
+      "pivotX": 570,
+      "pivotY": 825
+    },
+    {
+      "id": "tail_base",
+      "parent": "torso",
+      "pivotX": 535,
+      "pivotY": 785,
+      "spring": {
+        "stiffness": 65,
+        "damping": 20,
+        "maxAngleDeg": 25
+      }
+    },
+    {
+      "id": "tail_tip",
+      "parent": "tail_base",
+      "pivotX": 815,
+      "pivotY": 747,
+      "spring": {
+        "stiffness": 85,
+        "damping": 18,
+        "maxAngleDeg": 30
+      }
+    }
+  ],
+  "slots": [
+    {
+      "id": "tail",
+      "bone": "tail_base",
+      "zIndex": 10,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/tail.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "hair_back",
+      "bone": "hair_back",
+      "zIndex": 20,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/hair_back.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "leg_l",
+      "bone": "leg_l",
+      "zIndex": 30,
+      "defaultVariant": "maid_classic",
+      "variants": {
+        "maid_classic": {
+          "file": "outfits/maid_classic/leg_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sailor_breeze": {
+          "file": "outfits/sailor_breeze/leg_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "coral_pajama": {
+          "file": "outfits/coral_pajama/leg_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "leg_r",
+      "bone": "leg_r",
+      "zIndex": 31,
+      "defaultVariant": "maid_classic",
+      "variants": {
+        "maid_classic": {
+          "file": "outfits/maid_classic/leg_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sailor_breeze": {
+          "file": "outfits/sailor_breeze/leg_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "coral_pajama": {
+          "file": "outfits/coral_pajama/leg_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "torso_outfit",
+      "bone": "torso",
+      "zIndex": 48,
+      "defaultVariant": "maid_classic",
+      "variants": {
+        "maid_classic": {
+          "file": "outfits/maid_classic/torso.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sailor_breeze": {
+          "file": "outfits/sailor_breeze/torso.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "coral_pajama": {
+          "file": "outfits/coral_pajama/torso.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "arm_l",
+      "bone": "arm_l",
+      "zIndex": 52,
+      "defaultVariant": "maid_classic",
+      "variants": {
+        "maid_classic": {
+          "file": "outfits/maid_classic/arm_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sailor_breeze": {
+          "file": "outfits/sailor_breeze/arm_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "coral_pajama": {
+          "file": "outfits/coral_pajama/arm_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "arm_r",
+      "bone": "arm_r",
+      "zIndex": 53,
+      "defaultVariant": "maid_classic",
+      "variants": {
+        "maid_classic": {
+          "file": "outfits/maid_classic/arm_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sailor_breeze": {
+          "file": "outfits/sailor_breeze/arm_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "coral_pajama": {
+          "file": "outfits/coral_pajama/arm_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "hand_prop",
+      "bone": "hand_prop",
+      "zIndex": 55,
+      "defaultVariant": "none",
+      "variants": {
+        "none": {
+          "file": "props/none.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "silver_fish": {
+          "file": "props/silver_fish.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "berry_cake": {
+          "file": "props/berry_cake.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "pearl": {
+          "file": "props/pearl.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "ear_fin_l",
+      "bone": "ear_l",
+      "zIndex": 60,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/ear_fin_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "ear_fin_r",
+      "bone": "ear_r",
+      "zIndex": 61,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/ear_fin_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "head_base",
+      "bone": "head",
+      "zIndex": 70,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/head_base.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "blush",
+      "bone": "head",
+      "zIndex": 75,
+      "defaultVariant": "normal",
+      "variants": {
+        "normal": {
+          "file": "face/blush_normal.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "heavy": {
+          "file": "face/blush_heavy.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "pout_cheek": {
+          "file": "face/blush_pout_cheek.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "eyes_iris",
+      "bone": "head",
+      "zIndex": 80,
+      "defaultVariant": "cheerful",
+      "variants": {
+        "cheerful": {
+          "file": "face/eyes_cheerful.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "deadpan": {
+          "file": "face/eyes_deadpan.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "wide": {
+          "file": "face/eyes_wide.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "teary": {
+          "file": "face/eyes_teary.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "happy": {
+          "file": "face/eyes_happy.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "dizzy": {
+          "file": "face/eyes_dizzy.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "eyelids",
+      "bone": "head",
+      "zIndex": 85,
+      "defaultVariant": "open",
+      "variants": {
+        "open": {
+          "file": "face/eyelids_open.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "half": {
+          "file": "face/eyelids_half.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "closed": {
+          "file": "face/eyelids_closed.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "mouth",
+      "bone": "head",
+      "zIndex": 90,
+      "defaultVariant": "cheerful",
+      "variants": {
+        "cheerful": {
+          "file": "face/mouth_cheerful.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "deadpan": {
+          "file": "face/mouth_deadpan.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "chew_open": {
+          "file": "face/mouth_chew_open.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "chew_munched": {
+          "file": "face/mouth_chew_munched.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "pout": {
+          "file": "face/mouth_pout.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "panicked_o": {
+          "file": "face/mouth_panicked_o.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sad": {
+          "file": "face/mouth_sad.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "smile": {
+          "file": "face/mouth_smile.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "face_fx",
+      "bone": "head",
+      "zIndex": 95,
+      "defaultVariant": "none",
+      "variants": {
+        "none": {
+          "file": "face/fx_none.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sweat": {
+          "file": "face/fx_sweat.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "tears": {
+          "file": "face/fx_tears.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "anger_vein": {
+          "file": "face/fx_anger_vein.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "brows",
+      "bone": "head",
+      "zIndex": 100,
+      "defaultVariant": "cheerful",
+      "variants": {
+        "cheerful": {
+          "file": "face/brows_cheerful.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "deadpan": {
+          "file": "face/brows_deadpan.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "angry": {
+          "file": "face/brows_angry.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "worried": {
+          "file": "face/brows_worried.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sad": {
+          "file": "face/brows_sad.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "hair_side_l",
+      "bone": "hair_side_l",
+      "zIndex": 110,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/hair_side_l.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "hair_side_r",
+      "bone": "hair_side_r",
+      "zIndex": 111,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/hair_side_r.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "hair_front",
+      "bone": "head",
+      "zIndex": 120,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/hair_front.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "headwear",
+      "bone": "head",
+      "zIndex": 125,
+      "defaultVariant": "maid_classic",
+      "variants": {
+        "maid_classic": {
+          "file": "outfits/maid_classic/headwear.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "sailor_breeze": {
+          "file": "outfits/sailor_breeze/headwear.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        },
+        "coral_pajama": {
+          "file": "outfits/coral_pajama/headwear.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "ahoge",
+      "bone": "ahoge",
+      "zIndex": 140,
+      "defaultVariant": "default",
+      "variants": {
+        "default": {
+          "file": "base/ahoge.webp",
+          "offsetX": 0,
+          "offsetY": 0,
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    }
+  ],
+  "outfits": [
+    {
+      "id": "maid_classic",
+      "name": "经典深海女仆装",
+      "description": "深海军蓝金纹、鲸鱼围裙与宝石领结",
+      "slotOverrides": {
+        "torso_outfit": "maid_classic",
+        "arm_l": "maid_classic",
+        "arm_r": "maid_classic",
+        "leg_l": "maid_classic",
+        "leg_r": "maid_classic",
+        "headwear": "maid_classic"
+      }
+    },
+    {
+      "id": "sailor_breeze",
+      "name": "晴空海风水手服",
+      "description": "白底蓝领水手服、百褶裙与迷你船员帽",
+      "slotOverrides": {
+        "torso_outfit": "sailor_breeze",
+        "arm_l": "sailor_breeze",
+        "arm_r": "sailor_breeze",
+        "leg_l": "sailor_breeze",
+        "leg_r": "sailor_breeze",
+        "headwear": "sailor_breeze"
+      }
+    },
+    {
+      "id": "coral_pajama",
+      "name": "珊瑚绒泡泡睡衣",
+      "description": "待重制预留槽位",
+      "slotOverrides": {
+        "torso_outfit": "coral_pajama",
+        "arm_l": "coral_pajama",
+        "arm_r": "coral_pajama",
+        "leg_l": "coral_pajama",
+        "leg_r": "coral_pajama",
+        "headwear": "coral_pajama"
+      }
+    }
+  ],
+  "expressions": [
+    {
+      "id": "cheerful",
+      "name": "元气笑颜",
+      "slotOverrides": {
+        "eyes_iris": "cheerful",
+        "brows": "cheerful",
+        "mouth": "cheerful",
+        "blush": "normal",
+        "face_fx": "none",
+        "eyelids": "open"
+      }
+    },
+    {
+      "id": "deadpan",
+      "name": "发呆死鱼眼",
+      "slotOverrides": {
+        "eyes_iris": "deadpan",
+        "brows": "deadpan",
+        "mouth": "deadpan",
+        "blush": "normal",
+        "face_fx": "none",
+        "eyelids": "open"
+      }
+    },
+    {
+      "id": "happy_eat",
+      "name": "幸福干饭",
+      "slotOverrides": {
+        "eyes_iris": "happy",
+        "brows": "cheerful",
+        "mouth": "chew_open",
+        "blush": "heavy",
+        "face_fx": "none",
+        "eyelids": "open"
+      }
+    },
+    {
+      "id": "pout",
+      "name": "鼓腮气呼呼",
+      "slotOverrides": {
+        "eyes_iris": "wide",
+        "brows": "angry",
+        "mouth": "pout",
+        "blush": "pout_cheek",
+        "face_fx": "anger_vein",
+        "eyelids": "open"
+      }
+    },
+    {
+      "id": "panicked",
+      "name": "抓包惊慌",
+      "slotOverrides": {
+        "eyes_iris": "wide",
+        "brows": "worried",
+        "mouth": "panicked_o",
+        "blush": "normal",
+        "face_fx": "sweat",
+        "eyelids": "open"
+      }
+    },
+    {
+      "id": "teary",
+      "name": "饥饿委屈",
+      "slotOverrides": {
+        "eyes_iris": "teary",
+        "brows": "sad",
+        "mouth": "sad",
+        "blush": "normal",
+        "face_fx": "tears",
+        "eyelids": "open"
+      }
+    },
+    {
+      "id": "headpat_bliss",
+      "name": "摸头享受",
+      "slotOverrides": {
+        "eyes_iris": "happy",
+        "brows": "cheerful",
+        "mouth": "smile",
+        "blush": "heavy",
+        "face_fx": "none",
+        "eyelids": "closed"
+      }
+    }
+  ]
+}

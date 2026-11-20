@@ -22,7 +22,7 @@ func TestAttendanceRoutesAutomaticAwardsExportAndDeletion(t *testing.T) {
 	}
 	zone := time.FixedZone("site", 480*60)
 	tomorrow := f.now().In(zone).AddDate(0, 0, 1).Format(time.DateOnly)
-	in := attendance.Input{Title: "A new day", Description: "Automatic rewards", StartDate: tomorrow, EndDate: tomorrow, Mode: "cumulative", Published: true, Tiers: []attendance.TierInput{{Days: 1, Rewards: []rewardasset.Item{{Asset: "general", Quantity: "1.125"}, {Asset: "game", Quantity: "2"}}}}}
+	in := attendance.Input{Title: "A new day", Description: "Automatic rewards", StartDate: tomorrow, EndDate: tomorrow, Mode: "cumulative", Published: true, Tiers: []attendance.TierInput{{Days: 1, Rewards: []rewardasset.Item{{Asset: "general", Quantity: "1.125"}, {Asset: "game", Quantity: "2"}, {Asset: "whale:pearls", Quantity: "6"}, {Asset: "whale:conch_shards", Quantity: "3"}}}}}
 	if r := f.request("POST", "/admin/api/attendance", in, f.users[0].Cookie, true); r.Code != http.StatusUnauthorized && r.Code != http.StatusForbidden {
 		t.Fatal("user configured attendance", r.Code)
 	}
@@ -60,7 +60,7 @@ func TestAttendanceRoutesAutomaticAwardsExportAndDeletion(t *testing.T) {
 	}
 	code, raw := request(body, "http://"+f.cfg.UserHost, "attendance-sign-in-key-0001")
 	var result attendance.SignInResult
-	if code != http.StatusOK || json.Unmarshal(raw, &result) != nil || result.AlreadySigned || len(result.Awards) != 1 || len(result.Awards[0].Results) != 2 {
+	if code != http.StatusOK || json.Unmarshal(raw, &result) != nil || result.AlreadySigned || len(result.Awards) != 1 || len(result.Awards[0].Results) != 4 {
 		t.Fatal(code, string(raw))
 	}
 	code, raw = request(body, "http://"+f.cfg.UserHost, "attendance-sign-in-key-0001")
@@ -92,12 +92,13 @@ func TestAttendanceRoutesAutomaticAwardsExportAndDeletion(t *testing.T) {
 	if err = json.Unmarshal(account("/api/account/export", ""), &document); err != nil {
 		t.Fatal(err)
 	}
+	assertUnadoptedWhaleAward(t, document.WhaleHaven, 6, 3, "attendance_tier", p.ID+":1")
 	var exported attendance.UserExport
-	if document.SchemaVersion != 36 || json.Unmarshal(document.Attendance, &exported) != nil || len(exported.SignIns) != 1 || len(exported.Periods) != 1 || !exported.Periods[0].Tiers[0].Awarded {
+	if document.SchemaVersion != 38 || json.Unmarshal(document.Attendance, &exported) != nil || len(exported.SignIns) != 1 || len(exported.Periods) != 1 || !exported.Periods[0].Tiers[0].Awarded {
 		t.Fatal("attendance export missing", string(document.Attendance))
 	}
 	account("/api/account/delete", `{"confirm":"DELETE"}`)
-	for _, table := range []string{"attendance_progress", "attendance_sign_ins", "attendance_awards"} {
+	for _, table := range []string{"attendance_progress", "attendance_sign_ins", "attendance_awards", "whale_haven_assets", "whale_haven_movements"} {
 		var count int
 		if err = f.store.DB().QueryRow("SELECT count(*) FROM "+table+" WHERE user_id=?", userID).Scan(&count); err != nil || count != 0 {
 			t.Fatal(table, count, err)

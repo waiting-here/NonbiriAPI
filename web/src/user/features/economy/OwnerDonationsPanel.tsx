@@ -27,7 +27,6 @@ import {
   Field,
   FilterBar,
   Fold,
-  MoreMenu,
   Panel,
   PanelBody,
   PanelHead,
@@ -264,7 +263,6 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
             });
           }}
           activeCount={status ? 1 : 0}
-          secondaryAlwaysVisible
           onSubmit={search}
           search={
             <>
@@ -285,24 +283,22 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
                   />
                 )}
               </Field>
+              <Field label={t('user.charity.ownerPages.status')} size="short">
+                {(props) => (
+                  <select
+                    {...props}
+                    value={status}
+                    onChange={(event) => setFilter('donation_status', event.target.value)}
+                  >
+                    {statuses.map((value) => (
+                      <option key={value} value={value}>
+                        {value ? t(`common.connections.donationStates.${value}`) : t('common.all')}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
             </>
-          }
-          secondary={
-            <Field label={t('user.charity.ownerPages.status')}>
-              {(props) => (
-                <select
-                  {...props}
-                  value={status}
-                  onChange={(event) => setFilter('donation_status', event.target.value)}
-                >
-                  {statuses.map((value) => (
-                    <option key={value} value={value}>
-                      {value ? t(`common.connections.donationStates.${value}`) : t('common.all')}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
           }
         />
         {view === 'history' || view === 'hidden' ? (
@@ -327,31 +323,34 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
         {query.isPending ? <LoadingState /> : null}
         {query.data && !accessLost(query.error) ? (
           <>
-            <PagePagination
-              alwaysShowJump
-              metadata={query.data.pagination}
-              requestedPage={pager.page}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-              busy={query.isFetching}
-            />
             {!query.data.data.length ? (
               <EmptyState
                 title={t('user.charity.noDonations')}
                 body={t('user.charity.ownerPages.noMatches')}
               />
+            ) : (
+              <div className="economy-donation-list nb-list" aria-busy={query.isFetching}>
+                {query.data.data.map((item) => (
+                  <DonationSummary
+                    key={item.id}
+                    item={item}
+                    disabled={query.isFetching || Boolean(query.error)}
+                    returnTo={`${location.pathname}${location.search}`}
+                    onOpenKeys={() => select(item.id)}
+                  />
+                ))}
+              </div>
+            )}
+            {query.data.data.length > 0 || pager.page !== '1' ? (
+              <PagePagination
+                alwaysShowJump
+                metadata={query.data.pagination}
+                requestedPage={pager.page}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+                busy={query.isFetching}
+              />
             ) : null}
-            <div className="economy-donation-list nb-list" aria-busy={query.isFetching}>
-              {query.data.data.map((item) => (
-                <DonationSummary
-                  key={item.id}
-                  item={item}
-                  disabled={query.isFetching || Boolean(query.error)}
-                  returnTo={`${location.pathname}${location.search}`}
-                  onOpenKeys={() => select(item.id)}
-                />
-              ))}
-            </div>
           </>
         ) : null}
         {expanded && !accessLost(query.error) ? (
@@ -472,10 +471,9 @@ function DonationSummary({
             {t('user.charity.openDonationDetail')}
           </Link>
         )}
-        <MoreMenu
-          label={t('user.charity.presentation.donationActions')}
-          items={[{ label: t('user.charity.ownerPages.keys'), disabled, onSelect: onOpenKeys }]}
-        />
+        <Button type="button" variant="secondary" disabled={disabled} onClick={onOpenKeys}>
+          {t('user.charity.ownerPages.keys')}
+        </Button>
       </div>
     </article>
   );
@@ -564,14 +562,6 @@ export function OwnerDonationKeys({
         {query.isPending ? <LoadingState /> : null}
         {query.data && !accessLost(query.error) ? (
           <>
-            <PagePagination
-              alwaysShowJump
-              metadata={query.data.pagination}
-              requestedPage={pager.page}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-              busy={query.isFetching}
-            />
             {!query.data.data.length ? <p>{t('user.charity.noRemainingKeys')}</p> : null}
             <fieldset
               className="ops-unframed"
@@ -602,7 +592,7 @@ export function OwnerDonationKeys({
                           </p>
                         ))}
                         {BigInt(key.ruleCount) > BigInt(key.rules.length) ? (
-                          <p className="muted">
+                          <p className="nb-muted">
                             {t('user.charity.ownerPages.rulesPreview', {
                               shown: key.rules.length,
                               total: key.ruleCount,
@@ -616,6 +606,16 @@ export function OwnerDonationKeys({
                 />
               ))}
             </fieldset>
+            {query.data.data.length > 0 || pager.page !== '1' ? (
+              <PagePagination
+                alwaysShowJump
+                metadata={query.data.pagination}
+                requestedPage={pager.page}
+                onPageChange={pager.setPage}
+                onPageSizeChange={pager.setPageSize}
+                busy={query.isFetching}
+              />
+            ) : null}
           </>
         ) : null}
       </Tabs>

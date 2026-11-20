@@ -3,6 +3,9 @@ import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 const keys = {
   description: 'user.models.description',
   callName: 'user.models.callName',
+  createHelp: 'user.models.createHelp',
+  open: 'user.models.open',
+  settingsSummary: 'user.models.settingsSummary',
   prefixHelp: 'user.models.prefixHelp',
   clientValue: 'user.models.clientValue',
   sources: 'user.models.sources',

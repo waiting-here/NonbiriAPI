@@ -17,7 +17,7 @@ import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useOperation } from '@shared/operations/useOperation';
 import { readEndpointKey, readResourceResult, resourceStatus } from './resourceOperation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { Navigate, Link, useLocation, useNavigate } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { PageHeader, SectionHead } from '@shared/components/States';
@@ -29,6 +29,7 @@ import { usePagePager } from '@shared/operations/usePagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
   getEndpoint,
+  getEndpointKey,
   getCatalog,
   createEndpointKey,
   createManualEntries,
@@ -51,7 +52,6 @@ import {
   StatusPill,
 } from './components';
 import { useCoreCopy } from './copy';
-import { useQuickstartCopy } from './quickstartCopy';
 import {
   applyManualUpdateToCache,
   coreKeys,
@@ -156,7 +156,7 @@ function AddEndpointKeyForm({
   const [queue, setQueue] = useState(() => keyQueueDraft());
   const retryAllowed = useRef(false);
   const [needsSecret, setNeedsSecret] = useState(false);
-  const { t: text } = useQuickstartCopy();
+  const { t: text } = useTranslation();
   const operation = useOperation<Omit<EndpointKeyCreateInput, 'secret'>, string, EndpointKey>({
     authorityRoot: ['user', 'core'],
     clearSecrets: () => dispatch({ type: 'cancel', accountId, pageInstanceId: instance }),
@@ -327,7 +327,7 @@ function AddEndpointKeyForm({
         />
       ) : null}
       <p className="core-inline-warning">{t('endpoints.costWarning')}</p>
-      {outcome === 'unknown' && needsSecret ? <p>{text('secretAgain')}</p> : null}
+      {outcome === 'unknown' && needsSecret ? <p>{text('user.quickstart.secretAgain')}</p> : null}
       {draft.message && !outcome ? <p className="core-inline-error">{draft.message}</p> : null}
       <OutcomeNotice
         outcome={outcome}
@@ -341,7 +341,7 @@ function AddEndpointKeyForm({
           {busy
             ? t('common.working')
             : hasAttempt
-              ? text('checkResult')
+              ? text('user.quickstart.checkResult')
               : t('endpoints.addKeyStep')}
         </button>
       </FormActions>
@@ -961,10 +961,12 @@ function EndpointKeyCard({
   suppressRoutePanel = false,
   onChooseConnection,
   initialModelsOpen = false,
+  summaryOnly = false,
   initialEditing = false,
   onModelsLockChange,
 }: {
   initialModelsOpen?: boolean;
+  summaryOnly?: boolean;
   initialEditing?: boolean;
   onModelsLockChange?: (locked: boolean) => void;
   accountId: string;
@@ -999,11 +1001,26 @@ function EndpointKeyCard({
   const [catalogReveal, setCatalogReveal] = useState(0);
   const routesOpen = new URLSearchParams(location.search).has(`routes_${keyData.id}_page`);
   const showModels = modelsOpen || (routesOpen && !suppressRoutePanel);
+  const focusKey = (edit = false, routes = false) => {
+    const next = new URLSearchParams(location.search);
+    next.set('focus_key_id', keyData.id);
+    if (edit) next.set('edit_key', '1');
+    if (routes) next.set('routes_' + keyData.id + '_page', '1');
+    navigate(location.pathname + '?' + next.toString(), { state: location.state });
+  };
   const openModels = () => {
+    if (summaryOnly) {
+      focusKey();
+      return;
+    }
     setModelsVisited(true);
     setModelsOpen(true);
   };
   const openRoutes = () => {
+    if (summaryOnly) {
+      focusKey(false, true);
+      return;
+    }
     setModelsVisited(true);
     const params = new URLSearchParams(location.search);
     if (!routesOpen) params.set(`routes_${keyData.id}_page`, '1');
@@ -1161,6 +1178,10 @@ function EndpointKeyCard({
       onChooseConnection();
       return;
     }
+    if (summaryOnly) {
+      focusKey(true);
+      return;
+    }
     closeModels();
     setCatalogReveal((current) => current + 1);
     if (!editing) {
@@ -1267,6 +1288,7 @@ function EndpointKeyCard({
             <button
               type="button"
               className="nb-btn nb-btn--secondary nb-btn--sm"
+              id={summaryOnly ? 'key-models-' + keyData.id : undefined}
               onClick={openModels}
             >
               {ui('user.services.viewModels')}
@@ -1278,6 +1300,10 @@ function EndpointKeyCard({
                   label: <span title={blockTitle}>{ui('user.services.editKey')}</span>,
                   disabled: actionBlocked,
                   onSelect: () => {
+                    if (summaryOnly) {
+                      focusKey(true);
+                      return;
+                    }
                     setNote(keyData.note);
                     setEditRevision(keyData.revision);
                     setMaxConcurrency(String(keyData.max_concurrency));
@@ -1396,138 +1422,140 @@ function EndpointKeyCard({
           </td>
         </tr>
       ) : null}
-      <tr className="core-key-panels" hidden={!showModels && !editing}>
-        <td colSpan={6}>
-          <ExpandablePanel
-            open={showModels}
-            onClose={() => {
-              if (!modelsLocked) closeModels();
-            }}
-            busy={modelsLocked}
-            title={`${ui('user.services.viewModels')} · ${keyName || display}`}
-            closeLabel={t('common.close')}
-          >
-            {modelsVisited || routesOpen ? (
-              <>
-                <ServiceModelSetup
-                  onLockChange={setModelsLocked}
-                  accountId={accountId}
-                  entry={endpoint}
-                  entryKey={keyData}
-                />
-                <KeyBrowseSummary
-                  accountId={accountId}
-                  endpointId={endpoint.id}
-                  keyData={keyData}
-                  onRefresh={onRefresh}
-                />
-              </>
-            ) : null}
-          </ExpandablePanel>
-          <ExpandablePanel
-            open={editing}
-            onClose={() => {
-              if (!busy && !replayAttempt) {
-                setNote(keyData.note);
-                setEditing(false);
-              }
-            }}
-            title={ui('user.services.editKey')}
-            closeLabel={t('common.close')}
-            busy={busy || Boolean(replayAttempt)}
-          >
-            {editorVisited ? (
-              <KeyCredentialScope
-                accountId={accountId}
-                endpoint={endpoint}
-                entryKey={keyData}
-                defaultOpen={!hasCatalog}
-                revealCatalog={catalogReveal}
-              />
-            ) : null}
-            <p className="nb-muted">{t('browse.personalLimits')}</p>
-            <dl className="nb-facts">
-              <div>
-                <dt>{t('endpoints.storePolicy')}</dt>
-                <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
-              </div>
-              <div>
-                <dt>{t('common.updated')}</dt>
-                <dd>
-                  <CoreTime value={keyData.updated_at} />
-                </dd>
-              </div>
-            </dl>
-            <form
-              className="core-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run({
-                  kind: 'patch',
-                  input: {
-                    note,
-                    max_concurrency: Number(maxConcurrency),
-                    max_rpm: Number(maxRPM),
-                    ...keyQueueChanges(queue, keyData),
-                    expected_revision: editRevision,
-                  },
-                });
+      {!summaryOnly ? (
+        <tr className="core-key-panels" hidden={!showModels && !editing}>
+          <td colSpan={6}>
+            <ExpandablePanel
+              open={showModels}
+              onClose={() => {
+                if (!modelsLocked) closeModels();
               }}
+              busy={modelsLocked}
+              title={`${ui('user.services.viewModels')} · ${keyName || display}`}
+              closeLabel={t('common.close')}
             >
-              <Fields>
-                <Field label={t('endpoints.keyNote')} size="long">
-                  {(props) => (
-                    <input
-                      {...props}
-                      value={note}
-                      maxLength={2048}
-                      disabled={Boolean(replayAttempt)}
-                      onChange={(event) => setNote(event.target.value)}
-                    />
-                  )}
-                </Field>
-              </Fields>
-              <KeyLimitFields
-                concurrency={maxConcurrency}
-                rpm={maxRPM}
-                queue={queue}
-                onQueue={setQueue}
-                onConcurrency={setMaxConcurrency}
-                onRPM={setMaxRPM}
-                disabled={busy || Boolean(replayAttempt)}
-              />
-              <FormActions>
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
+              {modelsVisited || routesOpen ? (
+                <>
+                  <ServiceModelSetup
+                    onLockChange={setModelsLocked}
+                    accountId={accountId}
+                    entry={endpoint}
+                    entryKey={keyData}
+                  />
+                  <KeyBrowseSummary
+                    accountId={accountId}
+                    endpointId={endpoint.id}
+                    keyData={keyData}
+                    onRefresh={onRefresh}
+                  />
+                </>
+              ) : null}
+            </ExpandablePanel>
+            <ExpandablePanel
+              open={editing}
+              onClose={() => {
+                if (!busy && !replayAttempt) {
+                  setNote(keyData.note);
+                  setEditing(false);
+                }
+              }}
+              title={ui('user.services.editKey')}
+              closeLabel={t('common.close')}
+              busy={busy || Boolean(replayAttempt)}
+            >
+              {editorVisited ? (
+                <KeyCredentialScope
+                  accountId={accountId}
+                  endpoint={endpoint}
+                  entryKey={keyData}
+                  defaultOpen={!hasCatalog}
+                  revealCatalog={catalogReveal}
+                />
+              ) : null}
+              <p className="nb-muted">{t('browse.personalLimits')}</p>
+              <dl className="nb-facts">
+                <div>
+                  <dt>{t('endpoints.storePolicy')}</dt>
+                  <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
+                </div>
+                <div>
+                  <dt>{t('common.updated')}</dt>
+                  <dd>
+                    <CoreTime value={keyData.updated_at} />
+                  </dd>
+                </div>
+              </dl>
+              <form
+                className="core-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run({
+                    kind: 'patch',
+                    input: {
+                      note,
+                      max_concurrency: Number(maxConcurrency),
+                      max_rpm: Number(maxRPM),
+                      ...keyQueueChanges(queue, keyData),
+                      expected_revision: editRevision,
+                    },
+                  });
+                }}
+              >
+                <Fields>
+                  <Field label={t('endpoints.keyNote')} size="long">
+                    {(props) => (
+                      <input
+                        {...props}
+                        value={note}
+                        maxLength={2048}
+                        disabled={Boolean(replayAttempt)}
+                        onChange={(event) => setNote(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                </Fields>
+                <KeyLimitFields
+                  concurrency={maxConcurrency}
+                  rpm={maxRPM}
+                  queue={queue}
+                  onQueue={setQueue}
+                  onConcurrency={setMaxConcurrency}
+                  onRPM={setMaxRPM}
                   disabled={busy || Boolean(replayAttempt)}
-                  onClick={() => {
-                    setNote(keyData.note);
-                    setEditing(false);
-                  }}
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="nb-btn nb-btn--primary"
-                  disabled={
-                    busy ||
-                    reconciliationRequired ||
-                    Boolean(replayAttempt) ||
-                    (note === keyData.note &&
-                      Number(maxConcurrency) === keyData.max_concurrency &&
-                      Number(maxRPM) === keyData.max_rpm &&
-                      Object.keys(keyQueueChanges(queue, keyData)).length === 0)
-                  }
-                >
-                  {t('common.save')}
-                </button>
-              </FormActions>
-            </form>
-          </ExpandablePanel>
-        </td>
-      </tr>
+                />
+                <FormActions>
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--secondary"
+                    disabled={busy || Boolean(replayAttempt)}
+                    onClick={() => {
+                      setNote(keyData.note);
+                      setEditing(false);
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="submit"
+                    className="nb-btn nb-btn--primary"
+                    disabled={
+                      busy ||
+                      reconciliationRequired ||
+                      Boolean(replayAttempt) ||
+                      (note === keyData.note &&
+                        Number(maxConcurrency) === keyData.max_concurrency &&
+                        Number(maxRPM) === keyData.max_rpm &&
+                        Object.keys(keyQueueChanges(queue, keyData)).length === 0)
+                    }
+                  >
+                    {t('common.save')}
+                  </button>
+                </FormActions>
+              </form>
+            </ExpandablePanel>
+          </td>
+        </tr>
+      ) : null}
     </>
   );
 }
@@ -1536,11 +1564,13 @@ export function EndpointDetail({
   accountId,
   endpointId,
   embedded = false,
+  followService = false,
   onModelsLockChange,
 }: {
   accountId: string;
   endpointId: string;
   embedded?: boolean;
+  followService?: boolean;
   onModelsLockChange?: (locked: boolean) => void;
 }) {
   const [modelsLocked, setModelsLocked] = useState(false);
@@ -1550,7 +1580,6 @@ export function EndpointDetail({
   }, [modelsLocked, onModelsLockChange]);
   const { t } = useCoreCopy();
   const { t: text } = useTranslation();
-  const [selectedKeyId, setSelectedKeyId] = useState('');
   const { t: ui } = useRegisteredCopy(pageCopyKeys);
   const [adaptationCount, setAdaptationCount] = useState<number | null>(null);
   const [usingModels, setUsingModels] = useState(false);
@@ -1581,10 +1610,23 @@ export function EndpointDetail({
       page,
       pageSize,
     },
-    Boolean(accountId && endpointId),
+    Boolean(
+      accountId &&
+      endpointId &&
+      !focusKeyId &&
+      (!followService || (endpoint.data && !endpoint.data.connection_id)),
+    ),
     filters.filters,
   );
   useResourceListScroll(accountId, Boolean(keys.data) && !keys.isFetching);
+  const previousFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusKeyId) previousFocus.current = focusKeyId;
+    else if (previousFocus.current && keys.data && !keys.isFetching) {
+      document.getElementById('key-models-' + previousFocus.current)?.focus();
+      previousFocus.current = null;
+    }
+  }, [focusKeyId, keys.data, keys.isFetching]);
   const [addingKey, setAddingKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const donorReturn = location.state?.donationReturnTo;
@@ -1592,7 +1634,10 @@ export function EndpointDetail({
     typeof donorReturn === 'string' && /^\/charity(?:\/donations\/[1-9]\d*)?$/.test(donorReturn)
       ? donorReturn
       : null;
-  const returnTo = donationReturnTo ?? listReturnPath(location.state, '/endpoints');
+  const returnTo =
+    donationReturnTo === '/charity'
+      ? listReturnPath(location.state, '/charity')
+      : (donationReturnTo ?? listReturnPath(location.state, '/endpoints', '/issues'));
   type Intent =
     { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
   const retryAllowed = useRef(false);
@@ -1688,7 +1733,7 @@ export function EndpointDetail({
 
   if (endpoint.isPending && !endpoint.data)
     return (
-      <div className="page core-page">
+      <div className="page page--detail core-page">
         <CoreLoading />
       </div>
     );
@@ -1702,13 +1747,27 @@ export function EndpointDetail({
     (isNotFoundError(keys.error) && replayAttempt?.kind !== 'delete')
   )
     return (
-      <div className="page core-page">
+      <div className="page page--detail core-page">
         <CoreErrorPanel
           error={endpoint.error ?? keys.error ?? new Error('The endpoint details are unavailable.')}
           onRetry={() => void endpoint.refetch()}
         />
       </div>
     );
+
+  if (followService && endpoint.data.connection_id) {
+    const params = new URLSearchParams(location.search);
+    params.set('connection_id', endpoint.data.connection_id);
+    params.set('endpoint_id', endpointId);
+    params.set('connection_view', 'entries');
+    return (
+      <Navigate
+        replace
+        to={'/endpoints?' + params.toString() + location.hash}
+        state={location.state}
+      />
+    );
+  }
 
   const removeEndpoint = async () => {
     if (busy || reconciliationRequired || replayAttempt?.kind === 'patch') return;
@@ -1730,7 +1789,7 @@ export function EndpointDetail({
 
   return (
     <div
-      className={`${embedded ? '' : 'page core-page'} core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
+      className={`${embedded ? '' : 'page page--detail core-page'} core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
     >
       {embedded ? (
         <SectionHead
@@ -1762,7 +1821,9 @@ export function EndpointDetail({
                       ? 'user.charity.backToDonations'
                       : 'user.charity.backToDonation',
                   )
-                : t('endpoints.title')}
+                : returnTo.split('?')[0] === '/issues'
+                  ? text('user.records.issues')
+                  : t('endpoints.title')}
             </Link>
           }
           actions={
@@ -1953,7 +2014,9 @@ export function EndpointDetail({
                   endpoint={endpoint.data}
                   onSaved={(key) => {
                     setAddingKey(false);
-                    setSelectedKeyId(key.id);
+                    const next = new URLSearchParams(location.search);
+                    next.set('focus_key_id', key.id);
+                    navigate(location.pathname + '?' + next.toString(), { state: location.state });
                     void keys.refetch();
                   }}
                 />
@@ -1965,30 +2028,6 @@ export function EndpointDetail({
                 onClose={() => setAddingKey(false)}
               />
             )
-          ) : null}
-          {keys.data && keys.data.data.length > 1 && !focusKeyId ? (
-            <Field label={text('user.services.currentKey')}>
-              {(props) => (
-                <select
-                  {...props}
-                  disabled={modelsLocked}
-                  value={
-                    keys.data.data.some((row) => row.id === selectedKeyId)
-                      ? selectedKeyId
-                      : keys.data.data[0]!.id
-                  }
-                  onChange={(event) => setSelectedKeyId(event.target.value)}
-                >
-                  {keys.data.data.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {(row as EndpointKey & { credential_note?: string }).credential_note ||
-                        row.note ||
-                        row.display_head + '…' + row.display_tail}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
           ) : null}
           {keys.error && keys.data ? (
             <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
@@ -2021,27 +2060,20 @@ export function EndpointDetail({
                   </tr>
                 </thead>
                 <tbody>
-                  {keys.data.data
-                    .filter(
-                      (row) =>
-                        row.id ===
-                        (keys.data.data.some((item) => item.id === selectedKeyId)
-                          ? selectedKeyId
-                          : keys.data.data[0]?.id),
-                    )
-                    .map((keyData) => (
-                      <EndpointKeyCard
-                        initialModelsOpen
-                        onModelsLockChange={setModelsLocked}
-                        key={keyData.id}
-                        accountId={accountId}
-                        endpoint={endpoint.data}
-                        keyData={keyData}
-                        onRefresh={() => void keys.refetch()}
-                        suppressRoutePanel={usingModels}
-                        onChooseConnection={chooseConnection}
-                      />
-                    ))}
+                  {keys.data.data.map((keyData) => (
+                    <EndpointKeyCard
+                      summaryOnly={keys.data.pagination.total_items !== '1'}
+                      initialModelsOpen={keys.data.pagination.total_items === '1'}
+                      onModelsLockChange={setModelsLocked}
+                      key={keyData.id}
+                      accountId={accountId}
+                      endpoint={endpoint.data}
+                      keyData={keyData}
+                      onRefresh={() => void keys.refetch()}
+                      suppressRoutePanel={usingModels}
+                      onChooseConnection={chooseConnection}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -2140,7 +2172,7 @@ function FocusedEndpointKey({
   params.delete('edit_key');
   const current = useQuery({
     queryKey: [...coreKeys.endpointKeysRoot(accountId, endpoint.id), 'focused', keyId],
-    queryFn: ({ signal }) => readEndpointKey(endpoint.id, keyId, signal),
+    queryFn: ({ signal }) => getEndpointKey(endpoint.id, keyId, signal),
   });
   return (
     <section className="core-card">

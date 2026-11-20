@@ -11,7 +11,13 @@ describe('safe announcement rendering', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
+  it('renders a line break inside a Markdown paragraph', () => {
+    const { container } = render(<SafeAnnouncementBody html="<p>First line<br>Second line</p>" />);
+    expect(container.querySelector('p > br')?.nextSibling?.textContent).toBe('Second line');
+  });
+
   it.each([
+    '<br class="unexpected">',
     '<img src="https://example.com/pixel.png">',
     '<script>alert(1)</script>',
     '<a href="javascript:alert(1)">unsafe</a>',

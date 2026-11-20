@@ -60,6 +60,7 @@ export function DonationPendingBadge({
   }, [revoked, badge.error, client, role]);
   if (!eligible || revoked || lost) return null;
   const count = !badge.error ? badge.data?.pending_count : undefined;
+  if (count === '0') return null;
   const label =
     count === undefined
       ? t('common.donationHandling.badgeUnknown')

@@ -4,20 +4,22 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.3.12** adds optional administrator-controlled non-streaming
-JSON keepalives, bounds image-result pixels, reserves OAuth capacity per flow,
-and recognizes verified Google Gemini overloads for temporary backoff. Gacha
-adds five Christmas limited SSR cards and three R-18 Private Encore limited SSR
-cards, refines layered SSR/SP animation and full-screen Heartfelt Moments, and
-corrects character details. Its development preview includes bilingual copy
-review with importable and exportable edits.
-Backend changes shorten diagnostic writes, reuse sliding quota ranges and avoid
-idle image-task write transactions; see [performance validation](docs/performance-validation.md).
-Database schema remains 54 and account export remains format 36; existing databases
-on an earlier schema require the explicit offline upgrade before starting this
-version. See [service connections](docs/service-connections.md),
-[database upgrades](docs/database-upgrades.md) and [CHANGELOG](CHANGELOG.md).
-Source availability does not establish instance deployment status.
+**v1.4.0** improves service setup, model discovery, charity binding, request
+investigation and activity layouts across both stations. Donated keys can set
+total and recurring limits on credits, calls and total, input or output tokens
+for each upstream model. Recognized Google model quota errors put the affected
+model on hold while preserving the consecutive-failure count. Request logs
+can open details by exact request ID, and authorized management views show
+the recorded failure counts, waits and disablement triggers.
+
+Whale Haven lets players adopt and care for a whale, visit other open homes,
+hire consenting guest whales and earn social rewards. Whale coins and conch
+shards also work with site rewards and authorized user-resource management.
+The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
+
+This version uses database schema 55 and account export format 38. Upgrade
+existing installations offline through the v1.3.12 bridge.
+[Database upgrades](docs/database-upgrades.md) · [Changelog](CHANGELOG.md)
 
 ## Architecture
 
@@ -60,7 +62,7 @@ Attempt and request completion use small synchronous transaction batches when
 work overlaps. Success still requires a durable commit, and anonymous queue
 metrics distinguish application waiting from database pool waiting.
 
-Level-5 stewards have 54 per-account action permissions, six numeric limits and
+Level-5 stewards have 56 per-account action permissions, six numeric limits and
 a four-position donation scope, configured by administrators or actual level-6
 stewards. Standard scope, the default, requires at least one live donated key and every live
 key to have a mainstream source or a current binding to a mainstream charity
@@ -299,7 +301,7 @@ privacy rules remain unchanged. See the [diagnostic contract](docs/api-contract.
 
 ## Build and develop
 
-Use **Go 1.26.10**, **Node.js 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x)**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.
+Use **Go 1.26.11**, **Node.js 22.23.4+ (22.x), 24.22.1+ (24.x), or 26.12.1+ (26.x)**, **npm 12.0.1** and Bash; Windows uses Git Bash. The finished binary needs neither Node.js nor a C runtime.
 
 ```sh
 npm --prefix web ci
@@ -313,16 +315,13 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 53.
-The service opens only the exact current schema; older, newer, unknown or
-incomplete storage is rejected before migration, repair or recovery writes.
-For exact registered schema 16–26 and 33–52 sources, preserve a complete recovery
-set before deliberately running the matching standalone
-[upgrader](cmd/nonbiri-upgrade-v1/README.md) with `--check` or `--apply`.
-The service, startup scripts and deployment helpers must not apply upgrades
-implicitly. Account export uses format 36. Schema versions change when
-storage requires it, independently of software patch releases.
-Use the matching binaries' schema descriptors to check accepted sources.
+Fresh databases start in maintenance with public features closed and use schema 55.
+This version accepts existing storage through the v1.3.12 bridge. Stop the old
+service, preserve its complete recovery set, and use the matching standalone
+[upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert the exact schema 54
+database to schema 55. Earlier registered sources first use the v1.3.12
+upgrader. The service and deployment hooks leave conversion to the operator.
+Account export uses format 38.
 Upgrades are one-way: a server expecting an older or different schema cannot
 open the upgraded database, and there is no schema downgrade migration. Do not overwrite newly accepted data with an
 old snapshot.

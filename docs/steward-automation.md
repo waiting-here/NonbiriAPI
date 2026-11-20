@@ -282,6 +282,12 @@ unchanged. This requires a complete structured Google error from the native
 connector or official host; arbitrary 503 and authentication/billing failures do
 not qualify. A valid header, including zero or a past deadline, takes priority.
 The upstream error remains visible and this does not start the quota-trial schedule.
+For a Google 429 with a verified per-model request or input-token quota, a valid
+retry header or a positive `google.rpc.RetryInfo` duration sets the earliest
+retry for that upstream model on the affected service and credential. Binding
+service statuses expose `model_quota_reason` and `retry_after_until`. Check the
+quota window and time here before adjusting a key's failure policy. Other models
+on the same key can continue to serve requests.
 Other failures, except the recognized caller-parameter and input-length cases below, keep their ordinary counter behavior. This does not change automation authentication,
 creation limits, response budgets or failure-policy fields.
 

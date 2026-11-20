@@ -1,3 +1,6 @@
+.user-management {
+  container: users-workspace / inline-size;
+}
 .user-management .nb-md {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
@@ -17,6 +20,15 @@
 }
 .user-management .nb-md__list .card {
   padding: var(--nb-space-4);
+}
+.user-management .nb-md__list {
+  min-width: 0;
+  container: users-list / inline-size;
+}
+@container users-list (width < 40rem) {
+  .user-management .nb-table-wrap {
+    container: nb-card-table / inline-size;
+  }
 }
 .user-management .nb-table {
   table-layout: fixed;
@@ -38,9 +50,11 @@
   width: 24%;
 }
 .user-list-identity {
+  position: relative;
   display: grid;
-  gap: var(--nb-space-1);
+  gap: 0.125rem;
   min-width: 0;
+  align-content: center;
 }
 .user-list-identity > span {
   color: var(--nb-color-text-muted);
@@ -51,10 +65,12 @@
   font-variant-numeric: tabular-nums;
 }
 .user-list-name {
-  display: block;
-  width: 100%;
+  display: inline-block;
+  justify-self: start;
+  max-width: 100%;
   min-width: 0;
-  min-height: var(--nb-space-10);
+  min-height: 0;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -63,9 +79,14 @@
   background: transparent;
   color: var(--nb-color-accent);
   font: inherit;
-  font-weight: var(--nb-font-weight-medium);
+  font-weight: var(--nb-font-weight-semibold);
   text-align: start;
   cursor: pointer;
+}
+.user-list-name::after {
+  content: '';
+  position: absolute;
+  inset: -0.25rem 0;
 }
 .user-list-name:focus-visible {
   outline: 2px solid var(--nb-color-accent);
@@ -138,12 +159,12 @@
 .user-detail-back {
   margin-bottom: var(--nb-space-3);
 }
-@media (width >= 64rem) {
+@container users-workspace (width >= 64rem) {
   .user-detail-back {
     display: none;
   }
 }
-@media (width < 64rem) {
+@container users-workspace (width < 64rem) {
   .user-management .nb-md {
     display: block;
   }
@@ -182,7 +203,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-@media (width <= 48rem) {
+@container nb-card-table (width >= 0rem) {
+  .user-list-selection-heading .nb-table-check {
+    display: none;
+  }
   .user-management .nb-table td:has(.user-list-selection) {
     grid-column: 2;
     grid-row: 1;
@@ -222,12 +246,4 @@
   padding: 0;
   border: 0;
   min-width: 0;
-}
-
-.user-limit-select {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--nb-space-10);
-  min-height: var(--nb-space-10);
 }

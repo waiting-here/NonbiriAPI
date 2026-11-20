@@ -473,31 +473,19 @@ func (s *Service) completeAttemptTx(
 		if callbackCtx == nil || callbackTx == nil {
 			return ErrInvariant
 		}
-		if record.purpose == PurposeCharity {
-			if err := decrementClaimCapacityTx(callbackCtx, callbackTx, record.requestID); err != nil {
-				return err
-			}
-			if err := s.charity.CompleteAttempt(callbackCtx, callbackTx, CharityAttemptCompletion{
-				Attempt:     charityInput,
-				Actual:      charityActual,
-				RewardState: rewardState,
-			}); err != nil {
-				return fmt.Errorf("claim: persist charity attempt: %w", err)
-			}
-		}
 		_, err := callbackTx.ExecContext(callbackCtx, `INSERT INTO request_attempts(
 claim_id,request_log_id,attempt_seq,endpoint_id_snapshot,endpoint_key_id_snapshot,
 connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,upstream_code,diag,
 input_tokens,cache_write_input_tokens,cache_read_input_tokens,output_tokens,usage_unknown,
-usage_total_mismatch,usage_details,started_at,completed_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+usage_total_mismatch,usage_details,started_at,completed_at,streak_effect)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='charity' THEN 'pending' END)`,
 			record.claimID, record.requestLogID, record.attemptSeq,
 			nullableSQLInt64(snapshot.endpointID), nullableSQLInt64(snapshot.endpointKeyID),
 			snapshot.connectorType, snapshot.baseURL, snapshot.upstreamModel, outcome.Kind,
 			status, code, diag, outcome.Usage.UncachedInputTokens, outcome.Usage.CacheWriteInputTokens,
 			outcome.Usage.CacheReadInputTokens, outcome.Usage.OutputTokens, usageUnknown,
 			boolInt(outcome.Usage.TotalMismatch), usageinfo.Encode(outcome.Usage),
-			record.dispatchedAt.Int64, at)
+			record.dispatchedAt.Int64, at, record.purpose)
 		if err != nil {
 			return fmt.Errorf("claim: persist request attempt: %w", err)
 		}
@@ -508,6 +496,18 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			if _, err := callbackTx.ExecContext(callbackCtx, `INSERT INTO request_attempt_diagnostics(claim_id,request_log_id,attempt_seq,category,phase,details,completed_at) VALUES(?,?,?,?,?,?,?)`,
 				record.claimID, record.requestLogID, record.attemptSeq, facts.Category, facts.Phase, outcome.ErrorDiagnostics, at); err != nil {
 				return fmt.Errorf("claim: persist attempt diagnosis: %w", err)
+			}
+		}
+		// Folding can identify this attempt or a previously completed one as
+		// the threshold crossing. Both snapshots must already be readable.
+		if record.purpose == PurposeCharity {
+			if err := decrementClaimCapacityTx(callbackCtx, callbackTx, record.requestID); err != nil {
+				return err
+			}
+			if err := s.charity.CompleteAttempt(callbackCtx, callbackTx, CharityAttemptCompletion{
+				Attempt: charityInput, Actual: charityActual, RewardState: rewardState,
+			}); err != nil {
+				return fmt.Errorf("claim: persist charity attempt: %w", err)
 			}
 		}
 		if err := observability.RecordResponseHeadersTx(callbackCtx, callbackTx, record.requestID, record.attemptSeq); err != nil {
@@ -623,7 +623,8 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 	}
 	rejectionDetail := ""
 	if dispatchedClaims == 0 && input.Caller.Class == ResultFailed &&
-		(input.Caller.ErrorCode == httperr.CodeUnboundModel || input.Caller.ErrorCode == httperr.CodeRateLimited) {
+		(input.Caller.ErrorCode == httperr.CodeUnboundModel || input.Caller.ErrorCode == httperr.CodeRateLimited ||
+			((input.Caller.ErrorCode == httperr.CodeServiceUnavailable || input.Caller.ErrorCode == httperr.CodeInternal) && requestattempt.IsServiceAdmissionDetail(input.RejectionDetail))) {
 		rejectionDetail = requestattempt.EncodeDetail(input.RejectionDetail)
 	}
 	terminal := func(callbackCtx context.Context, callbackTx *sql.Tx) error {

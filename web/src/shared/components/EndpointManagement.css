@@ -1,19 +1,26 @@
-.endpoint-batch {
-  min-width: 0;
-  margin: 0;
-  padding: var(--nb-space-4);
-  border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
-}
-.endpoint-batch legend {
-  padding-inline: var(--nb-space-2);
-  font-weight: var(--nb-font-weight-semibold);
-}
-.endpoint-batch .nb-toolbar {
+.endpoint-batch-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
+  justify-content: space-between;
   gap: var(--nb-space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--nb-space-3) var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+}
+.endpoint-batch-bar__count {
+  display: grid;
+  gap: var(--nb-space-1);
+  align-self: center;
+}
+.endpoint-batch-bar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--nb-space-2);
 }
 .endpoint-management-url {
   overflow-wrap: anywhere;

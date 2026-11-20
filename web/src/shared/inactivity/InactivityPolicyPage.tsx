@@ -260,185 +260,191 @@ function Editor({
           ? '政策默认关闭。启用后系统定期执行；首次启用、重新启用或收紧规则至少给予 7 天宽限。'
           : 'Policies are disabled by default. Enabled policies run automatically. First enablement, re-enablement, and tighter rules grant at least seven days of grace.'}
       </p>
-      <form
-        ref={form}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (validate()) void perform(save);
-        }}
-      >
-        <fieldset disabled={pending} aria-label={zh ? '政策配置' : 'Policy configuration'}>
-          <h2 className="inactivity-config-title">{zh ? '政策配置' : 'Policy configuration'}</h2>
-          <Field
-            label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
-            size="medium"
-            help={
-              <>
-                {siteOffset === null
-                  ? zh
-                    ? '请先在站点设置中配置时区。'
-                    : 'Set the timezone in site settings first.'
-                  : `${zh ? '站点时区' : 'Site timezone'}: ${fixedOffsetZone(siteOffset)}`}{' '}
-                {zh
-                  ? '留空按账号到期时间执行。填写后，衰减和保护封禁在指定时刻到期，由分钟批次处理；周期为 1 天、时刻为 12:00 时，每天中午执行。更改时刻至少给予 7 天宽限。'
-                  : 'Leave blank to use each account’s due time. When set, decay and protective bans become due at this time and run in minute batches. A one-day interval at 12:00 runs daily at noon. Changing the time grants at least seven days of grace.'}
-              </>
-            }
-          >
-            {(field) => (
-              <input
-                {...field}
-                type="time"
-                aria-label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
-                step={60}
-                value={policy.execution_time ?? ''}
-                disabled={siteOffset === null}
-                onChange={(event) =>
-                  change({ ...policy, execution_time: event.target.value || undefined })
-                }
+      <div className="inactivity-workspace">
+        <form
+          ref={form}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (validate()) void perform(save);
+          }}
+        >
+          <fieldset disabled={pending} aria-label={zh ? '政策配置' : 'Policy configuration'}>
+            <h2 className="inactivity-config-title">{zh ? '政策配置' : 'Policy configuration'}</h2>
+            <Field
+              label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
+              size="medium"
+              help={
+                <>
+                  {siteOffset === null
+                    ? zh
+                      ? '请先在站点设置中配置时区。'
+                      : 'Set the timezone in site settings first.'
+                    : `${zh ? '站点时区' : 'Site timezone'}: ${fixedOffsetZone(siteOffset)}`}{' '}
+                  {zh
+                    ? '留空按账号到期时间执行。填写后，衰减和保护封禁在指定时刻到期，由分钟批次处理；周期为 1 天、时刻为 12:00 时，每天中午执行。更改时刻至少给予 7 天宽限。'
+                    : 'Leave blank to use each account’s due time. When set, decay and protective bans become due at this time and run in minute batches. A one-day interval at 12:00 runs daily at noon. Changing the time grants at least seven days of grace.'}
+                </>
+              }
+            >
+              {(field) => (
+                <input
+                  {...field}
+                  type="time"
+                  aria-label={zh ? '执行时刻（选填）' : 'Execution time (optional)'}
+                  step={60}
+                  value={policy.execution_time ?? ''}
+                  disabled={siteOffset === null}
+                  onChange={(event) =>
+                    change({ ...policy, execution_time: event.target.value || undefined })
+                  }
+                />
+              )}
+            </Field>
+            <section className="inactivity-section" aria-labelledby="inactivity-decay-heading">
+              <h3 id="inactivity-decay-heading">{zh ? '积分衰减' : 'Credit decay'}</h3>
+              <Toggle
+                disabled={pending}
+                label={zh ? '启用积分衰减' : 'Enable credit decay'}
+                checked={policy.decay.enabled}
+                onChange={(enabled) => change({ ...policy, decay: { ...policy.decay, enabled } })}
               />
-            )}
-          </Field>
-          <section className="inactivity-section" aria-labelledby="inactivity-decay-heading">
-            <h3 id="inactivity-decay-heading">{zh ? '积分衰减' : 'Credit decay'}</h3>
-            <Toggle
-              disabled={pending}
-              label={zh ? '启用积分衰减' : 'Enable credit decay'}
-              checked={policy.decay.enabled}
-              onChange={(enabled) => change({ ...policy, decay: { ...policy.decay, enabled } })}
-            />
-            {policy.decay.enabled && (
-              <>
-                <Fields>
-                  <Days
-                    zh={zh}
-                    name={zh ? '未活跃天数' : 'Inactive days'}
-                    value={policy.decay.inactive_days}
-                    onChange={(value) =>
-                      change({ ...policy, decay: { ...policy.decay, inactive_days: value } })
-                    }
-                  />
-                  <Days
-                    zh={zh}
-                    name={zh ? '执行周期' : 'Interval'}
-                    value={policy.decay.interval_days}
-                    onChange={(value) =>
-                      change({ ...policy, decay: { ...policy.decay, interval_days: value } })
-                    }
-                  />
-                </Fields>
-                <div className="inactivity-assets">
-                  {(['general', 'game'] as const).map((asset) => (
-                    <AssetEditor
-                      disabled={pending}
-                      key={asset}
+              {policy.decay.enabled && (
+                <>
+                  <Fields>
+                    <Days
                       zh={zh}
-                      name={
-                        asset === 'general'
-                          ? zh
-                            ? '通用积分'
-                            : 'General credits'
-                          : zh
-                            ? '游戏积分'
-                            : 'Game credits'
-                      }
-                      rule={policy.decay.assets[asset]}
-                      onChange={(rule) =>
-                        change({
-                          ...policy,
-                          decay: {
-                            ...policy.decay,
-                            assets: { ...policy.decay.assets, [asset]: rule },
-                          },
-                        })
+                      name={zh ? '未活跃天数' : 'Inactive days'}
+                      value={policy.decay.inactive_days}
+                      onChange={(value) =>
+                        change({ ...policy, decay: { ...policy.decay, inactive_days: value } })
                       }
                     />
-                  ))}
-                </div>
-              </>
-            )}
-          </section>
-          <section className="inactivity-section" aria-labelledby="inactivity-protection-heading">
-            <h3 id="inactivity-protection-heading">
-              {zh ? '保护性永久封禁' : 'Permanent protective ban'}
-            </h3>
-            <Toggle
-              disabled={pending}
-              label={zh ? '启用保护性封禁' : 'Enable protective bans'}
-              checked={policy.protection.enabled}
-              onChange={(enabled) =>
-                change({ ...policy, protection: { ...policy.protection, enabled } })
-              }
-            />
-            {policy.protection.enabled && (
-              <Days
-                zh={zh}
-                name={zh ? '封禁前未活跃天数' : 'Inactive days before ban'}
-                value={policy.protection.inactive_days}
-                onChange={(value) =>
-                  change({ ...policy, protection: { ...policy.protection, inactive_days: value } })
+                    <Days
+                      zh={zh}
+                      name={zh ? '执行周期' : 'Interval'}
+                      value={policy.decay.interval_days}
+                      onChange={(value) =>
+                        change({ ...policy, decay: { ...policy.decay, interval_days: value } })
+                      }
+                    />
+                  </Fields>
+                  <div className="inactivity-assets">
+                    {(['general', 'game'] as const).map((asset) => (
+                      <AssetEditor
+                        disabled={pending}
+                        key={asset}
+                        zh={zh}
+                        name={
+                          asset === 'general'
+                            ? zh
+                              ? '通用积分'
+                              : 'General credits'
+                            : zh
+                              ? '游戏积分'
+                              : 'Game credits'
+                        }
+                        rule={policy.decay.assets[asset]}
+                        onChange={(rule) =>
+                          change({
+                            ...policy,
+                            decay: {
+                              ...policy.decay,
+                              assets: { ...policy.decay.assets, [asset]: rule },
+                            },
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+            <section className="inactivity-section" aria-labelledby="inactivity-protection-heading">
+              <h3 id="inactivity-protection-heading">
+                {zh ? '保护性永久封禁' : 'Permanent protective ban'}
+              </h3>
+              <Toggle
+                disabled={pending}
+                label={zh ? '启用保护性封禁' : 'Enable protective bans'}
+                checked={policy.protection.enabled}
+                onChange={(enabled) =>
+                  change({ ...policy, protection: { ...policy.protection, enabled } })
                 }
               />
-            )}
-          </section>
-          <FormActions>
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              onClick={() =>
-                validate() &&
-                void perform(async () => {
-                  await loadPreview();
-                })
-              }
-            >
-              {zh ? '预览匹配账号' : 'Preview accounts'}
-            </button>
-            <button className="nb-btn nb-btn--primary" type="submit">
-              {retry ? (zh ? '重试保存' : 'Retry save') : zh ? '保存政策' : 'Save policy'}
-            </button>
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              onClick={() =>
-                void perform(async () => {
-                  const latest = await refresh();
-                  change(policyOnly(latest));
-                })
-              }
-            >
-              {zh ? '重新读取' : 'Reload'}
-            </button>
-          </FormActions>
-        </fieldset>
-      </form>
-      {error && <p role="alert">{error}</p>}
-      <Card>
-        <h2>{zh ? '当前草稿摘要' : 'Draft summary'}</h2>
-        <PolicySummary policy={policy} zh={zh} siteOffset={siteOffset} />
-        <p>
-          {zh ? '当前衰减宽限截止' : 'Current decay grace ends'}:{' '}
-          {date(configuration.decay_grace_until)} ·{' '}
-          {zh ? '当前封禁宽限截止' : 'Current ban grace ends'}:{' '}
-          {date(configuration.protection_grace_until)}
-        </p>
-      </Card>
-      <Fold
-        title={zh ? '适用范围、活跃判定与执行规则' : 'Eligibility, activity and execution rules'}
-      >
-        <p>
-          {zh
-            ? '成功本人登录、成功 API 调用、签到／福利领取及有效游戏或活动操作计入活跃；页面刷新、轮询和被动捐赠回馈不计入。'
-            : 'Successful sign-ins, successful API calls, check-ins, welfare claims and accepted game or activity actions count as activity. Page refreshes, polling and passive donation rewards do not.'}
-        </p>
-        <p>
-          {zh
-            ? '管理员、5 级和 6 级协管豁免，捐赠者不豁免。只衰减正的可用通用和游戏积分；冻结余额和活动币不受影响。封禁优先于衰减，错过多个周期最多补执行一次。保护封禁保留账号和余额，停止本人登录与 API 调用；既有公益捐赠仍可用并获得回馈。管理员解封后重新开始观察。'
-            : 'Administrators and level 5/6 stewards are exempt; donors are not. Decay affects only positive available general and game credits. Frozen funds and activity currencies are excluded. Bans take priority and missed periods produce at most one charge. Protective bans retain the account and balances and block its login and API use; existing donations remain usable and receive rewards. Administrator restoration restarts observation.'}
-        </p>
-      </Fold>
+              {policy.protection.enabled && (
+                <Days
+                  zh={zh}
+                  name={zh ? '封禁前未活跃天数' : 'Inactive days before ban'}
+                  value={policy.protection.inactive_days}
+                  onChange={(value) =>
+                    change({ ...policy, protection: { ...policy.protection, inactive_days: value } })
+                  }
+                />
+              )}
+            </section>
+            <FormActions>
+              <button
+                className="nb-btn nb-btn--secondary"
+                type="button"
+                onClick={() =>
+                  validate() &&
+                  void perform(async () => {
+                    await loadPreview();
+                  })
+                }
+              >
+                {zh ? '预览匹配账号' : 'Preview accounts'}
+              </button>
+              <button className="nb-btn nb-btn--primary" type="submit">
+                {retry ? (zh ? '重试保存' : 'Retry save') : zh ? '保存政策' : 'Save policy'}
+              </button>
+              <button
+                className="nb-btn nb-btn--secondary"
+                type="button"
+                onClick={() =>
+                  void perform(async () => {
+                    const latest = await refresh();
+                    change(policyOnly(latest));
+                  })
+                }
+              >
+                {zh ? '重新读取' : 'Reload'}
+              </button>
+            </FormActions>
+            {error && <p role="alert">{error}</p>}
+          </fieldset>
+        </form>
+        <div className="inactivity-sidebar">
+          <Card>
+            <h2>{zh ? '当前草稿摘要' : 'Draft summary'}</h2>
+            <PolicySummary policy={policy} zh={zh} siteOffset={siteOffset} />
+            <p>
+              {zh ? '当前衰减宽限截止' : 'Current decay grace ends'}:{' '}
+              {date(configuration.decay_grace_until)} ·{' '}
+              {zh ? '当前封禁宽限截止' : 'Current ban grace ends'}:{' '}
+              {date(configuration.protection_grace_until)}
+            </p>
+          </Card>
+          <Fold
+            title={
+              zh ? '适用范围、活跃判定与执行规则' : 'Eligibility, activity and execution rules'
+            }
+          >
+            <p>
+              {zh
+                ? '成功本人登录、成功 API 调用、签到／福利领取及有效游戏或活动操作计入活跃；页面刷新、轮询和被动捐赠回馈不计入。'
+                : 'Successful sign-ins, successful API calls, check-ins, welfare claims and accepted game or activity actions count as activity. Page refreshes, polling and passive donation rewards do not.'}
+            </p>
+            <p>
+              {zh
+                ? '管理员、5 级和 6 级协管豁免，捐赠者不豁免。只衰减正的可用通用和游戏积分；冻结余额和活动币不受影响。封禁优先于衰减，错过多个周期最多补执行一次。保护封禁保留账号和余额，停止本人登录与 API 调用；既有公益捐赠仍可用并获得回馈。管理员解封后重新开始观察。'
+                : 'Administrators and level 5/6 stewards are exempt; donors are not. Decay affects only positive available general and game credits. Frozen funds and activity currencies are excluded. Bans take priority and missed periods produce at most one charge. Protective bans retain the account and balances and block its login and API use; existing donations remain usable and receive rewards. Administrator restoration restarts observation.'}
+            </p>
+          </Fold>
+        </div>
+      </div>
       {preview && (
-        <section>
+        <Card className="ops-stack">
           <h2>{zh ? '候选政策预览' : 'Candidate policy preview'}</h2>
           <p>
             {zh
@@ -489,7 +495,7 @@ function Editor({
             onPageChange={(page) => void perform(() => loadPreview(page))}
             onPageSizeChange={(size) => void perform(() => loadPreview('1', size))}
           />
-        </section>
+        </Card>
       )}
       <PolicyRunHistory zh={zh} locale={locale} />
       <PolicyAuditHistory zh={zh} locale={locale} />

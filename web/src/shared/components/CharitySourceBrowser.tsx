@@ -3,7 +3,7 @@ import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel'
 import { ServiceHealth } from './ResourceHealth';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
-import { Field, FilterBar } from './ui';
+import { Field, FilterBar, StatusBadge } from './ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { Fold } from '@shared/components/ui/Fold';
@@ -35,7 +35,7 @@ import { KEY_STATES, type KeyStateFilter as KeyState } from '@shared/operations/
 import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { FailureResetControl } from './FailureResetControl';
 import { copyForRecurringLimits } from './recurringLimitsCopy';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from './States';
+import { Card, EmptyState, ErrorState, LoadingState } from './States';
 import '@shared/operations/operations.css';
 import './CharitySourceBrowser.css';
 
@@ -332,7 +332,7 @@ function RecurringSummary({ keyValue }: { keyValue: ManagedDonationKeySummary })
   return (
     <Fold plain className="charity-source-browser__recurring" title={copy.ruleCount(total)}>
       {keyValue.rules.length === 0 ? (
-        <p className="muted">{copy.noRules}</p>
+        <p className="nb-small nb-muted">{copy.noRules}</p>
       ) : (
         <ul>
           {keyValue.rules.map((rule) => (
@@ -352,7 +352,7 @@ function RecurringSummary({ keyValue }: { keyValue: ManagedDonationKeySummary })
         </ul>
       )}
       {total > keyValue.rules.length ? (
-        <p className="muted">
+        <p className="nb-small nb-muted">
           {t('common.operations.charity.sourceBrowser.recurringMore', {
             shown: keyValue.rules.length,
             total,
@@ -361,6 +361,27 @@ function RecurringSummary({ keyValue }: { keyValue: ManagedDonationKeySummary })
       ) : null}
     </Fold>
   );
+}
+
+function keySummaryTone(
+  keyValue: ManagedDonationKeySummary,
+): 'ok' | 'warn' | 'bad' | 'neutral' {
+  if (
+    keyValue.streak.failure_disabled ||
+    keyValue.charity_state === 'suspended' ||
+    keyValue.charity_state === 'exhausted' ||
+    keyValue.charity_state === 'ended' ||
+    keyValue.charity_state === 'expired'
+  ) {
+    return 'bad';
+  }
+  if (keyValue.physical_enabled && keyValue.charity_state === 'available') {
+    return 'ok';
+  }
+  if (keyValue.charity_state === 'pending' || keyValue.charity_state === 'rate_limited') {
+    return 'warn';
+  }
+  return 'neutral';
 }
 
 function KeySummary({
@@ -385,22 +406,14 @@ function KeySummary({
               tail: keyValue.display_tail,
             })}
           </h4>
-          <p className="muted">
-            {t('common.operations.charity.sourceBrowser.sourceLine', {
-              connector: keyValue.safe_source.connector_type,
-              source: sourceLabel(keyValue.safe_source, t),
-            })}
+          <p className="nb-small nb-muted">
+            <GatewayConnectorLabel value={keyValue.safe_source.connector_type} /> ·{' '}
+            {sourceLabel(keyValue.safe_source, t)}
           </p>
         </div>
-        <StatusBadge
-          active={
-            keyValue.physical_enabled &&
-            !keyValue.streak.failure_disabled &&
-            keyValue.charity_state === 'available'
-          }
-          danger={keyValue.charity_state === 'ended' || keyValue.charity_state === 'expired'}
-          label={t(keyStateLabel[keyValue.charity_state])}
-        />
+        <StatusBadge tone={keySummaryTone(keyValue)}>
+          {t(keyStateLabel[keyValue.charity_state])}
+        </StatusBadge>
       </header>
       <ServiceHealth statuses={keyValue.service_statuses} />
       <DonationKeyNotes

@@ -23,9 +23,17 @@ export function logManagementReturnPath(
   if (!state || typeof state !== 'object' || Array.isArray(state)) return undefined;
   const value = (state as Record<string, unknown>).logReturnTo;
   if (typeof value !== 'string') return undefined;
-  const path = listReturnPath({ returnTo: value }, role === 'admin' ? '/logs' : '/steward');
+  const basePath = role === 'admin' ? '/logs' : '/steward';
+  const path = listReturnPath({ returnTo: value }, basePath);
   if (path !== value) return undefined;
-  if (role === 'steward' && new URLSearchParams(path.split('?')[1]).get('tab') !== 'logs')
-    return undefined;
-  return path;
+  if (role === 'admin') return path;
+
+  const params = new URLSearchParams(path.slice(basePath.length));
+  const tab = params.get('tab');
+  if (tab === 'logs') return path;
+  if (tab !== null) return undefined;
+
+  // The default steward entry can show logs before a tab is present in the URL.
+  params.set('tab', 'logs');
+  return `${basePath}?${params}`;
 }

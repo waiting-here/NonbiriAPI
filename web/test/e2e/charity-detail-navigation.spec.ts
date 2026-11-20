@@ -1,3 +1,4 @@
+import { chatProjection } from '../fixtures/resourceScopes';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { numberedPage } from './numbered-fixtures';
@@ -1130,7 +1131,7 @@ for (const station of ['admin', 'user'] as const) {
       await list.getByRole('combobox', { name: 'Items per page' }).selectOption('10');
       if (station === 'user') await page.setViewportSize({ width: 375, height: 900 });
       await list.getByRole('button', { name: 'Next', exact: true }).click();
-      const card = list.locator('section.ops-subcard').filter({
+      const card = list.locator('section').filter({
         has: page.getByRole('heading', {
           name: '[公益]DetailProvider/detail-model-19',
           exact: true,
@@ -1184,6 +1185,7 @@ for (const station of ['admin', 'user'] as const) {
           binding_revision: '1',
           bindings: [
             {
+              targets: [],
               id: '1',
               ord: 0,
               donation_id: '20',
@@ -1525,7 +1527,11 @@ test('steward list permission loss clears an already visible private donation de
   });
   await donationSearch.fill('permission recheck');
   await donationSearch.press('Enter');
-  await expect(page).toHaveURL(/tab=logs/);
+  await expect(page).toHaveURL(USER_ORIGIN + '/steward');
+  await expect(page.getByRole('tab', { name: 'Request logs', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await expect(page.getByRole('heading', { name: 'Donation review', exact: true })).toHaveCount(0);
   await expect(privateNote).toHaveCount(0);
   await assertNoSensitiveBrowserPersistence(page, [setup.marker]);
@@ -1690,6 +1696,7 @@ for (const station of ['admin', 'user'] as const) {
           numberedPage(
             [
               {
+                ...chatProjection,
                 donation_id: '1',
                 donation_key_id: '1000',
                 upstream_model_id: refreshed ? 'shortcut-new-model' : 'shortcut-old-model',

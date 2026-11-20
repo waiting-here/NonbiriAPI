@@ -1,12 +1,12 @@
 .likes-action-urgent {
-  outline: 2px solid var(--nb-color-danger, #d94260);
+  outline: 2px solid var(--nb-color-danger);
   outline-offset: 4px;
   border-radius: 12px;
   animation: likes-urgent-pulse 0.85s ease-in-out infinite;
 }
 .likes-time-warning,
 .likes-resource-warning {
-  color: var(--nb-color-danger, #d94260);
+  color: var(--nb-color-danger);
   font-weight: 700;
 }
 .likes-time-warning {
@@ -44,7 +44,7 @@
 .likes-reader-main {
   line-height: 1.8;
 }
-@media (min-width: 761px) {
+@media (width >= 48rem) {
   .likes-reader-main:last-child {
     grid-column: 2 / -1;
   }
@@ -186,7 +186,7 @@
   border-color: var(--nb-color-accent);
   background: color-mix(in srgb, var(--nb-color-accent) 8%, var(--nb-color-surface));
 }
-@media (max-width: 760px) {
+@media (width < 48rem) {
   .likes-reader-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -210,7 +210,7 @@
   }
 }
 .likes-meter--shortage {
-  outline: 2px solid var(--nb-color-danger, #d94260);
+  outline: 2px solid var(--nb-color-danger);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -223,7 +223,7 @@
 }
 @keyframes likes-urgent-pulse {
   50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--nb-color-danger, #d94260) 24%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--nb-color-danger) 24%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -4,20 +4,22 @@ import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
 
 type OnboardingFlag = 'client' | 'hidden';
-const memory = { client: false, hidden: false };
+const memory: Partial<Record<OnboardingFlag, boolean>> = {};
 const listeners = new Set<() => void>();
 function readFlag(flag: OnboardingFlag): boolean {
+  if (memory[flag] !== undefined) return memory[flag];
   try {
-    return localStorage.getItem(`nb.onboarding.${flag}`) === '1' || memory[flag];
+    return localStorage.getItem(`nb.onboarding.${flag}`) === '1';
   } catch {
-    return memory[flag];
+    return false;
   }
 }
-export function markOnboarding(flag: OnboardingFlag) {
-  memory[flag] = true;
+export function markOnboarding(flag: OnboardingFlag, value = true) {
+  memory[flag] = value;
   try {
-    localStorage.setItem(`nb.onboarding.${flag}`, '1');
-    memory[flag] = false;
+    if (value) localStorage.setItem(`nb.onboarding.${flag}`, '1');
+    else localStorage.removeItem(`nb.onboarding.${flag}`);
+    delete memory[flag];
   } catch {
     // Keep the completion flag for this visit if browser storage is unavailable.
   }

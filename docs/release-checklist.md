@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 54 startup and explicit offline conversion
-  of registered schema 16–26 and 33–53 sources: target equality,
+- Validate fresh/exact-current schema 55 startup and the explicit v1.3.12 schema 54
+  offline conversion. Check fresh/converted target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -30,8 +30,8 @@ has passed.
   endpoint-key and charity-model deletion use indexes for their referencing
   history tables and preserve cascading behavior.
   Preserve credentials, operator settings, legal overrides, balances, game saves,
-  activities and receipts. Exercise successive stable migrations; see
-  [database upgrades](database-upgrades.md).
+  activities and receipts. Rehearse the v1.3.12 bridge for earlier registered
+  sources. [Database upgrades](database-upgrades.md)
 - Keep content-only catalog/template/period edits free of DDL and preserve administrator
   edits, historical eligibility, pity and claims. Recheck exports and deletion
   for every new user-associated record.
@@ -42,14 +42,27 @@ has passed.
 - Check service-health and reset-receipt times with an EST browser and UTC+08:00
   site. Exercise separate rate-limit release as donor, administrator and permitted
   steward, including late-request fencing and preserved failures/limits.
-- Check account export 36 includes own stored/effective steward permissions,
+- Check account export 38 includes own stored/effective steward permissions,
   retained policy history and personal-model header configuration, but excludes
   temporary generated values, shared charity settings, pressure samples and
   caller-parameter receipts. Include own pond queue/statistics and safe browser
-  association observations while excluding other accounts and donor identities;
-  verify that the browser accepts and downloads
-  the current export format. Verify model/user deletion, late completions and
-  the zero/default/positive idle-lifetime cases across all five formats.
+  association observations, per-model quota limits and usage, and Whale Haven
+  balances, adopted home and currency movements. Verify owner isolation and the
+  browser download of `nonbiriapi-account-export-v38.json`. Verify model/user
+  deletion, late completions and the zero/default/positive idle-lifetime cases
+  across all five session header formats.
+- Verify total and recurring quota limits at both key and model scope. Check
+  usage and outstanding reservations after conversion, and settle a dispatched
+  request under its captured rules. Cover matching model bindings and independent
+  models on the same key.
+- Check Google model quota waits across matching bindings, independent models
+  and credential versions. Exercise expiry, release and valid retry-header
+  precedence. Open logs by exact request ID and verify role-scoped streak
+  changes, wait details and disablement triggers across attempt pages.
+- Confirm Whale Haven and cash-out start closed on fresh and upgraded storage.
+  With two accounts, check consent, visit and wage settlement, social caps and
+  closure. Verify whole-lot exchange, all three cuts, daily and wallet caps,
+  reward grants before adoption or while closed, and permitted resource editing.
 - Exercise shared-credential rotation with old approved uses, whole-submission
   review with versioned per-service snapshots, explicit service expansion without budget reset, model target ordering
   and independent directory refresh. Verify ownership, revision conflicts,
@@ -145,8 +158,8 @@ has passed.
 
 Deployment, tags, GitHub releases and publishing instance legal text are separate
 actions. A deployment may use an exact commit without a tag or GitHub Release.
-For v1.3.3, create the annotated tag and source release from the reviewed merge
-commit; report release and production deployment results separately.
+Create the annotated tag and source release from the reviewed merge commit.
+Record source release and production deployment results separately.
 Apply instance security prerequisites before deployment when needed. Revise the
 maintained legal draft for the intended behavior and distinguish it from the
 currently effective text; publication follows the administrator workflow.

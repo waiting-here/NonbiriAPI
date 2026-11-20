@@ -2,9 +2,25 @@
   display: grid;
   gap: var(--nb-space-5);
 }
+.rewards-page {
+  width: 100%;
+  max-width: var(--nb-content-readable);
+  margin-inline: auto;
+}
 .reward-form {
   display: grid;
-  gap: var(--nb-space-5);
+  gap: var(--nb-space-4);
+}
+.reward-form__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--nb-space-3);
+  align-items: center;
+}
+@media (width < 32rem) {
+  .reward-form__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .reward-fields {
   display: grid;
@@ -80,21 +96,42 @@
 }
 .reward-list {
   display: grid;
-  gap: var(--nb-space-5);
+  gap: 0;
 }
 .reward-entry {
   border-block-end: 1px solid var(--nb-color-border);
-  padding-block-end: var(--nb-space-5);
+  padding-block: var(--nb-space-4);
   display: grid;
-  gap: var(--nb-space-3);
+  gap: var(--nb-space-2);
+}
+.reward-entry:first-child {
+  padding-block-start: 0;
 }
 .reward-entry:last-child {
   border: 0;
-  padding: 0;
+  padding-block-end: 0;
 }
 .reward-entry h3 {
   margin: 0;
-  font-size: var(--nb-font-size-lg);
+  font-size: var(--nb-font-size-md);
+}
+.reward-entry__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-4);
+}
+.reward-entry__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.reward-entry .reward-summary {
+  max-width: 32rem;
 }
 @media (width < 40rem) {
   .reward-item {

@@ -3,6 +3,8 @@ import { retainQueryScope } from '@shared/query/retain';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { TimeInput } from '@shared/components/TimeInput';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { PageHeader, ErrorState, LoadingState, EmptyState } from '@shared/components/States';
 import {
   Button,
@@ -17,6 +19,7 @@ import {
 } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PagePagination } from '@shared/operations/PagePagination';
+import actionTitles from '../../../../../internal/managementlog/action_titles.json';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -81,11 +84,21 @@ const domains = [
   'maintenance',
   'alerts',
   'abuse-audit',
+  'activities',
+  'attendance',
+  'limited-activities',
+  'inactivity-policy',
+  'pools',
   'rewards',
   'gacha',
   'games',
   'legal-holds',
   'ai',
+  'agent-requests',
+  'branding',
+  'egress',
+  'endpoint-backoff-policy',
+  'donation-key-failure-policy',
   'management-operations',
 ];
 function readFilter(params: URLSearchParams): Filter {
@@ -101,10 +114,13 @@ function readFilter(params: URLSearchParams): Filter {
   }
   return filter;
 }
-function localDate(value?: number) {
-  if (!value) return '';
-  const date = new Date(value);
-  return new Date(value - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function timeFilterDraft(value?: number) {
+  return createTimeDraft(value ? Math.floor(value / 1000) : null, 'second');
+}
+function timeFilterMillis(draft: TimeDraft, original?: number) {
+  if (draft.text === draft.originalText && !draft.invalidInput) return original ?? null;
+  const instant = timeDraftValue(draft);
+  return typeof instant === 'number' ? instant * 1000 : instant;
 }
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const { t } = useTranslation();
@@ -186,10 +202,15 @@ function ActionTitle({
   const verb = action.split('.').at(-1) ?? action;
   const domainLabel = t(`admin.managementHistory.domains.${domain}`, { defaultValue: domain });
   const verbLabel = t(`admin.managementHistory.actions.${verb}`, { defaultValue: verb });
-  const title =
-    i18n.resolvedLanguage === 'zh' && summary
-      ? summary
-      : t('admin.managementHistory.actionTitle', { domain: domainLabel, action: verbLabel });
+  const actionKey = domain + '/' + action;
+  const known = Object.hasOwn(actionTitles, actionKey)
+    ? actionTitles[actionKey as keyof typeof actionTitles]
+    : undefined;
+  const chinese = i18n.resolvedLanguage?.startsWith('zh');
+  const title = known
+    ? known[chinese ? 'zh' : 'en']
+    : (chinese && summary) ||
+      t('admin.managementHistory.actionTitle', { domain: domainLabel, action: verbLabel });
   return (
     <span className="nb-stack nb-stack--sm" title={domain + ' · ' + action}>
       {title}
@@ -202,16 +223,18 @@ function ActionTitle({
   );
 }
 
+function textFields(filter: Filter): Record<string, string> {
+  return Object.fromEntries(
+    filterFields
+      .filter((key) => key !== 'time_from' && key !== 'time_to')
+      .map((key) => [key, filter[key] ?? '']),
+  );
+}
 function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter) => void }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      filterFields.map((key) => [
-        key,
-        key === 'time_from' || key === 'time_to' ? localDate(filter[key]) : (filter[key] ?? ''),
-      ]),
-    ),
-  );
+  const [draft, setDraft] = useState<Record<string, string>>(() => textFields(filter));
+  const [from, setFrom] = useState(() => timeFilterDraft(filter.time_from));
+  const [to, setTo] = useState(() => timeFilterDraft(filter.time_to));
   const textSeed = JSON.stringify(
     filterFields
       .filter((key) => !['source', 'outcome', 'domain'].includes(key))
@@ -222,14 +245,9 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
   if (seededFor !== textSeed) {
     setSeededFor(textSeed);
     setInvalidRange(false);
-    setDraft(
-      Object.fromEntries(
-        filterFields.map((key) => [
-          key,
-          key === 'time_from' || key === 'time_to' ? localDate(filter[key]) : (filter[key] ?? ''),
-        ]),
-      ),
-    );
+    setDraft(textFields(filter));
+    setFrom(timeFilterDraft(filter.time_from));
+    setTo(timeFilterDraft(filter.time_to));
   }
   const field = (name: string, type = 'text') => (
     <Field label={t(`admin.managementHistory.fields.${name}`)} key={name}>
@@ -250,7 +268,6 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
           {...props}
           value={filter[name as keyof Filter] ?? ''}
           onChange={(event) => {
-            setDraft((old) => ({ ...old, [name]: event.target.value }));
             onApply({ ...filter, [name]: event.target.value || undefined });
           }}
         >
@@ -269,13 +286,12 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
       <FilterBar
         ariaLabel={t('admin.managementHistory.fields.search')}
         activeCount={
-          filterFields.filter(
-            (key) =>
-              draft[key] && !['search', 'source', 'outcome', 'domain', 'group_key'].includes(key),
-          ).length
+          filterFields.filter((key) => filter[key] !== undefined && filter[key] !== '').length
         }
         onReset={() => {
           setDraft({});
+          setFrom(timeFilterDraft());
+          setTo(timeFilterDraft());
           setInvalidRange(false);
           onApply({});
         }}
@@ -283,10 +299,20 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
           const next: Filter = {};
           for (const key of filterFields) {
             if (key === 'group_key') continue;
-            const value = draft[key]?.trim();
+            if (key === 'time_from' || key === 'time_to') {
+              const value = timeFilterMillis(key === 'time_from' ? from : to, filter[key]);
+              if (value === undefined) {
+                setInvalidRange(true);
+                return;
+              }
+              if (value !== null) next[key] = value;
+              continue;
+            }
+            const value = ['source', 'outcome', 'domain'].includes(key)
+              ? filter[key]
+              : draft[key]?.trim();
             if (!value) continue;
-            if (key === 'time_from' || key === 'time_to') next[key] = new Date(value).getTime();
-            else next[key] = value;
+            next[key] = value;
           }
           if (next.time_from && next.time_to && next.time_from >= next.time_to) {
             setInvalidRange(true);
@@ -297,10 +323,7 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
         }}
         search={
           <>
-            <Field
-              label={t('admin.managementHistory.fields.search')}
-              help={t('admin.managementHistory.searchHelp')}
-            >
+            <Field label={t('admin.managementHistory.fields.search')}>
               {(props) => (
                 <input
                   {...props}
@@ -318,8 +341,18 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
         }
         secondary={
           <>
-            {field('time_from', 'datetime-local')}
-            {field('time_to', 'datetime-local')}
+            <TimeInput
+              label={t('admin.managementHistory.fields.time_from')}
+              station="admin"
+              draft={from}
+              onChange={setFrom}
+            />
+            <TimeInput
+              label={t('admin.managementHistory.fields.time_to')}
+              station="admin"
+              draft={to}
+              onChange={setTo}
+            />
             {field('actor_id')}
             {field('authorizer_id')}
             {field('action')}
@@ -421,18 +454,21 @@ export function ManagementHistory({ account }: { account: string }) {
     {
       key: 'time',
       header: t('admin.managementHistory.hour'),
+      mobileLabel: t('admin.managementHistory.hour'),
       cell: 'meta' as const,
       render: (row: Group) => <AgentTime value={row.bucket} />,
     },
     {
       key: 'actor',
       header: t('admin.managementHistory.executor'),
+      mobileLabel: t('admin.managementHistory.executor'),
       cell: 'meta' as const,
       render: (row: Group) => <Executor {...row} />,
     },
     {
       key: 'source',
       header: t('admin.managementHistory.fields.source'),
+      mobileLabel: t('admin.managementHistory.fields.source'),
       cell: 'meta' as const,
       render: (row: Group) => (
         <span>
@@ -449,6 +485,7 @@ export function ManagementHistory({ account }: { account: string }) {
     {
       key: 'counts',
       header: t('admin.managementHistory.targetResults'),
+      mobileLabel: t('admin.managementHistory.targetResults'),
       cell: 'meta' as const,
       render: (row: Group) => <CountDetails value={row} />,
     },
@@ -493,31 +530,36 @@ export function ManagementHistory({ account }: { account: string }) {
         <PanelHead
           title={t('admin.managementHistory.records')}
           description={t('admin.managementHistory.groupHelp')}
-        />
-        <PanelBody>
-          <div className="nb-actions">
-            <Tabs
-              label={t('admin.managementHistory.view')}
-              value={query.data?.view ?? view}
-              onChange={changeView}
-              tabs={[
-                {
-                  value: 'groups',
-                  id: 'management-history-tab-groups',
-                  label: t('admin.managementHistory.groups'),
-                },
-                {
-                  value: 'operations',
-                  id: 'management-history-tab-operations',
-                  label: t('admin.managementHistory.individual'),
-                },
-              ]}
-              panelId="management-history-results"
-            />
-            <Button variant="secondary" onClick={() => void refresh()} disabled={query.isFetching}>
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void refresh()}
+              disabled={query.isFetching}
+            >
               {t('common.refresh')}
             </Button>
-          </div>
+          }
+        />
+        <PanelBody>
+          <Tabs
+            label={t('admin.managementHistory.view')}
+            value={query.data?.view ?? view}
+            onChange={changeView}
+            tabs={[
+              {
+                value: 'groups',
+                id: 'management-history-tab-groups',
+                label: t('admin.managementHistory.groups'),
+              },
+              {
+                value: 'operations',
+                id: 'management-history-tab-operations',
+                label: t('admin.managementHistory.individual'),
+              },
+            ]}
+            panelId="management-history-results"
+          />
           <div
             className="nb-tab-content"
             role="tabpanel"
@@ -568,12 +610,14 @@ export function ManagementHistory({ account }: { account: string }) {
                       {
                         key: 'time',
                         header: t('admin.managementHistory.time'),
+                        mobileLabel: t('admin.managementHistory.time'),
                         cell: 'meta',
                         render: (row) => <AgentTime value={row.created_at} />,
                       },
                       {
                         key: 'actor',
                         header: t('admin.managementHistory.executor'),
+                        mobileLabel: t('admin.managementHistory.executor'),
                         cell: 'meta',
                         render: (row) => <Executor {...row} />,
                       },
@@ -586,6 +630,7 @@ export function ManagementHistory({ account }: { account: string }) {
                       {
                         key: 'counts',
                         header: t('admin.managementHistory.targetResults'),
+                        mobileLabel: t('admin.managementHistory.targetResults'),
                         cell: 'meta',
                         render: (row) => <CountDetails value={row} />,
                       },
@@ -597,9 +642,10 @@ export function ManagementHistory({ account }: { account: string }) {
                           <Button
                             variant="secondary"
                             size="sm"
+                            aria-label={`${t('admin.managementHistory.details')} · ${row.id}`}
                             onClick={() => update('mh_detail', row.id)}
                           >
-                            {t('admin.managementHistory.details')} · {row.id}
+                            {t('admin.managementHistory.details')}
                           </Button>
                         ),
                       },
@@ -845,18 +891,20 @@ function CleanupPanel({
         description={t('admin.managementHistory.cleanupHelp')}
       />
       <PanelBody>
-        <Button
-          variant="secondary"
-          disabled={prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'}
-          onClick={() => {
-            cleanup.reset();
-            prepare.mutate(filter);
-          }}
-        >
-          {Object.keys(filter).length
-            ? t('admin.managementHistory.cleanupFiltered')
-            : t('admin.managementHistory.cleanupAll')}
-        </Button>
+        <div className="nb-actions">
+          <Button
+            variant="danger-outline"
+            disabled={prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'}
+            onClick={() => {
+              cleanup.reset();
+              prepare.mutate(filter);
+            }}
+          >
+            {Object.keys(filter).length
+              ? t('admin.managementHistory.cleanupFiltered')
+              : t('admin.managementHistory.cleanupAll')}
+          </Button>
+        </div>
         {prepare.error ? <ErrorState error={prepare.error} /> : null}
         {cleanup.error && !preview ? <ErrorState error={cleanup.error} /> : null}
         {cleanup.outcome === 'unknown' && !preview ? (

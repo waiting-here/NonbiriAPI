@@ -1,3 +1,4 @@
+import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import {
   CancelledError,
   notifyManager,
@@ -6,13 +7,13 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   captureStationSession,
   clearStationSession,
   stationSessionMatches,
 } from '@shared/charityManagement';
-import { Icon } from '@shared/components/Icon';
+import { StatusBadge } from '@shared/components/ui';
 import { ApiError, isUnauthorized } from '@shared/query/http';
 import { Link } from 'react-router';
 import { SafeAnnouncementBody } from './SafeAnnouncementBody';
@@ -25,7 +26,7 @@ import { collectHomeAnnouncementSummaries } from './homeAnnouncementsData';
 import { CoreErrorPanel, CoreLoading, CoreTime, CoreUnavailable } from '../core/components';
 import { useCoreCopy } from '../core/copy';
 import { coreSessionMatchesAccount } from '../core/queries';
-import { coreRequest } from '../core/request';
+import { createHomeBodyLoader } from './homeAnnouncementBodies';
 import type {
   AccountLanguage,
   HomeAnnouncementCapability,
@@ -33,7 +34,7 @@ import type {
 } from '../core/types';
 import './homeAnnouncements.css';
 
-const SEVERITY_ICONS = { info: 'info', warning: 'warning', important: 'error' } as const;
+const SEVERITY_TONES = { info: 'info', warning: 'warn', important: 'bad' } as const;
 const SEVERITY_KEYS = {
   info: 'home.announcement.severity.info',
   warning: 'home.announcement.severity.warning',
@@ -73,21 +74,6 @@ async function readForAccount<T>(
   }
 }
 
-async function loadAnnouncementDetail(
-  id: string,
-  signal?: AbortSignal,
-): Promise<AnnouncementDetail> {
-  const response = await coreRequest(`/api/announcements/${encodeURIComponent(id)}`, { signal });
-  if (response.status !== 200) {
-    throw new ApiError(
-      'invalid_response',
-      'The server returned an invalid announcement status.',
-      response.status,
-    );
-  }
-  return normalizeAnnouncementDetail(response.payload);
-}
-
 function sameSummary(a: HomeAnnouncementSummary, b: HomeAnnouncementSummary): boolean {
   return (
     a.epoch === b.epoch &&
@@ -112,27 +98,34 @@ function AnnouncementCard({
   busy,
   onRetry,
   onDismiss,
+  origin,
 }: {
   summary: HomeAnnouncementSummary;
+  origin: ReturnType<typeof useAnnouncementReturn>;
   detail: UseQueryResult<AnnouncementDetail, Error> | undefined;
   busy: boolean;
   onRetry: () => void;
   onDismiss: (summary: HomeAnnouncementSummary) => void;
 }) {
   const { t } = useCoreCopy();
+  const linkProps = {
+    state: { returnTo: '/', announcementSource: origin.announcementSource },
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => origin.remember(event.currentTarget),
+  };
   const title = `/announcements/${encodeURIComponent(summary.id)}`;
   return (
     <li className={`nb-row home-announcement-card home-announcement-card--${summary.severity}`}>
       <div className="home-announcement-card__top">
-        <div
-          className={`home-announcement-severity home-announcement-severity--${summary.severity}`}
-        >
-          <Icon name={SEVERITY_ICONS[summary.severity]} />
-          <span>{t(SEVERITY_KEYS[summary.severity])}</span>
+        <div className="home-announcement-severity">
+          <StatusBadge tone={SEVERITY_TONES[summary.severity]}>
+            {t(SEVERITY_KEYS[summary.severity])}
+          </StatusBadge>
+          {summary.pinned ? (
+            <StatusBadge tone="accent">{t('home.announcement.pinned')}</StatusBadge>
+          ) : null}
         </div>
         <div className="home-announcement-meta">
           <CoreTime value={summary.published_at} />
-          {summary.pinned ? <span>{t('home.announcement.pinned')}</span> : null}
           {summary.fallback_from ? (
             <span>
               {t('home.announcement.languageFallback', {
@@ -143,7 +136,7 @@ function AnnouncementCard({
         </div>
       </div>
       <h3 className="home-announcement-card__title">
-        <Link to={title}>{summary.title}</Link>
+        <Link {...linkProps} id={`home-title-${summary.id}`} to={title}>{summary.title}</Link>
       </h3>
       <div className="home-announcement-preview">
         {detail?.isSuccess ? (
@@ -165,7 +158,7 @@ function AnnouncementCard({
         </div>
       ) : null}
       <div className="home-announcement-card__actions">
-        <Link className="nb-btn nb-btn--secondary" to={title}>
+        <Link {...linkProps} id={`home-read-${summary.id}`} className="nb-btn nb-btn--secondary" to={title}>
           {t('home.announcement.viewFull')}
         </Link>
         {summary.dismissible ? (
@@ -241,7 +234,8 @@ export function HomeAnnouncements({
     retry: false,
   });
   const summaries = active ? (announcementQuery.data ?? []) : [];
-  const detailLoader = loadDetail ?? loadAnnouncementDetail;
+  const batchLoader = useMemo(() => createHomeBodyLoader(() => identity !== '' && sessionIdentity() === identity), [identity, sessionIdentity]);
+  const detailLoader = loadDetail ?? batchLoader;
   const detailQueries = useQueries({
     queries: summaries.map((summary) => ({
       queryKey: [
@@ -275,9 +269,12 @@ export function HomeAnnouncements({
     })),
   });
 
+  const origin = useAnnouncementReturn(
+    active && announcementQuery.isSuccess && !detailQueries.some((query) => query.isFetching),
+  );
   if (!active) return null;
   if (capability.state === 'available' && announcementQuery.isSuccess && summaries.length === 0)
-    return null;
+    return <Link className="nb-btn nb-btn--ghost home-announcements__archive" to="/announcements">{t('home.announcement.viewAll')}</Link>;
 
   const dismiss = (summary: HomeAnnouncementSummary) => {
     if (sessionIdentity() !== identity) return;
@@ -325,6 +322,7 @@ export function HomeAnnouncements({
             <AnnouncementCard
               key={`${summary.epoch}:${summary.id}:${summary.revision}`}
               summary={summary}
+              origin={origin}
               detail={detailQueries[index]}
               busy={announcementQuery.isFetching || detailQueries[index]?.isFetching === true}
               onRetry={() => void retryDetail(summary, index)}

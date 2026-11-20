@@ -80,7 +80,7 @@ function BindingSelector({
     [bindings.data?.bindings],
   );
   const toggleCandidate = (candidate: BindingCandidate) => {
-    if (candidate.capabilities?.can_bind === false) return;
+    if (!candidate.capabilities.can_bind) return;
     setSelectionDetails((current) => ({ ...current, [candidateIdentity(candidate)]: candidate }));
     dispatch({ type: 'toggle', accountId, modelId: model.id, candidate });
   };
@@ -197,7 +197,7 @@ function BindingSelector({
         revision: draft.bindingRevision,
         selections: draft.selections.map((candidate) => ({
           ...candidate,
-          ...(selectionDetails[candidateIdentity(candidate)]?.native_services === undefined
+          ...(!selectionDetails[candidateIdentity(candidate)]
             ? {}
             : { native_services: servicesFor(candidateIdentity(candidate)) }),
         })),
@@ -260,7 +260,7 @@ function BindingSelector({
                     </span>
                   ) : null}
                 </div>
-                {detail?.native_services ? (
+                {detail ? (
                   <Fold title={copy.calls}>
                     <NativeServicesField
                       options={detail.native_services}
@@ -341,7 +341,7 @@ function BindingSelector({
               (draft.selections.length === 0 ||
                 draft.selections.some(
                   (candidate) =>
-                    selectionDetails[candidateIdentity(candidate)]?.native_services !== undefined &&
+                    selectionDetails[candidateIdentity(candidate)] &&
                     !servicesFor(candidateIdentity(candidate)).length,
                 )))
           }
@@ -612,34 +612,32 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                         )}
                       </span>
                     ) : null}
+                    <div className="nb-actions">
+                      {([-1, 1] as const).map((step) => (
+                        <button
+                          key={step}
+                          type="button"
+                          className="nb-btn nb-btn--ghost nb-btn--sm"
+                          disabled={
+                            busy ||
+                            reconciliationRequired ||
+                            Boolean(replayAttempt) ||
+                            absoluteIndex + step < 0 ||
+                            absoluteIndex + step >= order.length
+                          }
+                          onClick={() =>
+                            setOrder((current) =>
+                              moveBinding(current, absoluteIndex, absoluteIndex + step),
+                            )
+                          }
+                        >
+                          {t(step === -1 ? 'models.moveUp' : 'models.moveDown')}
+                        </button>
+                      ))}
+                    </div>
                     <MoreMenu
                       label={textModel('moreSource', { name: binding.upstream_model_id })}
                       items={[
-                        {
-                          label: t('models.moveUp'),
-                          disabled:
-                            busy ||
-                            reconciliationRequired ||
-                            Boolean(replayAttempt) ||
-                            absoluteIndex === 0,
-                          onSelect: () =>
-                            setOrder((current) =>
-                              moveBinding(current, absoluteIndex, absoluteIndex - 1),
-                            ),
-                        },
-                        {
-                          label: t('models.moveDown'),
-                          disabled:
-                            busy ||
-                            reconciliationRequired ||
-                            Boolean(replayAttempt) ||
-                            absoluteIndex === order.length - 1,
-                          onSelect: () =>
-                            setOrder((current) =>
-                              moveBinding(current, absoluteIndex, absoluteIndex + 1),
-                            ),
-                        },
-                        'separator',
                         {
                           label: t('models.removeBinding'),
                           danger: true,

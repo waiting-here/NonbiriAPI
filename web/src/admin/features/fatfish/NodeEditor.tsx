@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Field, Fields, FormActions, Toggle } from '@shared/components/ui';
+import { Affix, Field, Fields, Fold, FormActions, Toggle } from '@shared/components/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useFatFishText } from './copy';
@@ -129,10 +129,9 @@ function VersionPicker({ value, change }: { value: string; change(value: string)
         </>
       ) : null}
       {picked.data ? (
-        <details>
-          <summary>{text('version_details')}</summary>
+        <Fold plain title={text('version_details')}>
           <code>{picked.data.content_hash}</code>
-        </details>
+        </Fold>
       ) : null}
     </div>
   );
@@ -244,7 +243,7 @@ function NodeForm({
   });
   const dirty = snapshot !== saved;
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
-  const nodes = period.nodes ?? [];
+  const nodes = useMemo(() => period.nodes ?? [], [period.nodes]);
   const validIDs = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
   const conditionError = validateCondition(condition, validIDs);
   const amountError = [
@@ -312,7 +311,7 @@ function NodeForm({
     <section className="fatfish-node-editor">
       <h3>{initial ? text('edit_node') : text('new_node')}</h3>
       <div inert={editingLocked}>
-        <Fields>
+        <Fields columns={1}>
           <Field label={text('title')}>
             {(props) => (
               <input
@@ -327,12 +326,15 @@ function NodeForm({
             {(props) => (
               <textarea
                 {...props}
+                rows={3}
                 value={description}
                 maxLength={4096}
                 onChange={(event) => setDescription(event.target.value)}
               />
             )}
           </Field>
+        </Fields>
+        <Fields>
           {!initial ? (
             <>
               <Field size="short" label={text('map_x')}>
@@ -387,9 +389,8 @@ function NodeForm({
           onChange={setCondition}
         />
       </div>
-      <fieldset disabled={editingLocked}>
-        <legend>{text('general_credit_amounts_up_to_three_decimals')}</legend>
-        <Fields>
+      <fieldset className="nb-fieldset" disabled={editingLocked}>
+        <Fields legend={text('general_credit_amounts_up_to_three_decimals')}>
           {(
             [
               ['unlock_cost', text('unlock_cost')],
@@ -399,8 +400,9 @@ function NodeForm({
           ).map(([name, caption]) => (
             <Field size="short" key={name} label={caption}>
               {(props) => (
-                <input
+                <Affix
                   {...props}
+                  unit={text('general_credits_unit')}
                   inputMode="decimal"
                   value={amounts[name]}
                   onChange={(event) => setAmount(name, event.target.value)}
@@ -419,8 +421,9 @@ function NodeForm({
               }
             >
               {(props) => (
-                <input
+                <Affix
                   {...props}
+                  unit={text('general_credits_unit')}
                   inputMode="decimal"
                   value={value}
                   onChange={(event) => {

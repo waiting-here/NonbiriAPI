@@ -16,14 +16,15 @@ import (
 // health. Shared key lifecycle, admission limits and quotas remain separate.
 type ServiceStatus struct {
 	smartbackoff.Projection
-	UseID           string                 `json:"use_id"`
-	NativeService   contract.NativeService `json:"native_service"`
-	State           string                 `json:"state"`
-	FailureStreak   string                 `json:"failure_streak"`
-	FailureDisabled bool                   `json:"failure_disabled"`
-	RetryAfterUntil *int64                 `json:"retry_after_until"`
-	ConfiguredType  contract.Type          `json:"-"`
-	RerankFormat    contract.RerankFormat  `json:"-"`
+	UseID            string                 `json:"use_id"`
+	NativeService    contract.NativeService `json:"native_service"`
+	State            string                 `json:"state"`
+	FailureStreak    string                 `json:"failure_streak"`
+	FailureDisabled  bool                   `json:"failure_disabled"`
+	RetryAfterUntil  *int64                 `json:"retry_after_until"`
+	ModelQuotaReason string                 `json:"model_quota_reason,omitempty"`
+	ConfiguredType   contract.Type          `json:"-"`
+	RerankFormat     contract.RerankFormat  `json:"-"`
 }
 
 // LoadServiceStatuses reads approved versions even when their service or grant
@@ -125,7 +126,7 @@ func serviceStatusQuery(placeholders string) string {
 COALESCE(a.available=1 AND a.relationship_valid=1 AND a.owner_user_id=d.user_id AND a.endpoint_key_id=dk.endpoint_key_id
  AND (a.effective_native_service_mask&u.native_service_bit)=u.native_service_bit,0),
 EXISTS(SELECT 1 FROM donation_key_review_requirements rr WHERE rr.hmac=ur.key_body_review_hmac AND rr.required=1),
-h.failure_streak,COALESCE(h.failure_disabled,0),h.retry_after_until,
+h.failure_streak,COALESCE(h.failure_disabled,0),` + smartbackoff.ServiceRetryAfterSQL("h") + `,
 COALESCE(h.backoff_period,''),COALESCE(h.backoff_source,''),h.backoff_retry_at,h.trial_claim_id IS NOT NULL,
 COALESCE(a.configured_type,''),COALESCE(a.rerank_format,'')
 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id

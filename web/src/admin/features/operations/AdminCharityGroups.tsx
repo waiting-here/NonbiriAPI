@@ -1,11 +1,11 @@
-import { Field, FilterBar } from '@shared/components/ui';
+import { Field, FilterBar, StatusBadge } from '@shared/components/ui';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
@@ -41,12 +41,18 @@ const KEY_STATE_LABEL_KEYS: Record<(typeof ADMIN_CHARITY_KEY_STATES)[number], st
   ended: 'common.operations.charity.charityState.ended',
 };
 
-function statusIsActive(status: AdminCharityStatus): boolean {
-  return status === 'pending' || status === 'approved';
+function statusTone(status: AdminCharityStatus) {
+  if (status === 'approved') return 'ok' as const;
+  if (status === 'pending') return 'warn' as const;
+  if (status === 'rejected') return 'bad' as const;
+  return 'neutral' as const;
 }
 
-function keyStateIsActive(state: AdminCharityKey['charity_state']): boolean {
-  return state === 'pending' || state === 'available';
+function keyStateTone(state: AdminCharityKey['charity_state']) {
+  if (state === 'available') return 'ok' as const;
+  if (state === 'pending') return 'warn' as const;
+  if (state === 'suspended' || state === 'exhausted') return 'bad' as const;
+  return 'neutral' as const;
 }
 
 function UsageValue({
@@ -118,20 +124,24 @@ function GroupSource({ group }: { group: AdminCharityGroup }) {
         ? t('admin.charity.group.mainstreamSubscription', { name: group.source.name })
         : t('admin.charity.group.mainstreamApiPlatform', { name: group.source.name });
   return (
-    <div className="ops-subcard">
+    <div className="ops-stack">
       <h3>{label}</h3>
       <dl className="ops-kv">
-        <dt>{t('admin.charity.group.connector')}</dt>
-        <dd>
-          <GatewayConnectorLabel value={group.source.connector_type} />
-        </dd>
-        <dt>{t('admin.charity.group.baseUrl')}</dt>
-        <dd className="ops-wrap">{group.source.base_url}</dd>
+        <div>
+          <dt>{t('admin.charity.group.connector')}</dt>
+          <dd>
+            <GatewayConnectorLabel value={group.source.connector_type} />
+          </dd>
+        </div>
+        <div>
+          <dt>{t('admin.charity.group.baseUrl')}</dt>
+          <dd className="ops-wrap">{group.source.base_url}</dd>
+        </div>
         {group.source.kind === 'mainstream' ? (
-          <>
+          <div>
             <dt>{t('admin.charity.group.channelRevision')}</dt>
             <dd>{group.source.channel_revision}</dd>
-          </>
+          </div>
         ) : null}
       </dl>
     </div>
@@ -161,46 +171,51 @@ function GroupKey({
             tail: keyValue.display_tail,
           })}
         </h4>
-        <StatusBadge
-          active={statusIsActive(donationStatus)}
-          danger={!statusIsActive(donationStatus)}
-          label={t(STATUS_LABEL_KEYS[donationStatus])}
-        />
+        <StatusBadge tone={statusTone(donationStatus)}>
+          {t(STATUS_LABEL_KEYS[donationStatus])}
+        </StatusBadge>
       </div>
       <dl className="ops-kv">
-        <dt>{t('admin.charity.group.donation')}</dt>
-        <dd>{donationID}</dd>
-        <dt>{t('admin.charity.group.physical')}</dt>
-        <dd>
-          <StatusBadge
-            active={keyValue.physical_enabled}
-            label={t(
-              keyValue.physical_enabled
-                ? 'admin.charity.group.physicalEnabled'
-                : 'admin.charity.group.physicalDisabled',
-            )}
-          />
-        </dd>
-        <dt>{t('admin.charity.group.keyState')}</dt>
-        <dd>
-          <StatusBadge
-            active={keyStateIsActive(keyValue.charity_state)}
-            danger={keyValue.charity_state === 'ended' || keyValue.charity_state === 'expired'}
-            label={t(KEY_STATE_LABEL_KEYS[keyValue.charity_state])}
-          />
-        </dd>
-        <dt>{t('admin.charity.group.effectiveExpiry')}</dt>
-        <dd>
-          {keyValue.expires_at === null
-            ? t('common.operations.charity.noExpiry')
-            : formatDateTime(keyValue.expires_at)}
-        </dd>
-        <dt>{t('admin.charity.group.authorizedExpiry')}</dt>
-        <dd>
-          {keyValue.authorized_expires_at === null
-            ? t('common.operations.charity.noExpiry')
-            : formatDateTime(keyValue.authorized_expires_at)}
-        </dd>
+        <div>
+          <dt>{t('admin.charity.group.donation')}</dt>
+          <dd>{donationID}</dd>
+        </div>
+        <div>
+          <dt>{t('admin.charity.group.physical')}</dt>
+          <dd>
+            <StatusBadge tone={keyValue.physical_enabled ? 'ok' : 'neutral'}>
+              {t(
+                keyValue.physical_enabled
+                  ? 'admin.charity.group.physicalEnabled'
+                  : 'admin.charity.group.physicalDisabled',
+              )}
+            </StatusBadge>
+          </dd>
+        </div>
+        <div>
+          <dt>{t('admin.charity.group.keyState')}</dt>
+          <dd>
+            <StatusBadge tone={keyStateTone(keyValue.charity_state)}>
+              {t(KEY_STATE_LABEL_KEYS[keyValue.charity_state])}
+            </StatusBadge>
+          </dd>
+        </div>
+        <div>
+          <dt>{t('admin.charity.group.effectiveExpiry')}</dt>
+          <dd>
+            {keyValue.expires_at === null
+              ? t('common.operations.charity.noExpiry')
+              : formatDateTime(keyValue.expires_at)}
+          </dd>
+        </div>
+        <div>
+          <dt>{t('admin.charity.group.authorizedExpiry')}</dt>
+          <dd>
+            {keyValue.authorized_expires_at === null
+              ? t('common.operations.charity.noExpiry')
+              : formatDateTime(keyValue.authorized_expires_at)}
+          </dd>
+        </div>
       </dl>
       <KeyLimitSummary
         concurrency={keyValue.max_concurrency}
@@ -252,7 +267,7 @@ function GroupKey({
 
 function GroupCard({ group }: { group: AdminCharityGroup }) {
   return (
-    <Card>
+    <div className="ops-subcard ops-stack">
       <GroupSource group={group} />
       <div className="ops-stack">
         {group.items.map((item) => (
@@ -264,7 +279,7 @@ function GroupCard({ group }: { group: AdminCharityGroup }) {
           />
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 

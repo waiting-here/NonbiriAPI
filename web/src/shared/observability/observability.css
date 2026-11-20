@@ -48,7 +48,7 @@
   cursor: pointer;
   padding-block: 0.5rem;
 }
-.request-diagnostics :is(.btn, .nb-btn) {
+.request-diagnostics :is(.btn, .nb-btn):not(.nb-filter .nb-btn) {
   align-self: start;
   min-width: 0;
   max-width: 100%;

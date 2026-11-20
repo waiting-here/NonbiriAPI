@@ -1,14 +1,10 @@
-import { useEffect, useState } from 'react';
-import { artSourceSet } from '../activities/gacha/art-resolution';
+import { useStageSize } from './stage-size';
+import { useBackgroundSources } from './sources';
 import { mirrorSeaAppearancePlacement } from '../activities/gacha/mirror-sea-layout';
 
 export function MirrorSeaStill({ dark }: { dark: boolean }) {
-  const [size, setSize] = useState(() => [innerWidth, innerHeight]);
-  useEffect(() => {
-    const resize = () => setSize([innerWidth, innerHeight]);
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
-  }, []);
+  const size = useStageSize();
+  const artSourceSet = useBackgroundSources();
   const mode = dark ? 'dark' : 'light';
   const background = `/assets/gacha/appearances/mirrorsea-${mode}.webp`;
   const root = '/assets/gacha/motion/n-gemini/';

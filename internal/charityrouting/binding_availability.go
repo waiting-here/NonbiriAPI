@@ -27,10 +27,11 @@ type KeyModelTarget struct {
 
 type bindingAvailabilityRow struct {
 	KeyModelTarget
-	bindingID  string
-	keyID      int64
-	mask       int64
-	modelTypes modeltype.Set
+	bindingID   string
+	keyID       int64
+	mask        int64
+	modelTypes  modeltype.Set
+	allStatuses []donationstate.ServiceStatus
 }
 
 // The selected bindings have already passed the caller's management scope.
@@ -73,6 +74,7 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 	}
 	defer rows.Close()
 	keys := []int64{}
+	targetIDs := []int64{}
 	for rows.Next() {
 		var row bindingAvailabilityRow
 		var bindingID, targetID int64
@@ -83,11 +85,19 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 		row.Availability.ServiceStatuses = []donationstate.ServiceStatus{}
 		out = append(out, row)
 		keys = append(keys, row.keyID)
+		targetIDs = append(targetIDs, targetID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return out, nil
+	}
+	availability, err := availableServiceTargetsTx(ctx, tx, targetIDs, now)
+	if err != nil {
 		return nil, err
 	}
 	statuses, err := donationstate.LoadServiceStatuses(ctx, tx, keys, now)
@@ -100,17 +110,38 @@ ORDER BY rb.ord,rb.id,t.ord,t.id`
 		if err != nil {
 			return nil, ErrInvariant
 		}
-		for _, status := range statuses[row.keyID] {
+		row.allStatuses = append([]donationstate.ServiceStatus(nil), statuses[row.keyID]...)
+		modelLimited := false
+		for j := range row.allStatuses {
+			status := &row.allStatuses[j]
 			if !selected.Has(status.NativeService) {
 				continue
+			}
+			useID, err := strconv.ParseInt(status.UseID, 10, 64)
+			if err != nil {
+				return nil, ErrInvariant
+			}
+			state := availability[serviceTarget{useID, targetIDs[i]}]
+			if state.modelRetryAt > now {
+				status.ModelQuotaReason = state.modelReason
+				if status.RetryAfterUntil == nil || *status.RetryAfterUntil < state.modelRetryAt {
+					status.RetryAfterUntil = &state.modelRetryAt
+				}
+				if status.State == "available" {
+					status.State = "rate_limited"
+				}
 			}
 			services, _ := contract.ParseNativeServices([]contract.NativeService{status.NativeService})
 			for _, op := range row.modelTypes {
 				if routes, err := connector.ResolveServiceRoutes(status.ConfiguredType, services, status.RerankFormat, op); err == nil && len(routes) > 0 {
-					row.Availability.ServiceStatuses = append(row.Availability.ServiceStatuses, status)
+					row.Availability.ServiceStatuses = append(row.Availability.ServiceStatuses, *status)
+					modelLimited = modelLimited || status.State == "rate_limited" && status.ModelQuotaReason != ""
 					break
 				}
 			}
+		}
+		if row.Availability.State == "unavailable" && modelLimited {
+			row.Availability.State = "rate_limited"
 		}
 		if row.Availability.State == "rate_limited" {
 			canRecover := false
@@ -137,17 +168,23 @@ func annotateBindingAvailabilityTx(ctx context.Context, tx *sql.Tx, modelID, now
 	if err != nil {
 		return err
 	}
-	byTarget := make(map[string]BindingAvailability, len(rows))
+	byTarget := make(map[string]bindingAvailabilityRow, len(rows))
 	for _, row := range rows {
-		byTarget[row.TargetID] = row.Availability
+		byTarget[row.TargetID] = row
 	}
 	for i := range value.Bindings {
 		for j := range value.Bindings[i].Targets {
 			target := &value.Bindings[i].Targets[j]
-			if availability, ok := byTarget[target.ID]; ok {
-				target.Availability = &availability
+			if row, ok := byTarget[target.ID]; ok {
+				target.Availability = &row.Availability
+				if target.Guide != nil {
+					target.Guide.attachHealth(row.allStatuses)
+				}
 			}
 		}
+	}
+	if len(rows) > 0 {
+		value.Coverage = visibleInterfaceCoverage(rows[0].modelTypes, value.Bindings)
 	}
 	return nil
 }

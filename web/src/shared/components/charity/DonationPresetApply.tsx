@@ -26,8 +26,8 @@ import { usePagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { formatCount } from '@shared/utils/formatNumber';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../States';
-import { Button, DataTable, Field, FilterBar, Fold, Note, OutcomeNote } from '../ui';
+import { EmptyState, ErrorState, LoadingState } from '../States';
+import { Button, DataTable, Field, FilterBar, Fold, Note, OutcomeNote, StatusBadge } from '../ui';
 import { BindingBatchResults, type BindingResultLabel } from './BindingBatchResults';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 
@@ -194,7 +194,9 @@ function CustomPresetApply(props: {
                       <strong>{row.name}</strong>
                       <small className="nb-workflow-id mono">{row.base_url}</small>
                       {row.recommended ? (
-                        <StatusBadge active label={t('common.bindingPresets.recommended')} />
+                        <StatusBadge tone="accent">
+                          {t('common.bindingPresets.recommended')}
+                        </StatusBadge>
                       ) : null}
                     </span>
                   ),
@@ -212,6 +214,7 @@ function CustomPresetApply(props: {
                   header: t('common.workflow.actions'),
                   mobileLabel: t('common.workflow.actions'),
                   cell: 'action',
+                  align: 'action',
                   render: (row) => (
                     <Button type="button" disabled={busy} onClick={() => setSelected(row)}>
                       {t('common.bindingPresets.selectPreset')}

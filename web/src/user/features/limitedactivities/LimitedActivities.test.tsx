@@ -58,13 +58,21 @@ const session = {
 describe('limited activity user experience', () => {
   it('opens a hidden activity directly and reuses an uncertain exchange', async () => {
     const writes: { key: string | null; body: string }[] = [];
+    let finishWalletRead!: (response: Response) => void;
+    const finalWalletRead = new Promise<Response>((resolve) => {
+      finishWalletRead = resolve;
+    });
+    const currentWallet = { general: '8000', sketch_paper: '2', sketch_brush: '0' };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = String(input);
         if (path.endsWith('/session')) return reply(session);
-        if (path.endsWith('/wallet'))
+        if (path.endsWith('/wallet')) {
+          if (writes.length === 2) return finalWalletRead;
+          if (writes.length === 1) return reply(currentWallet);
           return reply({ general: '10000', sketch_paper: '0', sketch_brush: '0' });
+        }
         if (path.endsWith('/exchange')) {
           writes.push({
             key: new Headers(init?.headers).get('Idempotency-Key'),
@@ -85,10 +93,16 @@ describe('limited activity user experience', () => {
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Confirm exchange' }));
     await screen.findByText(/previous result is unconfirmed/i);
+    await screen.findByText('8,000');
     expect(screen.getByLabelText('Quantity')).toBeDisabled();
     await rendered.user.click(screen.getByRole('button', { name: 'Retry the same exchange' }));
-    await screen.findByText(/Exchanged 1 Sketch paper/);
-    expect(writes).toHaveLength(2);
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(screen.getByText('8,000')).toBeVisible();
+    expect(screen.queryByText('9,000')).toBeNull();
+    finishWalletRead(reply(currentWallet));
+    expect(await screen.findByText(/^Exchanged /)).toHaveTextContent(
+      'Exchanged 1 Sketch paper · General credits charged 1,000',
+    );
     expect(writes[0]).toEqual(writes[1]);
   });
   it('uses the public directory and shows no entry when it is hidden', async () => {

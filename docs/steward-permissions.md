@@ -68,7 +68,7 @@ There are 56 independent boolean permissions.
 | `users.level` | Assign lower user levels | false |
 | `users.balance` | General balance adjustment | false |
 | `users.game_balance` | Game balance adjustment | false |
-| `users.resources` | Adjust drawing supplies, gacha inventory and Lake Notes resources | false |
+| `users.resources` | Adjust drawing supplies, gacha inventory, Lake Notes resources and Whale Haven currencies | false |
 | `users.ban` | Ban lower-level users | true |
 | `users.unban` | Unban or replace an active ban | false |
 | `users.ban_permanent` | Permanent ban | true |
@@ -332,3 +332,5 @@ including the check immediately before dispatch.
 Schema 54 adds `users.resources=false` to every saved schema-53 policy and extends
 management capture of that field. It preserves old grants, policy revisions,
 limits, scopes, timestamps and historical policy audit JSON.
+
+The user resources wallet also includes `whale:pearls` and `whale:conch_shards`. The same read and adjust grants, quantity comparisons and management audit cover these balances before and after adoption.

@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Menu, MenuItem, MenuSection, MenuTrigger, Separator } from 'react-aria-components';
 import { AnchoredSurface } from '../OverlaySurface';
 
@@ -19,17 +19,45 @@ export function MoreMenu({
   items,
   trigger,
   triggerClassName,
+  menuClassName,
 }: {
   label: string;
   items: readonly (MoreMenuItem | 'separator')[];
   trigger?: ReactNode;
   triggerClassName?: string;
+  /** A local surface (such as a game) can carry its colours into the portal. */
+  menuClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+  const [surface, setSurface] = useState<CSSProperties>();
+  const openMenu = (next: boolean) => {
+    if (next && menuClassName && ref.current) {
+      const source = getComputedStyle(ref.current);
+      const roles = [
+        'text',
+        'surface-raised',
+        'surface-muted',
+        'accent',
+        'accent-quiet',
+        'border',
+        'danger',
+        'focus',
+      ];
+      setSurface(
+        Object.fromEntries(
+          roles.map((role) => {
+            const name = '--nb-color-' + role;
+            return [name, source.getPropertyValue(name)];
+          }),
+        ),
+      );
+    }
+    setOpen(next);
+  };
   return (
     <span className="nb-more">
-      <MenuTrigger isOpen={open} onOpenChange={setOpen}>
+      <MenuTrigger isOpen={open} onOpenChange={openMenu}>
         <Button
           ref={ref}
           className={['nb-btn nb-btn--secondary', triggerClassName ?? 'nb-btn--sm'].join(' ')}
@@ -43,7 +71,13 @@ export function MoreMenu({
           triggerRef={ref}
           className="nb-more__popover"
         >
-          <Menu autoFocus="first" className="nb-more__menu" aria-label={label} shouldFocusWrap>
+          <Menu
+            autoFocus="first"
+            className={['nb-more__menu', menuClassName].filter(Boolean).join(' ')}
+            style={surface}
+            aria-label={label}
+            shouldFocusWrap
+          >
             {items.map((item, index) =>
               item === 'separator' ? (
                 <Separator key={'sep-' + index} />

@@ -1,0 +1,1219 @@
+@scope (.whale-haven) {
+  /* Drawer and sheet share the Whale Maid component kit. */
+  .deck-panel {
+    container: whale-deck / inline-size;
+    background: var(--nb-color-surface-raised);
+    border-color: var(--nb-color-border);
+  }
+
+  .deck-panel:not(.is-open) {
+    visibility: hidden;
+  }
+  .deck-panel[hidden] {
+    display: none;
+  }
+  .deck-panel--drawer {
+    width: min(458px, calc(100% - 28px));
+  }
+
+  .deck-header {
+    position: relative;
+    display: block;
+    flex: none;
+    padding: 0.85rem 1.15rem 0.2rem;
+    border-bottom: 0;
+    background: linear-gradient(
+      150deg,
+      var(--nb-color-accent-quiet),
+      var(--nb-color-surface-raised) 82%
+    );
+  }
+
+  .deck-header__row,
+  .deck-header__identity,
+  .deck-header__actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .deck-header__row {
+    justify-content: space-between;
+    gap: 0.7rem;
+  }
+  .deck-header__identity {
+    min-width: 0;
+    gap: 0.68rem;
+  }
+  .deck-header__actions {
+    flex: none;
+    gap: 0.3rem;
+  }
+  .deck-header__title {
+    margin: 0;
+    font-size: 1.21rem;
+    font-weight: 760;
+    line-height: 1.26;
+  }
+
+  .deck-header__emblem {
+    position: relative;
+    display: grid;
+    flex: none;
+    width: 51px;
+    height: 35px;
+    place-items: center;
+    color: white;
+    padding-right: 5px;
+  }
+
+  .deck-header__emblem::before,
+  .deck-header__emblem::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: skewX(-20deg);
+    border-radius: 3px;
+  }
+  .deck-header__emblem::before {
+    right: 6px;
+    background: linear-gradient(115deg, var(--deep-sea-blue), #356fae);
+  }
+  .deck-header__emblem::after {
+    left: auto;
+    width: 4px;
+    background: var(--champagne-gold);
+  }
+  .deck-header__emblem svg {
+    position: relative;
+  }
+  .deck-header__wave {
+    margin: 0.46rem 0 0;
+  }
+  .deck-header__wave svg {
+    background: var(--nb-color-surface-raised);
+  }
+
+  .deck-icon-btn {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    color: var(--nb-color-accent);
+    background: transparent;
+  }
+  .deck-icon-btn:hover {
+    border-color: var(--nb-color-border);
+    background: var(--nb-color-accent-quiet);
+  }
+  .wh-menu-position {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--nb-space-1);
+    min-height: 40px;
+    padding: 0 var(--nb-space-2);
+    color: var(--nb-color-accent);
+    border: 1px solid var(--nb-color-border);
+    border-radius: var(--nb-radius-control);
+    background: var(--nb-color-surface-raised);
+    font: inherit;
+    font-size: var(--nb-font-size-sm);
+    white-space: nowrap;
+  }
+  .wh-menu-position:hover {
+    background: var(--nb-color-accent-quiet);
+  }
+  .deck-header__title:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .deck-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    overflow-y: auto;
+    gap: 1.15rem;
+    padding: 0.8rem 1.14rem 1.25rem;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--nb-color-border-strong) transparent;
+  }
+  .deck-body > * {
+    flex-shrink: 0;
+    min-width: 0;
+  }
+  .deck-body h3,
+  .deck-body h4,
+  .deck-body p {
+    margin: 0;
+  }
+  .deck-body .deck-section-title {
+    margin: 0 0 0.67rem;
+  }
+  .deck-body .kit-section-title {
+    font-size: var(--nb-font-size-md);
+  }
+  .deck-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.67rem;
+  }
+  .deck-empty {
+    color: var(--nb-color-text-muted);
+    font-size: 0.82rem;
+    padding: 0.3rem 0;
+  }
+
+  .deck-link {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.22rem;
+    max-width: 100%;
+    padding: 0.24rem 0.3rem;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--nb-color-accent);
+    font-size: 0.77rem;
+    font-weight: 720;
+    white-space: nowrap;
+  }
+  .deck-link:hover {
+    background: var(--nb-color-accent-quiet);
+  }
+  .deck-link svg {
+    flex: none;
+  }
+
+  /* Send a whale, read past visits, browse neighbors. */
+  .voyage-card,
+  .exchange-ticket {
+    padding: 0.92rem;
+    border-radius: 18px;
+    border: 1px solid var(--nb-color-border);
+    background: linear-gradient(138deg, var(--nb-color-accent-soft), var(--nb-color-surface) 77%);
+  }
+  .voyage-card__intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px;
+    align-items: center;
+    gap: 0.35rem;
+    position: relative;
+  }
+  .voyage-card__intro h3 {
+    font-size: 1.16rem;
+    line-height: 1.25;
+  }
+  .voyage-card__intro p {
+    margin: 0.36rem 0 0.5rem;
+    color: var(--nb-color-text-muted);
+    line-height: 1.55;
+    font-size: 0.78rem;
+  }
+  .voyage-card__intro img {
+    width: 100%;
+    height: 96px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 4px #254b7a26);
+  }
+  .voyage-meter,
+  .exchange-quota {
+    display: grid;
+    grid-template-columns: auto minmax(24px, 1fr) auto;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.72rem;
+    color: var(--nb-color-text-muted);
+  }
+  .voyage-meter strong,
+  .exchange-quota strong {
+    color: var(--nb-color-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .deck-body progress {
+    appearance: none;
+    width: 100%;
+    height: 7px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 999px;
+    background: var(--nb-color-border);
+  }
+  .deck-body progress::-webkit-progress-bar {
+    background: var(--nb-color-border);
+  }
+  .deck-body progress::-webkit-progress-value {
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--sky-blue), #5fb5f5);
+  }
+  .deck-body progress::-moz-progress-bar {
+    border-radius: 999px;
+    background: var(--sky-blue);
+  }
+  .voyage-form {
+    display: grid;
+    gap: 0.38rem;
+    margin-top: 0.67rem;
+  }
+  .voyage-form label {
+    font-size: 0.75rem;
+    font-weight: 720;
+  }
+  .voyage-form select {
+    text-overflow: ellipsis;
+  }
+  .voyage-card__action {
+    width: 100%;
+    min-height: 39px;
+    margin-top: 0.25rem;
+  }
+  .voyage-form small {
+    text-align: center;
+    color: var(--nb-color-text-muted);
+    font-size: 0.69rem;
+  }
+
+  .deck-timeline,
+  .bay-directory,
+  .decor-shelf {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .deck-timeline {
+    position: relative;
+    margin-left: 0.32rem;
+    padding-left: 1rem;
+  }
+  .deck-timeline::before {
+    content: '';
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.75rem;
+    left: 0;
+    border-left: 1px solid var(--nb-color-border-strong);
+  }
+  .deck-timeline__entry {
+    position: relative;
+    padding: 0.16rem 0 0.75rem;
+  }
+  .deck-timeline__entry + .deck-timeline__entry {
+    padding-top: 0.68rem;
+    border-top: 1px solid var(--nb-color-border);
+  }
+  .deck-timeline__entry:last-child {
+    padding-bottom: 0.28rem;
+  }
+  .deck-timeline__entry::before {
+    content: '';
+    position: absolute;
+    top: 0.56rem;
+    left: -1.25rem;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--sky-blue);
+    box-shadow: 0 0 0 3px var(--nb-color-surface-raised);
+  }
+  .deck-timeline__entry + .deck-timeline__entry::before {
+    top: 1.05rem;
+  }
+  .deck-timeline__heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.35rem;
+  }
+  .deck-timeline__heading > div {
+    min-width: 0;
+  }
+  .deck-timeline__heading h4 {
+    font-size: 0.91rem;
+    font-weight: 740;
+    overflow-wrap: anywhere;
+  }
+  .deck-timeline__heading > time {
+    padding-top: 0.2rem;
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-xs);
+    white-space: nowrap;
+  }
+  .deck-timeline__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.58rem;
+    color: var(--nb-color-text-muted);
+    font-size: 0.73rem;
+  }
+  .deck-timeline__entry p {
+    margin: 0.32rem 0 0.3rem;
+    color: var(--nb-color-text-muted);
+    font-size: 0.79rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .visit-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.36rem;
+  }
+  .visit-counts span,
+  .deck-balance,
+  .bay-balance {
+    border-radius: 999px;
+    background: var(--nb-color-accent-quiet);
+    color: var(--nb-color-accent);
+    padding: 0.13rem 0.48rem;
+    font-size: 0.7rem;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .deck-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin: 0.4rem 0 0;
+    padding: 0.43rem 0.52rem;
+    border-radius: 10px;
+    background: var(--nb-color-accent-quiet);
+    font-size: 0.77rem;
+    line-height: 1.53;
+    overflow-wrap: anywhere;
+  }
+  .deck-message svg {
+    flex: none;
+    color: var(--nb-color-accent-hover);
+    margin-top: 0.14rem;
+  }
+
+  .bay-directory li,
+  .decor-shelf li {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--nb-color-border);
+  }
+  .bay-directory li:last-child,
+  .decor-shelf li:last-child {
+    border-bottom: 0;
+  }
+  .bay-directory li.is-pinned {
+    background: linear-gradient(90deg, rgba(251, 191, 36, 0.08), transparent 72%);
+    border-radius: 10px;
+    padding-inline: 0.36rem;
+    margin-inline: -0.36rem;
+  }
+  .bay-avatar,
+  .decor-shelf__image {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+    background: var(--nb-color-accent-quiet);
+    border: 1px solid var(--nb-color-border);
+  }
+  .bay-avatar {
+    border-radius: 50%;
+  }
+  .bay-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scale(1.6);
+    transform-origin: 50% 24%;
+  }
+  .bay-directory__name {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    font-size: 0.83rem;
+    overflow-wrap: anywhere;
+  }
+  .bay-directory__name span,
+  .bay-directory__action > span:not(.bay-balance) {
+    color: var(--nb-color-text-muted);
+    font-size: 0.72rem;
+  }
+  .bay-directory__title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+  }
+  .bay-whale-tag {
+    font-size: 0.69rem !important;
+    font-weight: 650;
+    color: var(--nb-color-accent) !important;
+  }
+  .bay-match-pill {
+    padding: 0.06rem 0.38rem;
+    border-radius: 999px;
+    font-size: 0.64rem !important;
+    font-weight: 700;
+    background: rgba(37, 150, 190, 0.16);
+    color: var(--nb-color-accent) !important;
+  }
+  .bay-directory__handles {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.24rem;
+  }
+  .bay-ocean-sub {
+    font-size: 0.69rem !important;
+    color: var(--nb-color-text-muted) !important;
+  }
+  .bay-directory__action {
+    display: grid;
+    justify-items: end;
+    gap: 0.14rem;
+  }
+  .bay-directory__top-ops {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+  }
+  .bay-pin-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--nb-color-border);
+    background: var(--nb-color-surface-raised);
+    color: var(--nb-color-text-muted);
+    cursor: pointer;
+    transition:
+      transform 0.14s ease,
+      color 0.14s ease,
+      border-color 0.14s ease;
+  }
+  .bay-pin-btn:hover {
+    transform: scale(1.08);
+    color: #f59e0b;
+    border-color: #fbbf24;
+  }
+  .bay-pin-btn.is-pinned {
+    color: #f59e0b;
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.14);
+  }
+
+  /* My Bay Pass & Multi-Identifier Neighbor Search */
+  .my-bay-pass {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+    padding: 0.62rem 0.78rem;
+    border-radius: 14px;
+    border: 1px dashed var(--nb-color-border-strong);
+    background: var(--nb-color-surface-raised);
+  }
+  .my-bay-pass__meta {
+    display: grid;
+    gap: 0.28rem;
+    min-width: 0;
+  }
+  .my-bay-pass__title {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--nb-color-text);
+  }
+  .my-bay-pass__title svg {
+    color: var(--nb-color-accent);
+  }
+  .my-bay-pass__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.26rem;
+  }
+  .my-bay-pass__copy {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .bay-id-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.08rem 0.38rem;
+    border-radius: 6px;
+    border: 1px solid var(--nb-color-border);
+    background: var(--nb-color-surface);
+    color: var(--nb-color-text-muted) !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.66rem !important;
+    font-weight: 640;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+  .bay-id-chip--dc {
+    background: rgba(88, 101, 242, 0.1);
+    border-color: rgba(88, 101, 242, 0.25);
+    color: #4f5bd5 !important;
+  }
+  :scope[data-whale-theme='dark'] .bay-id-chip--dc {
+    color: #a5b4fc !important;
+  }
+  .bay-id-chip--code {
+    background: var(--nb-color-accent-quiet);
+    color: var(--nb-color-accent) !important;
+  }
+  .bay-id-chip--anon {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #d97706 !important;
+  }
+
+  .bay-search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.24rem 0.32rem 0.24rem 0.65rem;
+    border-radius: 12px;
+    border: 1px solid var(--nb-color-border-strong);
+    background: var(--nb-color-surface-raised);
+    margin-bottom: 0.48rem;
+  }
+  .bay-search-bar:focus-within {
+    border-color: var(--sky-blue);
+    box-shadow: 0 0 0 3px rgba(95, 181, 245, 0.18);
+  }
+  .bay-search-bar__icon {
+    flex-shrink: 0;
+    color: var(--nb-color-text-muted);
+  }
+  .bay-search-bar__input {
+    flex: 1;
+    min-width: 0;
+    min-height: 30px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--nb-color-text);
+    font-size: 0.78rem;
+  }
+  .bay-search-bar__input::placeholder {
+    color: var(--nb-color-text-muted);
+    opacity: 0.8;
+  }
+  .bay-search-bar__clear {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--nb-color-accent-quiet);
+    color: var(--nb-color-text-muted);
+    cursor: pointer;
+  }
+  .bay-search-bar__go {
+    flex-shrink: 0;
+    min-height: 28px;
+    padding-inline: 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .bay-filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .bay-search-empty {
+    display: grid;
+    justify-items: start;
+    gap: 0.36rem;
+    padding: 0.75rem;
+    border-radius: 12px;
+    border: 1px dashed var(--nb-color-border);
+    background: var(--nb-color-accent-quiet);
+    font-size: 0.77rem;
+  }
+  .bay-search-empty small {
+    color: var(--nb-color-text-muted);
+    font-size: 0.7rem;
+    line-height: 1.45;
+  }
+
+  /* Wardrobe gallery and compact preview controls. */
+  .deck-balance {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.24rem;
+  }
+  .deck-balance img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+  }
+  .outfit-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+    gap: 0.65rem;
+  }
+  .outfit-tile {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--nb-color-border);
+    border-radius: 15px;
+  }
+  .outfit-tile.is-equipped {
+    border-color: var(--sky-blue);
+  }
+  .outfit-tile__art {
+    position: relative;
+    display: grid;
+    place-items: center;
+    height: clamp(106px, 19vh, 157px);
+    padding: 0.37rem;
+    background: radial-gradient(
+      ellipse at center,
+      var(--nb-color-surface-raised),
+      var(--nb-color-accent-quiet)
+    );
+  }
+  .outfit-tile__art img {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    object-fit: contain;
+  }
+  .outfit-tile__content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.28rem;
+    padding: 0.58rem;
+  }
+  .outfit-tile__content h4 {
+    font-size: var(--nb-font-size-md);
+    line-height: 1.35;
+  }
+  .outfit-tile__content p {
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+  }
+  .outfit-tile__content .nb-btn {
+    width: 100%;
+    min-height: 40px;
+    margin-top: auto;
+    font-size: var(--nb-font-size-sm);
+  }
+  .wh-item-price {
+    color: var(--nb-color-text);
+    font-size: var(--nb-font-size-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .deck-preferences .ui-switch-row {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--nb-color-border);
+  }
+  .motion-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.34rem;
+  }
+  .motion-option {
+    min-height: 28px;
+    padding: 0.24rem 0.53rem;
+    border: 1px solid var(--nb-color-border);
+    border-radius: 999px;
+    color: var(--nb-color-text);
+    background: var(--nb-color-surface);
+    font-size: 0.71rem;
+    font-weight: 620;
+  }
+  .motion-option:hover,
+  .motion-option[aria-pressed='true'] {
+    color: var(--nb-color-accent);
+    border-color: var(--sky-blue);
+    background: var(--nb-color-accent-quiet);
+  }
+  .deck-details {
+    margin-top: 0.63rem;
+    padding: 0.4rem 0;
+    color: var(--nb-color-text-muted);
+    font-size: 0.75rem;
+  }
+  .deck-details summary {
+    cursor: pointer;
+    color: var(--nb-color-accent);
+    font-weight: 680;
+  }
+  .deck-details summary svg {
+    vertical-align: middle;
+  }
+  .deck-details p {
+    margin: 0.45rem 0;
+  }
+  .deck-details--lore {
+    margin: 0;
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    background: var(--nb-color-accent-quiet);
+  }
+  .deck-details dl {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .deck-details dt {
+    color: var(--nb-color-text);
+    font-weight: 700;
+  }
+  .deck-details dd {
+    margin: 0;
+  }
+
+  /* Backpack reads like a grid with one selected item, not unrelated rows. */
+  .deck-body .backpack-card {
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .backpack-head > span {
+    border-radius: 999px;
+    padding: 0.2rem 0.45rem;
+    background: var(--nb-color-accent-quiet);
+    color: var(--nb-color-accent);
+    font-size: 0.69rem;
+  }
+  .backpack-selection {
+    display: grid;
+    gap: var(--nb-space-3);
+    padding: var(--nb-space-3);
+    border: 1px solid var(--nb-color-border);
+    border-radius: var(--nb-radius-card);
+    background: var(--nb-color-surface);
+  }
+  .backpack-selection__summary {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: var(--nb-space-3);
+    align-items: center;
+  }
+  .backpack-selection__art {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border: 1px solid var(--nb-color-border);
+    border-radius: 11px;
+    background: var(--nb-color-surface-raised);
+  }
+  .backpack-selection__art img,
+  .backpack-selection__art svg {
+    width: 83%;
+    height: 83%;
+    object-fit: contain;
+  }
+  .backpack-selection h3,
+  .backpack-gift h3 {
+    font-size: var(--nb-font-size-md);
+    line-height: 1.3;
+  }
+  .backpack-selection p,
+  .backpack-gift p {
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+    line-height: 1.5;
+  }
+  .backpack-selection p {
+    margin-top: 0.22rem;
+  }
+  .backpack-purchase {
+    display: grid;
+    gap: var(--nb-space-3);
+    padding-top: var(--nb-space-3);
+    border-top: 1px solid var(--nb-color-border);
+  }
+  .backpack-selection__stock,
+  .backpack-purchase__quantity,
+  .backpack-purchase__checkout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--nb-space-2) var(--nb-space-3);
+    font-size: var(--nb-font-size-sm);
+  }
+  .backpack-purchase__quantity {
+    justify-content: flex-start;
+  }
+  .backpack-purchase__quantity label {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--nb-space-1);
+  }
+  .backpack-purchase__quantity small,
+  .backpack-purchase__price > span,
+  .wh-detail {
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+  }
+  .backpack-purchase__quantity small {
+    white-space: nowrap;
+  }
+  .backpack-purchase__quantity input {
+    width: 5rem;
+    min-height: 40px;
+    margin: 0;
+  }
+  .backpack-selection .nb-btn {
+    min-height: 40px;
+    padding-inline: var(--nb-space-3);
+    font-size: var(--nb-font-size-sm);
+    border-radius: var(--nb-radius-control);
+  }
+  .backpack-purchase__price {
+    display: grid;
+    min-width: 0;
+    gap: var(--nb-space-1);
+    font-variant-numeric: tabular-nums;
+  }
+  .backpack-purchase__price .nb-amount {
+    display: inline-block;
+  }
+  .wh-detail {
+    display: block;
+    font-weight: var(--nb-font-weight-regular);
+  }
+  .backpack-gift {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.62rem 0;
+    border-top: 1px solid var(--nb-color-border);
+    background: transparent;
+  }
+  .backpack-gift__icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    color: var(--nb-color-accent);
+    background: var(--nb-color-accent-quiet);
+    border-radius: 10px;
+  }
+  .backpack-gift .nb-btn {
+    white-space: nowrap;
+  }
+
+  /* Conch Gacha & Kitchen Buffs Card */
+  .conch-gacha-card {
+    display: grid;
+    gap: 0.62rem;
+  }
+  .conch-gacha-hero {
+    display: grid;
+    grid-template-columns: 82px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.68rem;
+  }
+  .conch-gacha-hero__art {
+    display: grid;
+    place-items: center;
+    width: 82px;
+    height: 88px;
+    border-radius: 14px;
+    border: 1px solid var(--nb-color-border);
+    background: radial-gradient(
+      circle at 50% 42%,
+      var(--nb-color-surface-raised),
+      var(--nb-color-accent-quiet)
+    );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+  .conch-gacha-hero__art img {
+    width: 88%;
+    height: 90%;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 5px rgba(24, 52, 92, 0.2));
+  }
+  .conch-gacha-hero__copy {
+    display: grid;
+    gap: 0.38rem;
+    min-width: 0;
+  }
+  .conch-gacha-hero__copy p {
+    font-size: 0.73rem;
+    color: var(--nb-color-text-muted);
+    line-height: 1.45;
+  }
+  .conch-gacha-prizes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+  }
+  .conch-prize-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.24rem;
+    padding: 0.14rem 0.44rem;
+    border-radius: 999px;
+    border: 1px solid var(--nb-color-border);
+    background: var(--nb-color-surface-raised);
+    color: var(--nb-color-text);
+    font-size: 0.68rem;
+    font-weight: 640;
+    white-space: nowrap;
+  }
+  .conch-prize-pill img {
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .conch-buff-list {
+    display: grid;
+    gap: 0.38rem;
+    padding-top: 0.35rem;
+    border-top: 1px dashed var(--nb-color-border);
+  }
+  .conch-buff-item {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.76rem;
+  }
+  .conch-buff-item__icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid var(--nb-color-border);
+    background: var(--nb-color-surface-raised);
+  }
+  .conch-buff-item__icon img {
+    width: 84%;
+    height: 84%;
+    object-fit: contain;
+  }
+  .conch-buff-item__body {
+    min-width: 0;
+  }
+  .conch-buff-item__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.42rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .conch-buff-item--coupon {
+    color: var(--nb-color-accent);
+    font-size: 0.73rem;
+    line-height: 1.4;
+  }
+  .deck-timeline--activity [data-kind='gacha']::before {
+    background: #b57edc;
+  }
+
+  /* The conversion ticket separates balances, quantity and purchase. */
+  .exchange-values {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.53rem;
+    margin-bottom: 0.65rem;
+  }
+  .exchange-values > div {
+    display: grid;
+    justify-items: center;
+    padding: 0.42rem 0.2rem;
+    border-radius: 11px;
+    border: 1px solid var(--nb-color-border);
+    background: var(--nb-color-surface-raised);
+  }
+  .exchange-values svg {
+    color: var(--nb-color-accent-hover);
+  }
+  .exchange-values span {
+    color: var(--nb-color-text-muted);
+    font-size: 0.71rem;
+  }
+  .exchange-values strong {
+    color: var(--nb-color-accent);
+    max-width: 100%;
+    font-size: 1.19rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+  }
+  .exchange-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.62rem;
+  }
+  .exchange-controls > .nb-btn {
+    flex-grow: 1;
+    min-height: 35px;
+  }
+  .exchange-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.12rem;
+    padding: 0.15rem;
+    border: 1px solid var(--nb-color-border);
+    border-radius: 999px;
+    background: var(--nb-color-surface-raised);
+    font-size: 0.75rem;
+  }
+  .exchange-stepper button {
+    min-width: 25px;
+    height: 25px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--nb-color-accent);
+    background: var(--nb-color-accent-quiet);
+  }
+  .exchange-stepper button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .exchange-stepper strong {
+    min-width: 30px;
+    text-align: center;
+  }
+  .decor-shelf li {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+  }
+  .decor-shelf__image {
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+  }
+  .decor-shelf__image img {
+    width: 87%;
+    height: 87%;
+    object-fit: contain;
+  }
+  .decor-shelf h4 {
+    font-size: var(--nb-font-size-md);
+    line-height: 1.36;
+  }
+  .decor-shelf p {
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+    line-height: 1.4;
+  }
+  .decor-shelf .nb-btn {
+    white-space: nowrap;
+    min-height: 40px;
+    font-size: var(--nb-font-size-sm);
+    padding-inline: var(--nb-space-3);
+  }
+  .deck-timeline--activity [data-kind='exchange']::before,
+  .deck-timeline--activity [data-kind='harvest']::before {
+    background: #d2ad67;
+  }
+  .deck-timeline--activity [data-kind='feed']::before {
+    background: #56b89f;
+  }
+
+  @container whale-deck (width < 32rem) {
+    .deck-header {
+      padding: 0.52rem 0.88rem 0.18rem;
+    }
+    .deck-body {
+      padding: 0.62rem 0.85rem calc(1.05rem + env(safe-area-inset-bottom, 0px));
+      gap: 0.88rem;
+    }
+    .deck-header__emblem {
+      width: 42px;
+      height: 29px;
+    }
+    .deck-header__emblem svg {
+      width: 18px;
+    }
+    .deck-header__title {
+      font-size: 1.06rem;
+    }
+    .voyage-card,
+    .exchange-ticket {
+      padding: 0.72rem;
+    }
+    .voyage-card__intro {
+      grid-template-columns: minmax(0, 1fr) 74px;
+    }
+    .voyage-card__intro img {
+      height: 78px;
+    }
+    .deck-link {
+      font-size: 0.74rem;
+      padding: 0.3rem 0.38rem;
+    }
+    .outfit-tile__art {
+      height: clamp(96px, 16vh, 134px);
+    }
+    .motion-option {
+      min-height: 32px;
+      padding: 0.28rem 0.6rem;
+      font-size: 0.73rem;
+    }
+    .exchange-stepper button {
+      min-width: 30px;
+      height: 30px;
+    }
+    .backpack-gift .nb-btn {
+      min-height: 36px;
+    }
+    .conch-gacha-hero {
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 0.52rem;
+    }
+    .conch-gacha-hero__art {
+      width: 68px;
+      height: 74px;
+    }
+  }
+
+  @container whale-deck (width < 24rem) {
+    .decor-shelf li {
+      grid-template-columns: 40px minmax(0, 1fr);
+    }
+    .decor-shelf .nb-btn {
+      grid-column: 2;
+      justify-self: start;
+      margin-top: 0.15rem;
+    }
+    .backpack-selection__summary {
+      grid-template-columns: 54px minmax(0, 1fr);
+    }
+    .backpack-selection__art {
+      width: 54px;
+      height: 54px;
+    }
+  }
+}

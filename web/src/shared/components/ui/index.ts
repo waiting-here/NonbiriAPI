@@ -6,6 +6,7 @@ export * from './Affix';
 export * from './Toggle';
 export * from './Segmented';
 export * from './OptionCards';
+export * from './ChoiceRow';
 export * from './MoreMenu';
 export * from './SaveBar';
 export * from './Note';

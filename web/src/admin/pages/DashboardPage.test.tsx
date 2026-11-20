@@ -27,6 +27,14 @@ function response(body: unknown, status = 200) {
   });
 }
 
+function emptyAlerts() {
+  return response({
+    data: [],
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+  });
+}
+
 function overview(userCount: number, total = 37) {
   return {
     data: Array.from({ length: total === 0 ? 0 : 20 }, (_, index) => ({
@@ -61,6 +69,7 @@ describe('dashboard endpoint overview', () => {
           input instanceof Request ? input.url : String(input),
           window.location.origin,
         );
+        if (url.pathname === '/admin/api/alerts') return emptyAlerts();
         return url.pathname === '/admin/api/session'
           ? response({ admin: { username: 'dashboard-admin' } })
           : response(overview(0, 0));
@@ -88,6 +97,7 @@ describe('dashboard endpoint overview', () => {
             window.location.origin,
           );
           requests.push(url);
+          if (url.pathname === '/admin/api/alerts') return emptyAlerts();
           if (url.pathname === '/admin/api/session')
             return response({ admin: { username: 'dashboard-admin' } });
           expect(url.pathname).toBe('/admin/api/overview/endpoints');
@@ -110,6 +120,12 @@ describe('dashboard endpoint overview', () => {
         '/endpoints',
       );
       const calls = requests.filter((url) => url.pathname === '/admin/api/overview/endpoints');
+      const alertReads = requests.filter((url) => url.pathname === '/admin/api/alerts');
+      expect(alertReads.map((url) => url.searchParams.get('resolved'))).toEqual(['false']);
+      expect(screen.getByRole('link', { name: /unresolved alerts/i })).toHaveAttribute(
+        'href',
+        '/alerts?resolved=false',
+      );
       expect(calls).toHaveLength(1);
       expect(calls[0].searchParams.get('page')).toBe('1');
       expect(calls[0].searchParams.get('page_size')).toBe('20');
@@ -131,6 +147,7 @@ describe('dashboard endpoint overview', () => {
         );
         if (url.pathname === '/admin/api/session')
           return response({ admin: { username: 'dashboard-admin' } });
+        if (url.pathname === '/admin/api/alerts') return emptyAlerts();
         attempts += 1;
         return attempts === 1
           ? response({ error: { code: 'service_unavailable', message: 'Please retry' } }, 503)
@@ -144,6 +161,6 @@ describe('dashboard endpoint overview', () => {
     const error = await screen.findByRole('alert');
     await user.click(within(error).getByRole('button', { name: /retry/i }));
     await waitFor(() => expect(attempts).toBe(2));
-    expect(await screen.findByText('0', { exact: true })).toBeVisible();
+    expect((await screen.findAllByText('0', { exact: true })).length).toBeGreaterThan(0);
   });
 });

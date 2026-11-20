@@ -3,7 +3,7 @@ import { PresetModels } from './PresetModels';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
-import { Field, Fields, FormActions, Note, Segmented } from '@shared/components/ui';
+import { ChoiceRow, Field, Fields, FormActions, Note, Segmented } from '@shared/components/ui';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import type { DiscoveryPreset, NativeServiceOption } from '@shared/connections';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
@@ -265,27 +265,21 @@ export function EntryForm({
               </Field>
               {channel?.entries?.map((entry) =>
                 entry.id && entry.enabled ? (
-                  <div key={entry.id} className="nb-stack nb-stack--sm">
-                    <Field label={entry.name || entry.base_url} help={entry.base_url}>
-                      {(props) => (
-                        <input
-                          {...props}
-                          type="checkbox"
-                          disabled={locked || Boolean(saved[entry.id!])}
-                          checked={Boolean(selected[entry.id!])}
-                          onChange={(event) => {
-                            const enabled = event.target.checked;
-                            setSelected((current) => {
-                              const next = { ...current };
-                              if (enabled) next[entry.id!] = protocolServices(entry.connector_type);
-                              else delete next[entry.id!];
-                              return next;
-                            });
-                          }}
-                        />
-                      )}
-                    </Field>
-                  </div>
+                  <ChoiceRow
+                    key={entry.id}
+                    label={entry.name || entry.base_url}
+                    description={entry.name ? entry.base_url : undefined}
+                    disabled={locked || Boolean(saved[entry.id])}
+                    checked={Boolean(selected[entry.id])}
+                    onChange={(checked) =>
+                      setSelected((current) => {
+                        const next = { ...current };
+                        if (checked) next[entry.id!] = protocolServices(entry.connector_type);
+                        else delete next[entry.id!];
+                        return next;
+                      })
+                    }
+                  />
                 ) : null,
               )}
               {channel?.discovery_source ? (

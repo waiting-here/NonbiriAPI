@@ -11,16 +11,33 @@
 .charity-donation-stats {
   margin-bottom: var(--nb-space-4);
 }
+.economy-donation-credit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-4);
+  padding: var(--nb-space-3) var(--nb-space-4);
+}
+.economy-donation-credit-bar > span {
+  font-size: var(--nb-font-size-sm);
+  color: var(--nb-color-text-muted);
+}
+.economy-donation-credit-bar > strong {
+  font-size: var(--nb-font-size-lg);
+}
 .donate-step {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--nb-space-3);
   align-items: start;
   min-width: 0;
-  padding: var(--nb-space-4);
-  border: 1px solid color-mix(in srgb, var(--nb-color-border) 80%, transparent);
-  border-radius: var(--nb-radius-card);
-  background: var(--nb-color-surface-alt);
+  padding: var(--nb-space-4) 0 0;
+  border-top: 1px solid var(--nb-color-border);
+}
+.donate-step:first-of-type {
+  padding-top: 0;
+  border-top: 0;
 }
 .donate-step__number {
   display: grid;
@@ -75,11 +92,6 @@
   overflow-wrap: anywhere;
   max-width: 100%;
 }
-.donation-selected-chips button {
-  flex-shrink: 0;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-}
 .economy-donation-summary {
   grid-template-columns: minmax(0, 1fr) auto;
   padding-inline: 0;
@@ -119,6 +131,9 @@
   .economy-donation-summary {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--nb-space-2);
+  }
+  .donation-summary-actions {
+    flex-wrap: wrap;
   }
   .donation-summary-actions > a,
   .donation-summary-actions > span {

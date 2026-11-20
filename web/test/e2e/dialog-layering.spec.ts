@@ -209,6 +209,7 @@ for (const { station, design } of [
           .getByRole('button', { name: language === 'zh' ? '取消' : 'Cancel', exact: true })
           .click();
         if (station === 'admin') {
+          await page.getByRole('tab', { name: copy.tabOverview, exact: true }).click();
           await page.getByRole('button', { name: copy.delete, exact: true }).click();
           const deletion = page.getByRole('alertdialog', { name: copy.deleteTitle });
           await expectUnobscured(deletion);

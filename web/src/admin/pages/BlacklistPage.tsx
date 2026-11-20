@@ -96,8 +96,6 @@ export function BlacklistManagement({
     events: t('common.blacklist.events'),
     eventNote: t('common.blacklist.eventNote'),
     noEvents: t('common.blacklist.noEvents'),
-    previous: t('common.blacklist.previous'),
-    next: t('common.blacklist.next'),
   };
   const actorLabels = {
     admin: t('common.blacklist.actorAdmin'),
@@ -119,6 +117,7 @@ export function BlacklistManagement({
     scopeKey: accountID ?? 'anonymous',
     scopeReady: Boolean(accountID),
     resetKey: `${q}|${actorKind}|${actorUserID}|${filterDiscordID}`,
+    clearOnWindowChange: 'event_account',
   });
   const result = useQuery({
     queryKey: [
@@ -151,12 +150,28 @@ export function BlacklistManagement({
   const [search, setSearch] = useState(q);
   const [actorDraft, setActorDraft] = useState(actorUserID);
   const [discordDraft, setDiscordDraft] = useState(filterDiscordID);
-  const [selected, setSelected] = useState('');
-  const [eventsPage, setEventsPage] = useState(1);
+  const eventID = params.get('event_account') ?? '';
+  const selected = validDiscordID(eventID) ? eventID : '';
+  const setSelected = (id: string) =>
+    setParams((current) => {
+      if (id) current.set('event_account', id);
+      else current.delete('event_account');
+      current.delete('event_page');
+      return current;
+    });
+  const eventPager = useUrlPagePager({
+    station: role === 'admin' ? 'admin' : 'user',
+    listType: 'blacklist-events',
+    scopeKey: accountID ?? 'anonymous',
+    scopeReady: Boolean(accountID && selected),
+    pageParam: 'event_page',
+    pageSizeParam: 'event_page_size',
+  });
   const events = useQuery({
-    queryKey: [...listKeys, 'events', accountID, selected, eventsPage],
-    queryFn: ({ signal }) => getBlacklistEvents(role, selected, String(eventsPage), signal),
-    enabled: Boolean(accountID && selected),
+    queryKey: [...listKeys, 'events', accountID, selected, eventPager.page, eventPager.pageSize],
+    queryFn: ({ signal }) =>
+      getBlacklistEvents(role, selected, eventPager.page, eventPager.pageSize, signal),
+    enabled: Boolean(accountID && selected) && !sessionError && !sessionFetching,
     retry: false,
   });
   const [validation, setValidation] = useState('');
@@ -237,6 +252,8 @@ export function BlacklistManagement({
       if (actorKind) next.set('actor_kind', actorKind);
       else next.delete('actor_kind');
       next.set('page', '1');
+      next.delete('event_account');
+      next.delete('event_page');
       return next;
     });
   };
@@ -373,7 +390,14 @@ export function BlacklistManagement({
             setValidation('');
             setParams((previous) => {
               const next = new URLSearchParams(previous);
-              for (const key of ['q', 'actor_kind', 'actor_user_id', 'discord_id'])
+              for (const key of [
+                'q',
+                'actor_kind',
+                'actor_user_id',
+                'discord_id',
+                'event_account',
+                'event_page',
+              ])
                 next.delete(key);
               next.set('page', '1');
               return next;
@@ -399,6 +423,7 @@ export function BlacklistManagement({
                   <input
                     {...field}
                     value={discordDraft}
+                    placeholder="Discord ID"
                     onChange={(event) => setDiscordDraft(event.target.value)}
                     inputMode="numeric"
                     maxLength={20}
@@ -416,6 +441,8 @@ export function BlacklistManagement({
                         if (event.target.value) next.set('actor_kind', event.target.value);
                         else next.delete('actor_kind');
                         next.set('page', '1');
+                        next.delete('event_account');
+                        next.delete('event_page');
                         return next;
                       })
                     }
@@ -434,6 +461,7 @@ export function BlacklistManagement({
                   <input
                     {...field}
                     value={actorDraft}
+                    placeholder="#ID"
                     onChange={(event) => setActorDraft(event.target.value)}
                     inputMode="numeric"
                     maxLength={19}
@@ -452,7 +480,18 @@ export function BlacklistManagement({
         ) : (
           <>
             {result.data.data.length === 0 ? (
-              <EmptyState title={label.empty} body={label.emptyBody} />
+              <EmptyState
+                title={
+                  params.get('q') || actorKind || actorUserID || filterDiscordID
+                    ? label.empty
+                    : t('common.blacklist.emptyInitial')
+                }
+                body={
+                  params.get('q') || actorKind || actorUserID || filterDiscordID
+                    ? label.emptyBody
+                    : t('common.blacklist.emptyInitialBody')
+                }
+              />
             ) : (
               <DataTable
                 caption={label.title}
@@ -524,7 +563,6 @@ export function BlacklistManagement({
                             disabled: busy,
                             onSelect: () => {
                               setSelected(item.discord_id);
-                              setEventsPage(1);
                             },
                           },
                           ...(role === 'admin'
@@ -561,7 +599,7 @@ export function BlacklistManagement({
           </>
         )}
       </Card>
-      {selected ? (
+      {selected && accountID && !sessionError && !sessionFetching ? (
         <Card>
           <SectionHead
             title={`${label.events}: ${selected}`}
@@ -592,28 +630,15 @@ export function BlacklistManagement({
               ))}
             </ul>
           )}
-          <div className="ops-actions">
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={eventsPage <= 1 || events.isFetching}
-              onClick={() => setEventsPage(eventsPage - 1)}
-            >
-              {label.previous}
-            </button>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={
-                !events.data ||
-                BigInt(events.data.pagination.page) >= BigInt(events.data.pagination.total_pages) ||
-                events.isFetching
-              }
-              onClick={() => setEventsPage(eventsPage + 1)}
-            >
-              {label.next}
-            </button>
-          </div>
+          {events.data && (
+            <PagePagination
+              metadata={events.data.pagination}
+              requestedPage={eventPager.page}
+              onPageChange={eventPager.setPage}
+              onPageSizeChange={eventPager.setPageSize}
+              busy={events.isFetching}
+            />
+          )}
         </Card>
       ) : null}
     </div>

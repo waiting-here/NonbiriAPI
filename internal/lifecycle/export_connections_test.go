@@ -25,7 +25,19 @@ func TestConnectionExportOwnsExactPublicVersionsAndHealth(t *testing.T) {
 	for _, user := range []int64{owner, other} {
 		seedExportConnection(t, tx, user)
 	}
-	out, err := exportConnections(t.Context(), tx, ExportRequest{UserID: owner, Limit: 10000})
+	for _, item := range []struct {
+		user  int64
+		model string
+		until int64
+	}{{owner, "waiting", 101}, {owner, "another-wait", 102}, {owner, "expired-model", 100}, {other, "other-private-model", 150}} {
+		_, err := tx.ExecContext(t.Context(), `INSERT INTO donation_service_model_cooldowns(health_id,upstream_model_id,reason,retry_at)
+			SELECT h.id,?,'google_daily_requests',? FROM donation_service_health h JOIN donation_uses u ON u.id=h.use_id
+			JOIN donation_keys k ON k.id=u.donation_key_id JOIN donations d ON d.id=k.donation_id WHERE d.user_id=?`, item.model, item.until, item.user)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := exportConnections(t.Context(), tx, ExportRequest{UserID: owner, DecisionNow: 100, Limit: 10000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,17 +53,24 @@ func TestConnectionExportOwnsExactPublicVersionsAndHealth(t *testing.T) {
 	if len(out.DonationUses[0].Health) != 1 || out.DonationUses[0].Health[0].FailureStreak != "2" || out.DonationUses[0].Health[0].BackoffRetryAt == nil || *out.DonationUses[0].Health[0].BackoffRetryAt != 20 {
 		t.Fatalf("health: %+v", out.DonationUses[0])
 	}
+	waits := out.DonationUses[0].Health[0].ModelCooldowns
+	if len(waits) != 2 || waits[0].UpstreamModelID != "another-wait" || waits[1] != (DonationModelCooldownExport{"waiting", "google_daily_requests", 101}) {
+		t.Fatalf("active model waits for owner: %+v", waits)
+	}
 	body, err := json.Marshal(out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"secret_ref_id", "secret-sentinel", "fingerprint", "hmac", "context_id", "claim_id", "health_id", "next_claim_seq", "streak_generation"} {
+	for _, forbidden := range []string{"other-private-model", "expired-model", "secret_ref_id", "secret-sentinel", "fingerprint", "hmac", "context_id", "claim_id", "health_id", "next_claim_seq", "streak_generation"} {
 		if strings.Contains(string(body), forbidden) {
 			t.Fatalf("internal material exported: %s", forbidden)
 		}
 	}
 	if _, err := exportConnections(t.Context(), tx, ExportRequest{UserID: owner, Limit: 6}); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("nested health did not consume collection bound: %v", err)
+	}
+	if _, err := exportConnections(t.Context(), tx, ExportRequest{UserID: owner, DecisionNow: 100, Limit: 8}); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("nested model waits did not consume collection bound: %v", err)
 	}
 }
 
@@ -137,6 +156,7 @@ func TestConnectionExportFieldSetsAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, CredentialVersionExport{}, "credential_id", "credential_version", "display_head", "display_tail", "enabled", "revision", "created_at", "retired_at")
 	assertClosedJSONKeys(t, DonationUseExport{}, "id", "donation_id", "donation_key_id", "native_services", "enabled", "discovery_enabled", "revision", "approved_revision", "pending_revision", "created_at", "updated_at", "revisions", "health", "rerank_path_override")
 	assertClosedJSONKeys(t, DonationUseHealthExport{}, "credential_id", "credential_version", "failure_streak", "failure_disabled", "retry_after_until", "backoff_retry_at", "backoff_period", "backoff_source", "backoff_stage", "updated_at")
+	assertClosedJSONKeys(t, DonationModelCooldownExport{}, "upstream_model_id", "reason", "retry_at")
 	assertClosedJSONKeys(t, SourceRevisionExport{}, "discovery_source_id", "discovery_source_revision", "credential_id", "credential_version", "base_url", "list_format", "created_at")
 }
 

@@ -31,3 +31,20 @@ CREATE INDEX idx_donation_model_split_limits ON donation_model_quotas(donation_k
 const LakeExchangeDailyIndexSQL = `
 CREATE INDEX idx_lake_exchange_daily_source ON lake_notes_exchange_receipts(user_id,direction,created_at,source_amount_mag);
 `
+
+// DonationExpiryIndexSQL bounds the due-work probe to active keys with an expiry time.
+const DonationExpiryIndexSQL = `
+CREATE INDEX idx_donation_keys_due_expiry ON donation_keys(expires_at,donation_id)
+WHERE ended_at IS NULL AND expires_at IS NOT NULL;
+`
+
+// ModelConsumptionSQL extends the existing exact-model aggregate in place.
+const ModelConsumptionSQL = `
+ALTER TABLE donation_model_quotas ADD COLUMN call_limit_mag BLOB CHECK(call_limit_mag IS NULL OR (typeof(call_limit_mag)='blob' AND length(call_limit_mag)=16));
+ALTER TABLE donation_model_quotas ADD COLUMN price_limit_mag BLOB CHECK(price_limit_mag IS NULL OR (typeof(price_limit_mag)='blob' AND length(price_limit_mag)=16));
+ALTER TABLE donation_model_quotas ADD COLUMN calls_used BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(calls_used)='blob' AND length(calls_used)=16);
+ALTER TABLE donation_model_quotas ADD COLUMN price_used_mag BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(price_used_mag)='blob' AND length(price_used_mag)=16);
+ALTER TABLE donation_model_quotas ADD COLUMN calls_reserved BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(calls_reserved)='blob' AND length(calls_reserved)=16);
+ALTER TABLE donation_model_quotas ADD COLUMN price_reserved_mag BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(typeof(price_reserved_mag)='blob' AND length(price_reserved_mag)=16);
+ALTER TABLE donation_model_quotas ADD COLUMN historical_costs_partial INTEGER NOT NULL DEFAULT 0 CHECK(historical_costs_partial IN (0,1));
+`

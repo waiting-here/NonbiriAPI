@@ -238,6 +238,7 @@ export function UserDonationHistory({
                       key: 'actions',
                       header: t('common.workflow.actions'),
                       cell: 'action',
+                      align: 'action',
                       render: (row) => (
                         <Button
                           size="sm"
@@ -282,23 +283,33 @@ export function UserDonationHistory({
                     {detail.data.description || t('common.operations.charity.noDescription')}
                   </MarkdownText>
                   <DonationHandlingStatus handling={detail.data.handling} />
-                  <dl className="detail-grid">
-                    <dt>{t('common.donationHistory.created')}</dt>
-                    <dd>{formatDateTime(detail.data.created_at * 1000)}</dd>
-                    <dt>{t('common.donationHistory.updated')}</dt>
-                    <dd>{formatDateTime(detail.data.updated_at * 1000)}</dd>
-                    <dt>{t('common.donationHistory.keys')}</dt>
-                    <dd>{formatCount(detail.data.key_count).display}</dd>
-                    <dt>{t('common.donationHistory.sources')}</dt>
-                    <dd>{formatCount(detail.data.source_count).display}</dd>
-                    <dt>{t('common.donationHistory.visibility')}</dt>
-                    <dd>
-                      {t(
-                        detail.data.owner_hidden_at === null
-                          ? 'common.donationHistory.visible'
-                          : 'common.donationHistory.hidden',
-                      )}
-                    </dd>
+                  <dl className="nb-facts">
+                    <div>
+                      <dt>{t('common.donationHistory.created')}</dt>
+                      <dd>{formatDateTime(detail.data.created_at * 1000)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('common.donationHistory.updated')}</dt>
+                      <dd>{formatDateTime(detail.data.updated_at * 1000)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('common.donationHistory.keys')}</dt>
+                      <dd>{formatCount(detail.data.key_count).display}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('common.donationHistory.sources')}</dt>
+                      <dd>{formatCount(detail.data.source_count).display}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('common.donationHistory.visibility')}</dt>
+                      <dd>
+                        {t(
+                          detail.data.owner_hidden_at === null
+                            ? 'common.donationHistory.visible'
+                            : 'common.donationHistory.hidden',
+                        )}
+                      </dd>
+                    </div>
                   </dl>
                   {detail.data.review_result?.reason ? (
                     <MarkdownText>{detail.data.review_result.reason}</MarkdownText>

@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../../test/fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -86,6 +87,7 @@ function options(matching = false) {
         ],
       },
       {
+        ...channelPreset,
         id: secondChannel,
         name: 'Second channel',
         revision: '3',

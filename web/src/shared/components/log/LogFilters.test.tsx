@@ -1,14 +1,14 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
-import { LogFilters, type LogFilterField } from './LogFilters';
+import { LogFilters, LogSearch, type LogFilterField } from './LogFilters';
 import type { LogUrlState } from './useLogUrlState';
 
 const nativeOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
 const fields: readonly LogFilterField[] = [
   { name: 'model', label: 'Model', ariaLabel: 'Model', maxLength: 133 },
-  { name: 'status', label: 'Status', ariaLabel: 'Status', inputType: 'number', maxLength: 3 },
+  { name: 'status', label: 'Status', ariaLabel: 'Status', inputMode: 'numeric' },
   {
     name: 'category',
     label: 'Category',
@@ -62,7 +62,7 @@ describe('shared log filters', () => {
     });
   });
 
-  it('preserves a reversed time draft, reports it, and ignores the invalid range', async () => {
+  it('preserves a reversed time draft and keeps the current search', async () => {
     const onApply = vi.fn();
     const view = await renderWithProviders(
       <LogFilters
@@ -74,8 +74,11 @@ describe('shared log filters', () => {
       { station: 'user' },
     );
     await view.user.click(screen.getByRole('button', { name: 'Search' }));
-    expect(onApply).toHaveBeenCalledWith({ filters: {}, fromUnix: 75, toUnix: 0 });
-    expect(screen.getByRole('alert')).toBeVisible();
+    expect(onApply).not.toHaveBeenCalled();
+    const end = screen.getByLabelText('Filter by end time');
+    expect(end).toHaveAccessibleDescription('Choose an end time later than the start time.');
+    expect(end).toHaveFocus();
+    expect(end).toBeVisible();
     expect(screen.getByLabelText('Filter by start time')).toHaveValue('1970-01-01T00:01');
   });
 
@@ -89,12 +92,22 @@ describe('shared log filters', () => {
     fireEvent.change(screen.getByLabelText('Filter by start time'), {
       target: { value: '2026-09-08T12:34' },
     });
-    fireEvent.change(screen.getByLabelText('Status'), { target: { value: '99' } });
+    const status = screen.getByLabelText('Status');
+    await view.user.click(status);
+    await view.user.paste('2000');
+    expect(status).toHaveValue('2000');
+    await view.user.click(screen.getByText('More filters', { exact: true }));
+    expect(status).not.toBeVisible();
     const search = screen.getByRole('button', { name: 'Search' });
     expect(search).toBeEnabled();
     await view.user.click(search);
-    expect(onApply).toHaveBeenCalledWith({ filters: {}, fromUnix: undefined, toUnix: undefined });
-    expect(screen.getByRole('alert')).toBeVisible();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(status).toBeVisible();
+    expect(status).toHaveFocus();
+    expect(status).toHaveAttribute('aria-invalid', 'true');
+    expect(status).toHaveAccessibleDescription(
+      'Enter a three-digit HTTP status code from 100 to 599.',
+    );
   });
 
   it('applies selects immediately without submitting or discarding unfinished text', async () => {
@@ -122,12 +135,17 @@ describe('shared log filters', () => {
     await view.user.selectOptions(screen.getByLabelText('Category'), 'network');
     expect(onApply).toHaveBeenLastCalledWith({ filters: { category: 'network' } });
     expect(screen.getByLabelText('Model')).toHaveValue('draft');
+    const applied = screen.getByRole('group', { name: 'Applied filters' });
+    expect(applied).toHaveTextContent('Category: Network');
+    expect(applied).not.toHaveTextContent('draft');
+    expect(screen.getByText('Select Search to apply changes to Model.')).toBeVisible();
     await view.user.type(screen.getByLabelText('Model'), '{Enter}');
     expect(onApply).toHaveBeenLastCalledWith({
       filters: { category: 'network', model: 'draft' },
       fromUnix: undefined,
       toUnix: undefined,
     });
+    expect(screen.queryByText('Select Search to apply changes to Model.')).toBeNull();
     await view.user.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getByLabelText('Model')).toHaveValue('');
     expect(onApply).toHaveBeenLastCalledWith({
@@ -186,5 +204,40 @@ describe('shared log filters', () => {
       toUnix: now,
     });
     expect(screen.getByLabelText('Model')).toHaveValue('draft');
+    const applied = screen.getByRole('group', { name: 'Applied filters' });
+    const removeFrom = within(applied).getByRole('button', { name: 'Remove From filter' });
+    const removeTo = within(applied).getByRole('button', { name: 'Remove To filter' });
+    removeFrom.focus();
+    await view.user.keyboard('{Enter}');
+    expect(removeTo).toHaveFocus();
+    expect(onApply).toHaveBeenLastCalledWith({
+      filters: { model: 'applied' },
+      fromUnix: undefined,
+      toUnix: now,
+    });
+    expect(screen.getByLabelText('Model')).toHaveValue('draft');
+    expect(screen.getByText('Select Search to apply changes to Model.')).toBeVisible();
+  });
+
+  it('keeps a pasted request ID editable and opens its record on Enter', async () => {
+    const open = vi.fn();
+    const view = await renderWithProviders(
+      <LogSearch onOpenRequest={open}>
+        <p>List filters</p>
+      </LogSearch>,
+      { station: 'user' },
+    );
+    const id = screen.getByRole('textbox', { name: 'Request ID' });
+    await view.user.click(id);
+    await view.user.paste('req_partial');
+    await view.user.click(screen.getByRole('button', { name: 'Open request' }));
+    expect(id).toHaveFocus();
+    expect(id).toHaveAccessibleDescription('Paste the complete request ID, starting with req_.');
+    const requestID = `req_${'A'.repeat(21)}Q`;
+    await view.user.clear(id);
+    await view.user.paste(`  ${requestID}  `);
+    expect(open).not.toHaveBeenCalled();
+    await view.user.keyboard('{Enter}');
+    expect(open).toHaveBeenCalledExactlyOnceWith(requestID);
   });
 });

@@ -4,7 +4,8 @@ import { GameActionBar } from '../common/GameActionBar';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { Card, ErrorState, LoadingState } from '@shared/components/States';
+import { StatusBadge } from '@shared/components/ui/StatusBadge';
 import { useGameCopy } from '../copy';
 import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
@@ -213,6 +214,7 @@ export function LinkLinkGame() {
   }, [current.data, current.isFetchedAfterMount, playSound]);
   const [selectedSpec, setSelectedSpec] = useState<LinkLinkSpec>('6x8');
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [rankingsOpen, setRankingsOpen] = useState(false);
   const [review, setReview] = useState(false);
   const [abandonReview, setAbandonReview] = useState(false);
   const [selection, setSelection] = useState<{
@@ -433,6 +435,7 @@ export function LinkLinkGame() {
       : null;
 
   const spec = snapshot.data?.linklink.specs[selectedSpec];
+  const freeSpec = creditsToMilli(spec?.price ?? '0') === 0n;
   const gateOpen = Boolean(
     snapshot.data?.gamesEnabled && snapshot.data.linklink.enabled && spec?.enabled,
   );
@@ -489,6 +492,7 @@ export function LinkLinkGame() {
         game="linklink"
         sound={sound}
         onRules={() => setRulesOpen(true)}
+        onRankings={() => setRankingsOpen(true)}
         rankingsAvailable={current.isSuccess && !state && !maintenance}
       />
       <RandomnessProof
@@ -514,18 +518,22 @@ export function LinkLinkGame() {
                 <LinkCountdown state={state} onElapsed={reconcileElapsed} />
               </div>
               <StatusBadge
-                active={lease === 'active'}
-                danger={lease === 'lost' || lease === 'stopped'}
-                label={
+                tone={
                   lease === 'active'
-                    ? text('linklink.playing')
-                    : lease === 'renewing'
-                      ? text('common.leaseRenewing')
-                      : lease === 'stopped'
-                        ? text('common.serviceStopped')
-                        : text('common.leaseLost')
+                    ? 'ok'
+                    : lease === 'lost' || lease === 'stopped'
+                      ? 'bad'
+                      : 'warn'
                 }
-              />
+              >
+                {lease === 'active'
+                  ? text('linklink.playing')
+                  : lease === 'renewing'
+                    ? text('common.leaseRenewing')
+                    : lease === 'stopped'
+                      ? text('common.serviceStopped')
+                      : text('common.leaseLost')}
+              </StatusBadge>
             </div>
             <Fold title={text('common.entryPayment')} plain>
               <GamePayment payment={state.payment} />
@@ -618,11 +626,10 @@ export function LinkLinkGame() {
       ) : null}
       {!state ? (
         <Card className="linklink-lobby">
-          <h2>{text('linklink.startReview')}</h2>
+          <h2>{text(freeSpec ? 'linklink.startReviewFree' : 'linklink.startReview')}</h2>
           <p className="game-inline-notice game-inline-notice--warning">
             {text('linklink.noRegularReward')}
           </p>
-          {current.isSuccess && current.data === null ? <p>{text('linklink.empty')}</p> : null}
           <div className="linklink-specs">
             {LINKLINK_SPECS.map((value) => {
               const valueSpec = snapshot.data?.linklink.specs[value];
@@ -642,20 +649,13 @@ export function LinkLinkGame() {
                   <span>
                     {valueSpec ? text('linklink.seconds', { seconds: valueSpec.seconds }) : '—'}
                   </span>
-                  <StatusBadge
-                    active={open}
-                    danger={!open}
-                    label={open ? text('common.open') : text('linklink.specClosed')}
-                  />
+                  <StatusBadge tone={open ? 'ok' : 'bad'}>
+                    {open ? text('common.open') : text('linklink.specClosed')}
+                  </StatusBadge>
                 </button>
               );
             })}
           </div>
-          {!gateOpen ? (
-            <p className="game-inline-notice game-inline-notice--warning">
-              {text('linklink.specClosed')}
-            </p>
-          ) : null}
           {gateOpen && !affordable ? (
             <p className="game-inline-notice game-inline-notice--danger">
               {text('fishing.insufficient')}
@@ -675,14 +675,19 @@ export function LinkLinkGame() {
       ) : null}
       {current.isSuccess && !state && !maintenance ? (
         <div id="game-rankings">
-          <Fold title={text('linklink.leaderboard.title', { days: 7 })} lazy>
+          <Fold
+            title={text('linklink.leaderboard.title', { days: 7 })}
+            open={rankingsOpen}
+            onOpenChange={setRankingsOpen}
+            lazy
+          >
             <LinkLinkLeaderboard spec={selectedSpec} onSpecChange={setSelectedSpec} />
           </Fold>
         </div>
       ) : null}
       <ConfirmDialog
         open={review}
-        title={text('linklink.startReview')}
+        title={text(freeSpec ? 'linklink.startReviewFree' : 'linklink.startReview')}
         description={text('linklink.startConsequences')}
         confirmLabel={text('linklink.start', { spec: selectedSpec })}
         busy={mutationState === 'sending'}

@@ -116,6 +116,21 @@ func TestAlertDetailRejectsMalformedStructuredContextWithoutRenderingIt(t *testi
 	}
 }
 
+func TestStoredTriggerUsesClosedReasonAndExactCrossing(t *testing.T) {
+	valid := `{"trigger_attempt":{"request_id":"req_` + strings.Repeat("A", 22) + `","attempt_seq":"4","connector_type":"google-gemini","native_service":"gemini_generate_content","reason":"google_api_key_invalid","status_code":400,"streak_before":"39","streak_after":"40","threshold":"40"}}`
+	if _, err := decodeEventContext(1, valid); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range [][2]string{
+		{"google_api_key_invalid", "private message from upstream"}, {"gemini_generate_content", "made-up-service"},
+		{`"4"`, `"04"`}, {`"39"`, `"38"`}, {`"threshold":"40"`, `"threshold":"39"`}, {`"status_code":400`, `"status_code":700`},
+	} {
+		if _, err := decodeEventContext(1, strings.Replace(valid, change[0], change[1], 1)); err == nil {
+			t.Fatalf("accepted bad trigger %v", change)
+		}
+	}
+}
+
 func TestAlertDetailDonationUsesVerifiedDistinctEndpointKey(t *testing.T) {
 	environment := newAlertTestEnvironment(t)
 	database := environment.store.DB()
@@ -208,7 +223,7 @@ func TestAlertDetailDonationUsesVerifiedDistinctEndpointKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	must(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,endpoint_key_id_snapshot,connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,started_at,completed_at) VALUES(?,?,1,?,'openai-compatible','https://example.invalid/v1','model','response',500,?,?)`, claimID, logID, endpointKeys[1], alertTestNow, alertTestNow)
+	must(`INSERT INTO request_attempts(claim_id,request_log_id,attempt_seq,endpoint_key_id_snapshot,connector_type,canonical_base_url,upstream_model_id,result_kind,upstream_status,started_at,completed_at) VALUES(?,?,1,?,'google-gemini','https://example.invalid/v1','model','response',503,?,?)`, claimID, logID, endpointKeys[1], alertTestNow, alertTestNow)
 	secondClaim, err := db.GenerateOpaqueID("clm_")
 	if err != nil {
 		t.Fatal(err)
@@ -218,10 +233,80 @@ func TestAlertDetailDonationUsesVerifiedDistinctEndpointKey(t *testing.T) {
 	if err != nil || detail.RelatedLogs == nil || !detail.RelatedLogs.Available || detail.RelatedLogs.EndpointKeyID != strconv.FormatInt(endpointKeys[1], 10) {
 		t.Fatalf("failed attempt was hidden by the final endpoint key: %+v, %v", detail.RelatedLogs, err)
 	}
+	if detail.TriggerAttempt != nil {
+		t.Fatalf("legacy event inferred a trigger from nearby failures: %+v", detail.TriggerAttempt)
+	}
+	policyID := environment.seedAlert(t, string(KindDonationFailureDisabled), "Threshold edited", "donation-key:"+strconv.FormatInt(keyID, 10)+":policy:2", nil, alertTestNow, false)
+	must(`UPDATE admin_alerts SET context_version=1,context_json=? WHERE id=?`, contextBody, policyID)
+	policy, err := environment.repository.GetDetail(t.Context(), environment.adminID, policyID)
+	if err != nil || policy.TriggerAttempt != nil || policy.RelatedLogs == nil || !policy.RelatedLogs.Available {
+		t.Fatalf("policy edit attributed a nearby failure: %+v, %v", policy, err)
+	}
+	must(`INSERT INTO request_attempt_diagnostics(claim_id,request_log_id,attempt_seq,category,phase,details,completed_at)
+VALUES(?,?,1,'upstream','upstream_response','{"category":"upstream","phase":"upstream_response","code":"upstream_error","provider_reason":"google_model_overloaded","message":"private upstream message","extension":123}',?)`, claimID, logID, alertTestNow)
+	tx, err = database.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ref := "donation-key:" + strconv.FormatInt(keyID, 10) + ":generation:2:fold:11"
+	if err = RecordDonationFailureTx(t.Context(), tx, DonationFailure{DonationID: donationID, KeyID: keyID, EndpointKeyID: endpointKeys[1],
+		Generation: db.U128{15: 2}, OccurredAt: alertTestNow, Ref: ref,
+		Crossing: FailureCrossing{ClaimID: claimID, Before: db.U128{15: 9}, After: db.U128{15: 10}, Threshold: db.U128{15: 10}, Fold: db.U128{15: 10}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	var captured string
+	var extension int
+	if err := database.QueryRow(`SELECT id,context_json,(SELECT json_extract(details,'$.extension') FROM request_attempt_diagnostics WHERE claim_id=?) FROM admin_alerts WHERE ref=?`, claimID, ref).
+		Scan(&alertID, &captured, &extension); err != nil || strings.Contains(captured, "private upstream message") || extension != 123 {
+		t.Fatal("capture leaked upstream text or discarded the diagnostic extension", err, extension)
+	}
+	detail, err = environment.repository.GetDetail(t.Context(), environment.adminID, alertID)
+	if err != nil || detail.TriggerAttempt == nil || !detail.TriggerAttempt.Available || detail.TriggerAttempt.AttemptSeq != "1" || detail.TriggerAttempt.RequestID != requestID ||
+		detail.TriggerAttempt.Reason != "google_model_overloaded" || detail.TriggerAttempt.StatusCode != 503 || detail.TriggerAttempt.ConnectorType != "google-gemini" {
+		t.Fatalf("retained trigger=%+v, %v", detail.TriggerAttempt, err)
+	}
+	original := *detail.TriggerAttempt
+	environment.clock.Store(alertTestNow + 30*24*60*60)
+	detail, err = environment.repository.GetDetail(t.Context(), environment.adminID, alertID)
+	expired := original
+	expired.Available = false
+	if err != nil || detail.TriggerAttempt == nil || *detail.TriggerAttempt != expired {
+		t.Fatalf("expired trigger=%+v, %v", detail.TriggerAttempt, err)
+	}
+	holdID, err := db.GenerateOpaqueID("lgh_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := environment.clock.Load()
+	must(`INSERT INTO legal_holds(id,object_kind,object_ref,state,revision,basis,created_by_user_id,created_at,expires_at)
+VALUES(?,'request_log',?,'active',1,'fixture',?,?,?)`, holdID, strconv.FormatInt(logID, 10), environment.adminID, deadline-1, deadline+60)
+	detail, err = environment.repository.GetDetail(t.Context(), environment.adminID, alertID)
+	if err != nil || detail.TriggerAttempt == nil || *detail.TriggerAttempt != original {
+		t.Fatalf("active hold trigger=%+v, %v", detail.TriggerAttempt, err)
+	}
+	var reads int
+	if err := database.QueryRow(`SELECT count(*) FROM legal_hold_read_audits WHERE hold_id_text=?`, holdID).Scan(&reads); err != nil || reads != 0 {
+		t.Fatalf("link availability read held content: %d, %v", reads, err)
+	}
+	environment.clock.Store(deadline + 60)
+	detail, err = environment.repository.GetDetail(t.Context(), environment.adminID, alertID)
+	if err != nil || detail.TriggerAttempt == nil || *detail.TriggerAttempt != expired {
+		t.Fatalf("semantically expired hold trigger=%+v, %v", detail.TriggerAttempt, err)
+	}
+	must(`UPDATE legal_holds SET state='expired',revision=revision+1,ended_at=expires_at,end_reason='expired',
+retain_until=expires_at+34560000 WHERE id=?`, holdID)
+	environment.clock.Store(alertTestNow)
 	must(`DELETE FROM request_attempts WHERE claim_id=?`, claimID)
 	detail, err = environment.repository.GetDetail(context.Background(), environment.adminID, alertID)
 	if err != nil || detail.RelatedLogs == nil || detail.RelatedLogs.Available {
 		t.Fatalf("retired attempt remained available: %+v, %v", detail.RelatedLogs, err)
+	}
+	if detail.TriggerAttempt == nil || *detail.TriggerAttempt != expired {
+		t.Fatalf("purged trigger lost its facts or linked another attempt: %+v", detail.TriggerAttempt)
 	}
 	// The source ID remains as history after key revocation; no live endpoint
 	// target may be inferred from it or from another key with the same number.

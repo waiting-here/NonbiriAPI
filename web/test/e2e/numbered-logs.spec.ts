@@ -39,6 +39,29 @@ const copy = {
   },
 };
 
+async function expectPageToFit(page: Page) {
+  const overflow = await page.evaluate(() => {
+    const width = document.documentElement.scrollWidth;
+    if (width <= innerWidth) return null;
+    const elements = [...document.querySelectorAll('body *')]
+      .filter((element) => {
+        const right = element.getBoundingClientRect().right;
+        return right > innerWidth && right <= width + 1 && element.checkVisibility();
+      })
+      .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)
+      .slice(0, 6)
+      .map((element) => ({
+        tag: element.tagName.toLowerCase(),
+        class: element.className,
+        parent: element.parentElement?.className,
+        text: element.textContent?.trim().slice(0, 28),
+        right: Math.round(element.getBoundingClientRect().right),
+      }));
+    return { viewport: innerWidth, width, elements };
+  });
+  expect(overflow).toBeNull();
+}
+
 function row(role: Role, index: number, charity = false) {
   const common = {
     id: requestID(index),
@@ -252,7 +275,7 @@ test('complete header lists fetch lazily and remain usable in light and dark des
   });
   await page.goto(`${origin}/logs?from=&to=`);
   await page.getByRole('button', { name: 'Details', exact: true }).click();
-  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
   await expect(dialog.getByText('192.0.2.17', { exact: true })).toBeVisible();
   expect(requestReads).toBe(0);
   expect(responseReads).toBe(0);
@@ -303,9 +326,7 @@ test('complete header lists fetch lazily and remain usable in light and dark des
       await request.getByRole('button', { name: 'Go', exact: true }).click();
       await expect(request.getByText('X-Header-124', { exact: true })).toBeVisible();
       await request.getByRole('navigation').scrollIntoViewIfNeeded();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-        true,
-      );
+      await expectPageToFit(page);
       expect(await request.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
         true,
       );
@@ -396,7 +417,7 @@ for (const scenario of [
     });
     await page.goto(`${origin}${screenPath}?page=3&page_size=10&status=200`);
     await page.getByRole('button', { name: labels.details, exact: true }).click();
-    const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+    const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await dialog
       .locator('summary')
       .filter({ hasText: locale === 'zh' ? '服务调用记录' : 'Service call attempts' })
@@ -436,9 +457,7 @@ for (const scenario of [
       .click();
     await expect(dialog.locator('.log-attempt')).toHaveCount(3);
     await expect(dialog.getByText('upstream-23', { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    await expectPageToFit(page);
     if (process.env.NONBIRI_VISUAL_DIR)
       await page.screenshot({
         path: resolve(
@@ -475,9 +494,7 @@ for (const scenario of [
         expect(bounds!.x).toBeGreaterThanOrEqual(0);
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual((await page.viewportSize())!.width);
         expect(bounds!.y + bounds!.height).toBeLessThanOrEqual((await page.viewportSize())!.height);
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-          true,
-        );
+        await expectPageToFit(page);
       }
     }
     await page.getByRole('button', { name: labels.previous, exact: true }).click();
@@ -520,7 +537,7 @@ test('ordinary charity log detail exposes no attempt list or attempt pagination'
   });
   await page.goto(`${origin}/logs`);
   await page.getByRole('button', { name: 'Details', exact: true }).click();
-  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Success', { exact: true }).first()).toBeVisible();
   await expect(dialog.locator('.log-attempts')).toHaveCount(0);
@@ -587,10 +604,8 @@ for (const role of ['admin', 'steward', 'user'] as const)
       ).toHaveCount(1);
       for (const width of [1440, 768, 390]) {
         await page.setViewportSize({ width, height: 900 });
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-          true,
-        );
-        await expect(page.locator('.log-filters summary')).toBeVisible();
+        await expectPageToFit(page);
+        await expect(page.locator('.log-filters .nb-filter__more > summary')).toBeVisible();
         await expect(page.locator('.log-filters .nb-filter__fields')).toBeHidden();
         if (role !== 'user') {
           const filters = page.getByTestId('log-filters');
@@ -601,7 +616,8 @@ for (const role of ['admin', 'steward', 'user'] as const)
           });
           const upstream = filters.getByRole('textbox', { name: 'Model used', exact: true });
           await expect(discord).toBeVisible();
-          await expect(filters.getByLabel('User ID', { exact: true })).toBeVisible();
+          const siteUser = filters.getByLabel('User ID', { exact: true });
+          await expect(siteUser).toBeHidden();
           await expect(charity).toBeVisible();
           await expect(upstream).toBeHidden();
           if (width === 1440 || width === 390) {
@@ -615,12 +631,11 @@ for (const role of ['admin', 'steward', 'user'] as const)
               });
             const more = filters.locator('.nb-filter__more > summary');
             await more.click();
+            await expect(siteUser).toBeVisible();
             await expect(upstream).toBeVisible();
             await expect(discord).toBeVisible();
             await expect(charity).toBeVisible();
-            expect(
-              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-            ).toBe(true);
+            await expectPageToFit(page);
             if (process.env.NONBIRI_VISUAL_DIR)
               await filters.screenshot({
                 path: resolve(
@@ -657,7 +672,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 900 });
         await page.locator('.log-table tbody button').first().click();
-        const drawer = page.locator('.nb-expandable-panel:not([hidden])');
+        const drawer = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
         await expect(
           drawer.locator('summary').filter({ hasText: 'Technical information' }),
         ).toBeVisible();
@@ -691,7 +706,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
               ? '/api/steward/logs'
               : '/api/logs';
         const missing = locale === 'zh' ? '模型不存在' : 'Model not found';
-        const unavailable = locale === 'zh' ? '暂无可用密钥' : 'No usable key';
+        const unavailable = locale === 'zh' ? '模型暂无可用来源' : 'No available model source';
         await mockJson(page, {
           origin,
           method: 'GET',
@@ -729,9 +744,7 @@ for (const role of ['admin', 'steward', 'user'] as const)
             await expect(results).toHaveCount(2);
             await expect(results.nth(0)).toHaveText(missing);
             await expect(results.nth(1)).toHaveText(unavailable);
-            expect(
-              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-            ).toBe(true);
+            await expectPageToFit(page);
             if (process.env.NONBIRI_VISUAL_DIR)
               await page.screenshot({
                 path: resolve(

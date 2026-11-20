@@ -1,5 +1,6 @@
 import { MfaRecovery } from './features/mfa/MfaRecovery';
 import { createBrowserRouter } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
 import { LoadingState, NoticePage } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
@@ -9,6 +10,15 @@ import { UserLayout } from './layouts/UserLayout';
 import { NavigationProgress } from '@shared/components/NavigationProgress';
 
 const pathFor = (id: string) => relativeRoutePath('user', id);
+
+function RegistrationClosedSignIn() {
+  const { t } = useTranslation();
+  return (
+    <a className="nb-btn nb-btn--primary" href="/api/auth/discord/start">
+      {t('common.signIn')}
+    </a>
+  );
+}
 
 export const router = createBrowserRouter([
   {
@@ -130,6 +140,12 @@ export const router = createBrowserRouter([
           Component: (await import('./pages/PictureBookActivityPage')).PictureBookActivityPage,
         }),
       },
+      ...['game-whale-haven', 'whale-haven'].map((id) => ({
+        path: pathFor(id),
+        lazy: async () => ({
+          Component: (await import('./games/whale-haven/WhaleHavenPage')).WhaleHavenPage,
+        }),
+      })),
       {
         path: pathFor('game-lake-notes'),
         lazy: async () => ({
@@ -207,6 +223,7 @@ export const router = createBrowserRouter([
             titleKey="common.registrationClosedTitle"
             bodyKey="common.registrationClosedBody"
             icon="info"
+            actions={<RegistrationClosedSignIn />}
           />
         ),
       },

@@ -6,24 +6,24 @@ import { ApiError } from '@shared/query/http';
 import { ErrorState, EmptyState } from '@shared/components/States';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { CopyValue } from '@shared/components/CopyValue';
-import { Fold, Note } from '@shared/components/ui';
+import { Fold, Note, StatusBadge } from '@shared/components/ui';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 
 export function AgentState({ state }: { state: string }) {
   const { t } = useTranslation();
+  const tone = ['succeeded', 'completed', 'approved'].includes(state)
+    ? 'ok'
+    : ['pending', 'running', 'waiting_confirmation'].includes(state)
+      ? 'warn'
+      : ['failed', 'interrupted', 'rejected'].includes(state)
+        ? 'bad'
+        : ['cancelled', 'invalidated', 'superseded', 'unknown'].includes(state)
+          ? 'neutral'
+          : 'info';
   return (
-    <span
-      className={
-        'nb-badge agent-state agent-state--' +
-        (['failed', 'interrupted'].includes(state)
-          ? 'bad'
-          : state === 'waiting_confirmation'
-            ? 'warn'
-            : 'normal')
-      }
-    >
+    <StatusBadge tone={tone}>
       {t(stateLabels[state] ?? 'common.agent.states.unknown')}
-    </span>
+    </StatusBadge>
   );
 }
 export function AgentError({ error, onRetry }: { error: unknown; onRetry?: () => void }) {

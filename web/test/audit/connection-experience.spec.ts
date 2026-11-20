@@ -1493,6 +1493,7 @@ async function addGroup(
   }
   const selected = targetRows(editor);
   await expect(selected).toHaveCount(1);
+  if (charity) await openFold(selected, common.common.bindingGuide.editServices);
   const chat = selected.getByLabel(native.chat_completions, { exact: true });
   await expect(chat).toBeChecked();
   const response = responseFor(page, 'POST', path + '/batch-receipt');
@@ -1997,7 +1998,7 @@ test('connection lists return to the requested page and mainstream mappings use 
           { options: await firstSelection.getByRole('checkbox').count() },
         );
         const boxes = await firstSelection
-          .locator('.model-types-field__choices > .nb-field')
+          .locator('.model-types-field__choices > label')
           .evaluateAll((nodes) =>
             nodes.map((node) => {
               const { x, y, width, height } = node.getBoundingClientRect();
@@ -2174,8 +2175,13 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     );
     const ownerPage = await owner.newPage();
     await ownerPage.goto(fixture().user_url + '/charity/donations/' + donation.id);
+    const ownerDetail = ownerPage.locator('.economy-donation-card').filter({
+      has: ownerPage.getByRole('heading', {
+        name: userEn.user.charity.donationNumber.replace('{{id}}', donation.id),
+      }),
+    });
     await expect(
-      ownerPage.locator('.status-badge').filter({ hasText: c.donationStates.rejected }).first(),
+      ownerDetail.getByText(c.donationStates.rejected, { exact: true }).first(),
     ).toBeVisible();
 
     const saved = await credential(
@@ -2513,9 +2519,9 @@ test('a key without a catalog can recover, show a readable failure and load mode
       page.getByRole('button', { name: core['endpoints.refreshDiscovery'], exact: true }),
     ).toHaveCount(0);
     await page.getByRole('button', { name: userEn.user.services.viewModels, exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: services.fetchModels, exact: true }),
-    ).toBeDisabled();
+    await expect(page.getByRole('button', { name: services.fetchModels, exact: true })).toHaveCount(
+      0,
+    );
     await openFold(page, services.manualModels);
     await page
       .getByLabel(core['endpoints.manualModel'], { exact: true })
@@ -2617,6 +2623,138 @@ test('a key without a catalog can recover, show a readable failure and load mode
           204,
         );
       }
+    } finally {
+      await owner.close();
+    }
+  }
+});
+
+test('the authorized directory keeps cross-page choices and rejects a changed 200-model scope', async ({
+  browser,
+}) => {
+  const owner = await session(browser, 'owner');
+  const tag = 'Directory ' + randomUUID().slice(0, 8);
+  const group = await connection(owner, tag);
+  const modelName = (i: number) => 'scope-' + String(i).padStart(3, '0');
+  let modelId: string | undefined;
+  try {
+    const saved = await credential(owner, group, tag, 'synthetic-directory-' + randomUUID());
+    const target = await entry(owner, group, saved, await baseURL(owner), tag, [
+      'chat_completions',
+    ]);
+    const path = '/api/endpoints/' + target.endpoint.id + '/keys/' + target.key.id + '/models';
+    type CatalogRow = { id: string; pair_revision: string; upstream_model_id: string };
+    const rows: CatalogRow[] = [];
+    for (const start of [0, 100]) {
+      const entries = Array.from({ length: 100 }, (_, i) => ({
+        upstream_model_id: modelName(start + i),
+        provider: 'scope',
+      }));
+      const result = await userAPI<{ entries: CatalogRow[] }>(owner, path + '/manual', 'POST', {
+        entries,
+      });
+      rows.push(...result.entries);
+    }
+    const page = await owner.newPage();
+    await page.goto(
+      fixture().user_url + '/endpoints/' + target.endpoint.id + '?focus_key_id=' + target.key.id,
+    );
+    const directory = page.locator('.service-key-models');
+    await directory.getByRole('tab', { name: services.manualModels, exact: true }).click();
+    await directory
+      .getByRole('button', { name: services.selectPage.replace('{{count}}', '20') })
+      .click();
+    await directory.getByRole('button', { name: common.common.next, exact: true }).click();
+    await directory.getByRole('checkbox', { name: modelName(25), exact: true }).check();
+    const search = directory.getByRole('searchbox');
+    await search.fill(modelName(199));
+    await search.press('Enter');
+    const last = directory.getByRole('checkbox', { name: modelName(199), exact: true });
+    await last.check();
+    const selected = (count: number) =>
+      directory.getByText(services.selectedModels.replace('{{count}}', String(count)), {
+        exact: true,
+      });
+    await expect(selected(22)).toBeVisible();
+    await last.uncheck();
+    await expect(selected(21)).toBeVisible();
+    await directory.getByRole('button', { name: services.clearSelected, exact: true }).click();
+    await directory.getByRole('button', { name: common.common.resetFilter, exact: true }).click();
+    const all = directory.getByRole('button', {
+      name: services.selectMatches.replace('{{count}}', '200'),
+    });
+    await expect(all).toBeEnabled();
+    const original = rows[199]!;
+    const replace = () =>
+      userAPI<{ entries: CatalogRow[] }>(owner, path + '/manual', 'POST', {
+        entries: [{ upstream_model_id: original.upstream_model_id, provider: 'scope' }],
+      });
+    const remove = (row: CatalogRow) =>
+      userAPI(
+        owner,
+        path + '/manual/' + row.id,
+        'DELETE',
+        { expected_pair_revision: row.pair_revision, replacements: [] },
+        204,
+      );
+    await remove(original);
+    const replacement = (await replace()).entries[0]!;
+    const first = responseFor(page, 'GET', path + '/selection');
+    await all.click();
+    expect((await first).status()).toBe(409);
+    const fresh = responseFor(page, 'GET', path + '/selection');
+    await all.click();
+    expect((await fresh).status()).toBe(200);
+    await expect(selected(200)).toBeVisible();
+    await expect(directory.locator('.connection-model-batch > details[open]')).toHaveCount(0);
+    await directory.getByRole('button', { name: services.clearSelected }).click();
+    await search.fill(modelName(199));
+    await search.press('Enter');
+    await last.check();
+    const mapping = await openFold(directory.locator('.connection-model-batch'), modelName(199));
+    await remove(replacement);
+    const create = responseFor(page, 'POST', '/api/models');
+    const stale = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname.endsWith('/bindings/batch-receipt'),
+    );
+    await mapping.getByRole('button', { name: c.saveMapping }).click();
+    modelId = ((await (await create).json()) as Identity).id;
+    expect((await stale).status()).toBe(409);
+    await expect(mapping.getByText(services.selectionChanged, { exact: true })).toBeVisible();
+    expect(
+      (await userAPI<Bindings>(owner, '/api/models/' + modelId + '/bindings')).bindings,
+    ).toHaveLength(0);
+    await mapping.getByRole('button', { name: c.useCurrentRevision }).click();
+    await expect(mapping.getByRole('button', { name: c.saveMapping })).toBeDisabled();
+    await replace();
+    await mapping.getByRole('button', { name: c.useCurrentRevision }).click();
+    await mapping.getByRole('button', { name: c.saveMapping }).click();
+    await expect(mapping.getByText(c.mappingSaved, { exact: true })).toBeVisible();
+    expect(
+      (await userAPI<Bindings>(owner, '/api/models/' + modelId + '/bindings')).bindings,
+    ).toHaveLength(1);
+  } finally {
+    try {
+      if (modelId) {
+        const current = await userAPI<Identity>(owner, '/api/models/' + modelId);
+        await userAPI(
+          owner,
+          '/api/models/' + modelId,
+          'DELETE',
+          { expected_revision: current.revision },
+          204,
+        );
+      }
+      const current = await userAPI<Identity>(owner, '/api/connections/' + group.id);
+      await userAPI(
+        owner,
+        '/api/connections/' + group.id,
+        'DELETE',
+        { expected_revision: current.revision },
+        204,
+      );
     } finally {
       await owner.close();
     }

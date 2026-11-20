@@ -1,3 +1,5 @@
+import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
+import { DataTable } from '@shared/components/ui/DataTable';
 import { Field } from '@shared/components/ui/Field';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { FilterBar } from '@shared/components/ui/FilterBar';
@@ -71,7 +73,8 @@ export function AnnouncementManagement({
   embedded?: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const preferZh = Boolean(i18n.resolvedLanguage?.startsWith('zh'));
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchState();
@@ -138,6 +141,7 @@ export function AnnouncementManagement({
   const enBodyBytes = new TextEncoder().encode(draft.body_en).byteLength;
   const pageData = list.data;
   const busy = list.isFetching;
+  const { announcementSource, remember } = useAnnouncementReturn(Boolean(pageData) && !busy);
   const returnParams = new URLSearchParams(location.search);
   returnParams.set('page', pageData?.pagination.page ?? pager.page);
   returnParams.set('page_size', String(pager.pageSize));
@@ -257,6 +261,7 @@ export function AnnouncementManagement({
               {(field) => (
                 <textarea
                   {...field}
+                  rows={5}
                   value={draft.body_zh}
                   onChange={(event) => setDraft({ ...draft, body_zh: event.target.value })}
                 />
@@ -269,6 +274,7 @@ export function AnnouncementManagement({
               {(field) => (
                 <textarea
                   {...field}
+                  rows={5}
                   value={draft.body_en}
                   onChange={(event) => setDraft({ ...draft, body_en: event.target.value })}
                 />
@@ -379,20 +385,23 @@ export function AnnouncementManagement({
                   </select>
                 )}
               </Field>
-              <Button
-                type="button"
-                onClick={() =>
-                  setParams((previous) => {
-                    const next = new URLSearchParams(previous);
-                    next.delete('state');
-                    next.delete('severity');
-                    next.set('page', '1');
-                    return next;
-                  })
-                }
-              >
-                {t('common.resetFilter')}
-              </Button>
+              {state || severity ? (
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() =>
+                    setParams((previous) => {
+                      const next = new URLSearchParams(previous);
+                      next.delete('state');
+                      next.delete('severity');
+                      next.set('page', '1');
+                      return next;
+                    })
+                  }
+                >
+                  {t('common.resetFilter')}
+                </Button>
+              ) : null}
             </>
           }
         />
@@ -410,69 +419,111 @@ export function AnnouncementManagement({
                 body={t('management.announcements.emptyBody')}
               />
             ) : (
-              <div className="ops-table-scroll" aria-busy={busy}>
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>{t('management.announcements.table.state')}</th>
-                      <th>{t('management.announcements.table.draftTitle')}</th>
-                      <th>{t('management.announcements.table.severity')}</th>
-                      <th>{t('management.announcements.table.publication')}</th>
-                      <th>{t('management.announcements.table.updated')}</th>
-                      <th>{t('management.announcements.table.open')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageData.data.map((item) => (
-                      <tr key={item.id}>
-                        <td data-label={t('management.announcements.table.state')}>
-                          <StatusBadge
-                            active={item.state === 'published'}
-                            label={stateLabels[item.state]}
-                          />
-                        </td>
-                        <td
-                          className="ops-cell-wide"
-                          data-label={t('management.announcements.table.draftTitle')}
-                        >
-                          {item.draft.en?.title ??
-                            item.draft.zh?.title ??
-                            t('management.announcements.emptyDraft')}
-                        </td>
-                        <td data-label={t('management.announcements.table.severity')}>
+              <div aria-busy={busy}>
+                <DataTable
+                  caption={t('management.announcements.title')}
+                  rows={pageData.data}
+                  rowKey={(item) => item.id}
+                  columns={[
+                    {
+                      key: 'state',
+                      header: t('management.announcements.table.state'),
+                      cell: 'status',
+                      render: (item) => (
+                        <StatusBadge
+                          active={item.state === 'published'}
+                          label={stateLabels[item.state]}
+                        />
+                      ),
+                    },
+                    {
+                      key: 'draftTitle',
+                      header: t('management.announcements.table.draftTitle'),
+                      cell: 'title',
+                      render: (item) => {
+                        const zhTitle = item.draft.zh?.title?.trim() || '';
+                        const enTitle = item.draft.en?.title?.trim() || '';
+                        const primary = preferZh
+                          ? zhTitle || enTitle
+                          : enTitle || zhTitle;
+                        const secondary = preferZh
+                          ? zhTitle && enTitle && zhTitle !== enTitle
+                            ? enTitle
+                            : ''
+                          : enTitle && zhTitle && enTitle !== zhTitle
+                            ? zhTitle
+                            : '';
+                        if (!primary) {
+                          return (
+                            <span className="nb-muted">
+                              {t('management.announcements.emptyDraft')}
+                            </span>
+                          );
+                        }
+                        return secondary ? (
+                          <div className="nb-stack nb-stack--xs">
+                            <strong>{primary}</strong>
+                            <span className="nb-small nb-muted">{secondary}</span>
+                          </div>
+                        ) : (
+                          <strong>{primary}</strong>
+                        );
+                      },
+                    },
+                    {
+                      key: 'severity',
+                      header: t('management.announcements.table.severity'),
+                      mobileLabel: t('management.announcements.table.severity'),
+                      cell: 'meta',
+                      render: (item) => (
+                        <>
                           {severityLabels[item.severity]}
                           {item.pinned ? ` · ${t('management.announcements.pinned')}` : ''}
-                        </td>
-                        <td data-label={t('management.announcements.table.publication')}>
-                          {item.published
-                            ? t('management.announcements.publicationValue', {
-                                revision: item.published.revision,
-                                date: formatDateTime(item.published.published_at),
-                              })
-                            : t('management.announcements.neverPublished')}
-                        </td>
-                        <td data-label={t('management.announcements.table.updated')}>
-                          {formatDateTime(item.updated_at)}
-                        </td>
-                        <td
-                          className="ops-cell-wide"
-                          data-label={t('management.announcements.table.open')}
+                        </>
+                      ),
+                    },
+                    {
+                      key: 'publication',
+                      header: t('management.announcements.table.publication'),
+                      mobileLabel: t('management.announcements.table.publication'),
+                      cell: 'meta',
+                      render: (item) =>
+                        item.published
+                          ? t('management.announcements.publicationValue', {
+                              revision: item.published.revision,
+                              date: formatDateTime(item.published.published_at),
+                            })
+                          : t('management.announcements.neverPublished'),
+                    },
+                    {
+                      key: 'updated',
+                      header: t('management.announcements.table.updated'),
+                      mobileLabel: t('management.announcements.table.updated'),
+                      cell: 'meta',
+                      render: (item) => formatDateTime(item.updated_at),
+                    },
+                    {
+                      key: 'open',
+                      header: t('management.announcements.table.open'),
+                      cell: 'action',
+                      align: 'action',
+                      render: (item) => (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          type="button"
+                          id={`edit-${item.id}`}
+                          onClick={(event) => {
+                            remember(event.currentTarget);
+                            navigate(detailPath(item.id), { state: { returnTo, announcementSource } });
+                          }}
                         >
-                          <Button
-                            type="button"
-                            onClick={() =>
-                              navigate(detailPath(item.id), {
-                                state: { returnTo },
-                              })
-                            }
-                          >
-                            {t('management.announcements.edit')}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {t('management.announcements.edit')}
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
               </div>
             )}
             <PagePagination

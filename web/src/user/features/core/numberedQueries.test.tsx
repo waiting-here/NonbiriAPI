@@ -227,37 +227,56 @@ describe('numbered core query hooks', () => {
     await waitFor(() => expect(rendered.result.current.data?.data[0]?.id).toBe('21'));
   });
 
-  it('keeps catalog source in the query key and sends a manual source filter', async () => {
+  it('isolates catalog results by source and search and sends the active filters', async () => {
+    let reply!: (response: Response) => void;
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse(catalogPage([manualEntry])));
+      .mockResolvedValueOnce(jsonResponse(catalogPage([manualEntry])))
+      .mockImplementation(() => new Promise<Response>((resolve) => (reply = resolve)));
     vi.stubGlobal('fetch', fetchMock);
     const client = createClient();
     const rendered = renderHook(
-      () =>
-        useNumberedCatalog('account-a', '11', '21', 'manual', {
-          page: '1',
-          pageSize: 20,
-        }),
-      { wrapper: wrapper(client) },
+      ({ source, search }: { source: 'manual' | 'automatic'; search: string }) =>
+        useNumberedCatalog(
+          'account-a',
+          '11',
+          '21',
+          source,
+          { page: '1', pageSize: 20 },
+          true,
+          search,
+        ),
+      { initialProps: { source: 'manual', search: '' }, wrapper: wrapper(client) },
     );
+    const path = '/api/endpoints/11/keys/21/models?page=1&page_size=20';
+    const scope = ['user', 'core', 'account', 'account-a', 'catalog', '11', '21', 'page'];
 
     await waitFor(() => expect(rendered.result.current.data?.manual_entries[0]?.id).toBe('41'));
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      '/api/endpoints/11/keys/21/models?page=1&page_size=20&source=manual',
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(path + '&source=manual');
+    rendered.rerender({ source: 'manual', search: 'Vendor/Manual' });
+    expect(rendered.result.current.data).toBeUndefined();
+    await waitFor(() =>
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(path + '&source=manual&q=Vendor%2FManual'),
     );
-    expect(client.getQueryCache().getAll()[0]?.queryKey).toEqual([
-      'user',
-      'core',
-      'account',
-      'account-a',
-      'catalog',
-      '11',
-      '21',
-      'page',
-      'manual',
-      '1',
-      20,
+    act(() => reply(jsonResponse(catalogPage([manualEntry]))));
+    await waitFor(() => expect(rendered.result.current.data?.manual_entries[0]?.id).toBe('41'));
+
+    rendered.rerender({ source: 'automatic', search: 'Vendor/Manual' });
+    expect(rendered.result.current.data).toBeUndefined();
+    await waitFor(() =>
+      expect(fetchMock.mock.calls[2]?.[0]).toBe(path + '&source=automatic&q=Vendor%2FManual'),
+    );
+    act(() => reply(jsonResponse(catalogPage([]))));
+    await waitFor(() => expect(rendered.result.current.data?.manual_entries).toEqual([]));
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.queryKey),
+    ).toEqual([
+      [...scope, 'manual', '', '1', 20],
+      [...scope, 'manual', 'Vendor/Manual', '1', 20],
+      [...scope, 'automatic', 'Vendor/Manual', '1', 20],
     ]);
   });
 });

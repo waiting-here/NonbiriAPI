@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ErrorState } from '@shared/components/States';
+import { ErrorState, LoadingState } from '@shared/components/States';
 import { Segmented } from '@shared/components/ui/Segmented';
 import { gameRequest } from '../common/request';
 import { PublicGameIdentity } from '../common/PublicGameIdentity';
@@ -32,7 +32,7 @@ export function CatchLeaderboard() {
   const row = (r: Row) => {
     const identity = publicIdentity(r.identity, 'ranking identity');
     return (
-      <tr key={r.rank}>
+      <tr key={`${r.rank}-${r.is_me ? 'me' : 'row'}`}>
         <td>{formatCount(r.rank).display}</td>
         <td
           title={
@@ -50,6 +50,9 @@ export function CatchLeaderboard() {
       </tr>
     );
   };
+  const extraMe =
+    query.data?.me && !query.data.rows.some((item) => item.is_me) ? [query.data.me] : [];
+  const allRows = [...(query.data?.rows ?? []), ...extraMe];
   return (
     <section className="catch-ranking" id="game-rankings">
       <header>
@@ -66,6 +69,14 @@ export function CatchLeaderboard() {
             { value: '30d', label: t('近 30 天', 'Last 30 days') },
           ]}
         />
+        <button
+          type="button"
+          className="nb-btn nb-btn--secondary nb-btn--sm"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          {t('刷新榜单', 'Refresh')}
+        </button>
       </div>
       <p>
         {t(
@@ -73,23 +84,24 @@ export function CatchLeaderboard() {
           'Each player’s best score; earlier achievement breaks ties.',
         )}
       </p>
+      {query.isPending && <LoadingState />}
       {query.error && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
-      <div className="catch-ranking__scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>{t('玩家', 'Player')}</th>
-              <th>{t('分数', 'Score')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {query.data?.rows.map(row)}
-            {query.data?.me && row(query.data.me)}
-          </tbody>
-        </table>
-      </div>
-      {query.data?.rows.length === 0 && <p>{t('暂无成绩', 'No results yet')}</p>}
+      {allRows.length > 0 ? (
+        <div className="catch-ranking__scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>{t('玩家', 'Player')}</th>
+                <th>{t('分数', 'Score')}</th>
+              </tr>
+            </thead>
+            <tbody>{allRows.map(row)}</tbody>
+          </table>
+        </div>
+      ) : query.data ? (
+        <p>{t('暂无成绩', 'No results yet')}</p>
+      ) : null}
     </section>
   );
 }

@@ -122,8 +122,14 @@ func (s *Service) modelLimits(ctx context.Context, role reviewerRole, userID, do
 	return out, tx.Commit()
 }
 
-func (s *Service) replaceModelLimits(ctx context.Context, role reviewerRole, userID, donationID, keyID int64, mutation resources.ControlMutation, expected int64, model string, limits donationquota.ModelLimits) (resources.MutationResult[RecurringReceipt], error) {
+type modelLimitUpdate struct {
+	donationquota.ModelLimits
+	keepCalls, keepCredits bool
+}
+
+func (s *Service) replaceModelLimits(ctx context.Context, role reviewerRole, userID, donationID, keyID int64, mutation resources.ControlMutation, expected int64, model string, update modelLimitUpdate) (resources.MutationResult[RecurringReceipt], error) {
 	var empty resources.MutationResult[RecurringReceipt]
+	limits := update.ModelLimits
 	route := routeAdminModelLimits
 	if role == reviewerSteward {
 		route = routeStewardModelLimits
@@ -164,6 +170,18 @@ func (s *Service) replaceModelLimits(ctx context.Context, role reviewerRole, use
 	}
 	if err = requireOne(result); err != nil {
 		return empty, err
+	}
+	if update.keepCalls || update.keepCredits {
+		current, err := donationquota.ModelUsage(ctx, tx, keyID, model)
+		if err != nil {
+			return empty, quotaError(err)
+		}
+		if update.keepCalls {
+			limits.Calls = current.Limits.Calls
+		}
+		if update.keepCredits {
+			limits.Credits = current.Limits.Credits
+		}
 	}
 	if err = donationquota.SetModelLimits(ctx, tx, keyID, now, model, limits); err != nil {
 		return empty, quotaError(err)
@@ -216,6 +234,8 @@ func (api *httpAPI) modelLimitsHandler(role reviewerRole) AuthorizedUserHandler 
 			ExpectedRevision requiredField[string] `json:"expected_revision"`
 			UpstreamModelID  requiredField[string] `json:"upstream_model_id"`
 			Tokens           nullableField[string] `json:"tokens"`
+			Calls            nullableField[string] `json:"calls"`
+			Credits          nullableField[string] `json:"credits"`
 			InputTokens      nullableField[string] `json:"input_tokens"`
 			OutputTokens     nullableField[string] `json:"output_tokens"`
 		}
@@ -227,17 +247,23 @@ func (api *httpAPI) modelLimitsHandler(role reviewerRole) AuthorizedUserHandler 
 			writeDonationError(w, ErrInvalidRequest)
 			return
 		}
-		limits := donationquota.ModelLimits{Tokens: wire.Tokens.Value, InputTokens: wire.InputTokens.Value, OutputTokens: wire.OutputTokens.Value}
+		limits := donationquota.ModelLimits{Calls: wire.Calls.Value, Credits: wire.Credits.Value, Tokens: wire.Tokens.Value, InputTokens: wire.InputTokens.Value, OutputTokens: wire.OutputTokens.Value}
 		route := routeAdminModelLimits
 		if role == reviewerSteward {
 			route = routeStewardModelLimits
 		}
 		canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value, "upstream_model_id": wire.UpstreamModelID.Value, "tokens": limits.Tokens, "input_tokens": limits.InputTokens, "output_tokens": limits.OutputTokens}
+		if wire.Calls.Set {
+			canonical["calls"] = limits.Calls
+		}
+		if wire.Credits.Set {
+			canonical["credits"] = limits.Credits
+		}
 		mutation, ok := mutationFor(w, r, route, []int64{id, key}, canonical)
 		if !ok {
 			return
 		}
-		out, err := api.service.replaceModelLimits(r.Context(), role, p.UserID, id, key, mutation, revision, wire.UpstreamModelID.Value, limits)
+		out, err := api.service.replaceModelLimits(r.Context(), role, p.UserID, id, key, mutation, revision, wire.UpstreamModelID.Value, modelLimitUpdate{ModelLimits: limits, keepCalls: !wire.Calls.Set, keepCredits: !wire.Credits.Set})
 		if err != nil {
 			writeDonationError(w, err)
 			return

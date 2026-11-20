@@ -14,6 +14,7 @@ export function GameHeader({
   wallets,
   sound,
   onRules,
+  onRankings,
   rankingsAvailable = false,
   children,
   tools = [],
@@ -22,6 +23,7 @@ export function GameHeader({
   readonly game: 'fishing' | 'linklink' | 'rps';
   readonly sound: GameSoundControl;
   readonly onRules: () => void;
+  readonly onRankings?: () => void;
   readonly rankingsAvailable?: boolean;
   readonly children?: ReactNode;
   readonly tools?: readonly ToolItem[];
@@ -57,6 +59,7 @@ export function GameHeader({
                         label: duelText('ranking.leaderboards'),
                         icon: 'trophy' as const,
                         href: '#game-rankings',
+                        onClick: onRankings,
                       },
                     ]
                   : []),

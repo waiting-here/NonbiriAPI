@@ -1,13 +1,7 @@
-.admin-games-page .nb-page-header__actions {
+.admin-games-toolbar {
+  display: flex;
   flex-wrap: wrap;
-}
-.admin-games-page .nb-page-header__actions .nb-btn {
-  white-space: nowrap;
-}
-@media (width < 40rem) {
-  .admin-games-page .nb-page-header__actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    width: 100%;
-  }
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-2) var(--nb-space-4);
 }

@@ -75,7 +75,7 @@ function deferred<T>() {
 }
 
 describe('administrator alerts page', () => {
-  it('shows a returned request as a review notice while keeping its resolution controls', async () => {
+  it('finds returned requests by type and shows them with resolution controls', async () => {
     const returned = alert('4', false, {
       kind: 'forward_error',
       subtype: 'return_detected',
@@ -86,22 +86,35 @@ describe('administrator alerts page', () => {
       {
         method: 'GET',
         path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+        body: page([returned, alert('5')]),
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts?resolved=false&page=1&page_size=20&kind=forward_error',
         body: page([returned]),
       },
     ]);
-    const rendered = await renderWithProviders(<AlertsPage />, {
+    const view = await renderWithProviders(<AlertsPage />, {
       station: 'admin',
       role: 'admin',
       locale: 'en',
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
-    expect(await screen.findByText('Request returned')).toBeVisible();
+    const row = await screen.findByRole('row', { name: /Request returned/ });
     expect(screen.getByText(/processing continued without an automatic penalty/)).toBeVisible();
     expect(
       screen.queryByText('Upstream call did not complete. Open details for failure information.'),
     ).toBeNull();
-    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Resolve' })).toBeEnabled();
+    expect(within(row).getByRole('button', { name: 'Resolve' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Select alert 5' })).toBeVisible();
+    await view.user.selectOptions(
+      screen.getByRole('combobox', { name: 'Alert type' }),
+      screen.getByRole('option', { name: 'Forwarding errors and returned requests' }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox', { name: 'Select alert 5' })).not.toBeInTheDocument();
+      expect(screen.getByRole('row', { name: /Request returned/ })).toBeVisible();
+    });
   });
 
   it('rejects off-site and ambiguous return destinations', () => {
@@ -113,63 +126,164 @@ describe('administrator alerts page', () => {
     );
   });
 
-  it('opens an exact donation alert and links logs by endpoint key, then returns to the prior page', async () => {
-    const donationAlert = alert('7', false, {
-      kind: 'donation_failure_disabled',
-      ref: 'donation-key:71:generation:2:fold:3',
-    });
-    installJsonFetchFixtures([
-      { method: 'GET', path: '/admin/api/session', body: session() },
-      {
-        method: 'GET',
-        path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
-        body: page([donationAlert]),
-      },
-      {
-        method: 'GET',
-        path: '/admin/api/alerts/7',
-        body: {
-          alert: donationAlert,
-          context_version: 1,
-          occurred_facts: [
-            { key: 'failure_streak', value: '3' },
-            { key: 'failure_threshold', value: '3' },
-          ],
-          targets: [
-            { kind: 'donation', id: '2', available: true, status: 'approved' },
-            { kind: 'donation_key', id: '71', available: true, status: 'failure_disabled' },
-            { kind: 'endpoint_key', id: '83', available: true, status: 'enabled' },
-          ],
-          current_state: [],
-          related_logs: {
-            endpoint_key_id: '83',
-            from: 1799999100,
-            to: 1800000300,
-            available: true,
-          },
-          resolution_kind: '',
+  it.each([0, 1])(
+    'opens donation alert context %s and keeps the endpoint-key log link',
+    async (version) => {
+      const donationAlert = alert('7', false, {
+        kind: 'donation_failure_disabled',
+        ref: 'donation-key:71:generation:2:fold:3',
+      });
+      installJsonFetchFixtures([
+        { method: 'GET', path: '/admin/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+          body: page([donationAlert]),
         },
-      },
-    ]);
-    await renderWithProviders(<AlertsPage />, {
-      station: 'admin',
-      role: 'admin',
-      locale: 'en',
-      route:
-        '/alerts?resolved=false&page=1&page_size=20&alert_id=7&return_to=%2Fusers%3Fdeleted%3D9%26page%3D4%26page_size%3D50',
-    });
-    expect(await screen.findByRole('heading', { name: 'Alert details #7' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Return to previous page' })).toHaveAttribute(
-      'href',
-      '/users?deleted=9&page=4&page_size=50',
-    );
-    expect(
-      await screen.findByRole('link', {
-        name: 'From 15 minutes before to 5 minutes after this alert',
-      }),
-    ).toHaveAttribute('href', '/logs?endpoint_key_id=83&from=1799999100&to=1800000300');
-    expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
-  });
+        {
+          method: 'GET',
+          path: '/admin/api/alerts/7',
+          body: {
+            alert: donationAlert,
+            context_version: version,
+            occurred_facts:
+              version === 1
+                ? [
+                    { key: 'failure_streak', value: '3' },
+                    { key: 'failure_threshold', value: '3' },
+                  ]
+                : [],
+            targets: [
+              { kind: 'donation', id: '2', available: true, status: 'approved' },
+              { kind: 'donation_key', id: '71', available: true, status: 'failure_disabled' },
+              { kind: 'endpoint_key', id: '83', available: true, status: 'enabled' },
+            ],
+            current_state: [],
+            related_logs: {
+              endpoint_key_id: '83',
+              from: 1799999100,
+              to: 1800000300,
+              available: true,
+            },
+            resolution_kind: '',
+          },
+        },
+      ]);
+      await renderWithProviders(<AlertsPage />, {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route:
+          '/alerts?resolved=false&page=1&page_size=20&alert_id=7&return_to=%2Fusers%3Fdeleted%3D9%26page%3D4%26page_size%3D50',
+      });
+      expect(await screen.findByRole('heading', { name: 'Alert details #7' })).toBeVisible();
+      expect(screen.getByRole('link', { name: 'Return to previous page' })).toHaveAttribute(
+        'href',
+        '/users?deleted=9&page=4&page_size=50',
+      );
+      expect(
+        await screen.findByRole('link', {
+          name: 'From 15 minutes before to 5 minutes after this alert',
+        }),
+      ).toHaveAttribute(
+        'href',
+        expect.stringContaining(
+          '/logs?endpoint_key_id=83&from=1799999100&to=1800000300&return_to=',
+        ),
+      );
+      expect(screen.queryByRole('link', { name: /endpoint key.*71/i })).toBeNull();
+      expect(
+        screen.queryByRole('link', { name: 'View triggering attempt' }),
+      ).not.toBeInTheDocument();
+      if (version === 0) {
+        expect(screen.getByText('Alert 7', { exact: true })).toBeVisible();
+        expect(screen.getByText('donation-key:71:generation:2:fold:3')).toBeVisible();
+        expect(
+          screen.queryByText(
+            'The donated key was automatically disabled after consecutive failures.',
+          ),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(
+            'The donated key was automatically disabled after consecutive failures.',
+          ),
+        ).toBeVisible();
+        expect(screen.getByText('Alert 7', { exact: true })).not.toBeVisible();
+      }
+    },
+  );
+
+  it.each([true, false])(
+    'shows retained trigger facts with attempt availability %s',
+    async (available) => {
+      const ref = 'donation-use:51:health:11:generation:2:fold:10';
+      const message = 'retained private operator explanation';
+      const donationAlert = alert('7', false, { kind: 'donation_failure_disabled', ref, message });
+      const requestID = `req_${'A'.repeat(21)}Q`;
+      installJsonFetchFixtures([
+        { method: 'GET', path: '/admin/api/session', body: session() },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+          body: page([donationAlert]),
+        },
+        {
+          method: 'GET',
+          path: '/admin/api/alerts/7',
+          body: {
+            alert: donationAlert,
+            context_version: 1,
+            occurred_facts: [{ key: 'use_id', value: '51' }],
+            targets: [],
+            current_state: [],
+            related_logs: null,
+            resolution_kind: '',
+            trigger_attempt: {
+              request_id: requestID,
+              attempt_seq: '23',
+              connector_type: 'google-gemini',
+              native_service: 'gemini_generate_content',
+              reason: 'google_access_token_type_unsupported',
+              status_code: 401,
+              streak_before: '9',
+              streak_after: '10',
+              threshold: '10',
+              available,
+            },
+          },
+        },
+      ]);
+      const view = await renderWithProviders(<AlertsPage />, {
+        station: 'admin',
+        role: 'admin',
+        locale: 'en',
+        route: '/alerts?resolved=false&page=1&page_size=20&alert_id=7',
+      });
+      const trigger = await screen.findByRole('region', {
+        name: 'Attempt that triggered disablement',
+      });
+      expect(trigger).toHaveTextContent('Google rejected the access token type · HTTP 401');
+      expect(trigger).toHaveTextContent('Consecutive failures rose from 9 to 10');
+      expect(
+        screen.getByText(
+          'A donated service was automatically disabled after consecutive failures.',
+        ),
+      ).toBeVisible();
+      expect(screen.getByText(message)).not.toBeVisible();
+      expect(screen.getByText(ref)).not.toBeVisible();
+      await view.user.click(screen.getByText('Technical information', { selector: 'strong' }));
+      expect(screen.getByText(message)).toBeVisible();
+      expect(screen.getByText(ref)).toBeVisible();
+      const link = within(trigger).queryByRole('link', { name: 'View triggering attempt' });
+      if (available) {
+        expect(link).toHaveAttribute('href', expect.stringContaining('attempt_seq=23'));
+      } else {
+        expect(link).not.toBeInTheDocument();
+        expect(trigger).toHaveTextContent('This attempt is no longer available in request logs.');
+      }
+    },
+  );
 
   it('confirms the administrator session before requesting private alerts', async () => {
     const fetchMock = installJsonFetchFixtures([
@@ -364,8 +478,7 @@ describe('administrator alerts page', () => {
     });
 
     expect(await screen.findByRole('checkbox', { name: 'Select alert 41' })).toBeVisible();
-    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
     await waitFor(() => expect(resolvedOnServer).toBe(true));
     await waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(2));
 
@@ -433,8 +546,7 @@ describe('administrator alerts page', () => {
       });
 
       expect(await screen.findByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
-      await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-      await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+      await rendered.user.click(screen.getByRole('button', { name: 'Resolve' }));
       await waitFor(() =>
         expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument(),
       );
@@ -479,8 +591,7 @@ describe('administrator alerts page', () => {
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
     await screen.findByRole('checkbox', { name: 'Select alert 1' });
-    await view.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    await view.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    await view.user.click(screen.getByRole('button', { name: 'Resolve' }));
     await view.user.click(await screen.findByRole('button', { name: 'Retry' }));
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(reads).toBe(2);
@@ -541,13 +652,11 @@ describe('administrator alerts page', () => {
     );
     expect(screen.getByRole('checkbox', { name: 'Select alert 1' })).toBeVisible();
     expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Alert actions' })[0]);
-    const resolve = screen.getByRole('menuitem', { name: 'Resolve' });
-    expect(resolve).toHaveAttribute('aria-disabled', 'true');
+    const resolve = screen.getAllByRole('button', { name: 'Resolve' })[0];
+    expect(resolve).toBeDisabled();
     const reads = fetchMock.mock.calls.length;
     await rendered.user.click(resolve);
     expect(fetchMock).toHaveBeenCalledTimes(reads);
-    await rendered.user.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeDisabled();
 
@@ -561,9 +670,9 @@ describe('administrator alerts page', () => {
     });
     expect(await screen.findByRole('checkbox', { name: 'Select alert 21' })).toBeVisible();
     expect(screen.queryByRole('checkbox', { name: 'Select alert 1' })).not.toBeInTheDocument();
-    await rendered.user.click(screen.getByRole('button', { name: 'Alert actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled');
-    await rendered.user.click(screen.getByRole('menuitem', { name: 'Resolve' }));
+    const resolveAfter = screen.getByRole('button', { name: 'Resolve' });
+    expect(resolveAfter).toBeEnabled();
+    await rendered.user.click(resolveAfter);
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) => String(input).endsWith('/alerts/21/resolve')),
@@ -724,7 +833,7 @@ it.each([
     expect(screen.getByTestId('location-search')).not.toHaveTextContent('target_id=');
     const target = screen.getByText(new RegExp(`#${id}`)).closest('li');
     expect(target).not.toBeNull();
-    await rendered.user.click(within(target!).getByRole('button', { name: 'Details' }));
+    await rendered.user.click(within(target!).getByRole('button', { name: 'Inspect here' }));
     expect(
       await screen.findByRole('heading', { name: new RegExp(`Exact object diagnostic.*${id}`) }),
     ).toBeVisible();
@@ -778,7 +887,7 @@ it('shows only real retained issue references for an incomplete projection alert
     locale: 'en',
     route: '/alerts?resolved=false&alert_id=78&target_kind=issue_user&target_id=42',
   });
-  expect(await screen.findByRole('link', { name: 'Details' })).toHaveAttribute(
+  expect(await screen.findByRole('link', { name: 'Open related page' })).toHaveAttribute(
     'href',
     '/users?user=42',
   );
@@ -822,7 +931,7 @@ it('does not reinterpret a normal user target as issue projection from crafted U
     locale: 'en',
     route: '/alerts?resolved=false&alert_id=79&target_kind=issue_user&target_id=42',
   });
-  expect(await screen.findByRole('link', { name: 'Details' })).toHaveAttribute(
+  expect(await screen.findByRole('link', { name: 'Open related page' })).toHaveAttribute(
     'href',
     '/users?user=42',
   );

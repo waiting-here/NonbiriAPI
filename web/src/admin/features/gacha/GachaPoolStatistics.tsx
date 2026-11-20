@@ -192,7 +192,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
           <FilterBar
             query={pools}
             ariaLabel={t('admin.gachaStats.poolFilters')}
-            activeCount={poolQuery || poolSort !== 'recent' ? 1 : 0}
+            activeCount={Number(Boolean(poolQuery)) + Number(poolSort !== 'recent')}
             secondaryAlwaysVisible
             onSubmit={() => change('stats_pool_q', poolDraft.trim())}
             onReset={() => {
@@ -413,7 +413,7 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
                   <FilterBar
                     query={cards}
                     ariaLabel={t('admin.gachaStats.cardFilters')}
-                    activeCount={cardQuery || cardSort !== 'count' ? 1 : 0}
+                    activeCount={Number(Boolean(cardQuery)) + Number(cardSort !== 'count')}
                     secondaryAlwaysVisible
                     onSubmit={() => change('stats_card_q', cardDraft.trim())}
                     onReset={() => {
@@ -475,7 +475,10 @@ export function GachaPoolStatistics({ accountKey }: { accountKey: string }) {
                           header: t('admin.gachaStats.rarity'),
                           cell: 'status',
                           render: (row) => (
-                            <span className="nb-badge gacha-stats-rarity" data-rarity={row.rarity}>
+                            <span
+                              className="nb-badge nb-badge--plain gacha-stats-rarity"
+                              data-rarity={row.rarity}
+                            >
                               {row.rarity ?? t('admin.gachaStats.unspecifiedRarity')}
                             </span>
                           ),

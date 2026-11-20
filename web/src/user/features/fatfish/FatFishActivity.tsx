@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import { useActivityText } from '@shared/limitedactivities/copy';
 import { FatFishCanvas, FatFishPlayer } from '@shared/fatfish/FatFishPlayer';
 import {
@@ -27,6 +28,7 @@ import { cleanupLocalFishSessions, freshKey, localPlaySupportError } from '@shar
 import { PublicGameIdentity } from '../../games/common/PublicGameIdentity';
 import { UserPageGate } from '../../components/UserPageGate';
 import { useUserSession } from '../../data';
+import { creditHistoryKeys } from '../credits/queries';
 import './fatfish.css';
 const root = ['user', 'fat-fish'] as const;
 const challengeStateKeys: Record<FatFishChallenge['state'], string> = {
@@ -230,7 +232,7 @@ function Content({ account }: { account: string }) {
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: root }),
-      client.invalidateQueries({ queryKey: ['user', 'credits'] }),
+      client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) }),
     ]);
   };
   const doUnlock = async () => {
@@ -385,10 +387,9 @@ function Content({ account }: { account: string }) {
         eyebrow={text('common.limitedTimeActivity')}
         title={text('common.raiseABigFish')}
         description={text('common.placeToolsAndGuideTheFishTo')}
-        icon="activities"
         back={<Link to="/activities">{text('common.backToActivities')}</Link>}
       />
-      {notice ? <p role="status">{notice}</p> : null}
+      {notice ? <Note tone="info">{notice}</Note> : null}
       {error ? <ErrorState error={error} /> : null}
       {active ? (
         <Card>
@@ -426,315 +427,360 @@ function Content({ account }: { account: string }) {
           )}
         </Card>
       ) : null}
-      <section className="fatfish-catalog">
-        <h2>{text('common.periods')}</h2>
-        {periods.isPending ? (
-          <LoadingState />
-        ) : periods.error ? (
-          <ErrorState error={periods.error} onRetry={() => void periods.refetch()} />
-        ) : null}
-        {periods.data && periods.data.items.length === 0 && page === 1 ? (
-          <EmptyState title={text('common.noOpenPeriodsTitle')} body={text('common.noOpenPeriodsBody')} />
-        ) : null}
-        <div className="fatfish-periods">
-          {periods.data?.items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={periodID === item.id ? 'is-selected' : ''}
-              onClick={() => {
-                setParams({ period: item.id });
-                setBoardNode('');
-                setBoardPage(1);
-              }}
-            >
-              <strong>{item.title}</strong>
-              <span>
-                {item.state === 'open' && !item.paused
-                  ? text('common.open2')
-                  : text('common.endedOrPaused')}
-              </span>
-            </button>
-          ))}
-        </div>
-        <SimplePager
-          page={page}
-          hasMore={Boolean(periods.data?.has_more)}
-          onPrev={() => setPage(page - 1)}
-          onNext={() => setPage(page + 1)}
-          labels={{ previous: text('common.previous'), next: text('common.next') }}
-        />
-      </section>
+      <Panel className="fatfish-catalog">
+        <PanelHead title={text('common.periods')} />
+        <PanelBody>
+          {periods.isPending ? (
+            <LoadingState />
+          ) : periods.error ? (
+            <ErrorState error={periods.error} onRetry={() => void periods.refetch()} />
+          ) : null}
+          {periods.data && periods.data.items.length === 0 && page === 1 ? (
+            <EmptyState
+              title={text('common.noOpenPeriodsTitle')}
+              body={text('common.noOpenPeriodsBody')}
+            />
+          ) : null}
+          {periods.data && periods.data.items.length > 0 ? (
+            <div className="fatfish-periods">
+              {periods.data.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={periodID === item.id ? 'is-selected' : ''}
+                  onClick={() => {
+                    setParams({ period: item.id });
+                    setBoardNode('');
+                    setBoardPage(1);
+                  }}
+                >
+                  <strong>{item.title}</strong>
+                  <span>
+                    {item.state === 'open' && !item.paused
+                      ? text('common.open2')
+                      : text('common.endedOrPaused')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {(page > 1 || Boolean(periods.data?.has_more)) && (
+            <SimplePager
+              page={page}
+              hasMore={Boolean(periods.data?.has_more)}
+              onPrev={() => setPage(page - 1)}
+              onNext={() => setPage(page + 1)}
+              labels={{ previous: text('common.previous'), next: text('common.next') }}
+            />
+          )}
+        </PanelBody>
+      </Panel>
       {periodID ? (
-        <section>
+        <div className="nb-stack">
           {period.isPending ? (
             <LoadingState />
           ) : period.error ? (
             <ErrorState error={period.error} onRetry={() => void period.refetch()} />
           ) : null}
           {period.data ? (
-            <>
-              <h2>{period.data.title}</h2>
-              <p>{period.data.description}</p>
-              {period.data.paused ? <p>{text('common.newChallengesArePaused')}</p> : null}
-              <div className="fatfish-map-controls">
-                <span>
-                  {text('common.mapZoom')}: {Math.round(mapZoom * 100)}%
-                </span>
-                <button
-                  type="button"
-                  disabled={mapZoom <= 1}
-                  onClick={() => setMapZoom(Math.max(1, mapZoom - 0.5))}
-                >
-                  {text('common.zoomOut')}
-                </button>
-                <button
-                  type="button"
-                  disabled={mapZoom >= 3}
-                  onClick={() => setMapZoom(Math.min(3, mapZoom + 0.5))}
-                >
-                  {text('common.zoomIn')}
-                </button>
-              </div>
-              <div className="fatfish-map-viewport">
-                <div
-                  className="fatfish-map"
-                  aria-label={text('common.nodeMap')}
-                  style={{ width: `${40 * mapZoom}rem`, height: `${17 * mapZoom}rem` }}
-                >
-                  <svg
-                    className="fatfish-map__edges"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    {edges.map((edge) => {
-                      const from = position(edge.from),
-                        to = position(edge.to);
-                      return (
-                        <line
-                          key={`${edge.from.id}:${edge.to.id}`}
-                          x1={from.x}
-                          y1={from.y}
-                          x2={to.x}
-                          y2={to.y}
-                        />
-                      );
-                    })}
-                  </svg>
-                  {nodes.map((item) => {
-                    const point = position(item);
-                    return (
+            <Panel>
+              <PanelHead title={period.data.title} description={period.data.description} />
+              <PanelBody>
+                {period.data.paused ? (
+                  <Note tone="warn">{text('common.newChallengesArePaused')}</Note>
+                ) : null}
+                <div className={nodeID ? 'fatfish-stage-grid' : 'nb-stack'}>
+                  <div className="nb-stack">
+                    <div className="fatfish-map-controls">
+                      <span>
+                        {text('common.mapZoom')}: {Math.round(mapZoom * 100)}%
+                      </span>
                       <button
-                        key={item.id}
                         type="button"
-                        className={item.id === nodeID ? 'is-selected' : ''}
-                        style={{ left: `${point.x}%`, top: `${point.y}%` }}
-                        title={nodeLabel(item, text)}
-                        onClick={() => setParams({ period: periodID, node: item.id })}
-                        aria-label={nodeLabel(item, text)}
+                        disabled={mapZoom <= 1}
+                        onClick={() => setMapZoom(Math.max(1, mapZoom - 0.5))}
                       >
-                        {item.progress.best_stars ? `${item.progress.best_stars}★` : item.order + 1}
+                        {text('common.zoomOut')}
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        disabled={mapZoom >= 3}
+                        onClick={() => setMapZoom(Math.min(3, mapZoom + 0.5))}
+                      >
+                        {text('common.zoomIn')}
+                      </button>
+                    </div>
+                    <div className="fatfish-map-viewport">
+                      <div
+                        className="fatfish-map"
+                        aria-label={text('common.nodeMap')}
+                        style={{ width: `${40 * mapZoom}rem`, height: `${17 * mapZoom}rem` }}
+                      >
+                        <svg
+                          className="fatfish-map__edges"
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
+                          aria-hidden="true"
+                        >
+                          {edges.map((edge) => {
+                            const from = position(edge.from),
+                              to = position(edge.to);
+                            return (
+                              <line
+                                key={`${edge.from.id}:${edge.to.id}`}
+                                x1={from.x}
+                                y1={from.y}
+                                x2={to.x}
+                                y2={to.y}
+                              />
+                            );
+                          })}
+                        </svg>
+                        {nodes.map((item) => {
+                          const point = position(item);
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={item.id === nodeID ? 'is-selected' : ''}
+                              style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                              title={nodeLabel(item, text)}
+                              onClick={() => setParams({ period: periodID, node: item.id })}
+                              aria-label={nodeLabel(item, text)}
+                            >
+                              {item.progress.best_stars
+                                ? `${item.progress.best_stars}★`
+                                : item.order + 1}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <ol className="fatfish-node-list">
+                      {nodes.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => setParams({ period: periodID, node: item.id })}
+                          >
+                            {nodeLabel(item, text)}
+                          </button>
+                          <span>
+                            {item.progress.unlocked
+                              ? text('common.unlocked')
+                              : item.eligible
+                                ? text('common.eligible')
+                                : text('common.locked')}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  {nodeID && node.data ? (
+                    <div className="fatfish-node-detail">
+                      <h3>{nodeLabel(node.data, text)}</h3>
+                      {node.data.description ? <p>{node.data.description}</p> : null}
+                      {node.data.condition_hint ? (
+                        <div className="fatfish-condition">
+                          <Condition hint={node.data.condition_hint} />
+                        </div>
+                      ) : null}
+                      {node.data.amounts ? (
+                        <dl className="fatfish-facts">
+                          <dt>{text('common.unlockCost')}</dt>
+                          <dd>{node.data.amounts.unlock_cost}</dd>
+                          <dt>{text('common.ticketPerChallenge')}</dt>
+                          <dd>{node.data.amounts.ticket_price}</dd>
+                          <dt>{text('common.firstClearReward')}</dt>
+                          <dd>{node.data.amounts.first_clear_reward}</dd>
+                          <dt>{text('common.starRewards')}</dt>
+                          <dd>{node.data.amounts.star_rewards.join(' / ')}</dd>
+                        </dl>
+                      ) : null}
+                      {node.data.level ? (
+                        <>
+                          <h4>{text('common.initialLayout')}</h4>
+                          <FatFishCanvas level={node.data.level} />
+                        </>
+                      ) : null}
+                      <p>
+                        {text('common.personalBest')}:{' '}
+                        {formatScoreUnits(node.data.progress.best_score_units)} ·{' '}
+                        {node.data.progress.best_stars}★
+                      </p>
+                      {!active &&
+                      period.data &&
+                      canEnter(period.data) &&
+                      node.data.eligible &&
+                      !node.data.progress.unlocked &&
+                      node.data.revision ? (
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--primary"
+                          disabled={working}
+                          onClick={() => void doUnlock()}
+                        >
+                          {text('common.unlockNode')}
+                        </button>
+                      ) : null}
+                      {!active &&
+                      period.data &&
+                      canEnter(period.data) &&
+                      node.data.progress.unlocked ? (
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--primary"
+                          disabled={working || !!playSupportError}
+                          onClick={() => void doPrepare()}
+                        >
+                          {text('common.prepareChallengeFree')}
+                        </button>
+                      ) : null}
+                      {playSupportError ? (
+                        <p role="status">
+                          {text('common.thisBrowserCannotSafelySaveAndExclusively')}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : nodeID && node.isPending ? (
+                    <LoadingState />
+                  ) : nodeID && node.error ? (
+                    <ErrorState error={node.error} onRetry={() => void node.refetch()} />
+                  ) : null}
                 </div>
-              </div>
-              <ol className="fatfish-node-list">
-                {nodes.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => setParams({ period: periodID, node: item.id })}
-                    >
-                      {nodeLabel(item, text)}
-                    </button>
-                    <span>
-                      {item.progress.unlocked
-                        ? text('common.unlocked')
-                        : item.eligible
-                          ? text('common.eligible')
-                          : text('common.locked')}
-                    </span>
+              </PanelBody>
+            </Panel>
+          ) : null}
+          <Panel>
+            <PanelHead
+              title={text('common.leaderboard')}
+              actions={
+                <label className="fatfish-scope-filter">
+                  <span>{text('common.scope')}</span>
+                  <select
+                    value={boardNode}
+                    onChange={(event) => {
+                      setBoardNode(event.target.value);
+                      setBoardPage(1);
+                    }}
+                  >
+                    <option value="">{text('common.periodTotal')}</option>
+                    {nodes
+                      .filter((item) => item.title)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              }
+            />
+            <PanelBody>
+              {board.isPending ? (
+                <LoadingState />
+              ) : board.error ? (
+                <ErrorState error={board.error} onRetry={() => void board.refetch()} />
+              ) : null}
+              <ol className="fatfish-board">
+                {board.data?.rows.map((row) => (
+                  <li key={`${row.rank}-${row.achieved_at_ms}-${row.score_units}`}>
+                    <span>#{row.rank}</span>
+                    <PublicGameIdentity
+                      identity={{
+                        kind: row.identity.kind === 'public' ? 'public' : 'anonymous',
+                        displayName: row.identity.display_name ?? '',
+                        avatarURL: row.identity.avatar_url ?? null,
+                      }}
+                      anonymousLabel={text('common.anonymousPlayer')}
+                      isMe={row.is_me}
+                      meLabel={text('common.me')}
+                    />
+                    <strong>{formatScoreUnits(row.score_units)}</strong>
                   </li>
                 ))}
               </ol>
-            </>
-          ) : null}
-          {nodeID && node.data ? (
-            <Card>
-              <h3>{nodeLabel(node.data, text)}</h3>
-              {node.data.description ? <p>{node.data.description}</p> : null}
-              {node.data.condition_hint ? (
-                <div className="fatfish-condition">
-                  <Condition hint={node.data.condition_hint} />
-                </div>
-              ) : null}
-              {node.data.amounts ? (
-                <dl className="fatfish-facts">
-                  <dt>{text('common.unlockCost')}</dt>
-                  <dd>{node.data.amounts.unlock_cost}</dd>
-                  <dt>{text('common.ticketPerChallenge')}</dt>
-                  <dd>{node.data.amounts.ticket_price}</dd>
-                  <dt>{text('common.firstClearReward')}</dt>
-                  <dd>{node.data.amounts.first_clear_reward}</dd>
-                  <dt>{text('common.starRewards')}</dt>
-                  <dd>{node.data.amounts.star_rewards.join(' / ')}</dd>
-                </dl>
-              ) : null}
-              {node.data.level ? (
-                <>
-                  <h4>{text('common.initialLayout')}</h4>
-                  <FatFishCanvas level={node.data.level} />
-                </>
-              ) : null}
-              <p>
-                {text('common.personalBest')}:{' '}
-                {formatScoreUnits(node.data.progress.best_score_units)} ·{' '}
-                {node.data.progress.best_stars}★
-              </p>
-              {!active &&
-              period.data &&
-              canEnter(period.data) &&
-              node.data.eligible &&
-              !node.data.progress.unlocked &&
-              node.data.revision ? (
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--primary"
-                  disabled={working}
-                  onClick={() => void doUnlock()}
-                >
-                  {text('common.unlockNode')}
-                </button>
-              ) : null}
-              {!active && period.data && canEnter(period.data) && node.data.progress.unlocked ? (
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--primary"
-                  disabled={working || !!playSupportError}
-                  onClick={() => void doPrepare()}
-                >
-                  {text('common.prepareChallengeFree')}
-                </button>
-              ) : null}
-              {playSupportError ? (
-                <p role="status">{text('common.thisBrowserCannotSafelySaveAndExclusively')}</p>
-              ) : null}
-            </Card>
-          ) : nodeID && node.isPending ? (
+              {(boardPage > 1 ||
+                Boolean(board.data && boardPage * board.data.page_size < board.data.total)) && (
+                <SimplePager
+                  page={boardPage}
+                  hasMore={Boolean(
+                    board.data && boardPage * board.data.page_size < board.data.total,
+                  )}
+                  onPrev={() => setBoardPage(boardPage - 1)}
+                  onNext={() => setBoardPage(boardPage + 1)}
+                  labels={{ previous: text('common.previous'), next: text('common.next') }}
+                />
+              )}
+            </PanelBody>
+          </Panel>
+        </div>
+      ) : null}
+      <Panel>
+        <PanelHead title={text('common.challengeHistory')} />
+        <PanelBody>
+          {history.isPending ? (
             <LoadingState />
-          ) : nodeID && node.error ? (
-            <ErrorState error={node.error} onRetry={() => void node.refetch()} />
+          ) : history.error ? (
+            <ErrorState error={history.error} onRetry={() => void history.refetch()} />
           ) : null}
-          <section>
-            <h2>{text('common.leaderboard')}</h2>
-            <label>
-              {text('common.scope')}{' '}
-              <select
-                value={boardNode}
-                onChange={(event) => {
-                  setBoardNode(event.target.value);
-                  setBoardPage(1);
-                }}
-              >
-                <option value="">{text('common.periodTotal')}</option>
-                {nodes
-                  .filter((item) => item.title)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.title}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            {board.isPending ? (
-              <LoadingState />
-            ) : board.error ? (
-              <ErrorState error={board.error} onRetry={() => void board.refetch()} />
-            ) : null}
-            <ol className="fatfish-board">
-              {board.data?.rows.map((row) => (
-                <li key={`${row.rank}-${row.achieved_at_ms}-${row.score_units}`}>
-                  <span>#{row.rank}</span>
-                  <PublicGameIdentity
-                    identity={{
-                      kind: row.identity.kind === 'public' ? 'public' : 'anonymous',
-                      displayName: row.identity.display_name ?? '',
-                      avatarURL: row.identity.avatar_url ?? null,
-                    }}
-                    anonymousLabel={text('common.anonymousPlayer')}
-                    isMe={row.is_me}
-                    meLabel={text('common.me')}
-                  />
-                  <strong>{formatScoreUnits(row.score_units)}</strong>
-                </li>
-              ))}
+          {history.data && history.data.items.length === 0 && historyPage === 1 ? (
+            <EmptyState
+              title={text('common.noChallengeHistoryTitle')}
+              body={text('common.noChallengeHistoryBody')}
+            />
+          ) : null}
+          {history.data && history.data.items.length > 0 ? (
+            <ol className="fatfish-history">
+              {history.data.items.map((item) => {
+                const timestamp = item.end_at_ms ?? item.start_at_ms ?? item.prepared_at_ms;
+                return (
+                  <li key={item.id}>
+                    <div className="fatfish-history__heading">
+                      <strong>{t(challengeStateKeys[item.state])}</strong>
+                      {typeof timestamp === 'number' ? (
+                        <time dateTime={new Date(timestamp).toISOString()}>
+                          {formatTime(timestamp / 1000)}
+                        </time>
+                      ) : null}
+                    </div>
+                    {item.result ? (
+                      <span>
+                        {item.result.stars}★ · {formatScoreUnits(item.result.score_units)}
+                      </span>
+                    ) : null}
+                    <span>
+                      {text('common.ticket')}:{' '}
+                      <GameMoney value={item.result?.ticket_charge ?? item.ticket_price} />
+                      {item.result ? (
+                        <>
+                          {' · '}
+                          {text('common.refund')}: <GameMoney value={item.result.ticket_refund} />
+                          {' · '}
+                          {text('common.rewards')}: <GameMoney value={item.result.rewards} />
+                        </>
+                      ) : null}
+                    </span>
+                    <details className="fatfish-history__reference">
+                      <summary>{t('user.fatFish.recordReference')}</summary>
+                      <CopyValue value={item.id} label={t('user.fatFish.recordReference')} />
+                    </details>
+                  </li>
+                );
+              })}
             </ol>
+          ) : null}
+          {(historyPage > 1 || Boolean(history.data?.has_more)) && (
             <SimplePager
-              page={boardPage}
-              hasMore={Boolean(board.data && boardPage * board.data.page_size < board.data.total)}
-              onPrev={() => setBoardPage(boardPage - 1)}
-              onNext={() => setBoardPage(boardPage + 1)}
+              page={historyPage}
+              hasMore={Boolean(history.data?.has_more)}
+              onPrev={() => setHistoryPage(historyPage - 1)}
+              onNext={() => setHistoryPage(historyPage + 1)}
               labels={{ previous: text('common.previous'), next: text('common.next') }}
             />
-          </section>
-        </section>
-      ) : null}
-      <section>
-        <h2>{text('common.challengeHistory')}</h2>
-        {history.isPending ? (
-          <LoadingState />
-        ) : history.error ? (
-          <ErrorState error={history.error} onRetry={() => void history.refetch()} />
-        ) : null}
-        {history.data && history.data.items.length === 0 && historyPage === 1 ? (
-          <EmptyState title={text('common.noChallengeHistoryTitle')} body={text('common.noChallengeHistoryBody')} />
-        ) : null}
-        <ol className="fatfish-history">
-          {history.data?.items.map((item) => {
-            const timestamp = item.end_at_ms ?? item.start_at_ms ?? item.prepared_at_ms;
-            return (
-              <li key={item.id}>
-                <div className="fatfish-history__heading">
-                  <strong>{t(challengeStateKeys[item.state])}</strong>
-                  {typeof timestamp === 'number' ? (
-                    <time dateTime={new Date(timestamp).toISOString()}>
-                      {formatTime(timestamp / 1000)}
-                    </time>
-                  ) : null}
-                </div>
-                {item.result ? (
-                  <span>
-                    {item.result.stars}★ · {formatScoreUnits(item.result.score_units)}
-                  </span>
-                ) : null}
-                <span>
-                  {text('common.ticket')}:{' '}
-                  <GameMoney value={item.result?.ticket_charge ?? item.ticket_price} />
-                  {item.result ? (
-                    <>
-                      {' · '}{text('common.refund')}: <GameMoney value={item.result.ticket_refund} />
-                      {' · '}{text('common.rewards')}: <GameMoney value={item.result.rewards} />
-                    </>
-                  ) : null}
-                </span>
-                <details className="fatfish-history__reference">
-                  <summary>{t('user.fatFish.recordReference')}</summary>
-                  <CopyValue value={item.id} label={t('user.fatFish.recordReference')} />
-                </details>
-              </li>
-            );
-          })}
-        </ol>
-        <SimplePager
-          page={historyPage}
-          hasMore={Boolean(history.data?.has_more)}
-          onPrev={() => setHistoryPage(historyPage - 1)}
-          onNext={() => setHistoryPage(historyPage + 1)}
-          labels={{ previous: text('common.previous'), next: text('common.next') }}
-        />
-      </section>
+          )}
+        </PanelBody>
+      </Panel>
     </div>
   );
 }

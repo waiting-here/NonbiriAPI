@@ -90,18 +90,21 @@ func slidingWindowAmountSQL(amount, cached string) string {
 
 // ModelAvailabilityPredicate checks one exact upstream target. Arguments are
 // trusted repository expressions, never request text.
-func ModelAvailabilityPredicate(keyID, model, decisionNow, tokens string) string {
-	return fmt.Sprintf(`(CASE WHEN NOT EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=%[1]s AND mq.upstream_model_id=%[2]s AND (mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
+func ModelAvailabilityPredicate(keyID, model, decisionNow, credits, tokens string) string {
+	return fmt.Sprintf(`(CASE WHEN NOT EXISTS(SELECT 1 FROM donation_model_quotas mq WHERE mq.donation_key_id=%[1]s AND mq.upstream_model_id=%[2]s AND (mq.call_limit_mag IS NOT NULL OR mq.price_limit_mag IS NOT NULL OR mq.token_limit_mag IS NOT NULL OR mq.input_token_limit_mag IS NOT NULL OR mq.output_token_limit_mag IS NOT NULL))
  AND NOT EXISTS(SELECT 1 FROM donation_quota_rules mr WHERE mr.donation_key_id=%[1]s AND mr.upstream_model_id=%[2]s AND mr.current_epoch IS NOT NULL)
  THEN 1 ELSE (NOT EXISTS(SELECT 1 FROM donation_model_quotas mq JOIN donation_keys mk ON mk.id=mq.donation_key_id
  WHERE mq.donation_key_id=%[1]s AND mq.upstream_model_id=%[2]s AND (
- (mq.token_limit_mag IS NOT NULL AND (nbi_u128_remaining(mq.token_limit_mag,mq.tokens_used,mq.tokens_reserved,nbi_u128(0))=nbi_u128(0)
+ (mq.call_limit_mag IS NOT NULL AND nbi_u128_remaining(mq.call_limit_mag,mq.calls_used,mq.calls_reserved,nbi_u128(0))<nbi_u128(1))
+ OR (mq.price_limit_mag IS NOT NULL AND (nbi_u128_remaining(mq.price_limit_mag,mq.price_used_mag,mq.price_reserved_mag,nbi_u128(0))=nbi_u128(0)
+ OR nbi_u128_remaining(mq.price_limit_mag,mq.price_used_mag,mq.price_reserved_mag,nbi_u128(0))<nbi_u128(%[5]s)))
+ OR (mq.token_limit_mag IS NOT NULL AND (nbi_u128_remaining(mq.token_limit_mag,mq.tokens_used,mq.tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(mq.token_limit_mag,mq.tokens_used,mq.tokens_reserved,nbi_u128(0))<nbi_u128(COALESCE(mk.input_token_reserve+mk.output_token_reserve,%[3]s))))
  OR (mq.input_token_limit_mag IS NOT NULL AND (mk.input_token_reserve IS NULL OR nbi_u128_remaining(mq.input_token_limit_mag,mq.input_tokens_used,mq.input_tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(mq.input_token_limit_mag,mq.input_tokens_used,mq.input_tokens_reserved,nbi_u128(0))<nbi_u128(mk.input_token_reserve)))
  OR (mq.output_token_limit_mag IS NOT NULL AND (mk.output_token_reserve IS NULL OR nbi_u128_remaining(mq.output_token_limit_mag,mq.output_tokens_used,mq.output_tokens_reserved,nbi_u128(0))=nbi_u128(0)
  OR nbi_u128_remaining(mq.output_token_limit_mag,mq.output_tokens_used,mq.output_tokens_reserved,nbi_u128(0))<nbi_u128(mk.output_token_reserve)))))
- AND %[4]s) END)`, keyID, model, tokens, availabilityPredicate(keyID, decisionNow, "0", tokens, model))
+ AND %[4]s) END)`, keyID, model, tokens, availabilityPredicate(keyID, decisionNow, credits, tokens, model), credits)
 }
 
 // EffectiveTokenReserveSQL supplies the same pair-or-scalar amount to existing

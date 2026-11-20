@@ -11,7 +11,7 @@
 .channel-base-url {
   display: block;
   min-width: 0;
-  max-width: 16rem;
+  max-width: clamp(14rem, 26vw, 26rem);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

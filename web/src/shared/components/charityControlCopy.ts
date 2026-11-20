@@ -40,8 +40,9 @@ export function charityControlCopy(language: string) {
         outputTokens: '输出 token 限额',
         inputReserve: '输入 token 预留量',
         outputReserve: '输出 token 预留量',
-        splitHint:
-          '限额留空表示不限，三项共同生效。启用输入或输出限额前，请同时填写两项预留量；预留量之和必须大于 0。',
+        splitReservations: '分别预留输入和输出 Token',
+        splitRequired: '已设置输入或输出限额，两项预留量都要填写，合计须大于 0。',
+        splitHint: '启用后填写两项预留量，合计须大于 0。',
         breakdown: '分项统计起点',
         unattributed: '未拆分的总 token 用量',
       }
@@ -88,8 +89,11 @@ export function charityControlCopy(language: string) {
         outputTokens: 'Output token limit',
         inputReserve: 'Input token reservation',
         outputReserve: 'Output token reservation',
+        splitReservations: 'Reserve input and output tokens separately',
+        splitRequired:
+          'An input or output limit is set. Enter both reservations with a combined value greater than zero.',
         splitHint:
-          'Blank limits are unlimited; all configured limits apply. Input or output limits require both reservations, with a positive combined value.',
+          'Enter both reservations when enabled. Their combined value must be greater than zero.',
         breakdown: 'Breakdown tracking started',
         unattributed: 'Unattributed total token usage',
       };

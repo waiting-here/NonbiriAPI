@@ -1,3 +1,4 @@
+import { channelPreset } from '../../../../../test/fixtures/resourceScopes';
 import { describe, expect, it } from 'vitest';
 import { normalizeEndpointCreateOptions } from '../normalizers';
 import en from './matching-copy/en.json';
@@ -7,9 +8,11 @@ describe('mainstream matching projection', () => {
   const channelID = `mch_${'A'.repeat(22)}`;
   const match = { channel_id: channelID, entry_id: '2' };
   const wire = {
+    native_service_options: [],
     base_connector_types: ['openai-compatible'],
     mainstream_channels: [
       {
+        ...channelPreset,
         id: channelID,
         name: 'Channel',
         connector_type: 'openai-compatible',
@@ -39,27 +42,24 @@ describe('mainstream matching projection', () => {
     ).toEqual([]);
     expect(normalizeEndpointCreateOptions(wire)).not.toHaveProperty('matching_mainstream_entries');
   });
-  it('rejects missing, disabled, duplicate, and malformed matches', () => {
-    for (const matching_mainstream_entries of [
-      [{ ...match, entry_id: '3' }],
-      [{ ...match, channel_id: `mch_${'B'.repeat(21)}A` }],
-      [match, match],
-      [{ ...match, entry_id: '02' }],
-    ]) {
-      expect(() =>
-        normalizeEndpointCreateOptions({ ...wire, matching_mainstream_entries }),
-      ).toThrow();
-    }
-    const disabled = {
+  it('keeps usable channel options when another matched entry is absent from the list', () => {
+    const matches = [match, { ...match, entry_id: '3' }];
+    const options = normalizeEndpointCreateOptions({
       ...wire,
-      mainstream_channels: wire.mainstream_channels.map((channel) => ({
-        ...channel,
-        entries: channel.entries.map((entry) => ({ ...entry, enabled: false })),
-      })),
-    };
-    expect(() =>
-      normalizeEndpointCreateOptions({ ...disabled, matching_mainstream_entries: [match] }),
-    ).toThrow();
+      matching_mainstream_entries: matches,
+    });
+    expect(options.matching_mainstream_entries).toEqual(matches);
+    expect(options.mainstream_channels[0]?.entries[0]?.id).toBe('2');
+  });
+
+  it('rejects malformed channel and entry identities', () => {
+    for (const invalid of [
+      { ...match, entry_id: '02' },
+      { ...match, channel_id: 'invalid' },
+    ])
+      expect(() =>
+        normalizeEndpointCreateOptions({ ...wire, matching_mainstream_entries: [invalid] }),
+      ).toThrow();
   });
   it('keeps suggestion copy paired in both interface languages', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort());

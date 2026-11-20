@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { LogReadError, logAccessLost } from './logReadAccess';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold } from '@shared/components/ui/Fold';
 import { copyText } from '@shared/utils/clipboard';
@@ -24,17 +25,22 @@ export function RequestSource(props: { role: DiagnosticRole; requestID: string }
 function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; requestID: string }) {
   const { t } = useTranslation();
   const labels = riskCopy(t);
+  const report = useContext(LogReadError);
   const [source, setSource] = useState<SourceFacts | null>();
   const [error, setError] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     getSource(role, requestID, controller.signal)
-      .then(setSource)
-      .catch(() => {
-        if (!controller.signal.aborted) setError(true);
+      .then((value) => {
+        if (!controller.signal.aborted) setSource(value);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        if (logAccessLost(error)) report(error);
+        setError(true);
       });
     return () => controller.abort();
-  }, [role, requestID]);
+  }, [role, requestID, report]);
   if (error) return <p role="status">{t('common.diagnostics.sourceDetailsAreUnavailable')}</p>;
   if (!source) return <p>{t('common.diagnostics.noSourceDetailsRecorded')}</p>;
   return (
@@ -82,6 +88,7 @@ function ScopedAttemptErrors({
   requestID: string;
   attempt: number;
 }) {
+  const report = useContext(LogReadError);
   const { t } = useTranslation();
   const [page, setPage] = useState<ErrorPage>();
   const [failed, setFailed] = useState(false);
@@ -97,8 +104,11 @@ function ScopedAttemptErrors({
     try {
       const result = await getErrorList(role, requestID, attempt, after, request.signal);
       if (!request.signal.aborted) setPage(result);
-    } catch {
-      if (!request.signal.aborted) setFailed(true);
+    } catch (error) {
+      if (!request.signal.aborted) {
+        if (logAccessLost(error)) report(error);
+        setFailed(true);
+      }
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }
@@ -166,6 +176,7 @@ function LazyErrorBody({
   attempt: number;
   event: number;
 }) {
+  const report = useContext(LogReadError);
   const { t } = useTranslation();
   const [body, setBody] = useState<ErrorBody>();
   const [failed, setFailed] = useState(false);
@@ -181,8 +192,11 @@ function LazyErrorBody({
     try {
       const result = await getErrorBody(role, requestID, attempt, event, request.signal);
       if (!request.signal.aborted) setBody(result);
-    } catch {
-      if (!request.signal.aborted) setFailed(true);
+    } catch (error) {
+      if (!request.signal.aborted) {
+        if (logAccessLost(error)) report(error);
+        setFailed(true);
+      }
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }

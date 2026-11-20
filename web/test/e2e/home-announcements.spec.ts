@@ -99,9 +99,7 @@ interface HomeAPIState {
   ) => HomeAnnouncementPage;
   homeFailuresRemaining: number;
   homeRequests: (string | null)[];
-  detailRequests: string[];
-  activeDetails: number;
-  maximumActiveDetails: number;
+  detailBatches: string[][];
 }
 
 function sessionBody(accountId: string): { user: Record<string, unknown> } {
@@ -212,26 +210,30 @@ async function installHomeAPI(page: Page, state: HomeAPIState): Promise<void> {
       return;
     }
 
-    if (url.pathname.startsWith('/api/announcements/')) {
-      const id = decodeURIComponent(url.pathname.slice('/api/announcements/'.length));
-      const attempt = (state.detailAttempts.get(id) ?? 0) + 1;
-      state.detailAttempts.set(id, attempt);
-      state.detailRequests.push(id);
-      const response = state.detailFor(id, attempt, state.accountId);
-      state.activeDetails += 1;
-      state.maximumActiveDetails = Math.max(state.maximumActiveDetails, state.activeDetails);
+    if (url.pathname === '/api/announcements/selected') {
+      const ids = (url.searchParams.get('ids') ?? '').split(',');
+      expect(ids.length).toBeGreaterThanOrEqual(1);
+      expect(ids.length).toBeLessThanOrEqual(3);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).not.toContain('');
+      state.detailBatches.push(ids);
+      const notices = await Promise.all(
+        ids.map(async (id) => {
+          const attempt = (state.detailAttempts.get(id) ?? 0) + 1;
+          state.detailAttempts.set(id, attempt);
+          const response = state.detailFor(id, attempt, state.accountId);
+          if (response.waitFor) await response.waitFor;
+          if (response.delayMs)
+            await new Promise((resolve) => setTimeout(resolve, response.delayMs));
+          if (response.status === 404) return [];
+          expect(response.status).toBe(200);
+          return [response.body];
+        }),
+      );
       try {
-        if (response.waitFor) await response.waitFor;
-        if (response.delayMs) await new Promise((resolve) => setTimeout(resolve, response.delayMs));
-        await route.fulfill({
-          status: response.status,
-          headers: jsonHeaders(),
-          body: JSON.stringify(response.body ?? { error: { code: 'internal' } }),
-        });
-      } catch {
-        // A route can be aborted when the user leaves Home while a detail is pending.
-      } finally {
-        state.activeDetails -= 1;
+        await route.fulfill({ json: { data: notices.flat() }, headers: jsonHeaders() });
+      } catch (error) {
+        if (!route.request().failure()) throw error;
       }
       return;
     }
@@ -266,7 +268,7 @@ async function prepare(
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/models?page=1&page_size=10',
+    path: '/api/models?page=1&page_size=10&connection_state=available',
     body: {
       data: [],
       next_cursor: null,
@@ -317,9 +319,7 @@ function basicState(
     homeFor,
     homeFailuresRemaining: 0,
     homeRequests: [],
-    detailRequests: [],
-    activeDetails: 0,
-    maximumActiveDetails: 0,
+    detailBatches: [],
   };
 }
 
@@ -457,16 +457,11 @@ test('Home selects the first three visible announcements across cursor pages and
   await expect(section.locator('.ops-announcement-body script')).toHaveCount(0);
   await expect(section.locator('a a')).toHaveCount(0);
   expect(state.homeRequests).toEqual([null, CURSOR_ONE]);
-  expect(new Set(state.detailRequests)).toEqual(new Set([first.id, second.id, third.id]));
-  expect(state.maximumActiveDetails).toBeLessThanOrEqual(3);
-  expect(
-    await section.evaluate((element) =>
-      Boolean(
-        (document.querySelector('.core-checkin-grid')?.compareDocumentPosition(element) ?? 0) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ),
-  ).toBe(true);
+  expect(state.detailBatches).toEqual([[first.id, second.id, third.id]]);
+  await expect(
+    page.locator('.home-overview__main > .home-start + .home-announcements'),
+  ).toHaveCount(1);
+  await expect(page.locator('.core-checkin-grid')).toHaveCount(0);
   const previewSizes = await section
     .locator('.home-announcement-preview')
     .evaluateAll((elements) =>
@@ -675,7 +670,7 @@ test('Home refreshes the summary when detail revision changes and shows the new 
   await expect(
     page.locator('.home-announcement-card').filter({ hasText: oldItem.title }),
   ).toHaveCount(0);
-  expect(state.detailRequests).toEqual([oldItem.id, newItem.id]);
+  expect(state.detailBatches).toEqual([[oldItem.id], [newItem.id]]);
   await assertHomeLayout(page, consoleGuard);
 });
 

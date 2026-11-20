@@ -1,4 +1,10 @@
 import { normalizeDelivery, type DeliveryDiagnostics } from '@shared/observability/failure';
+import { normalizeRouteDecision } from './routeDecision';
+import {
+  ATTEMPT_SEQ_PARAM,
+  logAttemptSequence,
+  normalizeFailureSummary,
+} from './managementFailures';
 import { useQuery, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
 import { decoded, queryPath } from '@shared/operations/api';
@@ -19,15 +25,19 @@ import {
   normalizeUserLogAttempt,
   normalizeUserLogRow,
   validLogDiscordID,
+  validLogResourceID,
+  logRequestID,
   isLogOperation,
+  isLogOutcome,
   type AdminLogAttempt,
-  type AdminLogRow,
+  type AdminLogDetail,
   type CallerIdentity,
   type LogFiltersValue,
   type LogRole,
   type RoleLogAttempt,
   type RoleLogRow,
   type StewardLogAttempt,
+  type StewardLogDetail,
   type StewardLogRow,
   type UserCharityLogRow,
   type UserLogAttempt,
@@ -55,17 +65,11 @@ export type NumberedUserLogDetail = { delivery?: DeliveryDiagnostics | null } & 
     }
 );
 
-export interface NumberedAdminLogDetail {
-  delivery?: DeliveryDiagnostics | null;
-  request: AdminLogRow;
-  attempts: CursorPage<AdminLogAttempt>;
+export interface NumberedAdminLogDetail extends AdminLogDetail {
   attempt_pagination: PageMetadata;
 }
 
-export interface NumberedStewardLogDetail {
-  delivery?: DeliveryDiagnostics | null;
-  request: StewardLogRow;
-  attempts: CursorPage<StewardLogAttempt>;
+export interface NumberedStewardLogDetail extends StewardLogDetail {
   attempt_pagination: PageMetadata;
 }
 
@@ -84,7 +88,7 @@ const ROLE_PATHS: Record<LogRole, string> = {
 };
 
 const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
-  user: ['operation', 'model', 'error_code', 'status', 'from', 'to', 'phase'],
+  user: ['outcome', 'operation', 'model', 'error_code', 'status', 'from', 'to', 'phase'],
   steward: [
     'operation',
     'user_id',
@@ -99,6 +103,7 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'to',
     'phase',
     'usage_total_mismatch',
+    'outcome',
     'error_category',
     'error_phase',
   ],
@@ -116,12 +121,12 @@ const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
     'to',
     'phase',
     'usage_total_mismatch',
+    'outcome',
     'error_category',
     'error_phase',
   ],
 };
 const MAX_LOG_UNIX_SECOND = 253_402_300_799;
-const MAX_LOG_USER_ID = 9_223_372_036_854_775_807n;
 
 function invalidRequest(label: string): never {
   throw new ApiError('invalid_request', `Invalid ${label}.`, 400);
@@ -164,6 +169,7 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
       result.usage_total_mismatch = true;
       continue;
     }
+    if (key === 'outcome' && !isLogOutcome(role, raw)) invalidRequest('log outcome filter');
     if (key === 'operation' && !isLogOperation(raw)) invalidRequest('log operation filter');
     const text = requestString(raw, `log ${key} filter`, key === 'status' ? 3 : 512);
     if (text === '') continue;
@@ -171,10 +177,7 @@ function requestFilter(role: LogRole, value: LogFiltersValue): LogFiltersValue {
       invalidRequest('log phase filter');
     if (key === 'discord_id' && !validLogDiscordID(text)) invalidRequest('log Discord ID filter');
     if (key === 'status' && !/^[1-5][0-9]{2}$/.test(text)) invalidRequest('log status filter');
-    if (
-      (key === 'user_id' || key === 'endpoint_key_id') &&
-      (!/^[1-9][0-9]{0,18}$/.test(text) || BigInt(text) > MAX_LOG_USER_ID)
-    )
+    if ((key === 'user_id' || key === 'endpoint_key_id') && !validLogResourceID(text))
       invalidRequest(`log ${key} filter`);
     result[key] = text as never;
   }
@@ -240,6 +243,7 @@ function normalizedDetail(
   value: unknown,
   role: LogRole,
   window: LogPageWindow,
+  attemptSeq?: string,
 ): NumberedRoleLogDetail {
   if (role === 'user') {
     const probe = record(
@@ -295,11 +299,17 @@ function normalizedDetail(
 
   const root = record(
     value,
-    ['request', 'attempts', 'attempt_pagination', 'delivery'],
+    ['request', 'attempts', 'attempt_pagination', 'delivery', 'route_decision', 'failure_summary'],
     `${role} log detail`,
     ['request', 'attempts', 'attempt_pagination'],
   );
   const attemptPagination = normalizePageMetadata(root.attempt_pagination);
+  validatePageResponse(
+    attemptPagination,
+    attemptSeq === undefined ? window.page : attemptPagination.page,
+    window.pageSize,
+  );
+  const failureSummary = normalizeFailureSummary(root.failure_summary);
   if (role === 'admin') {
     const attempts = normalizedAttempts(
       root.attempts,
@@ -307,8 +317,9 @@ function normalizedDetail(
       window,
       normalizeAdminLogAttempt,
     );
-    validatePageResponse(attemptPagination, window.page, window.pageSize);
     return {
+      route_decision: normalizeRouteDecision(root.route_decision),
+      failure_summary: failureSummary,
       delivery: normalizeDelivery(root.delivery),
       request: normalizeAdminLogRow(root.request),
       attempts,
@@ -321,8 +332,9 @@ function normalizedDetail(
     window,
     normalizeStewardLogAttempt,
   );
-  validatePageResponse(attemptPagination, window.page, window.pageSize);
   return {
+    route_decision: normalizeRouteDecision(root.route_decision),
+    failure_summary: failureSummary,
     delivery: normalizeDelivery(root.delivery),
     request: normalizeStewardLogRow(root.request),
     attempts,
@@ -330,12 +342,16 @@ function normalizedDetail(
   };
 }
 
-function detailPath(role: LogRole, id: string, window: LogPageWindow): string {
-  if (typeof id !== 'string' || !/^req_[A-Za-z0-9_-]{22}$/.test(id) || !/[AQgw]$/.test(id)) {
+function detailPath(role: LogRole, id: string, window: LogPageWindow, attemptSeq?: string): string {
+  if (!logRequestID(id)) {
     invalidRequest('log id');
   }
+  if (attemptSeq !== undefined && (role === 'user' || !logAttemptSequence(attemptSeq))) {
+    invalidRequest('attempt sequence');
+  }
   return queryPath(`${ROLE_PATHS[role]}/${encodeURIComponent(id)}`, {
-    attempt_page: window.page,
+    attempt_page: attemptSeq === undefined ? window.page : undefined,
+    [ATTEMPT_SEQ_PARAM]: attemptSeq,
     attempt_page_size: window.pageSize,
   });
 }
@@ -381,12 +397,13 @@ export async function getRoleLogDetailPage(
   attemptPage: string,
   attemptPageSize: PageSize,
   signal?: AbortSignal,
+  attemptSeq?: string,
 ): Promise<NumberedRoleLogDetail> {
   const window = windowInput(attemptPage, attemptPageSize);
   return decoded(
-    detailPath(role, id, window),
+    detailPath(role, id, window, attemptSeq),
     (value) => {
-      const result = normalizedDetail(value, role, window);
+      const result = normalizedDetail(value, role, window, attemptSeq);
       if (result.request.id !== id) invalidResponse('log detail identity');
       return result;
     },
@@ -410,8 +427,22 @@ export const numberedLogKeys = {
     pageSize: PageSize,
     filters: LogFiltersValue,
   ) => [...numberedLogKeys.root(role), 'page', accountId, page, pageSize, filters] as const,
-  detail: (role: LogRole, accountId: string, id: string, page: string, pageSize: PageSize) =>
-    [...numberedLogKeys.root(role), 'detail-page', accountId, id, page, pageSize] as const,
+  detail: (
+    role: LogRole,
+    accountId: string,
+    id: string,
+    page: string,
+    pageSize: PageSize,
+    attemptSeq?: string,
+  ) =>
+    [
+      ...numberedLogKeys.root(role),
+      'detail-page',
+      accountId,
+      id,
+      ...(attemptSeq === undefined ? [page] : ['attempt', attemptSeq]),
+      pageSize,
+    ] as const,
 };
 
 function hasPrefix(query: { queryKey: QueryKey } | undefined, prefix: QueryKey): boolean {
@@ -456,13 +487,21 @@ export function useRoleLogDetailPage(
   attemptPage: string,
   attemptPageSize: PageSize,
   enabled = true,
+  attemptSeq?: string,
 ): UseQueryResult<NumberedRoleLogDetail, Error> {
   const prefix = [...numberedLogKeys.root(role), 'detail-page', accountId, id ?? 'none'] as const;
   return useQuery<NumberedRoleLogDetail, Error>({
-    queryKey: numberedLogKeys.detail(role, accountId, id ?? 'none', attemptPage, attemptPageSize),
+    queryKey: numberedLogKeys.detail(
+      role,
+      accountId,
+      id ?? 'none',
+      attemptPage,
+      attemptPageSize,
+      attemptSeq,
+    ),
     queryFn: ({ signal }) => {
       if (!id) throw new ApiError('invalid_request', 'A log id is required.', 400);
-      return getRoleLogDetailPage(role, id, attemptPage, attemptPageSize, signal);
+      return getRoleLogDetailPage(role, id, attemptPage, attemptPageSize, signal, attemptSeq);
     },
     enabled:
       enabled &&

@@ -46,6 +46,9 @@ WHERE c.id=? AND c.state='claimed'`, input.ClaimID).Scan(&check.DonationKeyID, &
 	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.DispatchedAt {
 		return claim.ErrKeyRateLimited
 	}
+	if row.modelRetryAt > input.DispatchedAt {
+		return &claim.ModelQuotaLimit{Reason: row.modelQuotaReason, BindingID: a.BindingID, NativeService: a.NativeService}
+	}
 	reservation, err := readUsageReservation(ctx, tx, input.RequestID, input.ClaimID)
 	if err != nil {
 		return err
@@ -90,7 +93,7 @@ WHERE c.id=? AND c.state='claimed'`, input.ClaimID).Scan(&check.DonationKeyID, &
 	// The per-key token fallback is mutable until dispatch. Replace our own
 	// total reservation and its claim snapshot before reconciling the current
 	// recurring rules. A later rejection rolls all three changes back together.
-	if err := donationquota.ReplaceModelReservation(ctx, tx, row.donationKeyID, input.DispatchedAt, reservation.upstreamModel, reservation.tokenVector(), budget.Reservation); err != nil {
+	if err := donationquota.ReplaceModelReservation(ctx, tx, row.donationKeyID, input.DispatchedAt, reservation.upstreamModel, reservation.consumption(), donationquota.Consumption{TokenVector: budget.Reservation, Calls: int64(reservation.callsReserved), PriceMilli: reservation.priceReserved}); err != nil {
 		return err
 	}
 	if err := budget.ReplaceReservation(ctx, tx, row.donationKeyID, reservation.tokenVector()); err != nil {

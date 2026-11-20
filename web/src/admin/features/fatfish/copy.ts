@@ -315,6 +315,12 @@ const keys = {
   tool_fan: 'admin.fatfish.workspace.tool_fan',
   tool_light: 'admin.fatfish.workspace.tool_light',
   tool_cup: 'admin.fatfish.workspace.tool_cup',
+  state_draft: 'admin.fatfish.workspace.state_draft',
+  state_open: 'admin.fatfish.workspace.state_open',
+  state_closed: 'admin.fatfish.workspace.state_closed',
+  playtest_active: 'admin.fatfish.workspace.playtest_active',
+  playtest_prepared: 'admin.fatfish.workspace.playtest_prepared',
+  general_credits_unit: 'admin.fatfish.workspace.general_credits_unit',
 } as const;
 export const toolCopy: Record<string, keyof typeof keys> = {
   barrier: 'tool_barrier',

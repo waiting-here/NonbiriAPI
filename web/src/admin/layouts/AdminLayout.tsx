@@ -2,9 +2,7 @@ import { FocusScope } from 'react-aria';
 import { useDrawerOverlay } from '@shared/components/OverlaySurface';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { NavLink, Outlet, useLocation } from 'react-router';
-import { Fragment } from 'react';
-import { DonationPendingBadge } from '@shared/components/DonationPendingBadge';
+import { Outlet } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Brand, useBrandFavicon } from '@shared/components/Brand';
 import { AccountMenu } from '@shared/components/AccountMenu';
@@ -20,18 +18,9 @@ import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useAdminSession } from '../data';
 import { useAdminBranding } from '../branding';
+import { useStationTitle } from '@shared/routing/useStationTitle';
 import { clearManagementSession } from '@shared/charityManagement';
-import { ADMIN_NAV_GROUPS, ADMIN_PRIMARY_NAV } from '../navigation';
-import { activeAdminNavGroup, useCollapsedAdminNavGroups } from '../navigationGroups';
-
-const ADMIN_GROUP_LABEL_KEYS: Record<(typeof ADMIN_NAV_GROUPS)[number], string> = {
-  overview: 'admin.navigation.overview',
-  services: 'admin.navigation.services',
-  users: 'admin.navigation.users',
-  records: 'admin.navigation.records',
-  activities: 'admin.navigation.activities',
-  system: 'admin.navigation.system',
-};
+import { AdminNavigation } from './AdminNavigation';
 
 function AdminLogin({
   onSignedIn,
@@ -157,11 +146,9 @@ export function AdminLayout() {
   const siteName = config.data?.siteName || branding.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL ?? branding.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
-  const { pathname } = useLocation();
-  const currentGroup = activeAdminNavGroup(pathname);
-  const navGroups = useCollapsedAdminNavGroups();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const [logoutError, setLogoutError] = useState<unknown>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const toastIdentity = logoutRequested
@@ -187,9 +174,21 @@ export function AdminLayout() {
     requestAnimationFrame(restoreMenuFocus);
   }, [restoreMenuFocus]);
 
+  useStationTitle('admin', siteName, Boolean(session.data) && !logoutRequested);
+  const shellReady = Boolean(session.data && config.data) && !logoutRequested;
   useEffect(() => {
-    document.title = `${siteName} · ${t('admin.shell.title')}`;
-  }, [t, siteName]);
+    const header = headerRef.current;
+    if (!shellReady || !header || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement.style;
+    const measure = () => root.setProperty('--nb-admin-header-height', `${header.offsetHeight}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      root.removeProperty('--nb-admin-header-height');
+    };
+  }, [shellReady]);
 
   useEffect(() => {
     if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity)
@@ -298,7 +297,7 @@ export function AdminLayout() {
       <a className="skip-link" href="#main">
         {t('shell.skipToContent')}
       </a>
-      <header className="site-header nb-admin-header">
+      <header className="site-header nb-admin-header" ref={headerRef}>
         <Brand
           siteName={siteName}
           siteLogoURL={siteLogoURL}
@@ -322,6 +321,7 @@ export function AdminLayout() {
           <Icon name={menuOpen ? 'close' : 'menu'} />
         </button>
         <div className="site-actions nb-admin-header__actions">
+          <ThemeToggle />
           <AccountMenu
             displayName={session.data.admin.username}
             signOutLabel={t('common.signOut')}
@@ -351,76 +351,7 @@ export function AdminLayout() {
             className={`nb-admin-sidebar${menuOpen ? ' is-open' : ''}`}
             aria-label={t('admin.shell.navLabel')}
           >
-            <nav className="nb-admin-sidebar__nav">
-              {ADMIN_NAV_GROUPS.map((group) => {
-                const items = ADMIN_PRIMARY_NAV.filter((item) => item.group === group);
-                if (items.length === 0) return null;
-                const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], {
-                  defaultValue: t('admin.settings.nav'),
-                });
-                // A one-item group would only repeat its own label as a heading.
-                const titled = items.length > 1;
-                const current = group === currentGroup;
-                const open = current || !navGroups.collapsed.includes(group);
-                const listID = `admin-nav-${group}`;
-                return (
-                  <section className="nb-admin-sidebar__group" key={group}>
-                    {titled ? (
-                      <h2 className="nb-admin-sidebar__group-title">
-                        {current ? (
-                          <span>{groupTitle}</span>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-expanded={open}
-                            aria-controls={listID}
-                            onClick={() => navGroups.toggle(group)}
-                          >
-                            <span>{groupTitle}</span>
-                            <Icon name="chevron-down" />
-                          </button>
-                        )}
-                      </h2>
-                    ) : null}
-                    <div className="nb-admin-sidebar__items" id={listID} hidden={titled && !open}>
-                      {items.map((item) => {
-                        const label = item.labelKey
-                          ? t(item.labelKey, {
-                              defaultValue: item.fallbackLabelKey
-                                ? t(item.fallbackLabelKey)
-                                : item.labelKey,
-                            })
-                          : t(`admin.${item.key}.nav`);
-                        const link = (
-                          <NavLink
-                            className="nb-admin-sidebar__link"
-                            to={item.to}
-                            end={item.end}
-                            onClick={closeMenu}
-                          >
-                            {item.icon ? <Icon name={item.icon} /> : null}
-                            <span className="nb-admin-sidebar__label">{label}</span>
-                          </NavLink>
-                        );
-                        return item.to === '/charity' ? (
-                          <div className="nb-admin-sidebar__row" key={item.key}>
-                            {link}
-                            <DonationPendingBadge
-                              key={toastIdentity}
-                              role="admin"
-                              accountID={toastIdentity}
-                              onNavigate={closeMenu}
-                            />
-                          </div>
-                        ) : (
-                          <Fragment key={item.key}>{link}</Fragment>
-                        );
-                      })}
-                    </div>
-                  </section>
-                );
-              })}
-            </nav>
+            <AdminNavigation key={toastIdentity} accountId={toastIdentity} onNavigate={closeMenu} />
             {menuOpen && (
               <button
                 type="button"

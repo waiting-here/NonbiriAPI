@@ -207,36 +207,40 @@ export function DuelHistory<V, F, P, S, L, A>({
             ))}
           </ul>
           {query.data?.items.length === 0 && <p>{text('blackjack.noGamesYet')}</p>}
-          <div className="duel-actions">
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={cursors.length === 1 || query.isFetching}
-              onClick={() => setCursors([null])}
-            >
-              {text('common.firstPage')}
-            </button>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={cursors.length === 1 || query.isFetching}
-              onClick={() => setCursors((previous) => previous.slice(0, -1))}
-            >
-              {text('common.previousPage')}
-            </button>
-            <span aria-live="polite">{text('common.pagePosition', { page: cursors.length })}</span>
-            <button
-              type="button"
-              className="nb-btn nb-btn--secondary"
-              disabled={!query.data?.nextCursor || query.isFetching}
-              onClick={() => {
-                const nextCursor = query.data?.nextCursor;
-                if (nextCursor) setCursors((previous) => [...previous, nextCursor]);
-              }}
-            >
-              {text('common.nextPage')}
-            </button>
-          </div>
+          {!(query.data?.items.length === 0 && cursors.length === 1 && !query.data?.nextCursor) && (
+            <div className="duel-actions">
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                disabled={cursors.length === 1 || query.isFetching}
+                onClick={() => setCursors([null])}
+              >
+                {text('common.firstPage')}
+              </button>
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                disabled={cursors.length === 1 || query.isFetching}
+                onClick={() => setCursors((previous) => previous.slice(0, -1))}
+              >
+                {text('common.previousPage')}
+              </button>
+              <span aria-live="polite">
+                {text('common.pagePosition', { page: cursors.length })}
+              </span>
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                disabled={!query.data?.nextCursor || query.isFetching}
+                onClick={() => {
+                  const nextCursor = query.data?.nextCursor;
+                  if (nextCursor) setCursors((previous) => [...previous, nextCursor]);
+                }}
+              >
+                {text('common.nextPage')}
+              </button>
+            </div>
+          )}
         </>
       )}
     </DuelDialog>

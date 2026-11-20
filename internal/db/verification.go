@@ -227,6 +227,12 @@ func ValidateCurrentStorage(ctx context.Context, q queryer, codec secret.Generat
 	if err := validateGenerationTwoManifest(ctx, q); err != nil {
 		return err
 	}
+	return ValidateStorageControls(ctx, q, codec)
+}
+
+// ValidateStorageControls checks the seeds, settings and authenticated root shared
+// by the current schema and the supported offline source.
+func ValidateStorageControls(ctx context.Context, q queryer, codec secret.GenerationTwoContextCodec) error {
 	if err := validateStartupSeed(ctx, q); err != nil {
 		return err
 	}

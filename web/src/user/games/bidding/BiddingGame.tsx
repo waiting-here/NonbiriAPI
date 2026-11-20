@@ -1,4 +1,3 @@
-import { CreditNumber } from '@shared/components/CreditNumber';
 import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
 import { useAIText } from '@shared/aiPlayers';
 import { GameToolbar } from '../common/GameToolbar';
@@ -17,13 +16,14 @@ import { GamePayment } from '../common/GamePayment';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuel } from '../common/duel/api';
 import { useDuelText } from '../common/duel/copy';
+import { useGameCopy } from '../copy';
 import { DuelDialog } from '../common/duel/Dialog';
 import { DuelFeedback, DuelProfile } from '../common/duel/Feedback';
 import { entryMessage, entryProblem } from '../common/duel/availability';
 import { DuelFinance, DuelTerms } from '../common/duel/Finance';
 import { DuelHistory } from '../common/duel/History';
 import type { DuelLobbyContext } from '../common/duel/types';
-import { creditsToMilli, formatCredits } from '../common/strict';
+import { creditsToMilli } from '../common/strict';
 import { spendableGameCredits } from '../common/spendable';
 import { BIDDING_MODES, biddingCodec } from './normalize';
 import { BiddingControls, PublicCards, RewardCard, RewardDeck } from './Cards';
@@ -58,6 +58,7 @@ export function BiddingGame({
   refreshWallets,
 }: DuelLobbyContext) {
   const text = useDuelText();
+  const { text: gameCopy } = useGameCopy();
   const aiText = useAIText();
   const duel = useDuel(biddingCodec, refreshWallets);
   const [mode, setMode] = useState<string>(
@@ -115,6 +116,12 @@ export function BiddingGame({
                 label: text('bidding.gameHistory'),
                 icon: 'history',
                 onClick: () => setHistory(true),
+              },
+              {
+                id: 'credits',
+                label: gameCopy('presentation.creditHistory'),
+                icon: 'credits',
+                to: '/credits',
               },
               {
                 id: 'rankings',
@@ -313,7 +320,7 @@ export function BiddingGame({
                       {text('bidding.tier')} {index + 1} {text('bidding.message2')}
                     </span>
                     <strong>
-                      <CreditNumber value={formatCredits(config.modes[key]?.ticket ?? '0')} />
+                      <GameMoney value={config.modes[key]?.ticket ?? '0'} />
                     </strong>
                     <small>
                       {!entryProblem({ config, accepting }, key)

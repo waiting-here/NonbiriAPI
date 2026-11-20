@@ -1,7 +1,19 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Field, Fields, FormActions, Note, Toggle } from '@shared/components/ui';
+import { CreditNumber } from '@shared/components/CreditNumber';
+import {
+  Affix,
+  Field,
+  Fields,
+  FormActions,
+  Note,
+  Panel,
+  PanelBody,
+  StatusBadge,
+  Toggle,
+} from '@shared/components/ui';
 import { ErrorState, LoadingState } from '@shared/components/States';
+import { formatCredits } from '../../../user/games/common/strict';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useAIText, type AIBot } from '@shared/aiPlayers';
 import { gameRequest } from '../../../user/games/common/request';
@@ -94,190 +106,204 @@ export function GwentAIAdmin() {
     if (edit) setEdit({ ...edit, bot: { ...edit.bot, ...value } });
   };
   return (
-    <section
-      className="nb-panel ai-admin"
-      aria-busy={busy}
-      aria-label={t('昆特牌 AI 挑战', 'Gwent AI challenges')}
-    >
-      <Note>
-        {t(
-          '四个阵营使用原版本地评分器。卡组可选择本阵营原版预设。门票、首通奖励与竞标对决分别配置；没有逐局奖金。修改只影响新对局，不重置首通。',
-          'Four factions use the original local scorer and their original deck presets. Tickets and first-clear rewards are independent of Bidding Duel. There are no per-match prizes. Changes apply to new matches and preserve first clears.',
-        )}
-      </Note>
-      <Toggle
-        label={t('开放昆特牌人机挑战', 'Enable Gwent AI challenges')}
-        checked={state.settings.enabled}
-        disabled={busy}
-        onChange={(enabled) =>
-          save.mutate({ kind: 'settings', settings: { ...state.settings, enabled } })
-        }
-      />
-      {edit ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            save.mutate({ kind: 'bot', value: edit }, { onSuccess: () => setEdit(undefined) });
-          }}
-        >
-          <h3>
-            {edit.policy.definition.faction.toUpperCase()} · {t('挑战设置', 'Challenge settings')}
-          </h3>
-          <Fields>
-            <Field label={t('名称', 'Name')}>
-              {(props) => (
-                <input
-                  {...props}
-                  value={edit.bot.name}
-                  maxLength={64}
-                  required
-                  disabled={busy}
-                  onChange={(e) => update({ name: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field size="long" label={t('说明', 'Description')}>
-              {(props) => (
-                <textarea
-                  {...props}
-                  value={edit.bot.description}
-                  maxLength={512}
-                  disabled={busy}
-                  onChange={(e) => update({ description: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field label={t('原版卡组预设', 'Original deck preset')}>
-              {(props) => (
-                <select
-                  {...props}
-                  disabled={busy}
-                  value={edit.policy.definition.preset}
-                  onChange={(e) =>
-                    setEdit({
-                      ...edit,
-                      policy: {
-                        ...edit.policy,
-                        definition: { ...edit.policy.definition, preset: e.target.value },
-                      },
-                    })
-                  }
-                >
-                  {presets
-                    .filter((p) => p.deck.faction === edit.policy.definition.faction)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                </select>
-              )}
-            </Field>
-            <p>
-              {
-                presets.find(
-                  (p) =>
-                    p.deck.faction === edit.policy.definition.faction &&
-                    p.id === edit.policy.definition.preset,
-                )?.description
-              }
-            </p>
-            <Field size="short" label={t('门票 · 积分', 'Ticket · credits')}>
-              {(props) => (
-                <input
-                  {...props}
-                  inputMode="decimal"
-                  value={edit.bot.ticket}
-                  required
-                  disabled={busy}
-                  onChange={(e) => update({ ticket: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field size="short" label={t('首通奖励 · 游戏积分', 'First clear · game credits')}>
-              {(props) => (
-                <input
-                  {...props}
-                  inputMode="decimal"
-                  value={edit.bot.first_reward}
-                  required
-                  disabled={busy}
-                  onChange={(e) => update({ first_reward: e.target.value })}
-                />
-              )}
-            </Field>
-            <Toggle
-              label={t('开放此挑战', 'Enable this challenge')}
-              checked={edit.bot.enabled}
-              disabled={busy}
-              onChange={(enabled) => update({ enabled })}
-            />
-          </Fields>
-          <FormActions>
-            <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
-              {t('保存', 'Save')}
-            </button>
-            <button
-              className="nb-btn nb-btn--secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => setEdit(undefined)}
+    <Panel aria-busy={busy} aria-label={t('昆特牌 AI 挑战', 'Gwent AI challenges')}>
+      <PanelBody>
+        <div className="ai-admin">
+          <Note>
+            {t(
+              '四个阵营使用原版本地评分器。卡组可选择本阵营原版预设。门票、首通奖励与竞标对决分别配置；没有逐局奖金。修改只影响新对局，不重置首通。',
+              'Four factions use the original local scorer and their original deck presets. Tickets and first-clear rewards are independent of Bidding Duel. There are no per-match prizes. Changes apply to new matches and preserve first clears.',
+            )}
+          </Note>
+          <Toggle
+            label={t('开放昆特牌人机挑战', 'Enable Gwent AI challenges')}
+            checked={state.settings.enabled}
+            disabled={busy}
+            onChange={(enabled) =>
+              save.mutate({ kind: 'settings', settings: { ...state.settings, enabled } })
+            }
+          />
+          {edit ? (
+            <form
+              className="ai-editor"
+              onSubmit={(event) => {
+                event.preventDefault();
+                save.mutate({ kind: 'bot', value: edit }, { onSuccess: () => setEdit(undefined) });
+              }}
             >
-              {t('取消', 'Cancel')}
-            </button>
-          </FormActions>
-        </form>
-      ) : (
-        <div className="ai-bot-list">
-          {state.bots.map((bot) => {
-            const policy = state.policies.find((p) => p.id === bot.policy_id);
-            return (
-              <article key={bot.id} className="nb-panel">
-                <h3>{bot.name}</h3>
-                <p>{bot.description}</p>
-                <p>
-                  {t('门票', 'Ticket')}: {bot.ticket} · {t('首通奖励', 'First clear')}:{' '}
-                  {bot.first_reward}
+              <h3>
+                {edit.bot.name} · {t('挑战设置', 'Challenge settings')}
+              </h3>
+              <Fields>
+                <Field label={t('名称', 'Name')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      value={edit.bot.name}
+                      maxLength={64}
+                      required
+                      disabled={busy}
+                      onChange={(e) => update({ name: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field size="long" label={t('说明', 'Description')}>
+                  {(props) => (
+                    <textarea
+                      {...props}
+                      rows={3}
+                      value={edit.bot.description}
+                      maxLength={512}
+                      disabled={busy}
+                      onChange={(e) => update({ description: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t('原版卡组预设', 'Original deck preset')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      disabled={busy}
+                      value={edit.policy.definition.preset}
+                      onChange={(e) =>
+                        setEdit({
+                          ...edit,
+                          policy: {
+                            ...edit.policy,
+                            definition: { ...edit.policy.definition, preset: e.target.value },
+                          },
+                        })
+                      }
+                    >
+                      {presets
+                        .filter((p) => p.deck.faction === edit.policy.definition.faction)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </Field>
+                <p className="nb-small nb-muted">
+                  {
+                    presets.find(
+                      (p) =>
+                        p.deck.faction === edit.policy.definition.faction &&
+                        p.id === edit.policy.definition.preset,
+                    )?.description
+                  }
                 </p>
-                <p>{bot.enabled ? t('已开放', 'Enabled') : t('未开放', 'Disabled')}</p>
+                <Field size="short" label={t('门票 · 积分', 'Ticket · credits')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit={t('积分', 'credits')}
+                      inputMode="decimal"
+                      value={edit.bot.ticket}
+                      required
+                      disabled={busy}
+                      onChange={(e) => update({ ticket: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field size="short" label={t('首通奖励 · 游戏积分', 'First clear · game credits')}>
+                  {(props) => (
+                    <Affix
+                      {...props}
+                      unit={t('游戏积分', 'game credits')}
+                      inputMode="decimal"
+                      value={edit.bot.first_reward}
+                      required
+                      disabled={busy}
+                      onChange={(e) => update({ first_reward: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Toggle
+                  label={t('开放此挑战', 'Enable this challenge')}
+                  checked={edit.bot.enabled}
+                  disabled={busy}
+                  onChange={(enabled) => update({ enabled })}
+                />
+              </Fields>
+              <FormActions>
+                <button type="submit" className="nb-btn nb-btn--primary" disabled={busy}>
+                  {t('保存', 'Save')}
+                </button>
                 <button
                   className="nb-btn nb-btn--secondary"
-                  disabled={busy || !policy}
-                  onClick={() => {
-                    if (policy) {
-                      save.reset();
-                      setEdit({ bot, policy });
-                    }
-                  }}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setEdit(undefined)}
                 >
-                  {t('编辑挑战', 'Edit challenge')}
+                  {t('取消', 'Cancel')}
                 </button>
-              </article>
-            );
-          })}
-        </div>
-      )}
-      {save.error && (
-        <ErrorState
-          error={save.error}
-          onRetry={
-            save.outcome === 'unknown'
-              ? () => {
-                  if (save.variables)
-                    save.mutate(save.variables, { onSuccess: () => setEdit(undefined) });
-                }
-              : undefined
-          }
-        />
-      )}
-      {save.outcome === 'unknown' && (
-        <Note>
-          {t(
-            '结果尚未确认，重试会继续同一次保存。',
-            'The result is not confirmed. Retry continues the same save.',
+              </FormActions>
+            </form>
+          ) : (
+            <div className="ai-bot-list">
+              {state.bots.map((bot) => {
+                const policy = state.policies.find((p) => p.id === bot.policy_id);
+                return (
+                  <article key={bot.id} className="ai-bot-card">
+                    <div className="ai-toolbar">
+                      <h3>{bot.name}</h3>
+                      <StatusBadge tone={bot.enabled ? 'ok' : 'neutral'}>
+                        {bot.enabled ? t('已开放', 'Enabled') : t('未开放', 'Disabled')}
+                      </StatusBadge>
+                    </div>
+                    <p>{bot.description}</p>
+                    <p className="nb-small nb-muted">
+                      {t('门票', 'Ticket')}：
+                      <CreditNumber value={formatCredits(bot.ticket)} /> {t('积分', 'credits')} ·{' '}
+                      {t('首通奖励', 'First clear')}：
+                      <CreditNumber value={formatCredits(bot.first_reward)} />{' '}
+                      {t('游戏积分', 'game credits')}
+                    </p>
+                    <div className="nb-actions">
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--secondary nb-btn--sm"
+                        disabled={busy || !policy}
+                        onClick={() => {
+                          if (policy) {
+                            save.reset();
+                            setEdit({ bot, policy });
+                          }
+                        }}
+                      >
+                        {t('编辑挑战', 'Edit challenge')}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           )}
-        </Note>
-      )}
-    </section>
+          {save.error && (
+            <ErrorState
+              error={save.error}
+              onRetry={
+                save.outcome === 'unknown'
+                  ? () => {
+                      if (save.variables)
+                        save.mutate(save.variables, { onSuccess: () => setEdit(undefined) });
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {save.outcome === 'unknown' && (
+            <Note>
+              {t(
+                '结果尚未确认，重试会继续同一次保存。',
+                'The result is not confirmed. Retry continues the same save.',
+              )}
+            </Note>
+          )}
+        </div>
+      </PanelBody>
+    </Panel>
   );
 }

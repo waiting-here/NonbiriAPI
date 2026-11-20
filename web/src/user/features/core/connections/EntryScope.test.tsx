@@ -309,8 +309,7 @@ describe('persistent entry metadata drafts', () => {
               ],
             });
           if (url.pathname === '/api/connections') return json(emptyPage);
-          if (url.pathname === '/api/endpoints/11/keys')
-            return json({ data: [key], next_cursor: null });
+          if (url.pathname === '/api/endpoints/11/keys/5') return json(key);
           if (url.pathname === '/api/endpoints/11') return json(endpoint);
           throw Error('Unexpected ' + url.pathname);
         }),
@@ -386,14 +385,14 @@ describe('persistent entry metadata drafts', () => {
           };
           return json(current);
         }
-        if (url.pathname === '/api/endpoints/11/keys') {
+        if (url.pathname === '/api/endpoints/11/keys/5') {
           reads += 1;
           if (reads === 1)
             return json(
               { error: { code: 'internal_error', message: 'Metadata read unavailable' } },
               500,
             );
-          return json({ data: [current], next_cursor: null });
+          return json(current);
         }
         throw Error('Unexpected ' + (init?.method ?? 'GET') + ' ' + url.pathname);
       }),

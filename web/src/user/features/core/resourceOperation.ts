@@ -12,7 +12,7 @@ import {
   getCatalog,
   getEndpoint,
   getModel,
-  listEndpointKeys,
+  getEndpointKey,
   refreshDiscovery,
 } from './api';
 import type {
@@ -86,20 +86,7 @@ export async function resourceStatus(key: string, signal?: AbortSignal): Promise
   return response.payload as ResourceStatus;
 }
 
-export async function readEndpointKey(
-  endpointId: string,
-  keyId: string,
-  signal: AbortSignal,
-): Promise<EndpointKey> {
-  let cursor: string | undefined;
-  do {
-    const page = await listEndpointKeys(endpointId, cursor, signal);
-    const key = page.data.find((item) => item.id === keyId);
-    if (key) return key;
-    cursor = page.next_cursor ?? undefined;
-  } while (cursor);
-  throw new ApiError('not_found', 'The saved service key is no longer present.', 404);
-}
+export { getEndpointKey as readEndpointKey };
 
 export async function executeResource(
   intent: ResourceIntent,
@@ -188,7 +175,7 @@ export async function readResourceResult(
       return { kind: 'endpoint', endpoint: await getEndpoint(id('endpoint_id'), signal) };
     case 'key': {
       const keyId = id('endpoint_key_id');
-      const key = await readEndpointKey(intent.endpointId, keyId, signal);
+      const key = await getEndpointKey(intent.endpointId, keyId, signal);
       return { kind: 'key', endpointId: intent.endpointId, keyId, key };
     }
     case 'refresh':
@@ -211,13 +198,18 @@ export async function readResourceResult(
             b.endpoint_key_id === intent.selection.endpoint_key_id &&
             b.upstream_model_id === intent.selection.upstream_model_id &&
             (!intent.selection.targets ||
-              JSON.stringify(
-                b.targets?.map(({ endpoint_key_id, upstream_model_id, native_services }) => ({
-                  endpoint_key_id,
-                  upstream_model_id,
-                  native_services,
-                })),
-              ) === JSON.stringify(intent.selection.targets)),
+              (b.targets?.length === intent.selection.targets.length &&
+                intent.selection.targets.every((target, index) => {
+                  const saved = b.targets?.[index];
+                  return (
+                    saved?.endpoint_key_id === target.endpoint_key_id &&
+                    saved.upstream_model_id === target.upstream_model_id &&
+                    saved.native_services.length === target.native_services.length &&
+                    target.native_services.every((service) =>
+                      saved.native_services.includes(service),
+                    )
+                  );
+                }))),
         )
       )
         throw new ApiError('conflict', 'The connection is no longer present.', 409);

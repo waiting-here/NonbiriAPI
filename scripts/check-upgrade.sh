@@ -4,7 +4,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 go_command=${GO:-go}
 python_command=${PYTHON:-python3}
-released_commit=82f1711b674425745a768f781e0e0c34dcb37ac3
+released_commit=03456c51d7537e806fc1b4576fc7e9660dc3f696
 bash "$root/scripts/ensure-upgrade-source.sh" "$released_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
@@ -18,7 +18,7 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir "$temporary/released" "$temporary/data"
-git archive "$released_commit" | tar -x -C "$temporary/released"
+git archive "$released_commit" -- go.mod go.sum internal | tar -x -C "$temporary/released"
 "$python_command" - "$root" "$temporary" <<'PY'
 import json, pathlib, sys
 root, temporary = map(pathlib.Path, sys.argv[1:3])
@@ -34,7 +34,6 @@ export CGO_ENABLED=0
 export NONBIRI_RELEASED_FIXTURE="$temporary/data/wallet.db"
 export NONBIRI_UPGRADE_FIXTURE="$NONBIRI_RELEASED_FIXTURE"
 export NONBIRI_ECONOMY_AUDIT_FIXTURE="$NONBIRI_RELEASED_FIXTURE"
-unset NONBIRI_UPGRADE_MASTER_KEY_FILE
 (
     # The released binary creates the populated source using its own schema.
     unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
@@ -42,6 +41,8 @@ unset NONBIRI_UPGRADE_MASTER_KEY_FILE
     "$go_command" test -c -overlay "$temporary/overlay.json" -o "$temporary/released-wallet.test" ./internal/ledger
     "$temporary/released-wallet.test" -test.run '^TestWriteReleasedUpgradeFixture$' -test.v -test.timeout 2m
 )
+export NONBIRI_UPGRADE_CLI="$temporary/upgrade.exe"
+"$go_command" build -o "$NONBIRI_UPGRADE_CLI" ./cmd/nonbiri-upgrade-v1
 "$go_command" test -count=1 -v -timeout=10m -run '^TestConvertReleasedDatabase$' ./internal/upgrade/v1
 NONBIRI_STABLE_UPGRADED_FIXTURE="$NONBIRI_RELEASED_FIXTURE" "$temporary/released-wallet.test" -test.run '^TestReleasedRejectsStableSchema$' -test.v -test.timeout 2m
 "$go_command" test -count=1 -v -timeout=2m -run '^TestEconomyAuditCatchUpFromReleasedBinary$' ./internal/economyaudit

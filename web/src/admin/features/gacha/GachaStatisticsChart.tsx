@@ -278,7 +278,7 @@ export function GachaStatisticsChart({
           <div className="gacha-stats-chart__canvas">
             <canvas ref={canvas} role="img" aria-label={title} />
           </div>
-          <Fold title={t('admin.gachaStats.chartData')}>
+          <Fold plain title={t('admin.gachaStats.chartData')}>
             <DataTable
               caption={title}
               rows={rows}

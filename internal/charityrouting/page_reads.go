@@ -234,10 +234,10 @@ func (s *Service) candidatesPage(ctx context.Context, role roleKind, actorID, mo
 		return empty, err
 	}
 	rows.Close()
-	if err := annotateCandidateServicesTx(ctx, tx, result.Data, modelID); err != nil {
-		return empty, err
-	}
 	if !query.omitBindingMarkers {
+		if err := annotateCandidateServicesTx(ctx, tx, result.Data, modelID, now); err != nil {
+			return empty, err
+		}
 		if err := annotateBindingCandidates(ctx, tx, result.Data, modelID, scope.Trainee); err != nil {
 			return empty, err
 		}

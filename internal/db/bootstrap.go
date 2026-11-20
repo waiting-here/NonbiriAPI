@@ -83,6 +83,9 @@ func (e *StartupError) Error() string {
 		if e.ActualSchemaVersion != nil && *e.ActualSchemaVersion == required {
 			return summary + "; database structure does not match this server; a version upgrade cannot repair this mismatch; preserve the database and use a matching database/server pair"
 		}
+		if e.ActualSchemaVersion != nil && *e.ActualSchemaVersion < 54 {
+			return summary + "; preserve the stopped database and use the v1.3.12 nonbiri-upgrade-v1 --check to identify a supported source and upgrade it to schema 54 before this version"
+		}
 		return summary + "; stop the service and back up the database before running the matching nonbiri-upgrade-v1 --check to inspect or --apply to upgrade explicitly; unsupported or newer schemas require a matching server and cannot be downgraded"
 	}
 	return "database startup rejected: " + string(e.Kind)
@@ -429,16 +432,8 @@ func foreignKeyCheck(ctx context.Context, q queryer) error {
 // ValidateStoredEndpointCredentials audits every persisted endpoint envelope.
 // Ordinary startup validates only the fixed key material; offline checks use this scan.
 func ValidateStoredEndpointCredentials(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec) error {
-	return validateStoredEndpointCredentials(ctx, q, generationTwoCodec, true)
-}
-
-func validateStoredEndpointCredentials(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec, shared bool) error {
 	if generationTwoCodec == nil {
 		return errors.New("generation-two secret codec unavailable")
-	}
-	referenceSQL := "(SELECT COUNT(*) FROM secret_live_references r WHERE r.secret_ref_id=endpoint_key_secrets.id)"
-	if !shared {
-		referenceSQL = "(SELECT COUNT(*) FROM endpoint_keys k WHERE k.secret_ref_id=endpoint_key_secrets.id)+(SELECT COUNT(*) FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id AND c.state IN ('claimed','dispatched'))"
 	}
 	// Validate every secret row, including orphaned rows. A join against the
 	// live endpoint-key set is insufficient: an unreferenced ciphertext is
@@ -451,7 +446,7 @@ SELECT id, context_id, canonical_base_url, connector_type,
                   AND length(CAST(encrypted_secret AS BLOB)) BETWEEN 1 AND ?
             THEN encrypted_secret END,
        orphaned_at,
-       `+referenceSQL+`
+       (SELECT COUNT(*) FROM secret_live_references r WHERE r.secret_ref_id=endpoint_key_secrets.id)
 FROM endpoint_key_secrets
 ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 	if err != nil {
@@ -471,7 +466,7 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 			clear(contextID)
 			return err
 		}
-		validRow := id > 0 && len(contextID) == 16 && (shared || canonicalBaseURL.Valid) && canonicalBaseURL.Valid == connector.Valid &&
+		validRow := id > 0 && len(contextID) == 16 && canonicalBaseURL.Valid == connector.Valid &&
 			(!canonicalBaseURL.Valid || (utf8.ValidString(canonicalBaseURL.String) && connectorcontract.Type(connector.String).Valid())) &&
 			ciphertextType == "text" && ciphertextBytes >= 1 && ciphertextBytes <= maxEndpointCredentialEnvelopeBytes &&
 			ciphertext.Valid && int64(len([]byte(ciphertext.String))) == ciphertextBytes && utf8.ValidString(ciphertext.String) &&
@@ -516,9 +511,6 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 		return err
 	}
 
-	if !shared {
-		return validateLegacyCredentialLinks(ctx, q)
-	}
 	// Shared secrets have no endpoint identity. Validate each current grant
 	// through the same relationship projection used by dispatch authorization.
 	rows, err = q.QueryContext(ctx, `

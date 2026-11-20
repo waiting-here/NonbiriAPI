@@ -366,6 +366,7 @@ func (service *Service) execute(ctx context.Context, writer http.ResponseWriter,
 	}
 	accepted, err := service.claims.Accept(executionContext, acceptInput)
 	if err != nil {
+		observeClaimError(parent, RouteCandidate{}, "accept", err)
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
 	}
@@ -726,8 +727,11 @@ func failureForError(err error, charity bool) wireFailure {
 	case errors.Is(err, charityrouting.ErrEntropyUnavailable):
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, donationquota.ErrLimited):
-		return rejectionFailure(httperr.CodeRateLimited, "charity candidates are temporarily at capacity", "model", "shared model resources are temporarily at capacity")
+		return admissionFailure(httperr.CodeRateLimited, claim.AdmissionReason(err))
 	case errors.Is(err, routing.ErrUnbound), errors.Is(err, charityrouting.ErrUnavailable):
+		if cause := requestattempt.AdmissionCauseOf(err); cause == requestattempt.AdmissionBudget || cause == requestattempt.AdmissionMixed {
+			return admissionFailure(httperr.CodeUnboundModel, cause)
+		}
 		return rejectionFailure(httperr.CodeUnboundModel, "model has no usable binding", "model", "no usable model resource is available for this request")
 	case errors.Is(err, routing.ErrResourceLimit), errors.Is(err, charityrouting.ErrResourceLimit):
 		return platformFailure(httperr.CodeResourceLimitExceeded, "resource limit exceeded")
@@ -740,7 +744,7 @@ func failureForError(err error, charity bool) wireFailure {
 	case errors.Is(err, ledger.ErrInsufficientBalance):
 		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
 	case errors.Is(err, ledger.ErrCapacityExhausted), errors.Is(err, ledger.ErrRetryable), errors.Is(err, donationquota.ErrCapacity), errors.Is(err, claim.ErrRoutingBusy):
-		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+		return admissionFailure(httperr.CodeServiceUnavailable, claim.AdmissionReason(err))
 	case errors.Is(err, charityrouting.ErrContentTooShort):
 		message := "charity content is too short"
 		var tooShort *charityrouting.ContentTooShortError

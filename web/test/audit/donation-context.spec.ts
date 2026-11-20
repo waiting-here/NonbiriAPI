@@ -95,6 +95,75 @@ function assertSource(source: Source, sample: Sample) {
   expect(source.endpoint_tags).toEqual(sample.tags);
 }
 
+test('owner pages size the workspace to the task and center their state illustrations', async ({
+  browser,
+}) => {
+  const state = fixture();
+  const context = await session(browser, state, 'owner');
+  const page = await context.newPage();
+  const sample = state.donation_context.donations[0]!;
+  try {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const contentWidths: number[] = [];
+      for (const path of [
+        '/charity?tab=donations',
+        '/models',
+        '/endpoints',
+        '/charity/donations/' + sample.donation_id,
+      ]) {
+        await page.goto(state.user_url + path);
+        const content = page.locator('main > .page');
+        await expect(content.getByRole('heading', { level: 1 })).toBeVisible();
+        const box = (await content.boundingBox())!;
+        expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+        contentWidths.push(box.width);
+        if (path.startsWith('/charity?')) {
+          const ranking = page.locator('.rank-empty');
+          await expect(ranking.locator('svg')).toBeVisible();
+          const cloud = (await ranking.locator('svg').boundingBox())!;
+          const card = (await ranking.boundingBox())!;
+          expect(Math.abs(cloud.x + cloud.width / 2 - card.x - card.width / 2)).toBeLessThanOrEqual(
+            1,
+          );
+        }
+      }
+      const [overview, models, services, detail] = contentWidths;
+      expect(models).toBe(services);
+      if (width === 1440) {
+        expect(overview!).toBeGreaterThan(models!);
+        expect(models!).toBeGreaterThan(detail!);
+      } else expect(new Set(contentWidths).size).toBe(1);
+      for (const [path, title] of [
+        ['/missing-preview-page', copy.common.notFoundTitle],
+        ['/maintenance', copy.common.maintenanceTitle],
+        ['/access-denied', copy.common.forbiddenTitle],
+      ] as const) {
+        await page.goto(state.user_url + path);
+        const panel = page.locator('.nb-state').filter({
+          has: page.getByRole('heading', { level: 1, name: title, exact: true }),
+        });
+        const art = panel.locator('.nb-state__art svg');
+        await expect(art, path + ' at ' + width).toBeVisible();
+        const geometry = await art.evaluate((svg) => {
+          const drawing = svg.getBoundingClientRect();
+          const host = svg.parentElement!.getBoundingClientRect();
+          return {
+            width: drawing.width,
+            hostWidth: host.width,
+            centerOffset: Math.abs(drawing.x + drawing.width / 2 - host.x - host.width / 2),
+          };
+        });
+        expect(geometry.width).toBeGreaterThan(0);
+        expect(geometry.width).toBeLessThanOrEqual(geometry.hostWidth + 1);
+        expect(geometry.centerOffset).toBeLessThanOrEqual(1);
+      }
+    }
+  } finally {
+    await context.close();
+  }
+});
+
 for (const actor of ['admin', 'five', 'six'] as const) {
   test(`${actor} enters donation review with source classifications and current labels`, async ({
     browser,

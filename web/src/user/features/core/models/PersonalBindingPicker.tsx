@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Field, FilterBar, Fold, Note, Segmented } from '@shared/components/ui';
+import { ChoiceRow, Field, FilterBar, Fold, Note, Segmented } from '@shared/components/ui';
 import { ConnectionUnavailable } from '@shared/components/ConnectionUnavailable';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
@@ -141,6 +141,18 @@ export function PersonalBindingPicker({
     searchInput.current?.focus();
     onSearchFocused?.();
   }, [focusSearch, locked, onSearchFocused]);
+  const chooseService = (next: Connection | null) => {
+    setService(next);
+    setManualSaved(false);
+    setEndpoint(null);
+    setEntryKey(null);
+    setEndpointQuery('');
+    setKeyQuery('');
+    setQueryDraft('');
+    setQuery('');
+    setStep('endpoints');
+    setSource('');
+  };
   const chooseEndpoint = (next: Endpoint) => {
     setManualSaved(false);
     setEndpoint(next);
@@ -210,7 +222,15 @@ export function PersonalBindingPicker({
         activeCount={service ? 1 : 0}
         secondaryAlwaysVisible
         onSubmit={() => undefined}
-        onReset={() => setServiceQuery('')}
+        onReset={
+          locked
+            ? undefined
+            : () => {
+                setServiceQuery('');
+                chooseService(null);
+                servicePager.reset();
+              }
+        }
         search={
           <Field label={copy.searchServices}>
             {(props) => (
@@ -237,15 +257,7 @@ export function PersonalBindingPicker({
                 onChange={(event) => {
                   const next =
                     services.data?.data.find((row) => row.id === event.target.value) ?? null;
-                  setService(next);
-                  setManualSaved(false);
-                  setEndpoint(null);
-                  setEntryKey(null);
-                  setEndpointQuery('');
-                  setKeyQuery('');
-                  setQueryDraft('');
-                  setQuery('');
-                  setStep('endpoints');
+                  chooseService(next);
                 }}
               >
                 <option value="">{copy.allServices}</option>
@@ -508,48 +520,36 @@ export function PersonalBindingPicker({
                     const alreadyBound = bound.has(identity);
                     return (
                       <li key={identity} className="personal-binding-picker__model">
-                        <Field
-                          label={
-                            <span className="nb-stack nb-stack--sm">
-                              <strong>{row.upstream_model_id}</strong>{' '}
-                              <span className="nb-small nb-muted">
-                                {alreadyBound
-                                  ? copy.bound
-                                  : row.source_types
-                                      .map((type) =>
-                                        type === 'automatic' ? copy.automatic : copy.manual,
-                                      )
-                                      .join(' + ')}
-                              </span>
-                            </span>
+                        <ChoiceRow
+                          label={row.upstream_model_id}
+                          description={
+                            alreadyBound
+                              ? copy.bound
+                              : row.source_types
+                                  .map((type) =>
+                                    type === 'automatic' ? copy.automatic : copy.manual,
+                                  )
+                                  .join(' + ')
                           }
-                        >
-                          {(props) => (
-                            <input
-                              {...props}
-                              type="checkbox"
-                              checked={selected.has(identity)}
-                              disabled={
-                                locked ||
-                                candidates.isFetching ||
-                                alreadyBound ||
-                                row.capabilities?.can_bind === false
-                              }
-                              onChange={() =>
-                                onToggle({
-                                  ...row,
-                                  endpoint_note:
-                                    endpoint.connection_name &&
-                                    endpoint.connection_name !== row.endpoint_note
-                                      ? `${endpoint.connection_name} · ${row.endpoint_note || endpoint.base_url}`
-                                      : row.endpoint_note,
-                                })
-                              }
-                            />
-                          )}
-                        </Field>
-                        {row.capabilities?.can_bind === false &&
-                        row.capabilities.unavailable_reason ? (
+                          checked={selected.has(identity)}
+                          disabled={
+                            locked ||
+                            candidates.isFetching ||
+                            alreadyBound ||
+                            !row.capabilities.can_bind
+                          }
+                          onChange={() =>
+                            onToggle({
+                              ...row,
+                              endpoint_note:
+                                endpoint.connection_name &&
+                                endpoint.connection_name !== row.endpoint_note
+                                  ? `${endpoint.connection_name} · ${row.endpoint_note || endpoint.base_url}`
+                                  : row.endpoint_note,
+                            })
+                          }
+                        />
+                        {!row.capabilities.can_bind && row.capabilities.unavailable_reason ? (
                           <ConnectionUnavailable reason={row.capabilities.unavailable_reason} />
                         ) : null}
                       </li>

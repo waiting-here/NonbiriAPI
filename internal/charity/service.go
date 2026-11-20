@@ -6,7 +6,6 @@ package charity
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -15,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/charitydiscount"
 	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
@@ -228,6 +228,8 @@ type keyReservation struct {
 	modelID, modelEnabled, keyEnabled, failureDisabled                   int64
 	endpointEnabled, physicalKeyEnabled                                  int64
 	expiresAt, rateLimitedUntil                                          sql.NullInt64
+	modelRetryAt                                                         int64
+	modelQuotaReason                                                     string
 	status, endedReason                                                  string
 	priceLimit, callLimit, tokenLimit                                    []byte
 	priceUsed, priceReserved, callsUsed, callsReserved                   []byte
@@ -284,6 +286,9 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 
 	if row.rateLimitedUntil.Valid && row.rateLimitedUntil.Int64 > input.ClaimedAt {
 		return claim.CharityReservation{}, claim.ErrKeyRateLimited
+	}
+	if row.modelRetryAt > input.ClaimedAt {
+		return claim.CharityReservation{}, &claim.ModelQuotaLimit{Reason: row.modelQuotaReason, BindingID: input.Authorization.BindingID, NativeService: input.Authorization.NativeService}
 	}
 
 	priceReserve := row.pricing.tokenReserve
@@ -354,7 +359,7 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 		return claim.CharityReservation{}, err
 	}
 
-	if err := donationquota.ReplaceModelReservation(ctx, tx, row.donationKeyID, input.ClaimedAt, input.UpstreamModelID, donationquota.TokenVector{}, tokenBudget.Reservation); err != nil {
+	if err := donationquota.ReplaceModelReservation(ctx, tx, row.donationKeyID, input.ClaimedAt, input.UpstreamModelID, donationquota.Consumption{}, donationquota.Consumption{TokenVector: tokenBudget.Reservation, Calls: 1, PriceMilli: priceReserve}); err != nil {
 		return claim.CharityReservation{}, err
 	}
 
@@ -448,7 +453,7 @@ cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-max(`+smartbackoff.EffectiveUntilSQL("dk.id")+`,`+smartbackoff.ServiceUntilSQL("h")+`)
+max(`+smartbackoff.EffectiveUntilSQL("dk.id")+`,`+smartbackoff.ServiceUntilSQL("h")+`),COALESCE(mc.retry_at,0),COALESCE(mc.reason,'')
 FROM charity_reservations cr
 JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN donation_keys dk ON dk.id=?
@@ -461,6 +466,7 @@ JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.id=?
 JOIN charity_binding_targets t ON t.binding_id=b.id AND t.id=? AND t.revision=? AND t.donation_key_id=dk.id
  AND t.upstream_model_id=? AND (t.native_service_mask & ?)<>0
 LEFT JOIN donation_service_health h ON h.use_id=? AND h.endpoint_key_id=k.id AND h.native_service_bit=? AND h.credential_version_id=?
+LEFT JOIN donation_service_model_cooldowns mc ON mc.health_id=h.id AND mc.upstream_model_id=t.upstream_model_id
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=? AND e.id=? AND k.id=?
 AND d.status IN ('pending','approved') AND d.terminal_at IS NULL
 LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.UpstreamModelID, serviceSet.Mask(),
@@ -476,7 +482,7 @@ LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.
 		&row.pricing.mode, &row.pricing.discount, &row.pricing.requestUser, &row.pricing.requestReward,
 		&row.pricing.uncachedUser, &row.pricing.writeUser, &row.pricing.readUser, &row.pricing.outputUser,
 		&row.pricing.uncachedReward, &row.pricing.writeReward, &row.pricing.readReward, &row.pricing.outputReward,
-		&row.pricing.tokenReserve, &suspended, &row.rateLimitedUntil)
+		&row.pricing.tokenReserve, &suspended, &row.rateLimitedUntil, &row.modelRetryAt, &row.modelQuotaReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return keyReservation{}, claim.ErrNotFound
 	}
@@ -582,7 +588,7 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 		if err := releaseKeyCapacity(ctx, tx, *row.keyID, row.priceReserved, row.callsReserved, row.tokensReserved, input.ReleasedAt); err != nil {
 			return err
 		}
-		if err := donationquota.SettleModelTokens(ctx, tx, *row.keyID, row.upstreamModel, row.tokenVector(), donationquota.TokenVector{}); err != nil {
+		if err := donationquota.SettleModelConsumption(ctx, tx, *row.keyID, row.upstreamModel, row.consumption(), donationquota.Consumption{}); err != nil {
 			return err
 		}
 		if err := donationquota.SettleTokenVector(ctx, tx, *row.keyID, row.tokenVector(), donationquota.TokenVector{}); err != nil {
@@ -615,6 +621,10 @@ type usageReservation struct {
 	callsReserved                             int
 	tokensReserved                            int64
 	inputTokensReserved, outputTokensReserved *int64
+}
+
+func (r usageReservation) consumption() donationquota.Consumption {
+	return donationquota.Consumption{TokenVector: r.tokenVector(), Calls: int64(r.callsReserved), PriceMilli: r.priceReserved}
 }
 
 func (r usageReservation) tokenVector() donationquota.TokenVector {
@@ -849,7 +859,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	if err := settleKeyCapacity(ctx, tx, *row.keyID, row, completion.Actual, callsActual, tokensActual, input.CompletedAt); err != nil {
 		return err
 	}
-	if err := donationquota.SettleModelTokens(ctx, tx, *row.keyID, row.upstreamModel, row.tokenVector(), tokenActual); err != nil {
+	if err := donationquota.SettleModelConsumption(ctx, tx, *row.keyID, row.upstreamModel, row.consumption(), donationquota.Consumption{TokenVector: tokenActual, Calls: int64(callsActual), PriceMilli: completion.Actual.PriceMilli}); err != nil {
 		return err
 	}
 	if err := donationquota.SettleTokenVector(ctx, tx, *row.keyID, row.tokenVector(), tokenActual); err != nil {
@@ -1092,7 +1102,7 @@ FROM donation_keys WHERE id=?`, keyID).Scan(&currentGenerationBlob, &nextFoldBlo
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT claim_seq,state,protocol_success,streak_disposition,failure_origin,
+	rows, err := tx.QueryContext(ctx, `SELECT claim_id,claim_seq,state,protocol_success,streak_disposition,failure_origin,
 NOT EXISTS(SELECT 1 FROM dispatch_service_health h WHERE h.claim_id=donation_usage_reservations.claim_id)
 FROM donation_usage_reservations
 WHERE donation_key_id=? AND streak_generation=? AND claim_seq>=? ORDER BY claim_seq`,
@@ -1100,12 +1110,11 @@ WHERE donation_key_id=? AND streak_generation=? AND claim_seq>=? ORDER BY claim_
 	if err != nil {
 		return fmt.Errorf("charity: read streak results: %w", err)
 	}
-	folded, err := foldFailureRows(rows, next, streak, threshold, failureDisabled)
+	folded, err := foldFailureRows(ctx, tx, rows, next, streak, threshold, failureDisabled)
 	if err != nil {
 		return err
 	}
 	next, streak, failureDisabled = folded.next, folded.streak, folded.disabled
-	disabledNow, disablingStreak, disablingFold := folded.disabledNow, folded.disablingStreak, folded.disablingFold
 
 	result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET next_fold_seq=?,failure_streak=?,failure_disabled=?,updated_at=?
 WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`,
@@ -1117,45 +1126,14 @@ WHERE id=? AND streak_generation=? AND next_fold_seq=? AND failure_streak=?`,
 	if err := requireOne(result); err != nil {
 		return err
 	}
-	if disabledNow {
-		ref := fmt.Sprintf("donation-key:%d:generation:%s:fold:%s", keyID, generation.Decimal(), next.Decimal())
-		type target struct {
-			Kind string `json:"kind"`
-			ID   string `json:"id"`
-		}
-		type fact struct {
-			Key   string `json:"key"`
-			Value string `json:"value"`
-		}
-		contextBody, err := json.Marshal(struct {
-			Targets []target `json:"targets"`
-			Facts   []fact   `json:"occurred_facts"`
-		}{
-			Targets: []target{
-				{Kind: "donation", ID: fmt.Sprint(donationID)},
-				{Kind: "donation_key", ID: fmt.Sprint(keyID)},
-				{Kind: "endpoint_key", ID: fmt.Sprint(sourceKeyID)},
-			},
-			Facts: []fact{
-				{Key: "donation_id", Value: fmt.Sprint(donationID)},
-				{Key: "donation_key_id", Value: fmt.Sprint(keyID)},
-				{Key: "endpoint_key_id", Value: fmt.Sprint(sourceKeyID)},
-				{Key: "failure_streak", Value: disablingStreak.Decimal()},
-				{Key: "failure_threshold", Value: thresholdText},
-				{Key: "generation", Value: generation.Decimal()},
-				{Key: "fold", Value: disablingFold.Decimal()},
-			},
-		})
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO admin_alerts(kind,message,ref,created_at,resolved,context_version,context_json)
-SELECT 'donation_failure_disabled','charity donation key disabled after consecutive protocol failures',?,?,0,1,?
-WHERE NOT EXISTS(SELECT 1 FROM admin_alerts WHERE kind='donation_failure_disabled' AND ref=?)`, ref, at, string(contextBody), ref); err != nil {
-			return fmt.Errorf("charity: create failure alert: %w", err)
-		}
+	if folded.crossing == nil {
+		return nil
 	}
-	return nil
+	return adminalerts.RecordDonationFailureTx(ctx, tx, adminalerts.DonationFailure{
+		DonationID: donationID, KeyID: keyID, EndpointKeyID: sourceKeyID,
+		Generation: generation, OccurredAt: at, Crossing: *folded.crossing,
+		Ref: fmt.Sprintf("donation-key:%d:generation:%s:fold:%s", keyID, generation.Decimal(), next.Decimal()),
+	})
 }
 
 func (s *Service) CompleteRequest(ctx context.Context, tx *sql.Tx, input claim.CharityRequestCompletion) error {

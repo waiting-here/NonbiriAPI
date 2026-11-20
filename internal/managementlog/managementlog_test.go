@@ -533,3 +533,16 @@ func TestCleanupUsesHTTPDomainInOperationAndGroupQueries(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedActionNamesReferToTheChangedResource(t *testing.T) {
+	for _, tc := range []struct{ method, path, action, name string }{
+		{"POST", "/admin/api/donations/{id}/keys/{keyId}/models/manual", "keys.models.manual.create", "手动添加捐赠密钥的上游模型"},
+		{"PUT", "/api/steward/donations/{id}/keys/{keyId}/model-limits", "keys.model-limits.update", "调整捐赠密钥的上游模型限额"},
+		{"POST", "/admin/api/charity-models/{id}/bindings/batch-receipt", "bindings.batch-receipt.create", "批量添加公益模型绑定"},
+	} {
+		meta, ok := DescribeRoute(tc.method, tc.path)
+		if !ok || meta.Action != tc.action || meta.Summary != tc.name {
+			t.Fatalf("%s %s: action=%q summary=%q", tc.method, tc.path, meta.Action, meta.Summary)
+		}
+	}
+}

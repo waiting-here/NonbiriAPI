@@ -1,20 +1,23 @@
-import { type ReactNode } from 'react';
+import { type AriaAttributes, type ReactNode } from 'react';
 
 export function Panel({
   children,
   tone,
   className = '',
   'aria-label': ariaLabel,
+  'aria-busy': busy,
 }: {
   children: ReactNode;
   tone?: 'danger';
   className?: string;
   'aria-label'?: string;
+  'aria-busy'?: AriaAttributes['aria-busy'];
 }) {
   return (
     <section
       className={`nb-panel${tone ? ` nb-panel--${tone}` : ''}${className ? ` ${className}` : ''}`}
       aria-label={ariaLabel}
+      aria-busy={busy}
     >
       {children}
     </section>

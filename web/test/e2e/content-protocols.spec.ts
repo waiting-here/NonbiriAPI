@@ -2,9 +2,11 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import { numberedPage } from './numbered-fixtures';
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { expect, test } from './test';
 import {
+  connection,
   createOptions,
   credential,
   mockConnectionResources,
@@ -75,7 +77,12 @@ for (const width of [1440, 390]) {
         } else if (url.pathname === '/api/endpoints' && request.method() === 'POST') {
           submitted = input;
           const endpoint = {
+            ...endpointScope,
             ...submitted,
+            connection_name: connection.name,
+            configuration_type: createOptions.native_service_options.find(
+              (row) => row.connector_type === submitted?.connector_type,
+            )!.configuration_type,
             id: String(endpoints.length + 1),
             origin: { kind: 'custom' },
             revision: '1',
@@ -91,6 +98,7 @@ for (const width of [1440, 390]) {
           const sourceId = automatic ? String(51 + sources.length) : null;
           if (automatic) sources.push({ id: sourceId, endpoint_id: endpointID });
           const grant = {
+            ...credentialGrant,
             ...input,
             discovery_source_id: sourceId,
             id: String(21 + grants.length),

@@ -31,7 +31,8 @@ func TestDiscordCallbackIssuerQuery(t *testing.T) {
 		{"empty state", "code=code&state=&iss=https://discord.com", false},
 		{"malformed escape", "code=code&state=state&iss=%ZZ", false},
 		{"overlong query", "code=code&state=state&iss=" + strings.Repeat("a", maxCallbackQueryBytes), false},
-		{"authorization error", "error=access_denied&error_description=Denied&state=state&iss=https://discord.com", false},
+		{"other authorization error", "error=server_error&state=state", false},
+		{"duplicate cancellation", "error=access_denied&error=access_denied&state=state", false},
 		{"mixed error details", "code=code&state=state&error_description=Denied", false},
 		{"mixed error URI", "code=code&state=state&error_uri=https://example.com/error", false},
 		{"mixed success and error", "code=code&state=state&iss=https://discord.com&error=access_denied", false},
@@ -43,6 +44,28 @@ func TestDiscordCallbackIssuerQuery(t *testing.T) {
 				t.Fatalf("code=%q state=%q valid=%v; want valid=%v", code, state, ok, tc.valid)
 			}
 		})
+	}
+}
+
+func TestCanceledElevationReturnsToAccount(t *testing.T) {
+	f := newRuntimeFixture(t, nil)
+	session := loginUser(t, f, "base", "")
+	handler := browserAuthHandler(t, f)
+	start := request(t, handler, host.StationUser, http.MethodPost, "https://user.example/api/auth/elevate", "", []*http.Cookie{session}, map[string]string{"Origin": "https://user.example"})
+	state := responseCookie(t, start, OAuthStateCookieName)
+	callbackURL := "https://user.example/api/auth/discord/callback?error=access_denied&state=" + url.QueryEscape(state.Value)
+	response := request(t, handler, host.StationUser, http.MethodGet, callbackURL, "", []*http.Cookie{state, session}, browserHeaders)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `href="/account"`) {
+		t.Fatalf("canceled verification did not return to account: status %d", response.Code)
+	}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == UserSessionCookieName || (cookie.Name == ElevatedCookieName && cookie.Value != "") {
+			t.Fatal("cancellation issued a capability or renewed the session")
+		}
+	}
+	replay := request(t, handler, host.StationUser, http.MethodGet, callbackURL, "", []*http.Cookie{state, session}, browserHeaders)
+	if replay.Code != http.StatusBadRequest || strings.Contains(replay.Body.String(), `href="/account"`) {
+		t.Fatal("consumed cancellation was reused")
 	}
 }
 

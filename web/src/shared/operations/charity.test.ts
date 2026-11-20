@@ -1,5 +1,7 @@
+import { chatProjection, unboundCandidate } from '../../../test/fixtures/resourceScopes';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  addManagedBindings,
   getManagedBindings,
   normalizeAdminCharityModel,
   normalizeAdminDonation,
@@ -130,6 +132,7 @@ const bindingSourceFixture = {
 };
 
 const bindingDTO = (sourceTypes: unknown) => ({
+  targets: [],
   id: '31',
   ord: 0,
   donation_key_id: '21',
@@ -140,6 +143,8 @@ const bindingDTO = (sourceTypes: unknown) => ({
 });
 
 const candidateDTO = (sourceTypes: unknown) => ({
+  ...chatProjection,
+  ...unboundCandidate,
   donation_key_id: '21',
   donation_id: '11',
   source: bindingSourceFixture,
@@ -318,7 +323,7 @@ describe('role-safe charity wire', () => {
     ).not.toHaveProperty('owner.email');
     expect(() =>
       normalizeAdminDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }),
-    ).toThrow(/invalid administrator donation owner/i);
+    ).toThrow(/invalid managed donation owner/i);
     // Expiry belongs to each key; the donation itself has no expires_at field.
     expect(normalizeAdminDonation({ ...common, owner: null, expires_at: null })).toEqual(
       normalizeAdminDonation({ ...common, owner: null }),
@@ -574,6 +579,51 @@ describe('charity model wire', () => {
     expect(normalizeAdminCharityModel(legacyModel).token_reserve_credits).toBeNull();
   });
 
+  it('reads a stored binding write response before live health and routing guidance are attached', async () => {
+    const binding = bindingDTO(['manual']);
+    const target = {
+      ...chatProjection,
+      id: '51',
+      revision: '1',
+      donation_id: binding.donation_id,
+      donation_key_id: binding.donation_key_id,
+      upstream_model_id: binding.upstream_model_id,
+      endpoint_id: '11',
+      connector_type: 'openai-compatible',
+      configuration_type: 'openai-compatible',
+      base_url: binding.source.canonical_base_url,
+      uses: [],
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json(
+        { bindings: [{ ...binding, targets: [target] }], binding_revision: '2' },
+        { status: 201 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const selection = {
+      donation_key_id: binding.donation_key_id,
+      upstream_model_id: binding.upstream_model_id,
+    };
+    const result = await addManagedBindings(
+      'steward',
+      '7',
+      '1',
+      [selection],
+      'abcdefghijklmnopqrstuv',
+    );
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      expected_binding_revision: '1',
+      selections: [selection],
+    });
+    expect(result.bindings[0]?.targets[0]).toMatchObject({
+      id: '51',
+      native_services: ['chat_completions'],
+    });
+    expect(result.bindings[0]?.targets[0]?.availability).toBeUndefined();
+    expect(result.bindings[0]?.targets[0]?.binding_guide).toBeUndefined();
+  });
+
   it('accepts binding revision zero from the bindings API', async () => {
     const fetchMock = vi.fn<typeof fetch>(
       async () =>
@@ -686,7 +736,7 @@ describe('charity model wire', () => {
     ).toThrow(/candidate source types/i);
   });
 
-  it('keeps binding order continuity strict when an empty-source binding is present', async () => {
+  it('renders authorized bindings when another position is outside the steward scope', async () => {
     const binding = bindingDTO([]);
     vi.stubGlobal(
       'fetch',
@@ -702,6 +752,8 @@ describe('charity model wire', () => {
       ),
     );
 
-    await expect(getManagedBindings('admin', '1')).rejects.toThrow(/binding order/i);
+    expect((await getManagedBindings('steward', '1')).bindings.map((row) => row.ord)).toEqual([
+      0, 2,
+    ]);
   });
 });

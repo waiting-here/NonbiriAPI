@@ -1,12 +1,22 @@
-import { SimplePager } from '@shared/operations/SimplePager';
+import { PagePagination } from '@shared/operations/PagePagination';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stationSessionWrite } from '@shared/charityManagement';
-import { Card, ErrorState, LoadingState } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { Fold } from '@shared/components/ui/Fold';
-import { Field, Fields, FilterBar, FormActions } from '@shared/components/ui';
+import {
+  Field,
+  Fields,
+  FilterBar,
+  FormActions,
+  Panel,
+  PanelBody,
+  PanelHead,
+  StatusBadge,
+} from '@shared/components/ui';
+import { formatCount } from '@shared/utils/formatNumber';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { useImageOperation } from '@shared/picturebook/useImageOperation';
 import { useAdminSession } from '../../data';
@@ -191,402 +201,468 @@ const Catalog = forwardRef<
   }, [operationID, state, onRefreshed, reloadModels]);
   return (
     <div className="picturebook-stack">
-      <Card>
-        <h2>{t('图像模型目录', 'Image model catalog')}</h2>
-        <p>
-          {t(
+      <Panel>
+        <PanelHead
+          title={t('图像模型目录', 'Image model catalog')}
+          description={t(
             '拉取使用已保存的服务地址和密钥，支持参数与尺寸自动配置。选择模型、填写价格后即可开放；刷新会保留已有价格和开放状态，不会自动开放新模型。',
             'Discovery uses the saved URL and key and automatically configures supported parameters and sizes. Choose a model, set prices and enable it. Refreshing preserves prices and availability and does not enable new models.',
           )}
-        </p>
-        <button
-          className="nb-btn nb-btn--primary"
-          disabled={
-            discovery.pending ||
-            reloading ||
-            state === 'queued' ||
-            state === 'running' ||
-            locked ||
-            draftDirty ||
-            upstreamDirty ||
-            upstreamLocked
-          }
-          onClick={() => {
-            if (!discovery.uncertain) setOperationID('');
-            void discovery.run(discovery.input ?? {}, (result) => {
-              client.setQueryData(['admin', 'picture-book', account, 'refresh', result.id], result);
-              setOperationID(result.id);
-            });
-          }}
-        >
-          {discovery.uncertain
-            ? t('重试同一次模型拉取', 'Retry the same model refresh')
-            : state === 'failed'
-              ? t('重新拉取模型目录', 'Start a new model refresh')
-              : t('拉取模型目录', 'Refresh model catalog')}
-        </button>
-        {draftDirty || upstreamDirty ? (
-          <p role="status">
-            {t(
-              '请先保存或放弃草稿，再刷新模型目录。',
-              'Save or discard drafts before refreshing the model catalog.',
-            )}
-          </p>
-        ) : null}
-        {discovery.uncertain ? (
-          <p role="status">
-            {t(
-              '拉取回执尚未确认，请重试同一次操作。',
-              'The refresh receipt is unconfirmed. Retry the same operation.',
-            )}
-          </p>
-        ) : null}
-        {discovery.error ? <ErrorState error={discovery.error} /> : null}
-        {operation.error ? (
-          <ErrorState error={operation.error} onRetry={() => void operation.refetch()} />
-        ) : null}
-        {operation.data?.state === 'failed' ? (
-          <section role="alert" className="picturebook-discovery-error">
-            <h3>{t('模型拉取失败', 'Model discovery failed')}</h3>
-            <p>{discoveryError(operation.data.error_code, operation.data.http_status, t)}</p>
-            {operation.data.http_status ? <p>HTTP {operation.data.http_status}</p> : null}
-            <DiscoveryFailureDiagnostics operationID={operation.data.id} />
-            <Fold plain title={t('诊断信息', 'Diagnostic information')}>
-              <p>
-                {t('错误类别：', 'Error class: ')}
-                <code>{operation.data.error_code ?? 'unknown'}</code>
-              </p>
-              <p>
-                {t('操作编号：', 'Operation ID: ')}
-                <code>{operation.data.id}</code>
-              </p>
-            </Fold>
-          </section>
-        ) : operation.data ? (
-          <p role="status">
-            {state === 'succeeded'
-              ? operation.data.model_count === 0
-                ? t(
-                    '服务返回了空模型目录。请核对服务地址，或稍后再刷新。',
-                    'The service returned an empty catalog. Check the service URL or refresh again later.',
-                  )
-                : t('目录已更新，模型数：', 'Catalog updated. Models: ') +
-                  operation.data.model_count
-              : t('正在等待或拉取模型目录。', 'Model discovery is queued or running.')}
-          </p>
-        ) : null}
-        {models.isPending ? (
-          <LoadingState />
-        ) : models.error ? (
-          <ErrorState error={models.error} onRetry={() => void models.refetch()} />
-        ) : null}
-        <FilterBar
-          query={models}
-          activeCount={
-            Number(Boolean(filter.q)) +
-            Number(filter.type !== 'image') +
-            Number(filter.configured !== 'all') +
-            Number(filter.enabled !== 'all')
-          }
-          onSubmit={() => {}}
-          search={
-            <Field label={t('搜索全部模型目录', 'Search the full model catalog')}>
-              {(props) => (
-                <input
-                  {...props}
-                  placeholder={t('搜索全部模型目录', 'Search the full model catalog')}
-                  value={filter.q}
-                  maxLength={128}
-                  onChange={(event) =>
-                    setFilter((current) => ({
-                      ...current,
-                      q: event.target.value,
-                      page: 1,
-                      catalog_revision: undefined,
-                    }))
-                  }
-                />
-              )}
-            </Field>
-          }
-          secondaryAlwaysVisible
-          secondary={
-            <>
-              <Field size="short" label={t('模型类型', 'Model type')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={filter.type}
-                    onChange={(event) =>
-                      setFilter((current) => ({
-                        ...current,
-                        type: event.target.value as CatalogFilter['type'],
-                        page: 1,
-                        catalog_revision: undefined,
-                      }))
-                    }
-                  >
-                    <option value="image">{t('图像', 'Image')}</option>
-                    <option value="unknown">{t('未分类', 'Unknown')}</option>
-                    <option value="other">{t('其他类型', 'Other types')}</option>
-                    <option value="all">{t('全部类型', 'All types')}</option>
-                  </select>
-                )}
-              </Field>
-              <Field size="short" label={t('配置状态', 'Configuration')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={filter.configured}
-                    onChange={(event) =>
-                      setFilter((current) => ({
-                        ...current,
-                        configured: event.target.value as CatalogFilter['configured'],
-                        page: 1,
-                        catalog_revision: undefined,
-                      }))
-                    }
-                  >
-                    <option value="all">{t('全部', 'All')}</option>
-                    <option value="true">{t('已配置', 'Configured')}</option>
-                    <option value="false">{t('未配置', 'Unconfigured')}</option>
-                  </select>
-                )}
-              </Field>
-              <Field size="short" label={t('开放状态', 'Availability')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={filter.enabled}
-                    onChange={(event) =>
-                      setFilter((current) => ({
-                        ...current,
-                        enabled: event.target.value as CatalogFilter['enabled'],
-                        page: 1,
-                        catalog_revision: undefined,
-                      }))
-                    }
-                  >
-                    <option value="all">{t('全部', 'All')}</option>
-                    <option value="true">{t('已开放', 'Enabled')}</option>
-                    <option value="false">{t('未开放', 'Disabled')}</option>
-                  </select>
-                )}
-              </Field>
-            </>
-          }
-        />
-        {models.data ? (
-          <p role="status">
-            {t('匹配模型数：', 'Matching models: ')}
-            {models.data.total} · {filter.page}/
-            {Math.max(1, Math.ceil(models.data.total / filter.page_size))}
-          </p>
-        ) : null}
-        <Fields>
-          <Field label={t('选择要配置的模型', 'Choose a model to configure')}>
-            {(props) => (
-              <select
-                {...props}
-                disabled={locked || refreshActive || upstreamLocked}
-                value={selected?.id ?? ''}
-                onChange={(event) =>
-                  selectModel(
-                    models.data?.data.find((model) => model.id === event.target.value) ?? null,
-                  )
-                }
-              >
-                <option value="">{t('请选择', 'Select a model')}</option>
-                {selected && !models.data?.data.some((model) => model.id === selected.id) ? (
-                  <option value={selected.id}>{selected.upstream_model_id}</option>
-                ) : null}
-                {models.data?.data.map((model) => (
-                  <option value={model.id} key={model.id}>
-                    {model.upstream_model_id} ·{' '}
-                    {model.enabled ? t('已开放', 'Enabled') : t('未开放', 'Not enabled')}
-                    {model.missing
-                      ? ` · ${t('最新目录未返回', 'Missing from latest catalog')}`
-                      : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-        </Fields>
-        {pendingSelection ? (
-          <div role="alert" className="picturebook-stack">
-            <p>
-              {t(
-                '当前模型有未保存草稿。请先保存，或明确放弃后切换；也可以继续编辑。',
-                'The current model has an unsaved draft. Save it first, explicitly discard it, or continue editing.',
-              )}
-            </p>
-            <FormActions>
-              <button
-                className="nb-btn nb-btn--primary"
-                type="button"
-                disabled={locked}
-                onClick={() => {
-                  if (selected) void editorRefs.current[selected.id]?.saveDraft();
-                }}
-              >
-                {t('保存并切换', 'Save and switch')}
-              </button>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                onClick={() => setPendingSelection(null)}
-              >
-                {t('继续编辑', 'Continue editing')}
-              </button>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                disabled={locked || refreshActive || upstreamLocked}
-                onClick={() => {
-                  if (locked || refreshActive || upstreamLocked) return;
-                  if (selected) {
-                    setEpochs((current) => ({
-                      ...current,
-                      [selected.id]: (current[selected.id] ?? 0) + 1,
-                    }));
-                    setDirty((current) => ({ ...current, [selected.id]: false }));
-                  }
-                  finishSelection(pendingSelection.model);
-                }}
-              >
-                {t('放弃草稿并切换', 'Discard draft and switch')}
-              </button>
-            </FormActions>
-          </div>
-        ) : null}
-        {models.data ? (
-          <div className="picturebook-stack">
-            <p>
-              {t(
-                '批量选择模型（最多50项，跨页保留）',
-                'Select up to 50 models across pages for an atomic batch save',
-              )}
-            </p>
-            {models.data.data.map((model) => (
-              <Field key={model.id} label={model.upstream_model_id}>
-                {(props) => (
-                  <input
-                    {...props}
-                    type="checkbox"
-                    checked={batchIDs.includes(model.id)}
-                    disabled={
-                      locked ||
-                      refreshActive ||
-                      upstreamLocked ||
-                      (!batchIDs.includes(model.id) && batchIDs.length >= 50)
-                    }
-                    onChange={(event) => {
-                      setBatchResult(null);
-                      if (event.target.checked) {
-                        setBatchIDs((current) => [...current, model.id]);
-                        setOpenModels((current) => ({
-                          ...current,
-                          [model.id]: current[model.id] ?? model,
-                        }));
-                      } else setBatchIDs((current) => current.filter((id) => id !== model.id));
-                    }}
-                  />
-                )}
-              </Field>
-            ))}
-            {batchIDs.length ? (
-              <p>
-                {t('已选择：', 'Selected: ')}
-                {batchIDs.length} ·{' '}
-                {batchIDs.map((id) => openModels[id]?.upstream_model_id ?? id).join(', ')}
-              </p>
-            ) : null}
+          actions={
             <button
-              className="nb-btn nb-btn--secondary"
+              className={
+                (models.data?.total ?? 0) > 0 && !discovery.uncertain && state !== 'failed'
+                  ? 'nb-btn nb-btn--secondary'
+                  : 'nb-btn nb-btn--primary'
+              }
               type="button"
               disabled={
-                !batchIDs.length ||
-                batch.pending ||
-                refreshActive ||
-                upstreamLocked ||
+                discovery.pending ||
+                reloading ||
+                state === 'queued' ||
+                state === 'running' ||
+                locked ||
+                draftDirty ||
                 upstreamDirty ||
-                Object.values(lockedEditors).some(Boolean) ||
-                (!batch.uncertain && batchIDs.some((id) => !drafts[id]))
+                upstreamLocked
               }
               onClick={() => {
-                const input =
-                  batch.uncertain && batch.input
-                    ? batch.input
-                    : { models: batchIDs.map((id) => ({ id, input: drafts[id]! })) };
-                void batch.run(input, (result) => {
-                  setBatchResult(result);
-                  if (result.applied)
-                    void reloadModels(result.receipts.map((receipt) => receipt.id));
+                if (!discovery.uncertain) setOperationID('');
+                void discovery.run(discovery.input ?? {}, (result) => {
+                  client.setQueryData(
+                    ['admin', 'picture-book', account, 'refresh', result.id],
+                    result,
+                  );
+                  setOperationID(result.id);
                 });
               }}
             >
-              {batch.uncertain
-                ? t('重试同一次批量保存', 'Retry the same batch save')
-                : copy('admin.picturebook.saveSelectedModels')}
+              {discovery.uncertain
+                ? t('重试同一次模型拉取', 'Retry the same model refresh')
+                : state === 'failed'
+                  ? t('重新拉取模型目录', 'Start a new model refresh')
+                  : t('拉取模型目录', 'Refresh model catalog')}
             </button>
-            {batch.error ? <ErrorState error={batch.error} /> : null}
-            {batchResult?.issues.length ? (
-              <ul role="alert">
-                {batchResult.issues.map((issue, index) => (
-                  <li key={index}>
-                    {openModels[issue.model_id]?.upstream_model_id ?? issue.model_id}:{' '}
-                    {issue.field_path}: {issue.safe_message}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {batchResult?.applied ? (
-              <p role="status">
+          }
+        />
+        <PanelBody>
+          {draftDirty || upstreamDirty ? (
+            <p role="status">
+              {t(
+                '请先保存或放弃草稿，再刷新模型目录。',
+                'Save or discard drafts before refreshing the model catalog.',
+              )}
+            </p>
+          ) : null}
+          {discovery.uncertain ? (
+            <p role="status">
+              {t(
+                '拉取回执尚未确认，请重试同一次操作。',
+                'The refresh receipt is unconfirmed. Retry the same operation.',
+              )}
+            </p>
+          ) : null}
+          {discovery.error ? <ErrorState error={discovery.error} /> : null}
+          {operation.error ? (
+            <ErrorState error={operation.error} onRetry={() => void operation.refetch()} />
+          ) : null}
+          {operation.data?.state === 'failed' ? (
+            <section role="alert" className="picturebook-discovery-error">
+              <h3>{t('模型拉取失败', 'Model discovery failed')}</h3>
+              <p>{discoveryError(operation.data.error_code, operation.data.http_status, t)}</p>
+              {operation.data.http_status ? <p>HTTP {operation.data.http_status}</p> : null}
+              <DiscoveryFailureDiagnostics operationID={operation.data.id} />
+              <Fold plain title={t('诊断信息', 'Diagnostic information')}>
+                <p>
+                  {t('错误类别：', 'Error class: ')}
+                  <code>{operation.data.error_code ?? 'unknown'}</code>
+                </p>
+                <p>
+                  {t('操作编号：', 'Operation ID: ')}
+                  <code>{operation.data.id}</code>
+                </p>
+              </Fold>
+            </section>
+          ) : operation.data ? (
+            <p role="status">
+              {state === 'succeeded'
+                ? operation.data.model_count === 0
+                  ? t(
+                      '服务返回了空模型目录。请核对服务地址，或稍后再刷新。',
+                      'The service returned an empty catalog. Check the service URL or refresh again later.',
+                    )
+                  : t('目录已更新，模型数：', 'Catalog updated. Models: ') +
+                    formatCount(operation.data.model_count).display
+                : t('正在等待或拉取模型目录。', 'Model discovery is queued or running.')}
+            </p>
+          ) : null}
+          {models.isPending ? (
+            <LoadingState />
+          ) : models.error ? (
+            <ErrorState error={models.error} onRetry={() => void models.refetch()} />
+          ) : null}
+          <FilterBar
+            query={models}
+            activeCount={
+              Number(Boolean(filter.q)) +
+              Number(filter.type !== 'image') +
+              Number(filter.configured !== 'all') +
+              Number(filter.enabled !== 'all')
+            }
+            onSubmit={() => {}}
+            search={
+              <Field label={t('搜索全部模型目录', 'Search the full model catalog')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    placeholder={t('搜索全部模型目录', 'Search the full model catalog')}
+                    value={filter.q}
+                    maxLength={128}
+                    onChange={(event) =>
+                      setFilter((current) => ({
+                        ...current,
+                        q: event.target.value,
+                        page: 1,
+                        catalog_revision: undefined,
+                      }))
+                    }
+                  />
+                )}
+              </Field>
+            }
+            secondaryAlwaysVisible
+            secondary={
+              <>
+                <Field size="short" label={t('模型类型', 'Model type')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={filter.type}
+                      onChange={(event) =>
+                        setFilter((current) => ({
+                          ...current,
+                          type: event.target.value as CatalogFilter['type'],
+                          page: 1,
+                          catalog_revision: undefined,
+                        }))
+                      }
+                    >
+                      <option value="image">{t('图像', 'Image')}</option>
+                      <option value="unknown">{t('未分类', 'Unknown')}</option>
+                      <option value="other">{t('其他类型', 'Other types')}</option>
+                      <option value="all">{t('全部类型', 'All types')}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field size="short" label={t('配置状态', 'Configuration')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={filter.configured}
+                      onChange={(event) =>
+                        setFilter((current) => ({
+                          ...current,
+                          configured: event.target.value as CatalogFilter['configured'],
+                          page: 1,
+                          catalog_revision: undefined,
+                        }))
+                      }
+                    >
+                      <option value="all">{t('全部', 'All')}</option>
+                      <option value="true">{t('已配置', 'Configured')}</option>
+                      <option value="false">{t('未配置', 'Unconfigured')}</option>
+                    </select>
+                  )}
+                </Field>
+                <Field size="short" label={t('开放状态', 'Availability')}>
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={filter.enabled}
+                      onChange={(event) =>
+                        setFilter((current) => ({
+                          ...current,
+                          enabled: event.target.value as CatalogFilter['enabled'],
+                          page: 1,
+                          catalog_revision: undefined,
+                        }))
+                      }
+                    >
+                      <option value="all">{t('全部', 'All')}</option>
+                      <option value="true">{t('已开放', 'Enabled')}</option>
+                      <option value="false">{t('未开放', 'Disabled')}</option>
+                    </select>
+                  )}
+                </Field>
+              </>
+            }
+          />
+          {models.data ? (
+            <p role="status" className="nb-small nb-muted">
+              {t('匹配模型数：', 'Matching models: ')}
+              {formatCount(models.data.total).display} · {filter.page}/
+              {Math.max(1, Math.ceil(models.data.total / filter.page_size))}
+            </p>
+          ) : null}
+          <Fields>
+            <Field label={t('选择要配置的模型', 'Choose a model to configure')}>
+              {(props) => (
+                <select
+                  {...props}
+                  disabled={locked || refreshActive || upstreamLocked}
+                  value={selected?.id ?? ''}
+                  onChange={(event) =>
+                    selectModel(
+                      models.data?.data.find((model) => model.id === event.target.value) ?? null,
+                    )
+                  }
+                >
+                  <option value="">{t('请选择', 'Select a model')}</option>
+                  {selected && !models.data?.data.some((model) => model.id === selected.id) ? (
+                    <option value={selected.id}>{selected.upstream_model_id}</option>
+                  ) : null}
+                  {models.data?.data.map((model) => (
+                    <option value={model.id} key={model.id}>
+                      {model.upstream_model_id} ·{' '}
+                      {model.enabled ? t('已开放', 'Enabled') : t('未开放', 'Not enabled')}
+                      {model.missing
+                        ? ` · ${t('最新目录未返回', 'Missing from latest catalog')}`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+          </Fields>
+          {pendingSelection ? (
+            <div role="alert" className="picturebook-stack">
+              <p>
                 {t(
-                  '批量保存成功，正在读回权威修订。',
-                  'Batch saved; reloading authoritative revisions.',
+                  '当前模型有未保存草稿。请先保存，或明确放弃后切换；也可以继续编辑。',
+                  'The current model has an unsaved draft. Save it first, explicitly discard it, or continue editing.',
                 )}
               </p>
+              <FormActions>
+                <button
+                  className="nb-btn nb-btn--primary"
+                  type="button"
+                  disabled={locked}
+                  onClick={() => {
+                    if (selected) void editorRefs.current[selected.id]?.saveDraft();
+                  }}
+                >
+                  {t('保存并切换', 'Save and switch')}
+                </button>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() => setPendingSelection(null)}
+                >
+                  {t('继续编辑', 'Continue editing')}
+                </button>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  disabled={locked || refreshActive || upstreamLocked}
+                  onClick={() => {
+                    if (locked || refreshActive || upstreamLocked) return;
+                    if (selected) {
+                      setEpochs((current) => ({
+                        ...current,
+                        [selected.id]: (current[selected.id] ?? 0) + 1,
+                      }));
+                      setDirty((current) => ({ ...current, [selected.id]: false }));
+                    }
+                    finishSelection(pendingSelection.model);
+                  }}
+                >
+                  {t('放弃草稿并切换', 'Discard draft and switch')}
+                </button>
+              </FormActions>
+            </div>
+          ) : null}
+          {models.data ? (
+            <div className="picturebook-stack">
+              <p className="nb-small nb-muted">
+                {t(
+                  '批量选择模型（最多50项，跨页保留）',
+                  'Select up to 50 models across pages for an atomic batch save',
+                )}
+              </p>
+              {models.data.data.length === 0 ? (
+                <EmptyState
+                  title={t('暂无匹配的模型', 'No matching models')}
+                  body={t(
+                    '请调整筛选条件，或点击右上角拉取最新模型目录。',
+                    'Adjust the filters or refresh the model catalog.',
+                  )}
+                />
+              ) : (
+                <div className="picturebook-catalog-list">
+                  {models.data.data.map((model) => (
+                    <div
+                      key={model.id}
+                      className={`picturebook-catalog-row${selected?.id === model.id ? ' is-selected' : ''}`}
+                    >
+                      <Field label={model.upstream_model_id}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            type="checkbox"
+                            checked={batchIDs.includes(model.id)}
+                            disabled={
+                              locked ||
+                              refreshActive ||
+                              upstreamLocked ||
+                              (!batchIDs.includes(model.id) && batchIDs.length >= 50)
+                            }
+                            onChange={(event) => {
+                              setBatchResult(null);
+                              if (event.target.checked) {
+                                setBatchIDs((current) => [...current, model.id]);
+                                setOpenModels((current) => ({
+                                  ...current,
+                                  [model.id]: current[model.id] ?? model,
+                                }));
+                              } else
+                                setBatchIDs((current) => current.filter((id) => id !== model.id));
+                            }}
+                          />
+                        )}
+                      </Field>
+                      <div className="picturebook-actions">
+                        <StatusBadge tone={model.enabled ? 'ok' : 'neutral'}>
+                          {model.enabled ? t('已开放', 'Enabled') : t('未开放', 'Not enabled')}
+                        </StatusBadge>
+                        {model.missing ? (
+                          <StatusBadge tone="warn">
+                            {t('目录缺失', 'Missing from catalog')}
+                          </StatusBadge>
+                        ) : null}
+                        <span className="nb-small nb-muted">
+                          {t('草稿纸', 'Paper')} {model.price.paper} · {t('画笔', 'Brush')}{' '}
+                          {model.price.brush}
+                        </span>
+                        <button
+                          type="button"
+                          className="nb-btn nb-btn--secondary nb-btn--sm"
+                          disabled={locked || refreshActive || upstreamLocked}
+                          onClick={() => selectModel(model)}
+                        >
+                          {selected?.id === model.id
+                            ? t('正在配置', 'Editing')
+                            : t('配置', 'Configure')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {batchIDs.length ? (
+                <p className="nb-small nb-muted">
+                  {t('已选择：', 'Selected: ')}
+                  {batchIDs.length} ·{' '}
+                  {batchIDs.map((id) => openModels[id]?.upstream_model_id ?? id).join(', ')}
+                </p>
+              ) : null}
+              <div className="nb-actions">
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  disabled={
+                    !batchIDs.length ||
+                    batch.pending ||
+                    refreshActive ||
+                    upstreamLocked ||
+                    upstreamDirty ||
+                    Object.values(lockedEditors).some(Boolean) ||
+                    (!batch.uncertain && batchIDs.some((id) => !drafts[id]))
+                  }
+                  onClick={() => {
+                    const input =
+                      batch.uncertain && batch.input
+                        ? batch.input
+                        : { models: batchIDs.map((id) => ({ id, input: drafts[id]! })) };
+                    void batch.run(input, (result) => {
+                      setBatchResult(result);
+                      if (result.applied)
+                        void reloadModels(result.receipts.map((receipt) => receipt.id));
+                    });
+                  }}
+                >
+                  {batch.uncertain
+                    ? t('重试同一次批量保存', 'Retry the same batch save')
+                    : copy('admin.picturebook.saveSelectedModels')}
+                </button>
+              </div>
+              {batch.error ? <ErrorState error={batch.error} /> : null}
+              {batchResult?.issues.length ? (
+                <ul role="alert">
+                  {batchResult.issues.map((issue, index) => (
+                    <li key={index}>
+                      {openModels[issue.model_id]?.upstream_model_id ?? issue.model_id}:{' '}
+                      {issue.field_path}: {issue.safe_message}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {batchResult?.applied ? (
+                <p role="status">
+                  {t(
+                    '批量保存成功，正在读回权威修订。',
+                    'Batch saved; reloading authoritative revisions.',
+                  )}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="picturebook-actions">
+            {models.data && (
+              <PagePagination
+                metadata={{
+                  page: String(filter.page),
+                  page_size: filter.page_size,
+                  total_items: String(models.data.total),
+                  total_pages: String(Math.max(1, Math.ceil(models.data.total / filter.page_size))),
+                }}
+                busy={locked || models.isFetching}
+                maxPage={1000n}
+                pageSizes={[20, 50, 100]}
+                onPageChange={(page) =>
+                  setFilter((current) => ({
+                    ...current,
+                    page: Number(page),
+                    catalog_revision: models.data?.revision,
+                  }))
+                }
+                onPageSizeChange={(size) => {
+                  if (size !== 10)
+                    setFilter((current) => ({
+                      ...current,
+                      page: 1,
+                      page_size: size,
+                      catalog_revision: models.data?.revision,
+                    }));
+                }}
+              />
+            )}
+            {selected ? (
+              <button
+                className="nb-btn nb-btn--secondary"
+                type="button"
+                disabled={locked || refreshActive || upstreamLocked || models.isFetching}
+                onClick={async () => {
+                  await reloadModels([selected.id]);
+                }}
+              >
+                {dirty[selected.id]
+                  ? t('放弃草稿并重新读取模型', 'Discard draft and reload model')
+                  : t('重新读取选中模型', 'Reload selected model')}
+              </button>
             ) : null}
           </div>
-        ) : null}
-        <div className="picturebook-actions">
-          <SimplePager
-            page={filter.page}
-            hasMore={Boolean(models.data && filter.page * filter.page_size < models.data.total)}
-            disabled={locked || models.isFetching}
-            onPrev={() =>
-              setFilter((current) => ({
-                ...current,
-                page: current.page - 1,
-                catalog_revision: models.data?.revision,
-              }))
-            }
-            onNext={() =>
-              setFilter((current) => ({
-                ...current,
-                page: current.page + 1,
-                catalog_revision: models.data?.revision,
-              }))
-            }
-            labels={{ previous: t('上一页', 'Previous'), next: t('下一页', 'Next') }}
-          />
-          {selected ? (
-            <button
-              className="nb-btn nb-btn--secondary"
-              disabled={locked || refreshActive || upstreamLocked || models.isFetching}
-              onClick={async () => {
-                await reloadModels([selected.id]);
-              }}
-            >
-              {dirty[selected.id]
-                ? t('放弃草稿并重新读取模型', 'Discard draft and reload model')
-                : t('重新读取选中模型', 'Reload selected model')}
-            </button>
-          ) : null}
-        </div>
-      </Card>
+        </PanelBody>
+      </Panel>
       {reloadError ? <ErrorState error={reloadError} /> : null}
       {Object.values(openModels).map((model) => (
         <div key={model.id} hidden={selected?.id !== model.id}>
@@ -690,42 +766,44 @@ export function AdminContent({
   return (
     <div className="picturebook-stack">
       {blocker.state === 'blocked' ? (
-        <Card>
-          <div role="alert" className="picturebook-stack">
-            <p>
-              {t(
-                '绘本配置有未保存草稿。保存成功后离开、放弃草稿，或继续编辑。',
-                'Picture book settings have unsaved drafts. Save successfully before leaving, discard the drafts, or continue editing.',
-              )}
-            </p>
-            <FormActions>
-              <button
-                className="nb-btn nb-btn--primary"
-                type="button"
-                disabled={savingDrafts}
-                onClick={() => void leaveAfterSave()}
-              >
-                {t('保存并离开', 'Save and leave')}
-              </button>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                disabled={savingDrafts || modelLocked || upstreamLocked}
-                onClick={discardAndLeave}
-              >
-                {t('放弃草稿并离开', 'Discard drafts and leave')}
-              </button>
-              <button
-                className="nb-btn nb-btn--secondary"
-                type="button"
-                disabled={savingDrafts}
-                onClick={() => blocker.reset()}
-              >
-                {t('继续编辑', 'Continue editing')}
-              </button>
-            </FormActions>
-          </div>
-        </Card>
+        <Panel>
+          <PanelBody>
+            <div role="alert" className="picturebook-stack">
+              <p>
+                {t(
+                  '绘本配置有未保存草稿。保存成功后离开、放弃草稿，或继续编辑。',
+                  'Picture book settings have unsaved drafts. Save successfully before leaving, discard the drafts, or continue editing.',
+                )}
+              </p>
+              <FormActions>
+                <button
+                  className="nb-btn nb-btn--primary"
+                  type="button"
+                  disabled={savingDrafts}
+                  onClick={() => void leaveAfterSave()}
+                >
+                  {t('保存并离开', 'Save and leave')}
+                </button>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  disabled={savingDrafts || modelLocked || upstreamLocked}
+                  onClick={discardAndLeave}
+                >
+                  {t('放弃草稿并离开', 'Discard drafts and leave')}
+                </button>
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  disabled={savingDrafts}
+                  onClick={() => blocker.reset()}
+                >
+                  {t('继续编辑', 'Continue editing')}
+                </button>
+              </FormActions>
+            </div>
+          </PanelBody>
+        </Panel>
       ) : null}
       <div
         id="picture-book-panel-service"
@@ -770,12 +848,17 @@ export function AdminContent({
         ) : upstream.error ? (
           <ErrorState error={upstream.error} onRetry={() => void upstream.refetch()} />
         ) : !upstream.data?.configured ? (
-          <p className="table-note">
-            {t(
-              '请先在“图片生成服务”中配置服务，再读取模型目录。',
-              'Configure the Image generation service first, then load its model catalog.',
-            )}
-          </p>
+          <Panel>
+            <PanelBody>
+              <EmptyState
+                title={t('尚未配置生成服务', 'Service not configured')}
+                body={t(
+                  '请先在“图片生成服务”中配置服务，再读取模型目录。',
+                  'Configure the Image generation service first, then load its model catalog.',
+                )}
+              />
+            </PanelBody>
+          </Panel>
         ) : null}
         {upstream.data?.configured ? (
           <>

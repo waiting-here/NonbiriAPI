@@ -156,7 +156,7 @@ export function FishingFields({ draft, disabled, edit }: Props) {
           ))}
         </Fields>
       </fieldset>
-      <Fold title={text('宝物倍率', 'Treasure multipliers')}>
+      <Fold plain title={text('宝物倍率', 'Treasure multipliers')}>
         <p className="nb-field__help">
           {text(
             '抽中宝物时，扣费前奖励等于本次鱼饵价格乘以倍率。',

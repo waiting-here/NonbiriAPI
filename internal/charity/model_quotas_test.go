@@ -1,15 +1,22 @@
 package charity
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/connectionstore/testseed"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	upgrade "github.com/waiting-here/NonbiriAPI/internal/upgrade/v1"
 )
 
 func (e *charityTestEnv) setModelQuota(t *testing.T, model string, limits donationquota.ModelLimits, rules ...donationquota.RuleInput) {
@@ -37,8 +44,8 @@ func TestModelQuotasShareBindingsAndKeepOtherModelsAvailable(t *testing.T) {
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
 	e.splitReserve(t, 2, 3)
-	limit := "5"
-	e.setModelQuota(t, "upstream-model", donationquota.ModelLimits{Tokens: &limit}, quotaRule("tokens", "5"))
+	calls := "1"
+	e.setModelQuota(t, "upstream-model", donationquota.ModelLimits{Calls: &calls})
 	tx := beginTestTx(t, e.store.DB())
 	if _, err := testseed.InsertCharityBindingTx(t.Context(), tx, testseed.BindingInput{ModelID: e.requestModel, KeyID: e.donationKey, UpstreamModelID: "other-model", Order: 1, At: charityTestNow}); err != nil {
 		t.Fatal(err)
@@ -70,7 +77,7 @@ func TestModelQuotasShareBindingsAndKeepOtherModelsAvailable(t *testing.T) {
 		}
 	}
 	for _, model := range []string{"upstream-model", "other-model"} {
-		if usage := e.modelUsage(t, model); usage.Used.Tokens != "0" || usage.Reserved.Tokens != "0" {
+		if usage := e.modelUsage(t, model); usage.Used.Tokens != "0" || usage.Reserved.Tokens != "0" || usage.Used.Calls != "0" || usage.Used.Credits != "0" || usage.Reserved.Calls != "0" || usage.Reserved.Credits != "0" {
 			t.Fatal(usage)
 		}
 	}
@@ -102,8 +109,8 @@ func TestModelQuotasReconcileRecoveryAndLimitRemoval(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				zero := "0"
-				e.setModelQuota(t, "upstream-model", donationquota.ModelLimits{Tokens: &zero}, quotaRule("tokens", "0"))
+				reduced := "2.999"
+				e.setModelQuota(t, "upstream-model", donationquota.ModelLimits{Credits: &reduced})
 				if _, err = rail.TakeForDispatch(t.Context(), handle); !errors.Is(err, donationquota.ErrLimited) {
 					t.Fatal("lowered limit admitted dispatch", err)
 				}
@@ -183,7 +190,7 @@ func TestModelQuotasConcurrentLastSlotAndActualOverspend(t *testing.T) {
 		}
 	}
 	usage := e.modelUsage(t, "upstream-model")
-	if usage.Used.Tokens != "13" || usage.Used.OutputTokens != "9" || usage.Reserved.Tokens != "0" || *usage.Remaining.OutputTokens != "0" {
+	if usage.HistoricalCostsPartial || usage.Used.Credits != "3" || usage.Used.Calls != "1" || usage.Reserved.Calls != "0" || usage.Reserved.Credits != "0" || usage.Used.Tokens != "13" || usage.Used.OutputTokens != "9" || usage.Reserved.Tokens != "0" || *usage.Remaining.OutputTokens != "0" {
 		t.Fatal(usage)
 	}
 	if err = e.service.ValidateRecurringState(t.Context()); err != nil {
@@ -269,4 +276,74 @@ func TestModelQuotasLegacyInFlightHasNoInventedModelUsage(t *testing.T) {
 	if err := e.service.ValidateRecurringState(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
+	e := newCharityTestEnv(t)
+	rail := e.billingRail(t)
+	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
+	h := e.billingDispatch(t, rail, request.ID, 1)
+	if err := rail.MarkResponseStarted(t.Context(), h); err != nil {
+		t.Fatal(err)
+	}
+	rail = reopenAfterOfflineUpgrade(t, e)
+	restored := e.modelUsage(t, "upstream-model")
+	if !restored.HistoricalCostsPartial || restored.Reserved.Calls != "1" || restored.Reserved.Credits != "3" || restored.Reserved.Tokens != "5" {
+		t.Fatal(restored)
+	}
+	if err := e.service.ValidateRecurringState(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, err := rail.RecoverNonterminal(t.Context(), 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settled := e.modelUsage(t, "upstream-model")
+	if !settled.HistoricalCostsPartial || settled.Reserved.Calls != "0" || settled.Reserved.Credits != "0" || settled.Used.Calls != "1" || settled.Used.Credits != "3" || settled.Used.Tokens != "5" {
+		t.Fatal(settled)
+	}
+	e.billingBalance(t, e.callerID, 7600)
+	e.billingBalance(t, e.donorID, 10000)
+}
+
+func reopenAfterOfflineUpgrade(t *testing.T, e *charityTestEnv) *claim.Service {
+	t.Helper()
+	var path string
+	if err := e.store.DB().QueryRow("SELECT file FROM pragma_database_list WHERE name='main'").Scan(&path); err != nil {
+		t.Fatal(err)
+	}
+	// Recreate the exact prior layout around a real dispatched attempt, including
+	// its frozen receipt, response-start marker, ledger hold and token counters.
+	dbtest.RestoreSchema54Fixture(t, e.store.DB())
+	if err := e.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	vault, err := secret.New(bytes.Repeat([]byte{charityTestMasterKeyByte}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = vault.Close() })
+	if _, err := upgrade.Run(t.Context(), path, vault, upgrade.Options{Apply: true}); err != nil {
+		t.Fatal(err)
+	}
+	e.store, err = db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = e.store.Close() })
+	clock := func() time.Time { return time.Unix(charityTestNow+30, 0) }
+	e.donation, err = donation.New(donation.Config{Store: e.store, Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.service, err = New(Config{Store: e.store, KeyDeletion: e.donation, Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rail, err := claim.New(claim.Dependencies{DB: e.store.DB(), Secrets: vault, Charity: e.service, Accounting: claim.NewLedgerAccounting(), Acceptance: billingAcceptance{}, Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rail
 }

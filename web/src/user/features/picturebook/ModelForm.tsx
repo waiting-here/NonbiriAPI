@@ -102,34 +102,6 @@ function Fields({
       <fieldset disabled={locked}>
         <ModelParameterFields model={model} values={values} onChange={updateValues} />
       </fieldset>
-      <dl className="picturebook-facts">
-        <dt>{t('每张价格', 'Price per image')}</dt>
-        <dd>
-          {displayedPrice ? (
-            <ResourceCost value={displayedPrice.unit} />
-          ) : (
-            t('此尺寸暂无可用价格', 'No price is available for this size')
-          )}
-        </dd>
-        {displayedPrice ? (
-          <>
-            <dt>{t('计价依据', 'Price basis')}</dt>
-            <dd>
-              {displayedPrice.basis === 'size'
-                ? t('精确尺寸', 'Exact size')
-                : displayedPrice.basis === 'tier'
-                  ? t('尺寸档位', 'Size tier')
-                  : displayedPrice.basis === 'auto'
-                    ? t('自动尺寸', 'Automatic size')
-                    : t('默认价格', 'Default price')}
-            </dd>
-          </>
-        ) : null}
-        <dt>{t('本次预扣', 'Reservation')}</dt>
-        <dd>
-          <output>{total ? <ResourceCost value={total} /> : '—'}</output>
-        </dd>
-      </dl>
       {wallet && total && !enough ? (
         <p role="status">
           {t(
@@ -172,19 +144,49 @@ function Fields({
       ) : null}
       {quoteError ? <ErrorState error={quoteError} /> : null}
       {error ? <ErrorState error={error} /> : null}
-      <FormActions>
-        <button
-          className="nb-btn nb-btn--primary"
-          type="submit"
-          disabled={pending || quoting || (!uncertain && (!permitted || !wallet || !enough))}
-        >
-          {uncertain
-            ? t('重试同一次提交', 'Retry the same submission')
-            : pending || quoting
-              ? t('正在提交', 'Submitting')
-              : t('确认预扣并加入队列', 'Reserve currency and join queue')}
-        </button>
-      </FormActions>
+      <div className="picturebook-checkout">
+        <dl className="picturebook-facts">
+          <dt>{t('每张价格', 'Price per image')}</dt>
+          <dd>
+            {displayedPrice ? (
+              <ResourceCost value={displayedPrice.unit} />
+            ) : (
+              t('此尺寸暂无可用价格', 'No price is available for this size')
+            )}
+          </dd>
+          {displayedPrice ? (
+            <>
+              <dt>{t('计价依据', 'Price basis')}</dt>
+              <dd>
+                {displayedPrice.basis === 'size'
+                  ? t('精确尺寸', 'Exact size')
+                  : displayedPrice.basis === 'tier'
+                    ? t('尺寸档位', 'Size tier')
+                    : displayedPrice.basis === 'auto'
+                      ? t('自动尺寸', 'Automatic size')
+                      : t('默认价格', 'Default price')}
+              </dd>
+            </>
+          ) : null}
+          <dt>{t('本次预扣', 'Reservation')}</dt>
+          <dd>
+            <output>{total ? <ResourceCost value={total} /> : '—'}</output>
+          </dd>
+        </dl>
+        <FormActions>
+          <button
+            className="nb-btn nb-btn--primary"
+            type="submit"
+            disabled={pending || quoting || (!uncertain && (!permitted || !wallet || !enough))}
+          >
+            {uncertain
+              ? t('重试同一次提交', 'Retry the same submission')
+              : pending || quoting
+                ? t('正在提交', 'Submitting')
+                : t('确认预扣并加入队列', 'Reserve currency and join queue')}
+          </button>
+        </FormActions>
+      </div>
     </form>
   );
 }

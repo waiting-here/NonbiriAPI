@@ -21,10 +21,10 @@ func seedModelQuotaBrowser(t *testing.T, f *imageBrowserFixture, now int64, chan
 	}
 	// Seed a settled usage projection; browser actions configure real limits on
 	// this history. Reservation and settlement transitions have SQLite tests.
-	if _, err := f.store.DB().Exec(`UPDATE donation_keys SET token_reserve=5,input_token_reserve=2,output_token_reserve=3,tokens_used=nbi_u128(5),input_tokens_used=nbi_u128(2),output_tokens_used=nbi_u128(3) WHERE id=?`, key); err != nil {
+	if _, err := f.store.DB().Exec(`UPDATE donation_keys SET calls_used=nbi_u128(2),price_used_mag=nbi_u128(1125),token_reserve=5,input_token_reserve=2,output_token_reserve=3,tokens_used=nbi_u128(5),input_tokens_used=nbi_u128(2),output_tokens_used=nbi_u128(3) WHERE id=?`, key); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.DB().Exec(`INSERT INTO donation_model_quotas(donation_key_id,upstream_model_id,tokens_used,input_tokens_used,output_tokens_used,created_at) VALUES(?, ?,nbi_u128(5),nbi_u128(2),nbi_u128(3),?)`, key, names[0], now); err != nil {
+	if _, err := f.store.DB().Exec(`INSERT INTO donation_model_quotas(donation_key_id,upstream_model_id,calls_used,price_used_mag,tokens_used,input_tokens_used,output_tokens_used,created_at) VALUES(?, ?,nbi_u128(2),nbi_u128(1125),nbi_u128(5),nbi_u128(2),nbi_u128(3),?)`, key, names[0], now); err != nil {
 		t.Fatal(err)
 	}
 	return map[string]any{"donation_id": donation["id"], "key_id": key, "upstream_models": names, "model_ids": models}

@@ -282,7 +282,8 @@ export const operationsKeys = {
       pageSize,
       language,
     ] as const,
-  announcement: (id: string) => ['user', 'operations', 'announcement', id] as const,
+  announcement: (accountID: string, language: string, id: string) =>
+    ['user', 'operations', 'announcement', accountID, language, id] as const,
 };
 
 const selectAuthority = (session: UserSessionResponse | null) => session?.user ?? null;
@@ -368,8 +369,11 @@ export function useAnnouncementsPage(
 }
 
 export function useAnnouncement(id: string | undefined, enabled = true) {
+  const session = useUserAuthority(false);
+  const accountID = session.data?.id ?? 'none';
+  const language = session.data?.lang ?? '';
   return useQuery({
-    queryKey: operationsKeys.announcement(id ?? 'none'),
+    queryKey: operationsKeys.announcement(accountID, language, id ?? 'none'),
     queryFn: () => {
       if (!id) throw new ApiError('invalid_request', 'An announcement id is required.', 400);
       return decoded(

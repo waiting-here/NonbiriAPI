@@ -1,3 +1,4 @@
+import { artworkActivity, type ArtworkPlayback } from '@shared/animation/artwork-playback';
 import { blinkAt, PaintCadence } from '@shared/animation/illustration';
 import { createSweetScene } from './scene';
 import type { SceneOptions } from './scene';
@@ -6,6 +7,7 @@ import type { SweetCard } from './motion';
 export type SweetOptions = SceneOptions & {
   frozenTime?: number;
   paused?: () => boolean;
+  playback?: ArtworkPlayback;
 };
 
 export async function renderSweetHideAndSeek(
@@ -13,6 +15,7 @@ export async function renderSweetHideAndSeek(
   id: SweetCard,
   options: SweetOptions = {},
 ) {
+  const activity = artworkActivity(options.playback);
   if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   let stopScene = () => {};
   const scene = await createSweetScene(canvas, id, options, () => stopScene());
@@ -20,14 +23,14 @@ export async function renderSweetHideAndSeek(
     scene.dispose();
     throw new DOMException('Aborted', 'AbortError');
   }
-  const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const cadence = new PaintCadence();
+  const preference = activity.systemMotion;
+  const cadence = new PaintCadence(undefined, !!options.playback, options.playback?.highest);
   let request = 0,
     elapsed = options.frozenTime ?? 0,
     previous: number | undefined,
     disposed = false;
   const paint = () => {
-    const motion = !preference.matches;
+    const motion = !preference?.matches;
     const blink = motion ? blinkAt(elapsed) : 0;
     scene.paint(elapsed, blink, motion);
   };
@@ -49,7 +52,7 @@ export async function renderSweetHideAndSeek(
   };
   const tick = (now: number) => {
     request = 0;
-    if (disposed || document.hidden || preference.matches) return;
+    if (disposed || activity.hidden || preference?.matches) return;
     if (!options.paused?.()) {
       elapsed += previous === undefined ? 0 : Math.max(0, Math.min((now - previous) / 1000, 0.05));
       if (cadence.due(now)) paint();
@@ -62,7 +65,7 @@ export async function renderSweetHideAndSeek(
     request = 0;
     previous = undefined;
     cadence.reset();
-    if (!disposed && !document.hidden && !preference.matches && options.frozenTime === undefined)
+    if (!disposed && !activity.hidden && !preference?.matches && options.frozenTime === undefined)
       request = requestAnimationFrame(tick);
   };
   const preferenceChanged = () => {
@@ -75,22 +78,25 @@ export async function renderSweetHideAndSeek(
     disposed = true;
     cancelAnimationFrame(request);
     observer.disconnect();
-    document.removeEventListener('visibilitychange', reset);
+    activity.unlisten(reset);
     window.removeEventListener('resize', measure);
-    preference.removeEventListener('change', preferenceChanged);
+    preference?.removeEventListener('change', preferenceChanged);
     options.signal?.removeEventListener('abort', dispose);
     scene.dispose();
     canvas.dataset.ready = 'false';
   };
-  stopScene = dispose;
+  stopScene = () => {
+    options.playback?.setFailed(true);
+    dispose();
+  };
   try {
     measure();
     canvas.style.removeProperty('visibility');
     canvas.dataset.ready = 'true';
     observer.observe(canvas);
     window.addEventListener('resize', measure);
-    document.addEventListener('visibilitychange', reset);
-    preference.addEventListener('change', preferenceChanged);
+    activity.listen(reset);
+    preference?.addEventListener('change', preferenceChanged);
     options.signal?.addEventListener('abort', dispose, { once: true });
     reset();
   } catch (error) {

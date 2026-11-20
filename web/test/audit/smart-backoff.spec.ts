@@ -169,8 +169,6 @@ test('owner submits with automatic recovery and edits its threshold through the 
       .nth(1)
       .getByRole('checkbox', { name: new RegExp(source.label) })
       .check();
-    await picker.getByText(user.user.workflows.donationOptions, { exact: true }).click();
-    await picker.getByLabel(policy.label, { exact: true }).fill('13');
     await expect(
       picker.locator('..').getByText(backoff.automaticHelp, { exact: true }),
     ).toBeVisible();
@@ -178,6 +176,9 @@ test('owner submits with automatic recovery and edits its threshold through the 
     await page
       .getByRole('button', { name: charity.presentation.selectionDone, exact: true })
       .click();
+    const selected = page.locator('.donation-review-key').filter({ hasText: source.label });
+    await selected.getByText(user.user.workflows.donationOptions, { exact: true }).click();
+    await selected.getByLabel(policy.label, { exact: true }).fill('13');
     await page
       .getByLabel(charity.donationDescription, { exact: true })
       .fill('Synthetic smart backoff donation');

@@ -66,7 +66,9 @@ UPDATE donation_keys SET call_limit_mag=?,failure_streak=?,failure_disable_thres
 		t.Fatal("out-of-order service event disabled use early")
 	}
 	e.complete(t, second, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 200, ProtocolSuccess: true, ResponseStarted: true, Usage: contract.Usage{Present: true}})
+	assertAttemptStreak(t, e.store.DB(), second.ClaimID(), "reset", "0", "0")
 	e.complete(t, first, failure)
+	assertAttemptStreak(t, e.store.DB(), second.ClaimID(), "reset", "0", "0")
 	if err := e.store.DB().QueryRow(`SELECT failure_streak,next_fold_seq,failure_disabled FROM donation_service_health WHERE use_id=?`, chat.UseID).Scan(&streak, &cursor, &disabled); err != nil {
 		t.Fatal(err)
 	}
@@ -151,4 +153,23 @@ UPDATE donation_keys SET failure_streak=? WHERE id=?`, u128Blob(t, 1), e.donatio
 	}
 	other, _, _ := connectionDispatch(t, e, claim.RouteCharityEmbeddings)
 	e.complete(t, other, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 200, ProtocolSuccess: true, Usage: contract.Usage{Present: true}})
+}
+
+func TestDetachedServiceAttemptLeavesReplacementHealthAlone(t *testing.T) {
+	e := newBackoffEnv(t)
+	old, _, _ := connectionDispatch(t, e, claim.RouteCharityChat)
+	oldHealth := e.serviceHealthID(t, old)
+	if _, err := e.store.DB().Exec("DELETE FROM donation_service_health WHERE id=?", oldHealth); err != nil {
+		t.Fatal(err)
+	}
+	replacement, _, _ := connectionDispatch(t, e, claim.RouteCharityChat)
+	if e.serviceHealthID(t, replacement) == oldHealth {
+		t.Fatal("expected a new service health identity")
+	}
+	failure := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 503,
+		StreakDisposition: contract.StreakUpstreamFailure, FailureOrigin: contract.OriginUpstreamResponse}
+	e.complete(t, replacement, failure)
+	e.complete(t, old, failure)
+	assertAttemptStreak(t, e.store.DB(), old.ClaimID(), "unchanged", "", "")
+	assertAttemptStreak(t, e.store.DB(), replacement.ClaimID(), "incremented", "0", "1")
 }

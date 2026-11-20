@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -130,6 +131,7 @@ const model = {
 };
 
 const coreEndpoint = {
+  ...endpointScope,
   id: '1',
   connector_type: 'openai-compatible',
   base_url: 'https://upstream.test/v1',
@@ -143,6 +145,7 @@ const coreEndpoint = {
 };
 
 const coreEndpointKey = {
+  ...credentialGrant,
   id: '2',
   endpoint_id: '1',
   display_head: 'sk-a',
@@ -234,6 +237,7 @@ function coreNumberedCatalog<T extends { automatic_entries: unknown[]; manual_en
 
 function coreBinding(id: string, upstreamModelId: string, ord: number) {
   return {
+    targets: [],
     id,
     endpoint_key_id: '2',
     upstream_model_id: upstreamModelId,
@@ -465,6 +469,7 @@ function RealManagement({
 }
 
 const bindingFixture = {
+  targets: [],
   id: '10',
   ord: 0,
   donation_key_id: '6',
@@ -1009,6 +1014,8 @@ describe('experimental policy and charity controls', () => {
 
   test('refetches key authority after a lost response and keeps the committed store policy', async () => {
     let keyReads = 0;
+    let authorityReads = 0;
+    let stored = coreEndpointKey;
     const committed = {
       ...coreEndpointKey,
       force_store_false: true,
@@ -1025,10 +1032,12 @@ describe('experimental policy and charity controls', () => {
 
       if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         keyReads += 1;
-        return jsonResponse(coreNumberedPage([keyReads === 1 ? coreEndpointKey : committed]));
+        return jsonResponse(coreNumberedPage([stored]));
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
-        return jsonResponse(corePage([committed]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/2') {
+        authorityReads += 1;
+        return jsonResponse(stored);
+      }
       if (method === 'GET' && path === '/api/models?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (
@@ -1036,8 +1045,14 @@ describe('experimental policy and charity controls', () => {
         path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
       )
         return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
-      if (method === 'PATCH' && path === '/api/endpoints/1/keys/2')
+      if (method === 'PATCH' && path === '/api/endpoints/1/keys/2') {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          expected_revision: '1',
+          force_store_false: true,
+        });
+        stored = committed;
         throw new TypeError('connection reset');
+      }
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1054,6 +1069,7 @@ describe('experimental policy and charity controls', () => {
     });
     await rendered.user.click(action);
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
+    expect(authorityReads).toBe(1);
     await rendered.user.click(screen.getByRole('button', { name: 'More actions · key note' }));
     expect(
       await screen.findByRole('menuitem', { name: 'Stop asking the provider not to store chats' }),
@@ -1132,6 +1148,7 @@ describe('experimental policy and charity controls', () => {
   test('reconciles a lost endpoint-key create response from its recorded operation identity', async () => {
     let keyReads = 0;
     let keyPosts = 0;
+    let authorityReads = 0;
     const createdKey = {
       ...coreEndpointKey,
       id: '4',
@@ -1150,7 +1167,7 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         keyReads += 1;
         return jsonResponse(
-          coreNumberedPage(keyReads === 1 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
+          coreNumberedPage(keyPosts === 0 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
         );
       }
       if (method === 'POST' && path === '/api/resource-operation-status')
@@ -1159,8 +1176,11 @@ describe('experimental policy and charity controls', () => {
           stage: 'key',
           result: { endpoint_id: '1', endpoint_key_id: '4' },
         });
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
-        return jsonResponse(corePage([coreEndpointKey, createdKey]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/4') {
+        authorityReads += 1;
+        expect(keyPosts).toBe(1);
+        return jsonResponse(createdKey);
+      }
       if (method === 'GET' && path === '/api/models?page=1&page_size=20')
         return jsonResponse(coreNumberedPage([]));
       if (
@@ -1195,10 +1215,6 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    await rendered.user.selectOptions(
-      await screen.findByRole('combobox', { name: 'Current key' }),
-      '4',
-    );
     await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(screen.queryByLabelText('Key')).toBeNull());
     const original = fetchMock.mock.calls.find(
@@ -1208,6 +1224,7 @@ describe('experimental policy and charity controls', () => {
       operation_key: new Headers(original[1]?.headers).get('Idempotency-Key'),
     });
     expect(keyPosts).toBe(1);
+    expect(authorityReads).toBe(1);
     expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
   });
 
@@ -1297,6 +1314,12 @@ describe('experimental policy and charity controls', () => {
       binding_count: '0',
     };
     const candidate = {
+      native_services: ['anthropic_messages'],
+      model_types: ['chat_completions'],
+      service_routes: [
+        { operation: 'chat_completions', native_service: 'anthropic_messages', mode: 'converted' },
+      ],
+      capabilities: { can_bind: true, unavailable_reason: null },
       endpoint_key_id: '5',
       endpoint_base_url: anthropicEndpoint.base_url,
       connector_type: 'anthropic-compatible',
@@ -1333,7 +1356,7 @@ describe('experimental policy and charity controls', () => {
         expect(params.get('key_id')).toBe('5');
         return jsonResponse(coreNumberedPage([candidate]));
       }
-      if (method === 'POST' && path === '/api/models/3/bindings/batch') {
+      if (method === 'POST' && path === '/api/models/3/bindings/batch-receipt') {
         return jsonResponse(
           { error: { code: 'conflict', message: 'binding policy conflict' } },
           409,
@@ -1345,12 +1368,22 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'My models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
-    await rendered.user.click(await screen.findByRole('checkbox', { name: /^claude-3 / }));
+    await rendered.user.click(await screen.findByRole('checkbox', { name: 'claude-3' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
     await waitFor(() =>
-      expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch')).toEqual({
+      expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch-receipt')).toEqual({
         expected_binding_revision: '0',
-        selections: [{ endpoint_key_id: '5', upstream_model_id: 'claude-3' }],
+        selections: [
+          {
+            targets: [
+              {
+                endpoint_key_id: '5',
+                upstream_model_id: 'claude-3',
+                native_services: ['anthropic_messages'],
+              },
+            ],
+          },
+        ],
       }),
     );
     await waitFor(() => expect(bindingReads).toBeGreaterThan(1));
@@ -1358,7 +1391,7 @@ describe('experimental policy and charity controls', () => {
     expect(
       fetchMock.mock.calls.filter(
         (call) =>
-          requestPath(call[0] as string) === '/api/models/3/bindings/batch' &&
+          requestPath(call[0] as string) === '/api/models/3/bindings/batch-receipt' &&
           (call[1] as RequestInit | undefined)?.method === 'POST',
       ),
     ).toHaveLength(1);
@@ -1407,10 +1440,8 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'My models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'provider/model' }));
-    await rendered.user.click(
-      await screen.findByRole('button', { name: 'Source actions for gpt-a' }),
-    );
-    await rendered.user.click(await screen.findByRole('menuitem', { name: 'Move down' }));
+    const row = (await screen.findByText('gpt-a', { selector: 'strong' })).closest('li')!;
+    await rendered.user.click(within(row).getByRole('button', { name: 'Move down' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save complete order' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({
@@ -2610,6 +2641,7 @@ describe('experimental policy and charity controls', () => {
       route: '/steward?tab=logs',
     });
     const load = async () => {
+      await rendered.user.click(await screen.findByRole('tab', { name: 'Discovery and activity' }));
       const diagnostics = await screen.findByRole('region', {
         name: 'Discovery and activity diagnostics',
       });
@@ -2630,8 +2662,8 @@ describe('experimental policy and charity controls', () => {
     await act(async () => {
       await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
     });
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Abuse audit' })).toBeVisible());
-    expect(screen.getByRole('tab', { name: 'Request logs' })).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Abuse audit' })).toBeNull());
+    expect(await screen.findByRole('tab', { name: 'Request logs' })).toBeVisible();
     await act(async () => {
       finishOld(jsonResponse(detail(false)));
     });
@@ -2846,7 +2878,9 @@ describe('experimental policy and charity controls', () => {
       role: 'level5',
     });
     await rendered.user.click(await screen.findByRole('tab', { name: 'Charity management' }));
-    await rendered.user.click(screen.getByRole('tab', { name: 'Charity models and sources' }));
+    await rendered.user.click(
+      await screen.findByRole('tab', { name: 'Charity models and sources' }),
+    );
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
     const description = screen
@@ -2958,7 +2992,9 @@ describe('experimental policy and charity controls', () => {
     });
     await screen.findByText('No logs');
     await rendered.user.click(screen.getByRole('tab', { name: 'Charity management' }));
-    await rendered.user.click(screen.getByRole('tab', { name: 'Charity models and sources' }));
+    await rendered.user.click(
+      await screen.findByRole('tab', { name: 'Charity models and sources' }),
+    );
     await screen.findByText('[公益]provider/charity-model');
     const modelPageKey = [...charityKeys.root('steward'), 'model-pages'];
     expect(
@@ -3445,7 +3481,7 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<UserLayout />, { station: 'user', role: 'user' });
     await screen.findByText('fixture-user');
     rendered.queryClient.setQueryData(userKeys.models, [model]);
-    await rendered.user.click(screen.getByRole('button', { name: 'fixture-user' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Account actions · fixture-user' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Sign out' }));
     await expect(screen.findByText('logout refused')).resolves.toBeVisible();
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
@@ -3727,7 +3763,7 @@ describe('experimental policy and charity controls', () => {
 
     await waitFor(() => {
       expect(listReads).toBe(1);
-      expect(screen.getByText('Nothing here yet')).toBeVisible();
+      expect(screen.getByText('No services yet')).toBeVisible();
     });
     expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1')).toEqual({
       expected_revision: '1',
@@ -3795,7 +3831,7 @@ describe('experimental policy and charity controls', () => {
       ),
     );
 
-    await waitFor(() => expect(screen.getByText('Nothing here yet')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('No services yet')).toBeVisible());
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBeGreaterThanOrEqual(3);
   });

@@ -482,6 +482,7 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	if err != nil || len(bindings.Value.Bindings) != 1 || bindings.Value.BindingRevision != "1" {
 		t.Fatalf("add bindings = %+v err=%v", bindings.Value, err)
 	}
+	priorExpiryCalls := environment.state.dueCalls.Load()
 	snapshot, err := environment.service.chatSnapshot(context.Background(), modelID, routingTestNow,
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil || len(snapshot.Candidates()) != 1 || snapshot.Candidates()[0].DonationKeyID != donationKeyID || snapshot.ReservedMilli != 2400 {
@@ -511,8 +512,8 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	if _, err := environment.service.decodeModelCursor(token, scope, paginationOwner(roleAdmin, 0, "changed", ""), routingTestNow); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("cross-filter cursor error = %v, want invalid", err)
 	}
-	if environment.state.dueCalls.Load() == 0 {
-		t.Fatal("routing reads did not invoke expiry owner")
+	if environment.state.dueCalls.Load() != priorExpiryCalls {
+		t.Fatal("routing reads with no due expiry acquired the expiry owner")
 	}
 }
 
@@ -546,8 +547,8 @@ func TestRuntimePreflightIsCandidateFreeAndEnforcesCallerPolicy(t *testing.T) {
 		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("candidate-free model snapshot error=%v", err)
 	}
-	if environment.state.dueCalls.Load() != 1 {
-		t.Fatalf("snapshot expiry calls=%d", environment.state.dueCalls.Load())
+	if environment.state.dueCalls.Load() != 0 {
+		t.Fatalf("empty snapshot ran unnecessary expiry work %d times", environment.state.dueCalls.Load())
 	}
 
 	short, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"[公益]provider/model","messages":[{"role":"user","content":"hi"}]}`), openai.MaxRequestBodyBytes)

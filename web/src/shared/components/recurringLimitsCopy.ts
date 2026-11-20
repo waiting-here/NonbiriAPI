@@ -52,7 +52,7 @@ export interface RecurringLimitsCopy {
   structuralChanges: string;
   structuralLimit: string;
   structuralOrder: string;
-  structuralAdded: (index: number) => string;
+  structuralAdded: (numbers: readonly number[]) => string;
   structuralDeleted: string;
   structuralReset: (index: number) => string;
   noChanges: string;
@@ -129,7 +129,7 @@ const en: RecurringLimitsCopy = {
   charityOnly:
     "Donation limits count charity calls only. Personal calls are not included and may cause actual usage of a shared key to exceed the site's charity totals. We recommend using separate keys for donations and personal use.",
   privacyNote:
-    "Administrators and current level-5 users can manage charity settings. Owners can view their limits. Steward views hide other donors' private details; these pages never show complete keys.",
+    'Administrators and stewards with quota-management access can edit these limits. Donors can view the limits on their own keys.',
   ruleCount: (count) => `${count} of 16 rules`,
   noRules: 'No recurring rules are configured for this key.',
   addRule: 'Add recurring rule',
@@ -165,7 +165,8 @@ const en: RecurringLimitsCopy = {
   structuralChanges: 'What this save changes',
   structuralLimit: 'Changing a limit keeps recorded usage and in-flight reservations.',
   structuralOrder: 'Changing the display order keeps recorded usage and in-flight reservations.',
-  structuralAdded: (index) => `Rule ${index} starts constraining calls sent after this save.`,
+  structuralAdded: (numbers) =>
+    `${numbers.length === 1 ? 'Rule' : 'Rules'} ${numbers.join(', ')} will apply to new calls.`,
   structuralDeleted: `Deleting a rule stops that constraint for new sends. Existing usage and accounting remain.`,
   structuralReset: (index) =>
     `Rule ${index} changes structure and starts counting again from this save. Its lifetime total and accounting remain.`,
@@ -233,8 +234,7 @@ const en: RecurringLimitsCopy = {
   slidingStart: 'Rolling window; no fixed start',
   deleteEffect:
     'Deleting this rule stops its constraint for new sends; existing usage and accounting are retained.',
-  preserveUsage:
-    'Calls already sent finish under the rules captured when sent. This change applies to later dispatches.',
+  preserveUsage: 'Calls already sent keep their original rules.',
   browserZone: (zone) => `Browser time zone: ${zone}`,
   zoneExample: (zone, offset, local) =>
     `${zone} · current offset ${offset} · local example ${local}`,
@@ -259,7 +259,7 @@ const zh: RecurringLimitsCopy = {
   charityOnly:
     '本站的捐赠限量只统计公益调用，不包含自用调用。同一密钥同时用于自用时，实际消耗可能高于本站记录的公益用量，影响限额控制。建议将捐赠密钥与自用密钥分开使用。',
   privacyNote:
-    '管理员和当前 5 级用户可管理公益配置，捐赠者可查看本人限量。协管视图隐藏他人的捐赠者资料；这些页面都不会显示完整密钥。',
+    '管理员及拥有额度管理权限的协管可以编辑限额。捐赠人可查看自己密钥的限额。',
   ruleCount: (count) => `${count}/16 条规则`,
   noRules: '此密钥尚未配置循环规则。',
   addRule: '添加循环规则',
@@ -295,7 +295,7 @@ const zh: RecurringLimitsCopy = {
   structuralChanges: '本次保存的影响',
   structuralLimit: '调整上限会保留已记录用量和在途预留。',
   structuralOrder: '调整显示顺序会保留已记录用量和在途预留。',
-  structuralAdded: (index) => `规则 ${index} 将从本次保存后发出的调用开始约束。`,
+  structuralAdded: (numbers) => `保存后，新请求将按规则 ${numbers.join('、')} 执行。`,
   structuralDeleted: '删除规则会停止它对新发送调用的约束；已有用量和账务保留。',
   structuralReset: (index) =>
     `规则 ${index} 发生结构变化，将从本次保存起重新计量；累计总量和账务保留。`,
@@ -343,7 +343,7 @@ const zh: RecurringLimitsCopy = {
   slidingRecovery: '旧用量移出滑动窗口后容量恢复，不承诺固定重置时间。',
   slidingStart: '滑动窗口；无固定起算',
   deleteEffect: '删除规则会停止它对新发送调用的约束；已有用量和账务保留。',
-  preserveUsage: '已发出的调用按发送时捕获的规则收尾；此变更约束之后发送的调用。',
+  preserveUsage: '已发出的请求仍按原规则结算。',
   browserZone: (zone) => `当前浏览器时区：${zone}`,
   zoneExample: (zone, offset, local) => `${zone} · 当前偏移 ${offset} · 当地示例 ${local}`,
   periodValue: (business, browser) => `${business} · ${browser}`,

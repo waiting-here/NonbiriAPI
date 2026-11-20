@@ -4,36 +4,48 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math/big"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
-func (b modelBudget) adjusted(previous, next TokenVector) ([3]db.U128, error) {
-	result := [3]db.U128{}
-	if !previous.Valid() || !next.Valid() {
-		return result, ErrInvariant
-	}
+// Consumption uses the same call, price and token amounts as the containing key.
+type Consumption struct {
+	TokenVector
+	Calls      int64
+	PriceMilli int64
+}
+
+func (c Consumption) valid() bool { return c.TokenVector.Valid() && c.Calls >= 0 && c.PriceMilli >= 0 }
+
+func (c Consumption) amounts() Amounts {
+	a := c.TokenVector.Amounts()
+	a.Calls, _ = db.U128FromBig(big.NewInt(c.Calls))
+	a.Credits, _ = db.U128FromBig(big.NewInt(c.PriceMilli))
+	return a
+}
+
+func (b modelBudget) adjusted(previous, next Amounts) ([len(modelMetrics)]db.U128, error) {
+	result := [len(modelMetrics)]db.U128{}
 	old, newValues := modelValues(previous), modelValues(next)
-	for i := range 3 {
+	for i := range modelMetrics {
 		without, err := subtract(b.reserved[i], old[i])
 		if err != nil {
 			return result, err
 		}
-		occupied, err := add(b.used[i], without)
-		if err != nil {
-			return result, err
-		}
-		total, err := add(occupied, newValues[i])
-		if err != nil {
-			return result, err
-		}
-		if b.limits[i] != nil {
-			if i > 0 && next.Input == nil {
+		occupied := new(big.Int).Add(b.used[i].Big(), without.Big())
+		total := new(big.Int).Add(occupied, newValues[i].Big())
+		if limit := b.limits[i]; limit != nil {
+			metric := modelMetrics[i]
+			if (metric == "input_tokens" || metric == "output_tokens") && !next.TokenBreakdown {
 				return result, ErrLimited
 			}
-			if occupied.Big().Cmp(b.limits[i].Big()) >= 0 || total.Big().Cmp(b.limits[i].Big()) > 0 {
+			if occupied.Cmp(limit.Big()) >= 0 || total.Cmp(limit.Big()) > 0 {
 				return result, ErrLimited
 			}
+		}
+		if total.BitLen() > 128 {
+			return result, ErrInvariant
 		}
 		result[i], err = add(without, newValues[i])
 		if err != nil {
@@ -45,10 +57,11 @@ func (b modelBudget) adjusted(previous, next TokenVector) ([3]db.U128, error) {
 
 // ReplaceModelReservation shares the caller's key/claim transaction. Removing a
 // model limit preserves cumulative usage and outstanding reservations.
-func ReplaceModelReservation(ctx context.Context, tx *sql.Tx, keyID, now int64, model string, previous, next TokenVector) error {
+func ReplaceModelReservation(ctx context.Context, tx *sql.Tx, keyID, now int64, model string, previous, next Consumption) error {
+	// Receipts created before exact-model tracking have no model counter.
 	if model == "" {
 		return nil
-	} // Existing claims have no historical model counter.
+	}
 	if !ValidModel(model) || keyID <= 0 || !validNow(now) {
 		return ErrInvalid
 	}
@@ -56,25 +69,28 @@ func ReplaceModelReservation(ctx context.Context, tx *sql.Tx, keyID, now int64, 
 	if err != nil {
 		return err
 	}
-	reserved, err := b.adjusted(previous, next)
+	if !previous.valid() || !next.valid() {
+		return ErrInvariant
+	}
+	reserved, err := b.adjusted(previous.amounts(), next.amounts())
 	if err != nil {
 		return err
 	}
 	if b.created == nil {
-		_, err = tx.ExecContext(ctx, `INSERT INTO donation_model_quotas(donation_key_id,upstream_model_id,tokens_reserved,input_tokens_reserved,output_tokens_reserved,created_at) VALUES(?,?,?,?,?,?)`,
-			keyID, model, db.EncodeU128(reserved[0]), db.EncodeU128(reserved[1]), db.EncodeU128(reserved[2]), now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO donation_model_quotas(donation_key_id,upstream_model_id,tokens_reserved,input_tokens_reserved,output_tokens_reserved,calls_reserved,price_reserved_mag,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+			keyID, model, db.EncodeU128(reserved[0]), db.EncodeU128(reserved[1]), db.EncodeU128(reserved[2]), db.EncodeU128(reserved[3]), db.EncodeU128(reserved[4]), now)
 		return err
 	}
-	return oneRow(tx.ExecContext(ctx, `UPDATE donation_model_quotas SET tokens_reserved=?,input_tokens_reserved=?,output_tokens_reserved=?
- WHERE donation_key_id=? AND upstream_model_id=? AND tokens_reserved=? AND input_tokens_reserved=? AND output_tokens_reserved=?`,
-		db.EncodeU128(reserved[0]), db.EncodeU128(reserved[1]), db.EncodeU128(reserved[2]), keyID, model, db.EncodeU128(b.reserved[0]), db.EncodeU128(b.reserved[1]), db.EncodeU128(b.reserved[2])))
+	return oneRow(tx.ExecContext(ctx, `UPDATE donation_model_quotas SET tokens_reserved=?,input_tokens_reserved=?,output_tokens_reserved=?,calls_reserved=?,price_reserved_mag=?
+ WHERE donation_key_id=? AND upstream_model_id=? AND tokens_reserved=? AND input_tokens_reserved=? AND output_tokens_reserved=? AND calls_reserved=? AND price_reserved_mag=?`,
+		db.EncodeU128(reserved[0]), db.EncodeU128(reserved[1]), db.EncodeU128(reserved[2]), db.EncodeU128(reserved[3]), db.EncodeU128(reserved[4]), keyID, model, db.EncodeU128(b.reserved[0]), db.EncodeU128(b.reserved[1]), db.EncodeU128(b.reserved[2]), db.EncodeU128(b.reserved[3]), db.EncodeU128(b.reserved[4])))
 }
 
-func SettleModelTokens(ctx context.Context, tx *sql.Tx, keyID int64, model string, previous, actual TokenVector) error {
+func SettleModelConsumption(ctx context.Context, tx *sql.Tx, keyID int64, model string, previous, actual Consumption) error {
 	if model == "" {
 		return nil
 	}
-	if !previous.Valid() || !actual.Valid() {
+	if !previous.valid() || !actual.valid() {
 		return ErrInvariant
 	}
 	b, err := readModelBudget(ctx, tx, keyID, model)
@@ -84,8 +100,8 @@ func SettleModelTokens(ctx context.Context, tx *sql.Tx, keyID int64, model strin
 	if b.created == nil {
 		return ErrInvariant
 	}
-	old, newValues := modelValues(previous), modelValues(actual)
-	for i := range 3 {
+	old, newValues := modelValues(previous.amounts()), modelValues(actual.amounts())
+	for i := range modelMetrics {
 		if b.reserved[i], err = subtract(b.reserved[i], old[i]); err != nil {
 			return err
 		}
@@ -98,16 +114,16 @@ func SettleModelTokens(ctx context.Context, tx *sql.Tx, keyID int64, model strin
 			return err
 		}
 	}
-	return oneRow(tx.ExecContext(ctx, `UPDATE donation_model_quotas SET tokens_used=?,input_tokens_used=?,output_tokens_used=?,tokens_reserved=?,input_tokens_reserved=?,output_tokens_reserved=?,unattributed_total_tokens=?
- WHERE donation_key_id=? AND upstream_model_id=?`, db.EncodeU128(b.used[0]), db.EncodeU128(b.used[1]), db.EncodeU128(b.used[2]), db.EncodeU128(b.reserved[0]), db.EncodeU128(b.reserved[1]), db.EncodeU128(b.reserved[2]), db.EncodeU128(b.unattributed), keyID, model))
+	return oneRow(tx.ExecContext(ctx, `UPDATE donation_model_quotas SET tokens_used=?,input_tokens_used=?,output_tokens_used=?,calls_used=?,price_used_mag=?,tokens_reserved=?,input_tokens_reserved=?,output_tokens_reserved=?,calls_reserved=?,price_reserved_mag=?,unattributed_total_tokens=?
+ WHERE donation_key_id=? AND upstream_model_id=?`, db.EncodeU128(b.used[0]), db.EncodeU128(b.used[1]), db.EncodeU128(b.used[2]), db.EncodeU128(b.used[3]), db.EncodeU128(b.used[4]), db.EncodeU128(b.reserved[0]), db.EncodeU128(b.reserved[1]), db.EncodeU128(b.reserved[2]), db.EncodeU128(b.reserved[3]), db.EncodeU128(b.reserved[4]), db.EncodeU128(b.unattributed), keyID, model))
 }
 
-func ModelAvailable(ctx context.Context, q Reader, keyID, now int64, model string, reservation TokenVector) (bool, error) {
+func ModelAvailable(ctx context.Context, q Reader, keyID, now int64, model string, reservation Amounts) (bool, error) {
 	b, err := readModelBudget(ctx, q, keyID, model)
 	if err != nil {
 		return false, err
 	}
-	if _, err = b.adjusted(TokenVector{}, reservation); errors.Is(err, ErrLimited) {
+	if _, err = b.adjusted(Amounts{}, reservation); errors.Is(err, ErrLimited) {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -116,5 +132,5 @@ func ModelAvailable(ctx context.Context, q Reader, keyID, now int64, model strin
 	if err != nil {
 		return false, err
 	}
-	return viewsAvailable(rules, reservation.Amounts())
+	return viewsAvailable(rules, reservation)
 }

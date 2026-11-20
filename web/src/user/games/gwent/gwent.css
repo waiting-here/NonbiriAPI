@@ -480,20 +480,54 @@
 }
 
 .gwent-host-dialog {
-  --panel: #10151e;
-  --text: #e9eef8;
-  --muted: #98a4b8;
-  color: #e9eef8;
-  background: #10151e;
-  border: 1px solid #293544;
+  --panel: #121924;
+  --text: #eef2f9;
+  --muted: #a6b3c8;
+  --nb-color-bg: #0c1017;
+  --nb-color-surface: #121924;
+  --nb-color-surface-raised: #182231;
+  --nb-color-surface-muted: #1e2a3b;
+  --nb-color-surface-emphasis: #223044;
+  --nb-color-surface-alt: #16202e;
+  --nb-color-text: #eef2f9;
+  --nb-color-text-muted: #a6b3c8;
+  --nb-color-text-subtle: #7d8ca3;
+  --nb-color-border: rgba(214, 185, 123, 0.22);
+  --nb-color-border-strong: rgba(214, 185, 123, 0.42);
+  --nb-color-accent: #d8b36a;
+  --nb-color-accent-hover: #e5c47f;
+  --nb-color-accent-soft: rgba(216, 179, 106, 0.18);
+  --nb-color-accent-quiet: rgba(216, 179, 106, 0.1);
+  --nb-color-accent-contrast: #17120a;
+  color: var(--nb-color-text);
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border);
   border-radius: 16px;
-  font-family: 'Segoe UI', system-ui, sans-serif;
 }
-.gwent-host-dialog .btn {
+.gwent-host-dialog :is(.btn, .nb-btn--secondary) {
   border-radius: 8px;
-  border: 1px solid #293544;
-  color: #e9eef8;
-  background: #171f2b;
+  border: 1px solid var(--nb-color-border);
+  color: var(--nb-color-text);
+  background: var(--nb-color-surface-raised);
+}
+.gwent-host-dialog .gwt-ranking-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.gwent-host-dialog .gwt-ranking-scroll table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+}
+.gwent-host-dialog .gwt-ranking-scroll th,
+.gwent-host-dialog .gwt-ranking-scroll td {
+  padding: 0.55rem;
+  border-bottom: 1px solid var(--nb-color-border);
+  text-align: left;
+}
+.gwent-host-dialog .gwt-ranking-scroll :is(th, td):nth-child(n + 3) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .gwent-frame-fallback {

@@ -1,8 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { isBulkProduct } from './bulk';
+import { creditHistoryKeys } from '../../features/credits/queries';
 import { stationSessionWrite, StationSessionChangedError } from '@shared/charityManagement';
 import { apiFetch, ApiError } from '@shared/query/http';
-import { idempotentOptions, queryPath } from '@shared/operations/api';
+import { idempotentOptions, queryPath, responseOutcomeUnknown } from '@shared/operations/api';
 import type {
   Action,
   Configuration,
@@ -30,6 +31,10 @@ export function createGachaPort(client: QueryClient, account: string): GachaPort
     history: (cursor) =>
       bound(() => apiFetch<HistoryPage>(queryPath('/api/gacha/history', { cursor }))),
     act: async (input: Action, key: string) => {
+      const changesCredits =
+        input.action === 'buy' ||
+        input.action === 'claim' ||
+        (input.action === 'redeem' && isBulkProduct(input.product));
       const confirmed = await bound(async () => {
         const result = await apiFetch<Outcome | { rejection: string }>(
           '/api/gacha/actions',
@@ -39,14 +44,15 @@ export function createGachaPort(client: QueryClient, account: string): GachaPort
         if (!result.snapshot)
           throw new ApiError('invalid_response', 'The activity result was incomplete.', 0);
         return result;
+      }).catch((error: unknown) => {
+        if (changesCredits && responseOutcomeUnknown(error)) {
+          void client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
+        }
+        throw error;
       });
-      if (
-        input.action === 'buy' ||
-        input.action === 'claim' ||
-        (input.action === 'redeem' && isBulkProduct(input.product))
-      ) {
+      if (changesCredits) {
         void client.invalidateQueries({ queryKey: ['user', 'session'] });
-        void client.invalidateQueries({ queryKey: ['user', 'credits'] });
+        void client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
       }
       return confirmed;
     },

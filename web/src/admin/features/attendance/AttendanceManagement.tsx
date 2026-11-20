@@ -124,6 +124,7 @@ function AttendanceEditor({
     <>
       <Button
         type="button"
+        size={period ? 'sm' : undefined}
         variant={period ? 'secondary' : 'primary'}
         onClick={() => setOpen(true)}
       >
@@ -206,23 +207,25 @@ function AttendanceEditor({
                 )}
               </Field>
             </Fields>
-            <Segmented
-              label={t('admin.attendance.mode')}
-              value={draft.mode}
-              disabled={busy || unknown || !editable}
-              options={[
-                { value: 'cumulative', label: t('admin.attendance.cumulative') },
-                { value: 'consecutive', label: t('admin.attendance.consecutive') },
-              ]}
-              onChange={(mode) => change({ ...draft, mode })}
-            />
-            <p className="nb-small nb-muted">
-              {t(
-                draft.mode === 'consecutive'
-                  ? 'admin.attendance.consecutiveHelp'
-                  : 'admin.attendance.cumulativeHelp',
-              )}
-            </p>
+            <div className="attendance-editor__mode">
+              <Segmented
+                label={t('admin.attendance.mode')}
+                value={draft.mode}
+                disabled={busy || unknown || !editable}
+                options={[
+                  { value: 'cumulative', label: t('admin.attendance.cumulative') },
+                  { value: 'consecutive', label: t('admin.attendance.consecutive') },
+                ]}
+                onChange={(mode) => change({ ...draft, mode })}
+              />
+              <p className="nb-small nb-muted">
+                {t(
+                  draft.mode === 'consecutive'
+                    ? 'admin.attendance.consecutiveHelp'
+                    : 'admin.attendance.cumulativeHelp',
+                )}
+              </p>
+            </div>
             <Toggle
               label={t('admin.attendance.published')}
               checked={draft.published}
@@ -265,6 +268,7 @@ function AttendanceEditor({
                     </Field>
                     <Button
                       type="button"
+                      size="sm"
                       disabled={busy || unknown || !editable || draft.tiers.length === 1}
                       onClick={() =>
                         change({ ...draft, tiers: draft.tiers.filter((_, i) => i !== index) })
@@ -377,6 +381,23 @@ export function AttendanceManagement({ account, enabled }: { account: string; en
               title={period.title}
               actions={
                 <>
+                  <StatusBadge
+                    tone={
+                      period.status === 'active'
+                        ? 'ok'
+                        : period.status === 'upcoming'
+                          ? 'info'
+                          : 'neutral'
+                    }
+                  >
+                    {t(
+                      period.status === 'active'
+                        ? 'admin.attendance.statusActive'
+                        : period.status === 'upcoming'
+                          ? 'admin.attendance.statusUpcoming'
+                          : 'admin.attendance.statusEnded',
+                    )}
+                  </StatusBadge>
                   <StatusBadge tone={period.published ? 'ok' : 'neutral'}>
                     {t(period.published ? 'admin.attendance.published' : 'admin.attendance.draft')}
                   </StatusBadge>
@@ -404,7 +425,7 @@ export function AttendanceManagement({ account, enabled }: { account: string; en
                 {period.description && <MarkdownText>{period.description}</MarkdownText>}
                 <div className="attendance-management__rewards">
                   {period.tiers.map((tier) => (
-                    <div key={tier.days}>
+                    <div className="attendance-management__tier" key={tier.days}>
                       <strong>
                         {t('admin.attendance.tierDays', { amount: formatCount(tier.days).display })}
                       </strong>

@@ -27,8 +27,8 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 	}
 	for key := range object {
 		switch key {
-		case "model", "input", "instructions", "stream", "store", "background", "tools", "tool_choice", "parallel_tool_calls", "max_output_tokens", "temperature", "top_p", "text":
-		case "reasoning", "include", "truncation", "metadata":
+		case "model", "input", "instructions", "stream", "store", "background", "tools", "tool_choice", "parallel_tool_calls", "max_output_tokens", "temperature", "top_p", "text", "reasoning":
+		case "include", "truncation", "metadata":
 			return bad(key)
 		default:
 			return bad("request")
@@ -39,6 +39,17 @@ func (r *InferenceRequest) compileChatResponseMode(model string, policy contract
 		return nil, err
 	}
 	out := map[string]any{"model": model, "messages": messages, "stream": r.Stream, "store": false, "n": 1}
+	if raw := object["reasoning"]; raw != nil && !isJSONNull(raw) {
+		reasoning, ok := decisionObject(raw, "effort")
+		if !ok {
+			return bad("reasoning")
+		}
+		effort, ok := decisionString(reasoning["effort"], 1, 7)
+		if !ok || !ValidReasoningEffort(effort) {
+			return bad("reasoning")
+		}
+		out["reasoning_effort"] = effort
+	}
 	if policy.SafetyIdentifier != "" {
 		out["safety_identifier"] = policy.SafetyIdentifier
 	}

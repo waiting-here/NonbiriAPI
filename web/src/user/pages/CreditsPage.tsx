@@ -11,6 +11,7 @@ import { Link } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
 import { PagePagination } from '@shared/operations/PagePagination';
+import { DEFAULT_PAGE } from '@shared/operations/usePagePager';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { formatDateTime } from '@shared/utils/datetime';
 import { UserPageGate } from '../components/UserPageGate';
@@ -25,6 +26,7 @@ import {
   type HistoryPage,
 } from '../features/credits/data';
 import { useCreditCopy } from '../features/credits/copy';
+import { creditHistoryKeys } from '../features/credits/queries';
 import { useCreditHistoryUrl } from '../features/credits/url';
 import '../features/credits/credits.css';
 
@@ -56,8 +58,9 @@ function CreditHistory({
       active = false;
     };
   }, [url.filter.from, url.filter.to]);
+  const historyScope = creditHistoryKeys.account(accountID);
   const history = useQuery<HistoryPage, Error>({
-    queryKey: ['user', 'credit-history', accountID, url.filter, url.refreshRevision],
+    queryKey: [...historyScope, url.filter],
     queryFn: async ({ signal }) => {
       if (!coreSessionMatchesAccount(client, accountID)) throw new CancelledError();
       const page = await loadHistory(
@@ -76,10 +79,19 @@ function CreditHistory({
     enabled: Boolean(accountID),
     retry: false,
   });
-  const data = useRetainedQueryData(history, ['user', 'credit-history', accountID]);
+  const data = useRetainedQueryData(history, historyScope);
   const busy = history.isFetching;
   const timeReady =
     timeDraftValue(fromTimeDraft) !== undefined && timeDraftValue(toTimeDraft) !== undefined;
+  const refresh = () => {
+    // Mark cached pages stale before returning to the first page without its old anchor.
+    void client.invalidateQueries({ queryKey: historyScope, refetchType: 'none' });
+    if (url.filter.page === DEFAULT_PAGE && url.filter.anchor === undefined) {
+      void history.refetch();
+    }
+    url.refresh();
+    void wallet.refetch();
+  };
   const reset = () => {
     setValidation(null);
     setFromTimeDraft(createTimeDraft(null));
@@ -124,36 +136,39 @@ function CreditHistory({
             type="button"
             className="nb-btn nb-btn--secondary"
             disabled={busy}
-            onClick={url.refresh}
+            onClick={refresh}
           >
             {copy.refresh}
           </button>
         }
       />
       <Card>
-        <div className="nb-stats credit-history__overview" aria-label={copy.asset}>
-          {[
-            [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—'), 'credits'],
-            [copy.game, history.isError ? '—' : (data?.game_balance ?? '—'), 'credits'],
-            [copy.sketch_paper, wallet.isError ? '—' : (wallet.data?.sketch_paper ?? '—'), 'count'],
-            [copy.sketch_brush, wallet.isError ? '—' : (wallet.data?.sketch_brush ?? '—'), 'count'],
-          ].map(([label, value, type]) => (
-            <div
-              className={`nb-stat${value.length > 12 ? ' credit-history__balance--long' : ''}`}
-              key={label}
-            >
-              <span>{label}</span>
-              <strong>
-                {value === '—' ? (
-                  value
-                ) : type === 'count' ? (
-                  <ExactCount value={value} />
-                ) : (
-                  <ExactCredits value={value} />
-                )}
-              </strong>
-            </div>
-          ))}
+        <div className="credit-history__overview" aria-label={copy.asset}>
+          <div className="nb-stats">
+            {[
+              [copy.balance, history.isError ? '—' : (data?.current_balance ?? '—')],
+              [copy.game, history.isError ? '—' : (data?.game_balance ?? '—')],
+            ].map(([label, value]) => (
+              <div
+                className={`nb-stat${value.length > 12 ? ' credit-history__balance--long' : ''}`}
+                key={label}
+              >
+                <span>{label}</span>
+                <strong>{value === '—' ? value : <ExactCredits value={value} />}</strong>
+              </div>
+            ))}
+          </div>
+          {(['sketch_paper', 'sketch_brush'] as const).map((asset) => {
+            const value = wallet.isError ? undefined : wallet.data?.[asset];
+            if (!wallet.isError && url.filter.asset_type !== asset && (!value || value === '0'))
+              return null;
+            return (
+              <span className="credit-history__supply" key={asset}>
+                <span>{copy[asset]}</span>{' '}
+                <span>{value === undefined ? '—' : <ExactCount value={value} />}</span>
+              </span>
+            );
+          })}
         </div>
         {wallet.isError ? (
           <ErrorState error={wallet.error} onRetry={() => void wallet.refetch()} />
@@ -176,7 +191,13 @@ function CreditHistory({
           onReset={reset}
           submitDisabled={busy || !timeReady}
           resetDisabled={busy}
-          activeCount={[url.filter.from, url.filter.to].filter(Boolean).length}
+          activeCount={
+            Number(Boolean(url.filter.category)) +
+            Number(Boolean(url.filter.direction)) +
+            Number(Boolean(url.filter.asset_type && url.filter.asset_type !== 'all')) +
+            Number(url.filter.from !== undefined) +
+            Number(url.filter.to !== undefined)
+          }
           search={
             <>
               <Field label={copy.category} size="short">
@@ -258,7 +279,7 @@ function CreditHistory({
                       <tr>
                         <th>{copy.time}</th>
                         <th>{copy.asset}</th>
-                        <th>{copy.change}</th>
+                        <th className="is-num">{copy.change}</th>
                         <th>{copy.category}</th>
                         {data.data.some((entry) => entry.request_id !== null) ? (
                           <th>{copy.request}</th>
@@ -274,7 +295,7 @@ function CreditHistory({
                             </time>
                           </td>
                           <td data-label={copy.asset}>{copy[entry.asset_type]}</td>
-                          <td data-label={copy.change} className="credit-history__amount">
+                          <td data-label={copy.change} className="credit-history__amount is-num">
                             <CreditChange value={entry.delta} />
                           </td>
                           <td data-label={copy.category}>{reason(entry)}</td>

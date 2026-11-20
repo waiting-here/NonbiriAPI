@@ -1,6 +1,7 @@
 import { RecordsHeader } from '../components/RecordsHeader';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
+import { logRequestID } from '@shared/components/log/data';
 import { RoleLogPanel } from '@shared/components/log';
 import '@shared/operations/operations.css';
 import { useUserSession } from '../data';
@@ -11,12 +12,7 @@ export function LogsPage() {
   const [params] = useSearchParams();
   const requestIDValues = params.getAll('request_id');
   const requested = requestIDValues[0] ?? null;
-  const requestID =
-    requestIDValues.length === 1 &&
-    requested !== null &&
-    /^req_[A-Za-z0-9_-]{21}[AQgw]$/.test(requested)
-      ? requested
-      : null;
+  const requestID = requestIDValues.length === 1 ? logRequestID(requested) : null;
   return (
     <div className="page ops-stack">
       <RecordsHeader description={t('user.logs.description')} />

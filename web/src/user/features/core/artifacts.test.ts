@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CORE_COPY_DESCRIPTORS, CORE_COPY_KEYS } from './copy';
+import { CORE_COPY_KEYS } from './copy';
+import en from '../../i18n/en.json';
+import zh from '../../i18n/zh.json';
 import { CORE_ROUTE_DESCRIPTORS, CORE_ROUTE_PATHS } from './descriptors';
 
 function workspaceFile(path: string): string {
@@ -9,13 +11,11 @@ function workspaceFile(path: string): string {
 }
 
 describe('core integration descriptors', () => {
-  it('exports one complete bilingual descriptor for every local copy key', () => {
-    expect(CORE_COPY_DESCRIPTORS).toHaveLength(CORE_COPY_KEYS.length);
+  it('resolves every registered local copy key in both station catalogs', () => {
     expect(new Set(CORE_COPY_KEYS).size).toBe(CORE_COPY_KEYS.length);
-    expect(CORE_COPY_DESCRIPTORS.map(({ key }) => key)).toEqual(CORE_COPY_KEYS);
-    for (const descriptor of CORE_COPY_DESCRIPTORS) {
-      expect(descriptor.en.trim(), descriptor.key).not.toBe('');
-      expect(descriptor.zh.trim(), descriptor.key).not.toBe('');
+    for (const key of CORE_COPY_KEYS) {
+      expect(en.user.core[key].trim(), key).not.toBe('');
+      expect(zh.user.core[key].trim(), key).not.toBe('');
     }
   });
 
@@ -56,7 +56,8 @@ describe('core narrow viewport and untrusted-text boundary', () => {
       'src/user/pages/AccountPage.tsx',
       'src/user/features/core/components.tsx',
       'src/user/features/core/EndpointDetail.tsx',
-      'src/user/features/core/EndpointWizard.tsx',
+      'src/user/features/core/connections/ServiceCreateForm.tsx',
+      'src/user/features/core/connections/CredentialGrantForm.tsx',
       'src/user/features/core/ModelsWorkspace.tsx',
       'src/user/features/core/AccountWorkspace.tsx',
     ];

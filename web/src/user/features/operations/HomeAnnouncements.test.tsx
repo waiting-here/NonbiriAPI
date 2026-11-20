@@ -16,6 +16,7 @@ import type {
 } from '../core/types';
 import { announcementDismissalKey, type AnnouncementDetail } from './data';
 import { HomeAnnouncements } from './HomeAnnouncements';
+import { createHomeBodyLoader } from './homeAnnouncementBodies';
 import { collectHomeAnnouncementSummaries } from './homeAnnouncementsData';
 
 type CompleteSummary = HomeAnnouncementSummary & {
@@ -125,6 +126,24 @@ function confirmSession(rendered: RenderedProviders, accountId: string): void {
 }
 
 describe('home announcement previews', () => {
+  it('fetches visible cards together, matches out-of-order bodies and isolates a withdrawn notice', async () => {
+    const [first, removed, last] = ['first', 'withdrawn', 'last'].map((label) => summary(label));
+    const fetcher = vi.fn(async () => Response.json({ data: [detail(last), detail(first)] }));
+    vi.stubGlobal('fetch', fetcher);
+    const read = createHomeBodyLoader(() => true);
+    const results = await Promise.allSettled([read(first.id), read(removed.id), read(last.id)]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/announcements/selected?' +
+        new URLSearchParams({ ids: [first.id, removed.id, last.id].join(',') }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(results).toMatchObject([
+      { status: 'fulfilled', value: { id: first.id } },
+      { status: 'rejected', reason: { status: 404 } },
+      { status: 'fulfilled', value: { id: last.id } },
+    ]);
+  });
   it('serially scans cursor pages, skips hidden revisions, and stops after three selections', async () => {
     const hidden = summary('hidden');
     const first = [hidden, summary('one'), summary('two')];

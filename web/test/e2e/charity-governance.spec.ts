@@ -418,9 +418,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   await badge.click();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending`);
   await expect.poll(() => listReads.length).toBeGreaterThanOrEqual(2);
-  await expect(
-    page.locator('.status-badge').filter({ hasText: 'Pending follow-up' }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Pending follow-up', exact: true })).toBeVisible();
   await expect(
     page.locator('.nb-table tbody').getByText('Synthetic pending donation', { exact: true }),
   ).toBeVisible();
@@ -456,15 +454,14 @@ test('admin pending badge opens the shared queue and processing survives refresh
     idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{22,128}$/),
   });
   await expect(
-    page.locator('.status-badge').filter({ hasText: 'Processed' }).first(),
+    page.getByText('Processed', { exact: true }).filter({ visible: true }).first(),
   ).toBeVisible();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
   await expect(
     page.getByRole('link', {
-      name: '0 donations awaiting shared follow-up',
-      exact: true,
+      name: /donations awaiting shared follow-up/,
     }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Mark as processed', exact: true })).toHaveCount(0);
   expect(current.revision).toBe('7');
@@ -834,7 +831,7 @@ test('level-six stewardship shows the shared owner projection and caller identit
   const copyButton = page.getByRole('button', { name: 'Copy Discord ID', exact: true }).first();
   await copyButton.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(DISCORD_ID);
-  const dialog = page.locator('.nb-expandable-panel:not([hidden])');
+  const dialog = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();
   await expect(dialog.getByText(DISCORD_ID, { exact: true })).toBeVisible();

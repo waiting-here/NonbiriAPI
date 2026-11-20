@@ -1,6 +1,7 @@
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import type { TestRole as UnitTestRole, TestStation } from '../unit/support';
 import { ADMIN_ORIGIN, FIXTURE_ORIGIN, USER_ORIGIN } from './ports';
+import { numberedResponse } from './numbered-fixtures';
 
 type TestRole = UnitTestRole | 'level6';
 
@@ -323,6 +324,12 @@ export async function mockRoleSession(
   });
   await mockJson(page, { origin, method: 'GET', path: apiRoot + '/rewards/assets', body: [] });
   if (station === 'user') {
+    await mockJson(page, {
+      origin,
+      method: 'GET',
+      path: '/api/issues?state=current&page=1&page_size=20',
+      body: { ...numberedResponse([], '1', 20), projection_incomplete: false },
+    });
     await mockJson(page, {
       origin,
       method: 'GET',

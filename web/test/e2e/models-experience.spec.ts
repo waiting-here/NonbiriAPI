@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { ServiceProjection } from '../../src/shared/connections';
@@ -138,6 +139,7 @@ async function fixture(page: Page, empty: boolean) {
   const keyReads: string[] = [];
   const bindingReads: { revision: string; order: string[] }[] = [];
   const endpoints = ['11', '12'].map((id) => ({
+    ...endpointScope,
     id,
     connection_id: id === '11' ? '51' : '52',
     connector_type: 'openai-compatible',
@@ -548,14 +550,16 @@ for (const scenario of cases) {
         const edit = page
           .locator('.nb-table tbody tr')
           .first()
-          .getByRole('button', { name: core('models.editModel'), exact: true });
+          .getByRole('button', { name: text.open, exact: true });
         await edit.focus();
         await page.keyboard.press('Enter');
       }
       const rows = page.locator('.core-binding-list .core-binding-row');
       await expect(rows).toHaveCount(20);
-      await rows.first().getByRole('button').click();
-      await page.getByRole('menuitem', { name: core('models.moveDown'), exact: true }).click();
+      await rows
+        .first()
+        .getByRole('button', { name: core('models.moveDown'), exact: true })
+        .click();
       await expect(rows.first()).toContainText('gpt-source-2');
       await page.getByRole('button', { name: core('models.saveOrder'), exact: true }).click();
       await expect.poll(() => state.orders.length).toBe(1);

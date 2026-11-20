@@ -4,9 +4,9 @@ import { CreditNumber } from '@shared/components/CreditNumber';
 import { SimplePager } from '@shared/operations/SimplePager';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Fold, DataTable, Field, FilterBar, FormActions, Tabs } from '@shared/components/ui';
+import { Fold, DataTable, Field, FilterBar, Tabs } from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { TimeInput } from '@shared/components/TimeInput';
 import { TimeContextNotice } from '@shared/components/TimeContext';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
@@ -114,7 +114,11 @@ function Coverage({
           )}
         </p>
       )}
-      <Fold plain title={copy('admin.economyAudit.presentation.coverage')} defaultOpen={!compact}>
+      <Fold
+        plain
+        title={copy('admin.economyAudit.presentation.coverage')}
+        defaultOpen={!compact && Boolean(meta.range_adjusted || c.status === 'catching_up')}
+      >
         {meta.range_adjusted && (
           <p>
             {t('历史范围已对齐整点', 'Historical range aligned to whole hours')}:{' '}
@@ -321,6 +325,7 @@ function Trend({ filter }: { readonly filter: AuditFilter }) {
           <>
             <EconomyTrendChart series={data} />
             <Fold
+              plain
               title={copy('admin.economyAudit.presentation.periods', { count: data.data.length })}
             >
               <DataTable
@@ -439,7 +444,13 @@ function ChannelDetails({
           ]}
         />
         {data.data.length === 0 && data.metadata.coverage.status !== 'catching_up' && (
-          <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
+          <EmptyState
+            title={t('该区间没有账本操作', 'No ledger operations in this interval')}
+            body={t(
+              '可调整上方起止时间或资产类型查看其他记录。',
+              'Adjust the time range or asset filter above to inspect other activity.',
+            )}
+          />
         )}
       </div>
     </>
@@ -537,7 +548,13 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
           </details>
         ))}
         {data.data.length === 0 && (
-          <p>{t('该区间没有账本操作。', 'There are no ledger operations in this interval.')}</p>
+          <EmptyState
+            title={t('该区间没有账本操作', 'No ledger operations in this interval')}
+            body={t(
+              '可调整上方起止时间或切换渠道查看其他记录。',
+              'Adjust the time range or channel filter above to inspect other activity.',
+            )}
+          />
         )}
         <SimplePager
           disabled={q.isFetching}
@@ -699,19 +716,6 @@ export function EconomyAuditPage() {
             </>
           }
         />
-        <FormActions>
-          <button
-            className="nb-btn nb-btn--secondary"
-            type="button"
-            disabled={summary.isFetching}
-            onClick={() => {
-              setRefreshing(true);
-              void summary.refetch().finally(() => setRefreshing(false));
-            }}
-          >
-            {t('刷新库存', 'Refresh stock')}
-          </button>
-        </FormActions>
         {invalid && (
           <p role="alert">
             {t(
@@ -722,7 +726,21 @@ export function EconomyAuditPage() {
         )}
       </Card>
       <Card>
-        <div aria-busy={summary.isFetching && summaryData !== undefined}>
+        <div className="ops-stack" aria-busy={summary.isFetching && summaryData !== undefined}>
+          <div className="ops-toolbar">
+            <h2>{assetLabel(filter.asset, t)}</h2>
+            <button
+              className="nb-btn nb-btn--secondary nb-btn--sm"
+              type="button"
+              disabled={summary.isFetching}
+              onClick={() => {
+                setRefreshing(true);
+                void summary.refetch().finally(() => setRefreshing(false));
+              }}
+            >
+              {t('刷新库存', 'Refresh stock')}
+            </button>
+          </div>
           {summary.error && summaryData ? (
             <AuditErrorState error={summary.error} onRetry={() => void summary.refetch()} />
           ) : null}
@@ -732,7 +750,6 @@ export function EconomyAuditPage() {
             <AuditErrorState error={summary.error} onRetry={() => void summary.refetch()} />
           ) : summaryData ? (
             <>
-              <h2>{assetLabel(filter.asset, t)}</h2>
               <Coverage meta={summaryData.metadata} />
               {summaryData.metadata.coverage.status !== 'catching_up' && (
                 <>

@@ -11,6 +11,7 @@ interface Fixture {
   request_rejections: {
     precise_id: string;
     historical_id: string;
+    unbound_id: string;
     private_markers: string[];
   };
 }
@@ -67,6 +68,57 @@ test('real rejection details show safe top-level positions and explain historica
             localStorage.setItem('nb.theme', theme);
           }, theme);
           const page = await context.newPage();
+          const route = role === 'steward' ? '/steward?tab=logs&request_id=' : '/logs?request_id=';
+          const withRoute = await context.request.get(
+            origin + api + samples.unbound_id + '?attempt_page=1&attempt_page_size=20',
+            { headers: { Origin: origin } },
+          );
+          expect(withRoute.status()).toBe(200);
+          const unbound = await withRoute.json();
+          expect(unbound.request.caller_error_code).toBe('unbound_model');
+          if (role === 'user') {
+            expect(unbound).not.toHaveProperty('route_decision');
+            expect(unbound).not.toHaveProperty('attempts');
+          } else {
+            expect(unbound.route_decision.observations).toContainEqual({ reason: 'no_bindings' });
+            expect(unbound.attempts.data).toHaveLength(0);
+          }
+          const listRoute =
+            role === 'steward' ? '/steward?tab=logs&status=400' : '/logs?status=400';
+          await page.goto(origin + listRoute);
+          const lookup = page.getByLabel('请求 ID', { exact: true });
+          const submit = page.getByRole('button', { name: '打开详情', exact: true });
+          if (width === 1440 && theme === 'light') {
+            await lookup.fill('req_' + 'A'.repeat(21) + 'Q');
+            await submit.click();
+            const missing = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
+            await expect(missing.getByRole('status')).toContainText(
+              role === 'user' ? '已过期或不属于当前账号' : '没有找到这条记录',
+            );
+            await missing.getByRole('button', { name: '关闭' }).click();
+            expect(new URL(page.url()).searchParams.get('status')).toBe('400');
+            expect(new URL(page.url()).searchParams.has('request_id')).toBe(false);
+          }
+          await lookup.fill(samples.unbound_id);
+          await submit.click();
+          await expect(page).toHaveURL(
+            (url) =>
+              url.searchParams.get('request_id') === samples.unbound_id &&
+              url.searchParams.get('status') === '400',
+          );
+          const routing = page.getByRole('region', { name: '本次路由选择' });
+          if (role !== 'user') {
+            await expect(routing.getByText('当时没有已配置的绑定。')).toBeVisible();
+            await routing.scrollIntoViewIfNeeded();
+            await page.screenshot({
+              path: resolve(visual, `routing-${role}-${width}-${theme}.png`),
+            });
+          } else {
+            await expect(
+              page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)'),
+            ).toBeVisible();
+            await expect(routing).toHaveCount(0);
+          }
           for (const sample of ['precise', 'historical'] as const) {
             const id = sample === 'precise' ? samples.precise_id : samples.historical_id;
             const response = await context.request.get(
@@ -82,10 +134,9 @@ test('real rejection details show safe top-level positions and explain historica
             if (role !== 'user') expect(detail.request.attempt_count).toBe('0');
             for (const marker of samples.private_markers)
               expect(JSON.stringify(detail)).not.toContain(marker);
-            const route =
-              role === 'steward' ? '/steward?tab=logs&request_id=' : '/logs?request_id=';
+            expect(detail).not.toHaveProperty('route_decision');
             await page.goto(origin + route + id);
-            const panel = page.locator('.nb-expandable-panel:not([hidden])');
+            const panel = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
             await expect(panel).toBeVisible();
             const label =
               sample === 'precise'

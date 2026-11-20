@@ -1,24 +1,28 @@
 import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS } from '@shared/nativeServices';
-import type { BindingAvailability, ServiceStatus } from '@shared/operations/resourceHealth';
+import { failureReasonKey } from '@shared/observability/failure';
+import {
+  serviceStateLabel,
+  type BindingAvailability,
+  type ServiceStatus,
+} from '@shared/operations/resourceHealth';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
-import { StatusBadge } from './States';
+import { StatusBadge } from './ui';
 import './ResourceHealth.css';
 
-const stateKeys: Record<string, string> = {
-  available: 'common.resourceHealth.states.available',
-  failure_disabled: 'common.resourceHealth.states.failure_disabled',
-  rate_limited: 'common.resourceHealth.states.rate_limited',
-  disabled: 'common.resourceHealth.states.disabled',
-  review_required: 'common.resourceHealth.states.review_required',
-  pending: 'common.resourceHealth.states.pending',
-  suspended: 'common.resourceHealth.states.suspended',
-  exhausted: 'common.resourceHealth.states.exhausted',
-  expired: 'common.resourceHealth.states.expired',
-  ended: 'common.resourceHealth.states.ended',
-  model_disabled: 'common.resourceHealth.states.model_disabled',
-  feature_disabled: 'common.resourceHealth.states.feature_disabled',
-};
+function healthTone(state: string, manualRecovery = false) {
+  if (
+    manualRecovery ||
+    state === 'failure_disabled' ||
+    state === 'suspended' ||
+    state === 'exhausted'
+  )
+    return 'bad' as const;
+  if (state === 'available') return 'ok' as const;
+  if (state === 'rate_limited' || state === 'pending' || state === 'review_required')
+    return 'warn' as const;
+  return 'neutral' as const;
+}
 
 export function ServiceHealth({ statuses }: { statuses?: ServiceStatus[] }) {
   const { t } = useTranslation();
@@ -31,7 +35,7 @@ export function ServiceHealth({ statuses }: { statuses?: ServiceStatus[] }) {
     <section className="resource-health" aria-label={t('common.resourceHealth.title')}>
       <p className="resource-health__summary">
         <strong>{t('common.resourceHealth.title')}</strong>
-        <span className="muted">
+        <span className="nb-muted">
           {attention.length
             ? t('common.resourceHealth.summary', {
                 ready: statuses.filter((status) => status.state === 'available').length,
@@ -55,6 +59,7 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
   const { t } = useTranslation();
   const formatDateTime = useDateTimeFormatter();
   const backoff = status.smart_backoff;
+  const modelQuotaReason = failureReasonKey(status.model_quota_reason);
   const until = Math.max(
     status.retry_after_until ?? 0,
     backoff?.state === 'waiting' ? backoff.retry_at : 0,
@@ -64,11 +69,9 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
     <li className="resource-health__item">
       <div className="resource-health__heading">
         <strong>{t(NATIVE_SERVICE_LABEL_KEYS[status.native_service])}</strong>
-        <StatusBadge
-          active={status.state === 'available'}
-          danger={manualRecovery}
-          label={t(stateKeys[status.state] ?? 'common.resourceHealth.states.unavailable')}
-        />
+        <StatusBadge tone={healthTone(status.state, manualRecovery)}>
+          {t(serviceStateLabel(status.state))}
+        </StatusBadge>
       </div>
       {status.failure_streak !== '0' ? (
         <p>{t('common.resourceHealth.failures', { count: status.failure_streak })}</p>
@@ -89,6 +92,7 @@ function ServiceHealthRow({ status }: { status: ServiceStatus }) {
           })}
         </p>
       ) : null}
+      {modelQuotaReason && <p>{t(modelQuotaReason)}</p>}
       {until > 0 ? (
         <p>{t('common.resourceHealth.retryAt', { time: formatDateTime(until) })}</p>
       ) : null}
@@ -107,19 +111,18 @@ export function BindingHealth({ value }: { value?: BindingAvailability }) {
   if (!value) return null;
   return (
     <div className="resource-health__binding">
-      <StatusBadge
-        active={value.state === 'available'}
-        label={t(
+      <StatusBadge tone={healthTone(value.state)}>
+        {t(
           value.state === 'available'
             ? 'common.resourceHealth.bindingAvailable'
-            : (stateKeys[value.state] ?? 'common.resourceHealth.states.unavailable'),
+            : serviceStateLabel(value.state),
         )}
-      />
+      </StatusBadge>
       <ServiceHealth statuses={value.service_statuses} />
       {value.state === 'unavailable' &&
       (!value.service_statuses.length ||
         value.service_statuses.some((service) => service.state === 'available')) ? (
-        <p className="muted">{t('common.resourceHealth.checkDonation')}</p>
+        <p className="nb-muted">{t('common.resourceHealth.checkDonation')}</p>
       ) : null}
     </div>
   );

@@ -1,3 +1,4 @@
+import { TableCheckbox } from './ui/TableCheckbox';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
@@ -553,7 +554,6 @@ function UserAuthority({
           </dd>
         </dl>
       </Card>
-      {renderSecurity?.(user)}
       <Tabs
         label={t('management.users.detailTabs')}
         value={tab}
@@ -658,6 +658,7 @@ function UserAuthority({
             onAuthorityLoss={onAuthorityLoss}
           />
         ) : null}
+        {renderSecurity?.(user)}
       </section>
       {editable || limitsEditable ? (
         <>
@@ -673,7 +674,7 @@ function UserAuthority({
                 {editable ? ' / ' + t('management.users.levelSectionTitle') : ''}
               </h2>
               <p>{t('management.users.limitHint')}</p>
-              <Fold title={t('common.operations.management.details')}>
+              <Fold plain title={t('common.operations.management.details')}>
                 <p>{t('management.users.revisionGuard', { revision: user.revision })}</p>
               </Fold>
               {limitsEditable ? (
@@ -685,7 +686,7 @@ function UserAuthority({
               ) : (
                 <InferenceLimitSummary user={user} />
               )}
-              <Fold title={t('management.users.inferenceLimitRules')}>
+              <Fold plain title={t('management.users.inferenceLimitRules')}>
                 <p>{t('management.users.inferenceLimitHelp')}</p>
               </Fold>
               {editable ? (
@@ -821,11 +822,15 @@ function UserAuthority({
           >
             <Card>
               <p>{t('management.users.readOnly')}</p>
-              <dl className="ops-kv">
-                <dt>{t('management.users.endpointLimit')}</dt>
-                <dd>{user.effective_endpoint_limit}</dd>
-                <dt>{t('management.users.language')}</dt>
-                <dd>{user.lang || t('management.users.languageDefault')}</dd>
+              <dl className="nb-facts nb-facts--inline">
+                <div>
+                  <dt>{t('management.users.endpointLimit')}</dt>
+                  <dd className="nb-amount">{user.effective_endpoint_limit}</dd>
+                </div>
+                <div>
+                  <dt>{t('management.users.language')}</dt>
+                  <dd>{user.lang || t('management.users.languageDefault')}</dd>
+                </div>
               </dl>
               <InferenceLimitSummary user={user} />
             </Card>
@@ -956,31 +961,35 @@ function UserAuthority({
             ) : null}
             {banControls}
           </section>
-          <Card className="user-danger">
-            <h2>{t('management.users.dangerTitle')}</h2>
-            <div className="user-danger-row">
-              <p>{t('management.users.banConsequence')}</p>
-              <Button
-                variant="danger-outline"
-                type="button"
-                onClick={() => {
-                  if (user.is_banned) setConfirm('unban');
-                  else {
-                    setTab('penalties');
-                    setPenaltiesVisited(true);
-                  }
-                }}
-              >
-                {t(user.is_banned ? 'management.users.unbanAction' : 'management.users.banAction')}
-              </Button>
-            </div>
-            {renderDeletion ? (
+          {tab === 'overview' || tab === 'penalties' ? (
+            <Card className="user-danger">
+              <h2>{t('management.users.dangerTitle')}</h2>
               <div className="user-danger-row">
-                <p>{t('management.users.deleteConsequence')}</p>
-                {renderDeletion(user, refresh)}
+                <p>{t('management.users.banConsequence')}</p>
+                <Button
+                  variant="danger-outline"
+                  type="button"
+                  onClick={() => {
+                    if (user.is_banned) setConfirm('unban');
+                    else {
+                      setTab('penalties');
+                      setPenaltiesVisited(true);
+                    }
+                  }}
+                >
+                  {t(
+                    user.is_banned ? 'management.users.unbanAction' : 'management.users.banAction',
+                  )}
+                </Button>
               </div>
-            ) : null}
-          </Card>
+              {renderDeletion ? (
+                <div className="user-danger-row">
+                  <p>{t('management.users.deleteConsequence')}</p>
+                  {renderDeletion(user, refresh)}
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
         </>
       ) : (
         <>
@@ -1108,21 +1117,29 @@ function UserAuthority({
             })
           }
         >
-          <dl className="ops-kv">
-            <dt>{t('management.users.economyTarget')}</dt>
-            <dd>{t(economyTargetLabels[economyConfirm.body.target])}</dd>
-            <dt>{t('management.users.economyDirection')}</dt>
-            <dd>
-              {t(
-                economyConfirm.body.direction === 'increase'
-                  ? 'management.users.economyIncrease'
-                  : 'management.users.economyDecrease',
-              )}
-            </dd>
-            <dt>{t('management.users.economyPositiveAmount')}</dt>
-            <dd>{economyConfirm.body.amount}</dd>
-            <dt>{t('management.users.economyReason')}</dt>
-            <dd>{economyConfirm.body.reason}</dd>
+          <dl className="nb-facts nb-facts--inline">
+            <div>
+              <dt>{t('management.users.economyTarget')}</dt>
+              <dd>{t(economyTargetLabels[economyConfirm.body.target])}</dd>
+            </div>
+            <div>
+              <dt>{t('management.users.economyDirection')}</dt>
+              <dd>
+                {t(
+                  economyConfirm.body.direction === 'increase'
+                    ? 'management.users.economyIncrease'
+                    : 'management.users.economyDecrease',
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('management.users.economyPositiveAmount')}</dt>
+              <dd className="nb-amount">{economyConfirm.body.amount}</dd>
+            </div>
+            <div>
+              <dt>{t('management.users.economyReason')}</dt>
+              <dd>{economyConfirm.body.reason}</dd>
+            </div>
           </dl>
           {economyFeedback}
         </ConfirmDialog>
@@ -1465,6 +1482,7 @@ export function UserManagement({
                         {...field}
                         aria-label={t('management.users.userId')}
                         aria-invalid={invalidUserIDDraft}
+                        placeholder="#ID"
                         inputMode="numeric"
                         maxLength={64}
                         value={userIDDraft}
@@ -1478,6 +1496,7 @@ export function UserManagement({
                         {...field}
                         aria-label={t('management.users.discordId')}
                         aria-invalid={invalidDiscordIDDraft}
+                        placeholder="Discord ID"
                         inputMode="numeric"
                         maxLength={20}
                         value={discordIDDraft}
@@ -1485,7 +1504,7 @@ export function UserManagement({
                       />
                     )}
                   </Field>
-                  <Field label={accountLabels.allAccounts} size="short">
+                  <Field label={t('common.account.stateFilter')} size="short">
                     {(field) => (
                       <select
                         {...field}
@@ -1557,7 +1576,7 @@ export function UserManagement({
             ) : null}
           </Card>
           <Card>
-            <h2>{t('management.users.listTitle')}</h2>
+            {embedded ? <h2>{t('management.users.listTitle')}</h2> : null}
             {accountState === 'deleted' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
             {invalidCommittedUserID || invalidCommittedDiscordID ? (
               <p role="status">
@@ -1593,31 +1612,45 @@ export function UserManagement({
                       key: 'limit_selection',
                       header: (
                         <span className="user-list-selection-heading">
-                          {t('management.users.limitSelection')}
+                          <span className="nb-sr">{t('management.users.limitSelection')}</span>
+                          <TableCheckbox
+                            aria-label={t('management.users.selectPageLimits')}
+                            checked={
+                              eligibleUsers.length > 0 &&
+                              limitSelected.length === eligibleUsers.length
+                            }
+                            indeterminate={
+                              limitSelected.length > 0 &&
+                              limitSelected.length < eligibleUsers.length
+                            }
+                            disabled={batchBusy || users.isFetching || eligibleUsers.length === 0}
+                            onChange={(event) =>
+                              setLimitSelected(
+                                event.target.checked ? eligibleUsers.map((user) => user.id) : [],
+                              )
+                            }
+                          />
                         </span>
                       ),
-                      cell: 'meta',
+                      cell: 'select',
                       render: (entry) => (
                         <span className="user-list-selection">
                           {entry.account_state === 'active' &&
                           canEditInferenceLimits(entry.user, role, account, actorLevel === 5) ? (
-                            <label className="user-limit-select">
-                              <input
-                                type="checkbox"
-                                aria-label={t('management.users.selectLimitUser', {
-                                  user: entry.user.username,
-                                })}
-                                checked={limitSelected.includes(entry.user.id)}
-                                disabled={batchBusy || users.isFetching}
-                                onChange={(event) =>
-                                  setLimitSelected(
-                                    event.target.checked
-                                      ? [...limitSelected, entry.user.id]
-                                      : limitSelected.filter((id) => id !== entry.user.id),
-                                  )
-                                }
-                              />
-                            </label>
+                            <TableCheckbox
+                              aria-label={t('management.users.selectLimitUser', {
+                                user: entry.user.username,
+                              })}
+                              checked={limitSelected.includes(entry.user.id)}
+                              disabled={batchBusy || users.isFetching}
+                              onChange={(event) =>
+                                setLimitSelected(
+                                  event.target.checked
+                                    ? [...limitSelected, entry.user.id]
+                                    : limitSelected.filter((id) => id !== entry.user.id),
+                                )
+                              }
+                            />
                           ) : null}
                         </span>
                       ),

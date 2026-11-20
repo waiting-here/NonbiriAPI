@@ -57,6 +57,7 @@ var historyCategories = map[string][]Kind{
 	"donation":     {KindDonorReward},
 	"admin":        {KindAdminUserAdjustment, KindRewardGrant},
 	"penalty":      {KindAntiAbusePenalty},
+	"whale_haven":  {KindWhaleFeedPurchase, KindWhaleExchange},
 	"lake_notes":   {KindLakeEntry, KindLakeExchange, KindLakeCollectionReward},
 	"gacha":        {KindGachaTicketPurchase, KindGachaThemeReward},
 	"picture_book": {KindActivityExchange, KindImageReserve, KindImageSettle, KindImageRefund, KindImageDeleteFinalize},

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { OperationFeedback } from '@shared/components/OperationFeedback';
-import { Field, Fields, Fold, FormActions } from '@shared/components/ui';
+import { ChoiceRow, Field, Fields, Fold, FormActions } from '@shared/components/ui';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { GatewayCapabilitySummary } from '@shared/gateway/GatewayCapabilitySummary';
@@ -148,7 +148,7 @@ function GatewayCapabilitiesEditor() {
       <div className="card-title-row ops-toolbar">
         <h2>{t('gatewayCapabilities.title')}</h2>
         <button
-          className="nb-btn nb-btn--secondary"
+          className={`nb-btn ${editor === undefined ? 'nb-btn--primary' : 'nb-btn--secondary'}`}
           type="button"
           disabled={operation.isPending || list.isPending || Boolean(list.error)}
           onClick={() => open(null)}
@@ -181,7 +181,7 @@ function GatewayCapabilitiesEditor() {
                     {t('common.edit')}
                   </button>
                   <button
-                    className="nb-btn nb-btn--danger"
+                    className="nb-btn nb-btn--danger-outline"
                     type="button"
                     disabled={operation.isPending}
                     onClick={() => {
@@ -288,26 +288,23 @@ function GatewayCapabilitiesEditor() {
                 aria-describedby={`${prefix}-effort-hint`}
               >
                 <legend>{t('gatewayCapabilities.efforts')}</legend>
-                <Fields>
+                <div className="gateway-effort-options">
                   {gatewayAdapterEfforts(draft.adapter).map((effort) => (
-                    <Field size="short" label={t(gatewayEffortLabels[effort])} key={effort}>
-                      {(props) => (
-                        <input
-                          {...props}
-                          type="checkbox"
-                          checked={draft.efforts.includes(effort)}
-                          onChange={(event) =>
-                            change({
-                              efforts: event.target.checked
-                                ? [...draft.efforts, effort]
-                                : draft.efforts.filter((value) => value !== effort),
-                            })
-                          }
-                        />
-                      )}
-                    </Field>
+                    <ChoiceRow
+                      key={effort}
+                      label={t(gatewayEffortLabels[effort])}
+                      checked={draft.efforts.includes(effort)}
+                      disabled={operation.isPending}
+                      onChange={(checked) =>
+                        change({
+                          efforts: checked
+                            ? [...draft.efforts, effort]
+                            : draft.efforts.filter((value) => value !== effort),
+                        })
+                      }
+                    />
                   ))}
-                </Fields>
+                </div>
               </fieldset>
               <p className="muted" id={`${prefix}-effort-hint`}>
                 {t('gatewayCapabilities.effortsHint')}

@@ -64,14 +64,17 @@ export function SectionHead({
   title,
   description,
   actions,
+  back,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
+  back?: ReactNode;
 }) {
   return (
     <div className="nb-section-head">
       <div className="nb-section-head__copy">
+        {back ? <div className="nb-page-header__back">{back}</div> : null}
         <h2>{title}</h2>
         {description ? <p className="nb-small nb-muted">{description}</p> : null}
       </div>
@@ -263,10 +266,12 @@ export function NoticePage({
   titleKey,
   bodyKey,
   icon = 'maintenance',
+  actions,
 }: {
   titleKey: string;
   bodyKey: string;
   icon?: IconName;
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -283,6 +288,7 @@ export function NoticePage({
       <div>
         <h1>{t(titleKey)}</h1>
         <p>{t(bodyKey)}</p>
+        {actions ? <div className="state-actions">{actions}</div> : null}
       </div>
     </div>
   );

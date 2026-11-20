@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 	"github.com/waiting-here/NonbiriAPI/internal/returnmarker"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
@@ -41,6 +42,7 @@ func (service *Service) runAttempts(
 ) attemptRun {
 	var run attemptRun
 	keyLimited := false
+	var skipped requestattempt.AdmissionCause
 	var queueCandidates []claim.ClaimInput
 	remaining := append([]RouteCandidate(nil), plan.candidates...)
 	balancedPlan := plan.charity && plan.charityStrategy == charityrouting.RouteCacheBalanced ||
@@ -116,19 +118,35 @@ func (service *Service) runAttempts(
 				})
 			}
 		}
+		aggregateClaim := balanced
+		recheckStage := "claim"
 		handle, err := service.claims.Claim(executionContext, claimInput)
 		if err != nil {
+			skipped = skipped.Combine(claim.KeyQueueSkippedReason(err))
 			queueCandidates = append(queueCandidates, claim.KeyQueueCandidates(err)...)
 			if len(queueCandidates) > 0 && (balanced || index == len(plan.candidates)-1) &&
 				(errors.Is(err, claim.ErrKeyRateLimited) || errors.Is(err, claim.ErrNotFound) || errors.Is(err, donationquota.ErrLimited)) {
 				if queue, ok := service.claims.(interface {
 					WaitForKey(context.Context, []claim.ClaimInput) (claim.Handle, error)
 				}); ok {
+					aggregateClaim = true
+					recheckStage = "queue"
+					if !balanced {
+						observeClaimError(parent, candidate, "claim", err)
+					}
+					if len(claim.KeyQueueCandidates(err)) == 0 {
+						skipped = skipped.Combine(claim.AdmissionReason(err))
+					}
 					handle, err = queue.WaitForKey(executionContext, queueCandidates)
 					if executionContext.Err() != nil && err != nil {
+						if claim.AdmissionReason(err) == requestattempt.AdmissionQueueTimeout && !run.dispatched {
+							value := admissionFailure(httperr.CodeServiceUnavailable, requestattempt.AdmissionQueueTimeout)
+							run.failure = &value
+						}
 						break
 					}
 					if errors.Is(err, claim.ErrDependencyUnavailable) {
+						observeClaimError(parent, RouteCandidate{}, recheckStage, err)
 						if !run.dispatched {
 							value := failureForError(err, plan.charity)
 							run.failure = &value
@@ -155,6 +173,13 @@ func (service *Service) runAttempts(
 			}
 		}
 		if err != nil {
+			// A balanced claim or wait can examine several bindings. Its result
+			// cannot be attributed to the first candidate in the plan.
+			scope := candidate
+			if aggregateClaim {
+				scope = RouteCandidate{}
+			}
+			observeClaimError(parent, scope, recheckStage, err)
 			if errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable) {
 				if plan.charity || !run.dispatched {
 					value := failureForError(err, plan.charity)
@@ -164,12 +189,16 @@ func (service *Service) runAttempts(
 			}
 			if errors.Is(err, claim.ErrKeyRateLimited) || errors.Is(err, donationquota.ErrLimited) {
 				keyLimited = true
+				if len(claim.KeyQueueCandidates(err)) == 0 || balanced || index == len(plan.candidates)-1 {
+					skipped = skipped.Combine(claim.AdmissionReason(err))
+				}
 				if balanced {
 					break
 				}
 				continue
 			}
 			if errors.Is(err, claim.ErrNotFound) {
+				skipped = skipped.Combine(claim.AdmissionReason(err))
 				if balanced {
 					break
 				}
@@ -178,6 +207,13 @@ func (service *Service) runAttempts(
 			if errors.Is(err, donationquota.ErrCapacity) || errors.Is(err, claim.ErrRoutingBusy) || errors.Is(err, claim.ErrDependencyUnavailable) {
 				if !run.dispatched {
 					value := failureForError(err, plan.charity)
+					run.failure = &value
+				}
+				break
+			}
+			if cause := claim.AdmissionReason(err); cause == requestattempt.AdmissionLedgerBusy || cause == requestattempt.AdmissionLedgerSpace {
+				if !run.dispatched {
+					value := admissionFailure(httperr.CodeInternal, cause)
 					run.failure = &value
 				}
 				break
@@ -207,7 +243,11 @@ func (service *Service) runAttempts(
 		dispatch, err := service.claims.TakeForDispatch(executionContext, handle)
 		if err != nil {
 			released := run.handleDispatchFailure(parent, service, handle, err)
+			if released {
+				observeClaimError(parent, candidate, "dispatch", err)
+			}
 			if released && (errors.Is(err, donationquota.ErrLimited) || errors.Is(err, claim.ErrKeyRateLimited) || (plan.charity && errors.Is(err, claim.ErrNotFound))) {
+				skipped = skipped.Combine(claim.AdmissionReason(err))
 				keyLimited = keyLimited || errors.Is(err, donationquota.ErrLimited) || errors.Is(err, claim.ErrKeyRateLimited)
 				run.err = nil
 				continue
@@ -215,6 +255,7 @@ func (service *Service) runAttempts(
 			break
 		}
 		if dispatch == nil {
+			observeClaimError(parent, candidate, "dispatch", claim.ErrCredentialUnavailable)
 			run.handleDispatchFailure(parent, service, handle, claim.ErrCredentialUnavailable)
 			break
 		}
@@ -351,7 +392,11 @@ func (service *Service) runAttempts(
 		settleContext, cancel := context.WithTimeout(context.WithoutCancel(attemptContext), service.settlement)
 		outcome := attemptOutcome(result)
 		diagnostic.ProtocolComplete(attemptContext, outcome.ProtocolSuccess)
-		outcome.ErrorDiagnostics = diagnostic.Encode(diagnostic.Finish(attemptContext, result.Success, result.Committed, result.Usage.Present, result.UpstreamStatus, result.Diagnostic, string(result.FailureOrigin)))
+		failureFacts := diagnostic.Finish(attemptContext, result.Success, result.Committed, result.Usage.Present, result.UpstreamStatus, result.Diagnostic, string(result.FailureOrigin))
+		if failureFacts != nil {
+			failureFacts.ProviderReason = result.ErrorDetail.ProviderReason()
+		}
+		outcome.ErrorDiagnostics = diagnostic.Encode(failureFacts)
 		acceptedByCharityUpstream := plan.charity && result.UpstreamStatus == http.StatusOK
 		if plan.charity && responseStart != nil && responseStart.retryAfterObserved && !outcome.ProtocolSuccess {
 			outcome.StreakDisposition = connectorcontract.StreakNeutral
@@ -392,12 +437,38 @@ func (service *Service) runAttempts(
 				value = rejectionFailure(httperr.CodeRateLimited, "charity candidates are temporarily unavailable", "model", "no usable model resource is available for this request")
 			}
 			if keyLimited {
-				value = rejectionFailure(httperr.CodeRateLimited, "model connections are temporarily at capacity", "model", "shared model resources are temporarily at capacity")
+				value = admissionFailure(httperr.CodeRateLimited, skipped)
+			} else if skipped == requestattempt.AdmissionMixed {
+				value = admissionFailure(value.code, skipped)
 			}
 			run.failure = &value
 		}
 	}
 	return run
+}
+
+func observeClaimError(ctx context.Context, candidate RouteCandidate, stage string, err error) {
+	cause := claim.AdmissionReason(err)
+	var reason string
+	var quota *claim.ModelQuotaLimit
+	switch {
+	case cause != requestattempt.AdmissionMixed && errors.As(err, &quota):
+		requestattempt.ObserveRecheck(ctx, quota.BindingID, quota.NativeService, quota.Reason, stage)
+		return
+	case cause != "":
+		reason = cause.RouteReason()
+	case errors.Is(err, claim.ErrForbidden):
+		reason = "caller_level"
+	case errors.Is(err, claim.ErrCredentialUnavailable):
+		reason = "credential_unavailable"
+	case errors.Is(err, claim.ErrDependencyUnavailable):
+		reason = "dependency_unavailable"
+	case errors.Is(err, claim.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
+		reason = "unavailable"
+	default:
+		return
+	}
+	requestattempt.ObserveRecheck(ctx, candidate.BindingID, candidate.Authorization.NativeService, reason, stage)
 }
 
 func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Service, handle claim.Handle, dispatchErr error) bool {
@@ -408,6 +479,15 @@ func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Se
 		if errors.Is(dispatchErr, claim.ErrForbidden) || errors.Is(dispatchErr, claim.ErrModelUnavailable) {
 			value := failureForError(dispatchErr, true)
 			run.failure = &value
+			return true
+		}
+		if cause := claim.AdmissionReason(dispatchErr); cause == requestattempt.AdmissionRouting || cause == requestattempt.AdmissionLedgerBusy || cause == requestattempt.AdmissionLedgerSpace {
+			// This dispatch-stage path historically returns an internal error.
+			// Keep the wire code and retain an earlier, actually dispatched result.
+			if !run.dispatched {
+				value := admissionFailure(httperr.CodeInternal, cause)
+				run.failure = &value
+			}
 			return true
 		}
 		if errors.Is(dispatchErr, donationquota.ErrCapacity) {

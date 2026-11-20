@@ -172,7 +172,7 @@ func TestRewardsRootAuthorizationReplayExportAndDeletion(t *testing.T) {
 		}
 		return testApplicationRequest(t, f.app.Load().handler, "POST", host, path, body, []*http.Cookie{cookie}, map[string]string{"Origin": origin, "Content-Type": "application/json", "Idempotency-Key": key})
 	}
-	body := `{"kind":"code","title":"Gift","code":"ROOT-GIFT","enabled":true,"rewards":[{"asset":"general","quantity":"1.125"}],"conditions":{"op":"all"}}`
+	body := `{"kind":"code","title":"Gift","code":"ROOT-GIFT","enabled":true,"rewards":[{"asset":"general","quantity":"1.125"},{"asset":"whale:pearls","quantity":"4"},{"asset":"whale:conch_shards","quantity":"2"}],"conditions":{"op":"all"}}`
 	root := "/admin/api/rewards"
 	adminOrigin := "http://" + f.cfg.AdminHost
 	origin := "http://" + f.cfg.UserHost
@@ -242,6 +242,10 @@ func TestRewardsRootAuthorizationReplayExportAndDeletion(t *testing.T) {
 	if e = json.Unmarshal(account("/api/account/export", ""), &exported); e != nil {
 		t.Fatal(e)
 	}
+	if exported.SchemaVersion != 38 {
+		t.Fatalf("unexpected export schema %d", exported.SchemaVersion)
+	}
+	assertUnadoptedWhaleAward(t, exported.WhaleHaven, 4, 2, "redemption_code", campaign.ID)
 	var receipts []rewards.Receipt
 	if e = json.Unmarshal(exported.Rewards, &receipts); e != nil || len(receipts) != 1 || receipts[0].ID != receipt.ID {
 		t.Fatal(receipts, e)
@@ -259,5 +263,29 @@ func TestRewardsRootAuthorizationReplayExportAndDeletion(t *testing.T) {
 	}
 	if r := request(false, "/api/rewards/redeem", `{"code":"ROOT-GIFT"}`, user.Cookie, origin); r.Code != 401 {
 		t.Fatal(r.Code)
+	}
+}
+
+func assertUnadoptedWhaleAward(t *testing.T, raw json.RawMessage, wantPearls, wantShards int64, reason, ref string) {
+	t.Helper()
+	var data struct {
+		Profile   json.RawMessage `json:"profile"`
+		Pearls    int64           `json:"whale_coins"`
+		Shards    int64           `json:"conch_shards"`
+		Movements []struct {
+			Reason string `json:"reason"`
+			Ref    string `json:"operation_id"`
+		} `json:"movements"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatal(err)
+	}
+	if string(data.Profile) != "null" || data.Pearls != wantPearls || data.Shards != wantShards || len(data.Movements) != 2 {
+		t.Fatal("unadopted asset export", string(raw))
+	}
+	for _, m := range data.Movements {
+		if m.Reason != reason || m.Ref != ref {
+			t.Fatal("missing award source", m)
+		}
 	}
 }

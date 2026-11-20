@@ -299,7 +299,7 @@ function successfulMutation(reconcileError: ApiError | null = null) {
       } else {
         mutation.reconcileGeneration += 1;
       }
-      return undefined;
+      return { id: '71', status: 'pending', keys: [] };
     }),
   };
   return mutation;
@@ -631,6 +631,26 @@ describe('donation composer recovery', () => {
     await waitFor(() => expect(description).toBeEnabled());
     expect(description).toHaveValue('draft kept while hidden');
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
+  });
+
+  it('asks for an explicit thanks decision even when ownership has already been authorized', async () => {
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const rendered = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="thanks-required" />, [choices[0]]),
+      { station: 'user', role: 'user' },
+    );
+    await rendered.user.click(screen.getByLabelText('Select resource key 61'));
+    await rendered.user.type(
+      screen.getByRole('textbox', { name: /donation description/i }),
+      'Shared resource',
+    );
+    await rendered.user.click(screen.getByLabelText(charityCopy.ownershipAuthorization));
+    const radios = screen.getAllByRole('radio');
+    expect(radios.every((radio) => !(radio as HTMLInputElement).checked)).toBe(true);
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(radios.some((radio) => document.activeElement === radio)).toBe(true);
   });
 
   it('keeps a successful submit locked when reconciliation fails and retries only the read', async () => {
@@ -1125,6 +1145,31 @@ describe('donation composer recovery', () => {
     expect(screen.queryByText('Recovery status')).not.toBeInTheDocument();
   });
 
+  it('shows the recorded decision without an empty review disclosure', async () => {
+    vi.mocked(economyQueries.useEditDonation).mockReturnValue(successfulMutation() as never);
+    vi.mocked(economyQueries.useWithdrawDonation).mockReturnValue(successfulMutation() as never);
+    vi.mocked(economyQueries.useTerminateDonation).mockReturnValue(successfulMutation() as never);
+    const historical: Donation = {
+      id: '41',
+      status: 'approved',
+      revision: '2',
+      description: 'Earlier review',
+      keys: [],
+      createdAt: 1788100000,
+      updatedAt: 1788100001,
+      reviewResult: { decision: 'approve', reason: '', reviewedAt: 1788100001 },
+    };
+    const view = await renderWithProviders(
+      <DonationCard donation={historical} showDetailLink={false} />,
+      { station: 'user', role: 'user' },
+    );
+    expect(screen.getByText(charityCopy.reviewResult).closest('.detail-row')).toHaveTextContent(
+      charityCopy.status.approved,
+    );
+    expect(view.container.querySelector('details.economy-review-result')).not.toBeInTheDocument();
+    expect(screen.queryByText(charityCopy.presentation.modelSetupHelp)).not.toBeInTheDocument();
+  });
+
   it.each([
     ['list card', true],
     ['detail card', false],
@@ -1150,9 +1195,7 @@ describe('donation composer recovery', () => {
         <DonationCard donation={donation} showDetailLink={showDetailLink} />,
         { station: 'user', role: 'user' },
       );
-      if (!showDetailLink) {
-        expect(screen.getByText(charityCopy.presentation.modelSetupHelp)).toBeVisible();
-      }
+      expect(screen.queryByText(charityCopy.presentation.modelSetupHelp)).not.toBeInTheDocument();
       await rendered.user.click(screen.getByRole('button', { name: /edit/i }));
       const description = screen.getByRole('textbox', { name: /donation description/i });
       await rendered.user.clear(description);

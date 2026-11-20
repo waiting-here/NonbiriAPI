@@ -7,7 +7,6 @@ import { Icon } from '@shared/components/Icon';
 import { formatDateTime } from '@shared/utils/datetime';
 import { cardById } from './catalog';
 import type { GachaPoolEntry } from './entry';
-import './gacha.css';
 import './gacha-entry.css';
 
 export function GachaEntry() {
@@ -21,8 +20,10 @@ export function GachaEntry() {
         alt=""
         loading="lazy"
       />
-      <div>
-        <span>{english ? 'COLLECT A LITTLE JOY' : '收藏每一次心动'}</span>
+      <div className="gacha-entry__body">
+        <span className="gacha-entry__eyebrow">
+          {english ? 'COLLECT A LITTLE JOY' : '收藏每一次心动'}
+        </span>
         <h2 id="gacha-entry-title">{english ? 'The Gacha Simulator' : '真·抽卡模拟器'}</h2>
         <p>
           {english
@@ -104,27 +105,29 @@ function GachaPoolBanner({ pool, english }: { pool: GachaPoolEntry; english: boo
         : `显示 R-18 封面：${name}`;
   return (
     <article className="card limited-entry gacha-pool-entry gacha-pool-entry--rated">
-      <button
-        type="button"
-        className="limited-entry__cover gacha-pool-entry__toggle"
-        aria-label={label}
-        aria-pressed={visible}
-        disabled={!allowed}
-        onClick={() => setRevealed((current) => !current)}
-      >
-        {cover}
-        {allowed ? (
-          <span className="gacha-pool-entry__hint">
-            {english
-              ? visible
-                ? 'R-18 · Click to blur cover'
-                : 'R-18 · Click to reveal cover'
-              : visible
-                ? 'R-18 · 点击模糊封面'
-                : 'R-18 · 点击显示封面'}
-          </span>
-        ) : null}
-      </button>
+      <div className="limited-entry__cover">
+        <button
+          type="button"
+          className="gacha-pool-entry__toggle"
+          aria-label={label}
+          aria-pressed={visible}
+          disabled={!allowed}
+          onClick={() => setRevealed((current) => !current)}
+        >
+          {cover}
+          {allowed ? (
+            <span className="gacha-pool-entry__hint">
+              {english
+                ? visible
+                  ? 'R-18 · Click to blur cover'
+                  : 'R-18 · Click to reveal cover'
+                : visible
+                  ? 'R-18 · 点击模糊封面'
+                  : 'R-18 · 点击显示封面'}
+            </span>
+          ) : null}
+        </button>
+      </div>
       <Link className="limited-entry__copy gacha-pool-entry__link" to={href}>
         {copy}
       </Link>

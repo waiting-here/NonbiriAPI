@@ -1,3 +1,4 @@
+import { chatProjection, credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { resolve } from 'node:path';
 import { numberedPage, numberedResponse } from './numbered-fixtures';
 import { createOptions, mockConnectionResources } from './connection-fixtures';
@@ -714,6 +715,7 @@ for (const locale of ['en', 'zh'] as const) {
 
 function endpoint(index: number) {
   return {
+    ...endpointScope,
     id: String(index),
     connection_id: '1',
     native_services: ['chat_completions', 'responses'],
@@ -730,6 +732,7 @@ function endpoint(index: number) {
 }
 function endpointKey(endpointId: string, index: number) {
   return {
+    ...credentialGrant,
     id: String(Number(endpointId) * 1000 + index),
     endpoint_id: endpointId,
     display_head: 'head',
@@ -746,6 +749,7 @@ function endpointKey(endpointId: string, index: number) {
 function candidate(endpointId: string, keyId: string, index: number) {
   const ep = endpoint(Number(endpointId));
   return {
+    ...chatProjection,
     endpoint_key_id: keyId,
     endpoint_base_url: ep.base_url,
     connector_type: ep.connector_type,
@@ -791,29 +795,48 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   };
   await page.route(`${USER_ORIGIN}/api/models**`, async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname.endsWith('/bindings/batch') && route.request().method() === 'POST') {
+    if (url.pathname.endsWith('/bindings/batch-receipt') && route.request().method() === 'POST') {
       submitted = route.request().postDataJSON();
-      savedBindings = (
-        submitted!.selections as Array<{ endpoint_key_id: string; upstream_model_id: string }>
-      ).map((entry, i) => ({
-        ...Object.fromEntries(
-          Object.entries(
-            candidate(
-              String(Math.floor(Number(entry.endpoint_key_id) / 1000)),
-              entry.endpoint_key_id,
-              1,
-            ),
-          ).filter(([key]) => key !== 'source_types'),
-        ),
-        upstream_model_id: entry.upstream_model_id,
-        id: String(i + 1),
-        ord: i,
-      }));
+      const selections = submitted!.selections as {
+        targets: { endpoint_key_id: string; upstream_model_id: string }[];
+      }[];
+      savedBindings = selections.map(({ targets }, i) => {
+        const entry = targets[0]!;
+        const endpointID = String(Math.floor(Number(entry.endpoint_key_id) / 1000));
+        const source = candidate(endpointID, entry.endpoint_key_id, 1);
+        const id = String(i + 1);
+        return {
+          ...source,
+          upstream_model_id: entry.upstream_model_id,
+          id,
+          ord: i,
+          targets: [
+            {
+              ...chatProjection,
+              ...entry,
+              id,
+              revision: '1',
+              endpoint_id: endpointID,
+              base_url: source.endpoint_base_url,
+              connector_type: source.connector_type,
+              configuration_type: source.connector_type,
+              credential_id: '7',
+              credential_version: '1',
+              grant_revision: '1',
+            },
+          ],
+        };
+      });
       model.binding_revision = '1';
       model.binding_count = String(savedBindings.length);
       return route.fulfill({
         status: 201,
-        json: { bindings: savedBindings, binding_revision: '1' },
+        json: {
+          model_id: '7',
+          binding_revision: '1',
+          added_count: model.binding_count,
+          binding_count: model.binding_count,
+        },
       });
     } else if (url.pathname.endsWith('/binding-candidates')) {
       const endpointId = url.searchParams.get('endpoint_id');
@@ -906,7 +929,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${USER_ORIGIN}/models`);
-  await page.getByRole('button', { name: 'Edit model', exact: true }).click();
+  await page.getByRole('button', { name: 'View model', exact: true }).click();
   const picker = page.locator('.personal-binding-picker');
   const results = picker.getByRole('region', { name: 'Models', exact: true });
   await expect(results.locator('.personal-binding-picker__model')).toHaveCount(0);
@@ -960,12 +983,22 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
       expected_binding_revision: '0',
       selections: [
         {
-          endpoint_key_id: '50061',
-          upstream_model_id: candidate('50', '50061', 61).upstream_model_id,
+          targets: [
+            {
+              native_services: ['chat_completions'],
+              endpoint_key_id: '50061',
+              upstream_model_id: candidate('50', '50061', 61).upstream_model_id,
+            },
+          ],
         },
         {
-          endpoint_key_id: '61001',
-          upstream_model_id: candidate('61', '61001', 2).upstream_model_id,
+          targets: [
+            {
+              native_services: ['chat_completions'],
+              endpoint_key_id: '61001',
+              upstream_model_id: candidate('61', '61001', 2).upstream_model_id,
+            },
+          ],
         },
       ],
     });
@@ -1197,6 +1230,7 @@ for (const role of ['admin', 'steward'] as const)
         return route.fulfill({
           json: numberedFixturePage(
             Array.from({ length: 61 }, (_, i) => ({
+              ...chatProjection,
               donation_id: donationId,
               donation_key_id: keyId,
               upstream_model_id: `shared-model-${i + 1}-${'m'.repeat(i === 0 ? 440 : 20)}`,
@@ -1212,18 +1246,37 @@ for (const role of ['admin', 'steward'] as const)
       }
       if (path === '/charity-models/7/bindings/batch-receipt' && request.method() === 'POST') {
         submitted = request.postDataJSON();
-        const selections = submitted!.selections as Array<{
-          donation_key_id: string;
-          upstream_model_id: string;
-        }>;
-        bindings = selections.map((entry, i) => ({
-          ...entry,
-          id: String(i + 1),
-          ord: i,
-          donation_id: String(Math.floor(Number(entry.donation_key_id) / 1000)),
-          source: sharedSource(Math.floor(Number(entry.donation_key_id) / 1000)),
-          source_types: ['automatic'],
-        }));
+        const selections = submitted!.selections as {
+          targets: { donation_key_id: string; upstream_model_id: string }[];
+        }[];
+        bindings = selections.map(({ targets }, i) => {
+          const entry = targets[0]!;
+          const donation_id = String(Math.floor(Number(entry.donation_key_id) / 1000));
+          const source = sharedSource(Number(donation_id));
+          const id = String(i + 1);
+          return {
+            ...entry,
+            id,
+            ord: i,
+            donation_id,
+            source,
+            source_types: ['automatic'],
+            targets: [
+              {
+                ...chatProjection,
+                ...entry,
+                id,
+                revision: '1',
+                donation_id,
+                endpoint_id: id,
+                base_url: source.canonical_base_url,
+                connector_type: source.connector_type,
+                configuration_type: source.connector_type,
+                uses: [],
+              },
+            ],
+          };
+        });
         return route.fulfill({
           json: {
             model_id: '7',
@@ -1288,18 +1341,22 @@ for (const role of ['admin', 'steward'] as const)
       .click();
     const picker = page.locator('.ops-binding-picker');
     const currentPage = picker.getByRole('navigation', { name: 'Pagination', exact: true }).first();
-    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
+    await expect(picker.locator('button[data-binding-choice]')).toHaveCount(50);
     await picker.getByRole('button', { name: /endpoint-1\.example\.test/ }).click();
-    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
-    await picker.getByRole('button', { name: /^Reviewed key 1 —/ }).click();
+    await expect(picker.locator('button[data-binding-choice]')).toHaveCount(50);
+    await picker.getByRole('button', { name: /^Reviewed key 1\s/ }).click();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       const placement = await picker
-        .locator('.nb-choice-list__items .nb-field')
+        .locator('.nb-choice-list__items .nb-choice-row')
         .first()
         .evaluate((field) => {
-          const label = field.querySelector('label')!.getBoundingClientRect();
-          const source = field.querySelector('.ops-picker-source-types')!.getBoundingClientRect();
+          const label = field
+            .querySelector('.nb-choice-row__content > strong')!
+            .getBoundingClientRect();
+          const source = field
+            .querySelector('.nb-choice-row__content > span')!
+            .getBoundingClientRect();
           return {
             labelX: label.x,
             labelWidth: label.width,
@@ -1317,9 +1374,9 @@ for (const role of ['admin', 'steward'] as const)
     await picker.getByRole('button', { name: '1 · Choose source', exact: true }).click();
     await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
     await picker.getByRole('button', { name: /endpoint-61\.example\.test/ }).click();
-    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
+    await expect(picker.locator('button[data-binding-choice]')).toHaveCount(50);
     await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
-    await picker.getByRole('button', { name: /^Reviewed key 61 —/ }).click();
+    await picker.getByRole('button', { name: /^Reviewed key 61\s/ }).click();
     await expect(currentPage.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
     await picker.getByRole('checkbox', { name: /shared-model-2-/ }).check();
     await expect(picker.locator('.charity-binding-selection li')).toHaveCount(3);
@@ -1335,9 +1392,33 @@ for (const role of ['admin', 'steward'] as const)
       .toMatchObject({
         expected_binding_revision: '0',
         selections: [
-          { donation_key_id: '1001', upstream_model_id: `shared-model-1-${'m'.repeat(440)}` },
-          { donation_key_id: '1001', upstream_model_id: `shared-model-61-${'m'.repeat(20)}` },
-          { donation_key_id: '61061', upstream_model_id: `shared-model-2-${'m'.repeat(20)}` },
+          {
+            targets: [
+              {
+                native_services: ['chat_completions'],
+                donation_key_id: '1001',
+                upstream_model_id: `shared-model-1-${'m'.repeat(440)}`,
+              },
+            ],
+          },
+          {
+            targets: [
+              {
+                native_services: ['chat_completions'],
+                donation_key_id: '1001',
+                upstream_model_id: `shared-model-61-${'m'.repeat(20)}`,
+              },
+            ],
+          },
+          {
+            targets: [
+              {
+                native_services: ['chat_completions'],
+                donation_key_id: '61061',
+                upstream_model_id: `shared-model-2-${'m'.repeat(20)}`,
+              },
+            ],
+          },
         ],
       });
     expect(Object.keys(submitted!)).toEqual(['expected_binding_revision', 'selections']);
@@ -1490,44 +1571,29 @@ test.describe('donation selection expiry in UTC', () => {
     const keys = picker.locator('.donation-resource-picker__section').nth(1);
     const choice = keys.getByRole('checkbox').first();
     await choice.check();
-    await expect(
-      picker
-        .locator('.donation-resource-picker__selected-list > li')
-        .first()
-        .getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1'), {
-          exact: true,
-        }),
-    ).toBeVisible();
-    const expiry = picker
-      .locator('.donation-resource-picker__selected-list input[type=datetime-local]')
-      .first();
-    await picker
-      .locator('.donation-resource-picker__selected-list > li')
-      .first()
-      .locator('.nb-fold > summary')
-      .filter({ hasText: userCopy.user.workflows.donationOptions })
-      .click();
-    await expiry.fill('2027-02-01T12:00');
     await expect(choice).toBeChecked();
+    const done = page.getByRole('button', { name: 'Done', exact: true });
+    await done.click();
+    const composer = page.getByRole('region', { name: 'Submit a charity donation', exact: true });
+    const firstKey = composer.getByRole('listitem').filter({ hasText: 'Endpoint 20 —' });
+    const options = userCopy.user.workflows.donationOptions;
+    const sharing = commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1');
+    await firstKey.getByText(options, { exact: true }).click();
+    await expect(firstKey.getByText(sharing, { exact: true })).toBeVisible();
+    const expiry = firstKey.getByLabel('Expiry for head…0001', { exact: true });
+    await expiry.fill('2027-02-01T12:00');
+    await composer.getByRole('button', { name: 'Choose keys…', exact: true }).click();
     await filter.fill('Endpoint 1 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
     await sources.getByRole('button', { name: /^Endpoint 1 —/ }).click();
     await keys.getByRole('checkbox').nth(1).check();
-    await expect(
-      picker
-        .locator('.donation-resource-picker__selected-list > li')
-        .last()
-        .getByText(commonCopy.common.connections.shareExactVersion.replace('{{version}}', '1'), {
-          exact: true,
-        }),
-    ).toBeVisible();
+    await expect(keys.getByRole('checkbox').nth(1)).toBeChecked();
     await filter.fill('Endpoint 20 —');
     await filter.press('Enter');
     await expect(groups).toHaveCount(1);
     await sources.getByRole('button', { name: /^Endpoint 20 —/ }).click();
     await expect(keys.getByRole('checkbox').first()).toBeChecked();
-    await expect(expiry).toHaveValue('2027-02-01T12:00');
     await expect(picker.locator('.donation-resource-picker__selected-list > li')).toHaveCount(2);
     await filter.fill('');
     await filter.press('Enter');
@@ -1541,7 +1607,11 @@ test.describe('donation selection expiry in UTC', () => {
     }
     await page.setViewportSize({ width: 390, height: 1000 });
     await screenshot(page, 'donation-resources-mobile');
-    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await done.click();
+    await expect(expiry).toHaveValue('2027-02-01T12:00');
+    const secondKey = composer.getByRole('listitem').filter({ hasText: 'Endpoint 1 —' });
+    await secondKey.getByText(options, { exact: true }).click();
+    await expect(secondKey.getByText(sharing, { exact: true })).toBeVisible();
     await page
       .getByRole('textbox', { name: 'Donation description', exact: true })
       .fill('A helpful description for the shared resources');

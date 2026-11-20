@@ -43,7 +43,7 @@ func TestResponsesChatFiniteCompilation(t *testing.T) {
 
 func TestResponsesChatRejectsUnrepresentableRequests(t *testing.T) {
 	for _, tc := range []struct{ extra, field string }{
-		{`"reasoning":{"effort":"low"}`, "reasoning"},
+		{`"reasoning":{"effort":"low","summary":"auto"}`, "reasoning"},
 		{`"include":["reasoning.encrypted_content"]`, "include"},
 		{`"truncation":"auto"`, "truncation"},
 		{`"metadata":{"PRIVATE_NAME":"PRIVATE_VALUE"}`, "metadata"},

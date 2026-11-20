@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../../../../test/fixtures/resourceScopes';
 import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -72,6 +73,7 @@ function endpointWire(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
+    ...endpointScope,
     id,
     connector_type: 'openai-compatible',
     base_url: `https://endpoint-${id}.example/v1`,
@@ -114,6 +116,8 @@ function keyWire(
   withBrowse = true,
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
+    ...credentialGrant,
+    credential_id: id,
     id,
     endpoint_id: endpointId,
     display_head: `head-${id}`,
@@ -260,6 +264,11 @@ function selectedChoice(endpointId: string, keyId: string): EndpointKeyChoice {
       updatedAt: 1_700_000_001,
     },
     key: {
+      credentialId: keyId,
+      credentialVersion: credentialGrant.credential_version,
+      grantRevision: credentialGrant.grant_revision,
+      nativeServices: credentialGrant.native_services,
+      discoverySourceId: null,
       id: keyId,
       endpointId,
       displayHead: `head-${keyId}`,
@@ -326,7 +335,7 @@ describe('DonationResourcePicker', () => {
     expect(await screen.findByText('No matching keys')).toBeVisible();
     const navigations = screen.getAllByRole('navigation', { name: 'Pagination' });
     expect(navigations).toHaveLength(1);
-    expect(navigations[0]).toHaveTextContent('1 items');
+    expect(navigations[0]).toHaveTextContent('1 item');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
       expect.arrayContaining([endpointPath(), keyPath('1')]),
@@ -391,7 +400,9 @@ describe('DonationResourcePicker', () => {
       { station: 'user', role: 'user' },
     );
 
-    await rendered.user.click(await screen.findByRole('button', { name: /^endpoint-1(?!\d)/ }));
+    const serviceOne = await screen.findByRole('button', { name: /^endpoint-1(?!\d)/ });
+    await rendered.user.click(serviceOne);
+    expect(await screen.findByRole('heading', { name: 'Keys for endpoint-1' })).toHaveFocus();
     await waitFor(() =>
       expect(screen.getAllByRole('checkbox', { name: /key-1/ }).length).toBeGreaterThan(0),
     );
@@ -401,6 +412,8 @@ describe('DonationResourcePicker', () => {
     await rendered.user.click(await screen.findByRole('checkbox', { name: /key-21/ }));
 
     await rendered.user.click(screen.getByRole('button', { name: 'Back to services' }));
+    expect(serviceOne).toHaveFocus();
+    expect(screen.getByTestId('selected-ids')).toHaveTextContent('1:1,1:21');
     const endpointNavigations = screen.getAllByRole('navigation', { name: 'Pagination' });
     await rendered.user.click(
       within(endpointNavigations[0]!).getByRole('button', { name: 'Next' }),
@@ -554,6 +567,8 @@ describe('DonationResourcePicker', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'pop back' }));
     expect(await screen.findByRole('checkbox', { name: /pop-key-one/ })).toBeVisible();
     expect(screen.getByRole('button', { name: /^endpoint-1(?!\d)/ })).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Back to services' }));
+    expect(screen.getByRole('searchbox', { name: 'Search services' })).toHaveFocus();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(
       expect.arrayContaining([endpointPath(), endpointPath('2'), keyPath('1'), keyPath('1', '2')]),
     );

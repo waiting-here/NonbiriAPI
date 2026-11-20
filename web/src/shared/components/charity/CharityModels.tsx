@@ -1,3 +1,5 @@
+import { ChoiceRow } from '../ui/ChoiceRow';
+import { ModelBindingCoverage, BindingRouteGuide } from './BindingRouteGuide';
 import { CharityTargets } from './CharityTargets';
 import { BindingHealth } from '../ResourceHealth';
 import { serviceHealthDeadlines } from '@shared/operations/resourceHealth';
@@ -17,7 +19,7 @@ import {
   type PriceDraft,
 } from './priceDraft';
 import { DraftLeaveGuard } from './DraftLeaveScope';
-import { PageHeader } from '../States';
+import { SectionHead } from '../States';
 import {
   buildSessionHeaders,
   sessionHeaderDraft,
@@ -27,7 +29,7 @@ import {
 import { PriceConfigFields } from './PriceConfigFields';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ModelTypesField, ModelTypesSummary } from '@shared/components/ModelTypesField';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { TransportRuleField } from '@shared/components/TransportRuleField';
 import {
   Button,
@@ -36,6 +38,7 @@ import {
   FilterBar,
   Fields,
   FormActions,
+  StatusBadge,
   Toggle,
   Fold,
   Note,
@@ -492,31 +495,22 @@ function ModelForm({
               </div>
               <div className="ops-model-level-options">
                 {MODEL_LEVELS.map((level) => (
-                  <Field
-                    label={t('common.operations.charity.levelLabel', { level })}
-                    size="short"
+                  <ChoiceRow
                     key={level}
-                  >
-                    {(field) => (
-                      <input
-                        {...field}
-                        type="checkbox"
-                        checked={draft.allowedLevels.includes(level)}
-                        onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
-                            allowedLevels: event.target.checked
-                              ? MODEL_LEVELS.filter(
-                                  (candidate) =>
-                                    candidate === level ||
-                                    current.allowedLevels.includes(candidate),
-                                )
-                              : current.allowedLevels.filter((candidate) => candidate !== level),
-                          }))
-                        }
-                      />
-                    )}
-                  </Field>
+                    label={t('common.operations.charity.levelLabel', { level })}
+                    checked={draft.allowedLevels.includes(level)}
+                    onChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        allowedLevels: checked
+                          ? MODEL_LEVELS.filter(
+                              (candidate) =>
+                                candidate === level || current.allowedLevels.includes(candidate),
+                            )
+                          : current.allowedLevels.filter((candidate) => candidate !== level),
+                      }))
+                    }
+                  />
                 ))}
               </div>
               {draft.allowedLevels.length === 0 ? (
@@ -903,12 +897,14 @@ function BindingsPanel({
     queryFn: ({ signal }) => getManagedBindings(role, model.id, signal),
     retry: false,
   });
+  const targetConnectors = bindings.data?.bindings.flatMap((entry) =>
+    entry.targets.map((target) => target.connector_type),
+  );
   useRateLimitRefresh(
-    bindings.data?.bindings.flatMap(
-      (binding) =>
-        binding.targets?.flatMap((target) =>
-          serviceHealthDeadlines(target.availability?.service_statuses),
-        ) ?? [],
+    bindings.data?.bindings.flatMap((binding) =>
+      binding.targets.flatMap((target) =>
+        serviceHealthDeadlines(target.availability?.service_statuses),
+      ),
     ) ?? [],
     () => bindings.refetch({ throwOnError: true }),
   );
@@ -947,7 +943,9 @@ function BindingsPanel({
     setOrderDraft({ ids, revision: bindings.data.binding_revision });
   };
   const orderedBindings =
-    orderDraft && orderDraft.revision === bindings.data?.binding_revision
+    bindings.data?.can_reorder !== false &&
+    orderDraft &&
+    orderDraft.revision === bindings.data?.binding_revision
       ? orderDraft.ids.flatMap(
           (id) => bindings.data?.bindings.filter((entry) => entry.id === id) ?? [],
         )
@@ -981,15 +979,7 @@ function BindingsPanel({
             url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/request-adaptation`}
             scope="charity-model"
             gatewayCacheDefaults={Boolean(
-              bindings.data?.bindings.length &&
-              bindings.data.bindings
-                .flatMap(
-                  (entry) =>
-                    entry.targets?.map((target) => target.connector_type) ?? [
-                      entry.source.connector_type,
-                    ],
-                )
-                .every((type) => type !== undefined && isAISDKGateway(type)),
+              targetConnectors?.length && targetConnectors.every(isAISDKGateway),
             )}
             editable={canEditAdaptation}
           />
@@ -999,6 +989,9 @@ function BindingsPanel({
         <h3 id={`charity-model-connections-${model.id}`}>
           {t('common.operations.charity.orderedBindings')}
         </h3>
+        {bindings.data?.coverage && !bindings.error ? (
+          <ModelBindingCoverage coverage={bindings.data.coverage} />
+        ) : null}
         {bindings.isPending ? (
           <LoadingState />
         ) : bindings.error ? (
@@ -1022,7 +1015,7 @@ function BindingsPanel({
               <tbody>
                 {bindingPage.data.map((entry, pageIndex) => {
                   const index = bindingPage.offset + pageIndex;
-                  const sourceKeys = entry.targets?.length
+                  const sourceKeys = entry.targets.length
                     ? [
                         ...new Map(
                           entry.targets.map((target) => [target.donation_key_id, target]),
@@ -1031,7 +1024,9 @@ function BindingsPanel({
                     : [entry];
                   return (
                     <tr key={entry.id}>
-                      <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
+                      <td data-label={t(charityCopyKey(role, 'order'))}>
+                        {bindings.data.can_reorder === false ? entry.ord + 1 : index + 1}
+                      </td>
                       <td
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.source')}
@@ -1042,10 +1037,9 @@ function BindingsPanel({
                         {entry.source_types.length === 0 ? (
                           <>
                             <br />
-                            <StatusBadge
-                              active={false}
-                              label={t('common.operations.charity.sourceBrowser.sourceMissing')}
-                            />
+                            <StatusBadge tone="neutral">
+                              {t('common.operations.charity.sourceBrowser.sourceMissing')}
+                            </StatusBadge>
                           </>
                         ) : null}
                         <KeyLimitSummary
@@ -1059,96 +1053,114 @@ function BindingsPanel({
                         className="ops-cell-wide"
                         data-label={t(charityCopyKey(role, 'upstreamModel'))}
                       >
-                        {entry.targets?.length
+                        {entry.targets.length
                           ? entry.targets.map((target) => (
                               <div key={target.id} className="nb-stack nb-stack--sm">
                                 <strong>{target.upstream_model_id}</strong>
                                 <BindingHealth value={target.availability} />
+                                {target.binding_guide ? (
+                                  <Fold plain lazy title={t('common.bindingGuide.preview')}>
+                                    <BindingRouteGuide
+                                      guide={target.binding_guide}
+                                      selected={target.native_services}
+                                    />
+                                  </Fold>
+                                ) : null}
+                                {target.binding_guide && isAISDKGateway(target.connector_type) ? (
+                                  <GatewayCapabilitySummary entry={target.gateway_capabilities} />
+                                ) : null}
                               </div>
                             ))
                           : entry.upstream_model_id}
-                        {(entry.targets?.every((target) => isAISDKGateway(target.connector_type)) ??
-                        isAISDKGateway(entry.source.connector_type)) ? (
+                        {!entry.targets.some((target) => target.binding_guide) &&
+                        entry.targets.length > 0 &&
+                        entry.targets.every((target) => isAISDKGateway(target.connector_type)) ? (
                           <GatewayCapabilitySummary entry={entry.gateway_capabilities} />
                         ) : null}
                       </td>
                       <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            setEditingBinding(entry.id);
-                            setVisitedBindings((previous) =>
-                              previous.includes(entry.id) ? previous : [...previous, entry.id],
-                            );
-                          }}
-                        >
-                          {t('common.connections.editBindingSources')}
-                        </button>
-                        {sourceKeys.map((sourceKey) => (
+                        <div className="nb-actions">
                           <button
-                            key={sourceKey.donation_key_id}
-                            className="nb-btn nb-btn--secondary"
+                            className="nb-btn nb-btn--secondary nb-btn--sm"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              setEditingBinding(entry.id);
+                              setVisitedBindings((previous) =>
+                                previous.includes(entry.id) ? previous : [...previous, entry.id],
+                              );
+                            }}
+                          >
+                            {t('common.connections.editBindingSources')}
+                          </button>
+                          {sourceKeys.map((sourceKey) => (
+                            <button
+                              key={sourceKey.donation_key_id}
+                              className="nb-btn nb-btn--secondary nb-btn--sm"
+                              type="button"
+                              disabled={busy || orderChanged}
+                              onClick={() =>
+                                setParams((current) => {
+                                  const next = new URLSearchParams(current);
+                                  next.set('charity_section', 'donations');
+                                  next.set('donation_id', sourceKey.donation_id);
+                                  next.set('donation_key', sourceKey.donation_key_id);
+                                  next.set('donation_from', 'models');
+                                  next.delete('donation_keys_page');
+                                  next.delete('donation_keys_page_size');
+                                  return next;
+                                })
+                              }
+                            >
+                              {t('common.operations.charity.sourceBrowser.manageKey', {
+                                id: sourceKey.donation_key_id,
+                              })}
+                            </button>
+                          ))}
+                          {showAdaptation ? (
+                            <button
+                              className="nb-btn nb-btn--secondary nb-btn--sm"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => setAdaptationBinding(entry.id)}
+                            >
+                              {adaptationCopy('title')}
+                            </button>
+                          ) : null}
+                          {bindings.data.can_reorder !== false ? (
+                            <>
+                              <button
+                                className="nb-btn nb-btn--secondary nb-btn--sm"
+                                type="button"
+                                disabled={index === 0 || busy}
+                                onClick={() => move(index, -1)}
+                              >
+                                {t('common.operations.charity.moveUp')}
+                              </button>
+                              <button
+                                className="nb-btn nb-btn--secondary nb-btn--sm"
+                                type="button"
+                                disabled={index === orderedBindings.length - 1 || busy}
+                                onClick={() => move(index, 1)}
+                              >
+                                {t('common.operations.charity.moveDown')}
+                              </button>
+                            </>
+                          ) : null}
+                          <button
+                            className="nb-btn nb-btn--danger nb-btn--sm"
                             type="button"
                             disabled={busy || orderChanged}
                             onClick={() =>
-                              setParams((current) => {
-                                const next = new URLSearchParams(current);
-                                next.set('charity_section', 'donations');
-                                next.set('donation_id', sourceKey.donation_id);
-                                next.set('donation_key', sourceKey.donation_key_id);
-                                next.set('donation_from', 'models');
-                                next.delete('donation_keys_page');
-                                next.delete('donation_keys_page_size');
-                                return next;
+                              remove.mutate({
+                                id: entry.id,
+                                revision: bindings.data.binding_revision,
                               })
                             }
                           >
-                            {t('common.operations.charity.sourceBrowser.manageKey', {
-                              id: sourceKey.donation_key_id,
-                            })}
+                            {t('common.operations.charity.remove')}
                           </button>
-                        ))}
-                        {showAdaptation ? (
-                          <button
-                            className="nb-btn nb-btn--secondary"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setAdaptationBinding(entry.id)}
-                          >
-                            {adaptationCopy('title')}
-                          </button>
-                        ) : null}
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          disabled={index === 0 || busy}
-                          onClick={() => move(index, -1)}
-                        >
-                          {t('common.operations.charity.moveUp')}
-                        </button>
-                        <button
-                          className="nb-btn nb-btn--secondary"
-                          type="button"
-                          disabled={index === orderedBindings.length - 1 || busy}
-                          onClick={() => move(index, 1)}
-                        >
-                          {t('common.operations.charity.moveDown')}
-                        </button>
-                        <button
-                          className="nb-btn nb-btn--danger"
-                          type="button"
-                          disabled={busy || orderChanged}
-                          onClick={() =>
-                            remove.mutate({
-                              id: entry.id,
-                              revision: bindings.data.binding_revision,
-                            })
-                          }
-                        >
-                          {t('common.operations.charity.remove')}
-                        </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1179,9 +1191,7 @@ function BindingsPanel({
                   (entry) => entry.id === adaptationBinding,
                 );
                 if (!entry) return undefined;
-                const connectors = entry.targets?.map((target) => target.connector_type) ?? [
-                  entry.source.connector_type,
-                ];
+                const connectors = entry.targets.map((target) => target.connector_type);
                 return connectors.every((connector) => connector === connectors[0])
                   ? connectors[0]
                   : undefined;
@@ -1457,7 +1467,7 @@ export function ModelsPanel({
   }
   return (
     <div className="ops-stack" ref={listRef} tabIndex={-1}>
-      <PageHeader
+      <SectionHead
         title={t(
           creating
             ? 'common.workflow.newModel'
@@ -1526,7 +1536,6 @@ export function ModelsPanel({
           <FilterBar
             query={models}
             activeCount={[query, enabled].filter(Boolean).length}
-            secondaryAlwaysVisible
             onReset={() => {
               setQueryDraft('');
               updateFilters('', '');
@@ -1548,22 +1557,20 @@ export function ModelsPanel({
                     />
                   )}
                 </Field>
+                <Field label={t(charityCopyKey(role, 'enabled'))} size="short">
+                  {(props) => (
+                    <select
+                      {...props}
+                      value={enabled}
+                      onChange={(event) => updateFilters(query, event.target.value)}
+                    >
+                      <option value="">{t('common.all')}</option>
+                      <option value="true">{t(charityCopyKey(role, 'enabled'))}</option>
+                      <option value="false">{t(charityCopyKey(role, 'disabled'))}</option>
+                    </select>
+                  )}
+                </Field>
               </>
-            }
-            secondary={
-              <Field label={t(charityCopyKey(role, 'enabled'))}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={enabled}
-                    onChange={(event) => updateFilters(query, event.target.value)}
-                  >
-                    <option value="">{t('common.all')}</option>
-                    <option value="true">{t(charityCopyKey(role, 'enabled'))}</option>
-                    <option value="false">{t(charityCopyKey(role, 'disabled'))}</option>
-                  </select>
-                )}
-              </Field>
             }
           />
           {models.isPending ? (
@@ -1603,10 +1610,9 @@ export function ModelsPanel({
                     header: t('common.operations.charity.state'),
                     cell: 'status',
                     render: (model) => (
-                      <StatusBadge
-                        active={model.enabled}
-                        label={t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
-                      />
+                      <StatusBadge tone={model.enabled ? 'ok' : 'neutral'}>
+                        {t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
+                      </StatusBadge>
                     ),
                   },
                   {
@@ -1643,6 +1649,7 @@ export function ModelsPanel({
                     key: 'open',
                     header: t('common.workflow.actions'),
                     cell: 'action',
+                    align: 'action',
                     render: (model) => (
                       <Button
                         id={manageTriggerId + '-' + model.id}

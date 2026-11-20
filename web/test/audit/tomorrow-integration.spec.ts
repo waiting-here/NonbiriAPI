@@ -189,10 +189,10 @@ test('Tomorrow unlocks through its limited pool, collection reward and account a
         );
       }
     }
-    await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
     await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-    await page.getByRole('radio', { name: /Nonbiri/ }).check();
-    await page.getByRole('button', { name: 'Apply appearance', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'Appearance', exact: true });
+    await sheet.getByRole('radio', { name: /Nonbiri/ }).check();
+    await sheet.getByRole('button', { name: 'Apply appearance', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-appearance', 'default');
     expect((await readAppearance()).unlocked).toContain('tomorrow');
     if (process.env.NONBIRI_VISUAL_DIR)

@@ -1,4 +1,6 @@
+import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
+import { StatusBadge } from '@shared/components/ui';
 import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,7 +9,6 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
-  StatusBadge,
 } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
@@ -18,6 +19,12 @@ import {
   useUserAuthority,
 } from '../features/operations/data';
 import '@shared/operations/operations.css';
+
+const SEVERITY_TONES = {
+  info: 'info',
+  warning: 'warn',
+  important: 'bad',
+} as const;
 
 const SEVERITY_LABEL_KEYS = {
   info: 'user.announcements.severity.info',
@@ -69,12 +76,13 @@ export function AnnouncementsPage() {
   );
   const pageData = announcements.data;
   const busy = announcements.isFetching;
+  const { announcementSource, remember } = useAnnouncementReturn(Boolean(pageData) && !busy);
   const returnParams = new URLSearchParams(location.search);
   returnParams.set('page', pageData?.pagination.page ?? pager.page);
   returnParams.set('page_size', String(pager.pageSize));
   const returnTo = `/announcements?${returnParams.toString()}`;
   return (
-    <div className="page ops-stack">
+    <div className="page ops-stack ops-readable-page">
       <PageHeader
         icon="announcements"
         title={t('user.announcements.title')}
@@ -95,7 +103,7 @@ export function AnnouncementsPage() {
               body={t('user.announcements.emptyBody')}
             />
           ) : (
-            <div className="ops-grid" aria-busy={busy}>
+            <div className="announcement-list" aria-busy={busy}>
               {pageData.data.map((item) => {
                 const key = announcementDismissalKey(accountID, item);
                 const dismissed = isAnnouncementDismissed(key);
@@ -103,11 +111,16 @@ export function AnnouncementsPage() {
                   <Card key={item.id} className="ops-stack">
                     <div className="card-title-row">
                       <h2>{item.title}</h2>
-                      <StatusBadge
-                        active={item.severity === 'info'}
-                        danger={item.severity === 'important'}
-                        label={t(SEVERITY_LABEL_KEYS[item.severity])}
-                      />
+                      <div className="nb-inline">
+                        {item.pinned ? (
+                          <StatusBadge tone="accent">
+                            {t('user.core.home.announcement.pinned')}
+                          </StatusBadge>
+                        ) : null}
+                        <StatusBadge tone={SEVERITY_TONES[item.severity]}>
+                          {t(SEVERITY_LABEL_KEYS[item.severity])}
+                        </StatusBadge>
+                      </div>
                     </div>
                     <p>{item.excerpt}</p>
                     <p className="table-note">
@@ -120,7 +133,9 @@ export function AnnouncementsPage() {
                       <Link
                         className="nb-btn nb-btn--secondary"
                         to={`/announcements/${encodeURIComponent(item.id)}`}
-                        state={{ returnTo }}
+                        id={`read-${item.id}`}
+                        state={{ returnTo, announcementSource }}
+                        onClick={(event) => remember(event.currentTarget)}
                       >
                         {t('user.announcements.readMore')}
                       </Link>

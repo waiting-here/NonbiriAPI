@@ -104,6 +104,41 @@ func TestReadPoolBoundsAndReplacement(t *testing.T) {
 	}
 }
 
+func TestReadPoolReusesCompiledSelectAndReadsCurrentValues(t *testing.T) {
+	store := openTestStore(t, filepath.Join(privateDBDir(t), "reader-statements.sqlite"))
+	ctx := t.Context()
+	conn, err := store.ReadDB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	const query = "SELECT value FROM site_config WHERE key=?"
+	var first *cachedQuery
+	for _, name := range []string{"first site name", "updated site name"} {
+		if _, err := store.DB().ExecContext(ctx, "UPDATE site_config SET value=? WHERE key='site_name'", name); err != nil {
+			t.Fatal(err)
+		}
+		var value string
+		if err := conn.QueryRowContext(ctx, query, "site_name").Scan(&value); err != nil || value != name {
+			t.Fatalf("reader returned %q, want %q: %v", value, name, err)
+		}
+		if err := conn.Raw(func(raw any) error {
+			reader, ok := raw.(*queryConnection)
+			if !ok || reader.queries[query] == nil {
+				t.Fatal("reader discarded the compiled SELECT")
+			}
+			statement := reader.queries[query].Value.(*cachedQuery)
+			if statement.busy || first != nil && statement != first {
+				t.Fatal("reader did not release and reuse the same statement")
+			}
+			first = statement
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestStoreRetainsOwnershipUntilReaderCloses(t *testing.T) {
 	path := filepath.Join(privateDBDir(t), "reader-close.sqlite")
 	store := openTestStore(t, path)

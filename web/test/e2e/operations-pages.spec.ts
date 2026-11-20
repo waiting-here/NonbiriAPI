@@ -315,11 +315,17 @@ test('anonymous credential report keeps its secret request-only and accepts the 
   await anonymousSession;
   await page.waitForTimeout(50);
   setup.consoleGuard = collectConsoleViolations(page);
-  await page.getByLabel('Service address (URL)').fill('https://reported.example.test/v1');
+  const serviceURL = page.getByLabel('Service address (URL)');
+  await serviceURL.fill('ftp://reported.example.test/v1');
   await page.getByLabel('Suspected leaked key or credential').fill(REPORT_SECRET);
   await page
     .getByLabel('Additional note (optional)')
     .fill('Synthetic reporter context without credentials.');
+  await page.getByRole('button', { name: 'Submit report' }).click();
+  await expect(serviceURL).toBeFocused();
+  await expect(serviceURL).toHaveAttribute('aria-invalid', 'true');
+  expect(observation.count).toBe(0);
+  await serviceURL.fill('https://reported.example.test/v1');
   await page.getByRole('button', { name: 'Submit report' }).click();
 
   await expect(page.getByRole('heading', { name: 'Report accepted' })).toBeVisible();
@@ -466,6 +472,16 @@ test('administrator dashboard accepts the runtime activity day contract', async 
     body: {
       revision: '32',
       values: { site_timezone_offset_minutes: 480, unrelated_setting: true },
+    },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+    body: {
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
     },
   });
   await mockJson(page, {

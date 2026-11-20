@@ -1,7 +1,11 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
-import { normalizeServiceStatuses, type ServiceStatus } from '@shared/operations/resourceHealth';
+import {
+  normalizeBindingAvailability,
+  normalizeServiceStatuses,
+  type ServiceStatus,
+} from '@shared/operations/resourceHealth';
 import { BindingHealth, ServiceHealth } from './ResourceHealth';
 
 const service: ServiceStatus = {
@@ -15,6 +19,37 @@ const service: ServiceStatus = {
 };
 
 describe('current service health', () => {
+  it('shows a Google model quota wait only for the affected binding service', async () => {
+    const waiting = {
+      ...service,
+      native_service: 'gemini_generate_content',
+      state: 'rate_limited',
+      failure_streak: '0',
+      failure_disabled: false,
+      retry_after_until: 1_800_000_000,
+      model_quota_reason: 'google_minute_input_tokens',
+    };
+    const value = normalizeBindingAvailability({
+      state: 'available',
+      service_statuses: [
+        waiting,
+        {
+          ...waiting,
+          use_id: '2',
+          native_service: 'embeddings',
+          state: 'available',
+          model_quota_reason: undefined,
+          retry_after_until: null,
+        },
+      ],
+    });
+    await renderWithProviders(<BindingHealth value={value} />, { station: 'admin' });
+    expect(screen.getByText('1 of 2 services healthy')).toBeVisible();
+    expect(screen.getByText('Google model input token quota per minute exhausted')).toBeVisible();
+    expect(screen.getByText(/Rate limit wait until/)).toBeVisible();
+    expect(normalizeServiceStatuses([waiting])[0]).not.toHaveProperty('model_quota_reason');
+  });
+
   it('makes a partial service pause and manual recovery visible without claiming the whole key is unavailable', async () => {
     const statuses = normalizeServiceStatuses([
       service,

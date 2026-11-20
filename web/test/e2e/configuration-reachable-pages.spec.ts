@@ -1,3 +1,4 @@
+import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { numberedResponse } from './numbered-fixtures';
@@ -441,6 +442,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
 }) => {
   const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
   const endpoint = {
+    ...endpointScope,
     id: '1',
     connection_id: '1',
     native_services: ['chat_completions', 'responses'],
@@ -469,6 +471,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
       ...numberedResponse(
         [
           {
+            ...credentialGrant,
             id: '2',
             endpoint_id: '1',
             display_head: 'sk-a',
@@ -509,7 +512,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
 
   await page.goto(`${USER_ORIGIN}/endpoints`);
   await expect(page.getByRole('heading', { name: 'My services', level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: 'Manage', exact: true }).click();
+  await page.getByRole('link', { name: 'Browser connection', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Browser connection', exact: true }),
   ).toBeVisible();
@@ -933,7 +936,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await expect(flatten).toBeChecked();
   const picker = page.locator('.ops-binding-picker');
   await picker.getByRole('button', { name: /https:\/\/shared.example.test\/v1/ }).click();
-  await expect(picker.locator('.ops-picker-context')).toContainText(
+  await expect(picker.locator('.binding-current-source')).toContainText(
     'https://shared.example.test/v1',
   );
   await picker.getByRole('button', { name: /Reviewed key note/ }).click();

@@ -64,6 +64,16 @@ export function normalizeNativeServices(value: unknown): NativeService[] {
 export function normalizeRerankFormat(value: unknown): RerankFormat | '' {
   return value === '' ? '' : oneOf(value, RERANK_FORMATS, 'rerank format');
 }
+export function normalizeServiceRoutes(value: unknown): ServiceRoute[] {
+  return array(value, 'service routes').map((item) => {
+    const route = record(item, ['operation', 'native_service', 'mode'], 'service route');
+    return {
+      operation: oneOf(route.operation, MODEL_TYPES, 'operation'),
+      native_service: oneOf(route.native_service, NATIVE_SERVICES, 'native service'),
+      mode: oneOf(route.mode, ['native', 'converted'] as const, 'service route mode'),
+    };
+  });
+}
 export function normalizeServiceProjection(value: unknown): ServiceProjection {
   const source = record(
     value,
@@ -80,14 +90,7 @@ export function normalizeServiceProjection(value: unknown): ServiceProjection {
     model_types: array(source.model_types, 'provided services', MODEL_TYPES.length).map((item) =>
       oneOf(item, MODEL_TYPES, 'provided service'),
     ),
-    service_routes: array(source.service_routes, 'service routes').map((item) => {
-      const route = record(item, ['operation', 'native_service', 'mode'], 'service route');
-      return {
-        operation: oneOf(route.operation, MODEL_TYPES, 'operation'),
-        native_service: oneOf(route.native_service, NATIVE_SERVICES, 'native service'),
-        mode: oneOf(route.mode, ['native', 'converted'] as const, 'service route mode'),
-      };
-    }),
+    service_routes: normalizeServiceRoutes(source.service_routes),
     capabilities: {
       can_bind: boolean(capabilities.can_bind, 'can bind'),
       unavailable_reason: nullableString(
@@ -166,3 +169,21 @@ export function normalizeModelMappings(value: unknown): ModelMapping[] {
     };
   });
 }
+
+export const CONNECTOR_TYPES = [
+  'openai-compatible',
+  'anthropic-compatible',
+  'ai-sdk-gateway-v3',
+  'ai-sdk-gateway-v4',
+  'google-gemini',
+  'openai-responses',
+  'openai-decisions',
+  'cohere-rerank',
+  'jina-rerank',
+  'siliconflow-rerank',
+  'voyage-rerank',
+  'typesafe-systemone',
+  'openai-chat-completions',
+] as const;
+
+export type ConnectorType = (typeof CONNECTOR_TYPES)[number];

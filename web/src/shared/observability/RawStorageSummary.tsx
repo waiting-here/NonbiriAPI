@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiFetch } from '@shared/query/http';
 import { Fold } from '@shared/components/ui/Fold';
 import type { DiagnosticRole } from './api';
-import { IndependentDiagnostics } from './IndependentDiagnostics';
+import { LoadingState } from '@shared/components/States';
+import { LazyIndependentDiagnostics } from './LazyIndependentDiagnostics';
 
 interface Capacity {
   budget_bytes: number;
@@ -55,7 +56,9 @@ export function RawStorageSummary({ role }: { role: DiagnosticRole }) {
           {t('common.operations.logs.presentation.storageRecords')}
         </button>
         {showRecords ? (
-          <IndependentDiagnostics role={role} scopeReady accountId="storage" storage />
+          <Suspense fallback={<LoadingState />}>
+            <LazyIndependentDiagnostics role={role} scopeReady accountId="storage" storage />
+          </Suspense>
         ) : null}
       </Fold>
     </div>

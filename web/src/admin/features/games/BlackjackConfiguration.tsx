@@ -34,8 +34,8 @@ export function validateBlackjackConfiguration(
     (initial - min) % step !== 0n
   )
     return t(
-      '二十一点：金额须为正数且最多三位小数；最大投入不超过140625000000，默认值和最大值须符合步长。',
-      'Blackjack: positive amounts with at most three decimals; maximum stake 140625000000. Default and maximum stakes must align with the step from the minimum.',
+      '二十一点：金额须为正数且最多三位小数；最大投入不超过 140,625,000,000，默认值和最大值须符合步长。',
+      'Blackjack: positive amounts with at most three decimals; maximum stake 140,625,000,000. Default and maximum stakes must align with the step from the minimum.',
     );
   const quick = value.quick_stakes.map(parse);
   if (
@@ -74,7 +74,7 @@ export function BlackjackConfiguration({
   const t = useGameAdminText();
   return (
     <div className="nb-stack">
-      <Fold title={t('时间与关闭规则', 'Timing and closure rules')}>
+      <Fold plain title={t('时间与关闭规则', 'Timing and closure rules')}>
         {t(
           '单桌九席，每30秒按5秒落座、20秒决策、5秒展示轮转。提前结束延长展示，下一局不提前。修改配置不改变已经入队的投入及费用。关闭后候补和未发牌席位原退，已发牌局正常结算。',
           'Nine seats, every 30 seconds: 5 for seating, 20 for decisions and 5 for results. Early finishes extend the display without starting the next round early. Queued entries keep their stake and fees. Closing refunds waiters and undealt seats; dealt tables settle normally.',
@@ -162,7 +162,7 @@ export function BlackjackConfiguration({
         </p>
         <Fields>
           {value.quick_stakes.map((amount, index) => (
-            <div key={index}>
+            <div key={index} className="blackjack-quick-stake">
               <Field size="short" label={`${t('快捷金额', 'Quick amount')} ${index + 1}`}>
                 {(props) => (
                   <Affix
@@ -183,21 +183,19 @@ export function BlackjackConfiguration({
                   />
                 )}
               </Field>
-              <FormActions>
-                <button
-                  type="button"
-                  className="nb-btn nb-btn--secondary"
-                  aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
-                  onClick={() =>
-                    onChange({
-                      ...value,
-                      quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
-                    })
-                  }
-                >
-                  {t('移除', 'Remove')}
-                </button>
-              </FormActions>
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                aria-label={`${t('移除快捷金额', 'Remove quick amount')} ${index + 1}`}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    quick_stakes: value.quick_stakes.filter((_, i) => i !== index),
+                  })
+                }
+              >
+                {t('移除', 'Remove')}
+              </button>
             </div>
           ))}
         </Fields>

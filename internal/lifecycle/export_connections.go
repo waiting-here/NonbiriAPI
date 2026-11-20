@@ -132,16 +132,23 @@ type DonationUseExport struct {
 	Health             []DonationUseHealthExport   `json:"health"`
 }
 type DonationUseHealthExport struct {
-	CredentialID      string  `json:"credential_id"`
-	CredentialVersion string  `json:"credential_version"`
-	FailureStreak     string  `json:"failure_streak"`
-	FailureDisabled   bool    `json:"failure_disabled"`
-	RetryAfterUntil   *int64  `json:"retry_after_until"`
-	BackoffRetryAt    *int64  `json:"backoff_retry_at"`
-	BackoffPeriod     *string `json:"backoff_period"`
-	BackoffSource     *string `json:"backoff_source"`
-	BackoffStage      int     `json:"backoff_stage"`
-	UpdatedAt         int64   `json:"updated_at"`
+	ModelCooldowns    []DonationModelCooldownExport `json:"model_cooldowns,omitempty"`
+	CredentialID      string                        `json:"credential_id"`
+	CredentialVersion string                        `json:"credential_version"`
+	FailureStreak     string                        `json:"failure_streak"`
+	FailureDisabled   bool                          `json:"failure_disabled"`
+	RetryAfterUntil   *int64                        `json:"retry_after_until"`
+	BackoffRetryAt    *int64                        `json:"backoff_retry_at"`
+	BackoffPeriod     *string                       `json:"backoff_period"`
+	BackoffSource     *string                       `json:"backoff_source"`
+	BackoffStage      int                           `json:"backoff_stage"`
+	UpdatedAt         int64                         `json:"updated_at"`
+}
+
+type DonationModelCooldownExport struct {
+	UpstreamModelID string `json:"upstream_model_id"`
+	Reason          string `json:"reason"`
+	RetryAt         int64  `json:"retry_at"`
 }
 
 type DonationUseRevisionExport struct {
@@ -370,37 +377,46 @@ func exportUseHealth(ctx context.Context, tx *sql.Tx, request ExportRequest, out
 		positions[item.ID] = i
 		count += len(item.Revisions)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT CAST(h.use_id AS TEXT),CAST(v.credential_id AS TEXT),CAST(v.version AS TEXT),h.failure_streak,h.failure_disabled,h.retry_after_until,h.backoff_retry_at,h.backoff_period,h.backoff_source,h.backoff_stage,h.updated_at
+	rows, err := tx.QueryContext(ctx, `SELECT h.id,CAST(h.use_id AS TEXT),CAST(v.credential_id AS TEXT),CAST(v.version AS TEXT),h.failure_streak,h.failure_disabled,h.retry_after_until,h.backoff_retry_at,h.backoff_period,h.backoff_source,h.backoff_stage,h.updated_at,c.upstream_model_id,c.reason,c.retry_at
  FROM donation_service_health h JOIN donation_uses u ON u.id=h.use_id JOIN donation_keys dk ON dk.id=u.donation_key_id JOIN donations d ON d.id=dk.donation_id JOIN credential_versions v ON v.id=h.credential_version_id
- WHERE d.user_id=? ORDER BY h.use_id,v.credential_id,v.version,h.id LIMIT ?`, request.UserID, request.Limit+1)
+ LEFT JOIN donation_service_model_cooldowns c ON c.health_id=h.id AND c.retry_at>?1
+ WHERE d.user_id=?2 ORDER BY h.use_id,v.credential_id,v.version,h.id,c.upstream_model_id LIMIT ?3`, request.DecisionNow, request.UserID, request.Limit-count+1)
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
+	var lastHealthID int64
+	var current *DonationUseHealthExport
 	for rows.Next() {
-		count++
-		if count > request.Limit {
-			rows.Close()
-			return ErrTooLarge
-		}
 		var id string
+		var healthID int64
 		var item DonationUseHealthExport
 		var streak []byte
-		if err := rows.Scan(&id, &item.CredentialID, &item.CredentialVersion, &streak, &item.FailureDisabled, &item.RetryAfterUntil, &item.BackoffRetryAt, &item.BackoffPeriod, &item.BackoffSource, &item.BackoffStage, &item.UpdatedAt); err != nil {
-			rows.Close()
+		var model, reason sql.NullString
+		var retryAt sql.NullInt64
+		if err := rows.Scan(&healthID, &id, &item.CredentialID, &item.CredentialVersion, &streak, &item.FailureDisabled, &item.RetryAfterUntil, &item.BackoffRetryAt, &item.BackoffPeriod, &item.BackoffSource, &item.BackoffStage, &item.UpdatedAt, &model, &reason, &retryAt); err != nil {
 			return err
 		}
-		value, err := db.DecodeU128(streak)
-		if err != nil {
-			rows.Close()
-			return ErrUnavailable
+		if current == nil || healthID != lastHealthID {
+			index, ok := positions[id]
+			value, err := db.DecodeU128(streak)
+			if !ok || err != nil {
+				return ErrUnavailable
+			}
+			item.FailureStreak = value.Decimal()
+			use := &out.DonationUses[index]
+			use.Health = append(use.Health, item)
+			current = &use.Health[len(use.Health)-1]
+			lastHealthID = healthID
+			count++
 		}
-		item.FailureStreak = value.Decimal()
-		index, ok := positions[id]
-		if !ok {
-			rows.Close()
-			return ErrUnavailable
+		if model.Valid {
+			current.ModelCooldowns = append(current.ModelCooldowns, DonationModelCooldownExport{UpstreamModelID: model.String, Reason: reason.String, RetryAt: retryAt.Int64})
+			count++
 		}
-		out.DonationUses[index].Health = append(out.DonationUses[index].Health, item)
+		if count > request.Limit {
+			return ErrTooLarge
+		}
 	}
-	return errors.Join(rows.Err(), rows.Close())
+	return rows.Err()
 }

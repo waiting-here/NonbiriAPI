@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { isLogOperation, validLogDiscordID } from './data';
+import { isLogOperation, validLogDiscordID, validLogResourceID } from './data';
+import { ATTEMPT_SEQ_PARAM } from './managementFailures';
 
 // URL-backed state for the shared log screens. Page, page size, text filters,
 // and the unix-second time range live in the query string so a filtered view
@@ -17,6 +18,12 @@ export interface LogUrlState {
   fromUnix?: number;
   /** Exclusive upper time bound in unix seconds; undefined when unset. */
   toUnix?: number;
+}
+
+interface LogPatchOptions {
+  clearDetail?: boolean;
+  replace?: boolean;
+  keepFilters?: readonly string[];
 }
 
 /** Maximum characters accepted for any restored filter value. */
@@ -41,26 +48,32 @@ function parseState(
     if (raw === null || raw.length > MAX_FILTER_CHARS) continue;
     const trimmed = raw.trim();
     if (Array.from(trimmed).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) continue;
-    if (
-      (name === 'user_id' || name === 'endpoint_key_id') &&
-      (!/^[1-9][0-9]{0,18}$/.test(trimmed) || BigInt(trimmed) > 9_223_372_036_854_775_807n)
-    )
+    if ((name === 'user_id' || name === 'endpoint_key_id') && !validLogResourceID(trimmed))
       continue;
     if (name === 'discord_id' && !validLogDiscordID(trimmed)) continue;
     if (name === 'operation' && !isLogOperation(raw)) continue;
     if (name === 'status' && !/^[1-5][0-9]{2}$/.test(trimmed)) continue;
+    if (
+      name === 'outcome' &&
+      !['success', 'failed', 'before_dispatch', 'actual_backoff'].includes(trimmed)
+    )
+      continue;
     if (name === 'phase' && trimmed !== 'handler' && trimmed !== 'pre_handler') continue;
     if (name === 'usage_total_mismatch' && trimmed !== 'true') continue;
     if (trimmed) filters[name] = trimmed;
   }
   const page = parsePositiveInt(params.get('page')) ?? 1;
   const pageSize = parsePositiveInt(params.get('page_size')) ?? defaultPageSize;
+  const from =
+    params.getAll('from').length === 1 ? parsePositiveInt(params.get('from')) : undefined;
+  const to = params.getAll('to').length === 1 ? parsePositiveInt(params.get('to')) : undefined;
+  const reversed = from !== undefined && to !== undefined && from >= to;
   return {
     page: Math.max(1, page),
     pageSize: Math.min(100, Math.max(1, pageSize)),
     filters,
-    fromUnix: params.getAll('from').length === 1 ? parsePositiveInt(params.get('from')) : undefined,
-    toUnix: params.getAll('to').length === 1 ? parsePositiveInt(params.get('to')) : undefined,
+    fromUnix: reversed ? undefined : from,
+    toUnix: reversed ? undefined : to,
   };
 }
 
@@ -74,10 +87,7 @@ export function useLogUrlState(
   defaultPageSize: number,
 ): {
   state: LogUrlState;
-  patch: (
-    partial: Partial<LogUrlState>,
-    options?: { clearDetail?: boolean; replace?: boolean },
-  ) => void;
+  patch: (partial: Partial<LogUrlState>, options?: LogPatchOptions) => void;
 } {
   const [searchParams, setSearchParams] = useSearchState();
   const state = useMemo(
@@ -86,12 +96,13 @@ export function useLogUrlState(
   );
 
   const patch = useCallback(
-    (partial: Partial<LogUrlState>, options?: { clearDetail?: boolean; replace?: boolean }) => {
+    (partial: Partial<LogUrlState>, options?: LogPatchOptions) => {
       setSearchParams(
         (prev) => {
           const next = { ...parseState(prev, textParams, defaultPageSize), ...partial };
           const params = new URLSearchParams(prev);
           for (const name of textParams) {
+            if (options?.keepFilters?.includes(name)) continue;
             params.delete(name);
             const value = next.filters?.[name];
             if (value) params.set(name, value);
@@ -116,6 +127,7 @@ export function useLogUrlState(
             params.delete('request_id');
             params.delete('attempt_page');
             params.delete('attempt_page_size');
+            params.delete(ATTEMPT_SEQ_PARAM);
           }
           return params;
         },

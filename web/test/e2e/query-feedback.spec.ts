@@ -137,7 +137,11 @@ for (const width of [1440, 390])
           await page.getByRole('button', { name: 'Next', exact: true }).click();
           const feedback = page.locator('.log-panel .nb-query-feedback');
           await expect(feedback).toContainText('Updating results');
-          await expect(page.locator('.log-panel > [aria-busy="true"]')).toBeVisible();
+          const results = page
+            .locator('.log-panel .nb-table')
+            .locator('xpath=ancestor::*[@aria-busy][1]');
+          await expect(results).toBeVisible();
+          await expect(results).toHaveAttribute('aria-busy', 'true');
           await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
           await expect(page.locator('.log-panel .nb-table tbody tr')).toHaveCount(20);
           await page.clock.fastForward(8_100);

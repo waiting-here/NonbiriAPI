@@ -104,10 +104,14 @@
   gap: 0.45rem;
   margin: 0;
 }
-.fishing-totals > div {
+.fishing-totals > div,
+.fishing-rake-details dl > div {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--nb-space-1) 1rem;
+}
+.fishing-totals > div {
   padding-top: 0.45rem;
   border-top: 1px solid var(--nb-color-border);
 }
@@ -115,6 +119,11 @@
 .fishing-totals dd {
   min-width: 0;
   margin: 0;
+}
+.fishing-totals dd > .game-money,
+.fishing-rake-details dd > .game-money {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .fishing-totals > div:has(.game-wallets) {
   flex-direction: column;
@@ -196,32 +205,6 @@
   min-width: 0;
   gap: 0.5rem;
 }
-.fishing-board-switch__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-.fishing-board-switch__tabs [role='tab'] {
-  font: inherit;
-  text-align: center;
-  cursor: pointer;
-  user-select: none;
-  min-width: 0;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--nb-color-border);
-  border-radius: 999px;
-  background: var(--nb-color-surface);
-  color: var(--nb-color-text);
-  overflow-wrap: anywhere;
-}
-.fishing-board-switch__tabs [role='tab'][data-selected] {
-  border-color: var(--nb-color-accent);
-  background: var(--nb-color-accent-soft);
-  box-shadow: inset 0 0 0 1px var(--nb-color-accent);
-}
-.fishing-board-switch__tabs [role='tab']:focus-visible {
-  box-shadow: var(--nb-focus-ring);
-}
 .fishing-board__heading {
   display: flex;
   align-items: start;
@@ -299,12 +282,12 @@
     transform-origin: 598px 388px;
   }
 }
-@media (max-width: 820px) {
+@media (width < 48rem) {
   .fishing-layout {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 520px) {
+@media (width < 32rem) {
   .fishing-table-wrap thead {
     display: none;
   }
@@ -359,11 +342,6 @@
   display: grid;
   gap: 0.35rem;
   margin-block: 0.5rem;
-}
-.fishing-rake-details dl > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
 }
 .fishing-rake-details dd {
   margin: 0;
@@ -449,6 +427,14 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   isolation: isolate;
+}
+.fishing-catch-celebration .fishing-art {
+  inline-size: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+.fishing-catch-celebration .fishing-art__label {
+  inline-size: max-content;
+  max-inline-size: 200%;
 }
 .fishing-catch-celebration .fishing-artwork {
   width: 100%;

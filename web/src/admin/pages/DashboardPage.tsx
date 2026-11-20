@@ -9,11 +9,13 @@ import {
   getAdminUsage,
 } from '../features/operations/core';
 import { adminPageKeys, getAdminEndpointsPage } from '../features/operations/adminPages';
-import { adminReportKeys, getReportBadge } from '../features/operations/reports';
+import { reportPageKeys } from '../features/operations/reportPages';
+import { useAdminAlertPage } from '../features/operations/alertPage';
+import { getReportBadge } from '../features/operations/reports';
 import { charityKeys, getDonationBadge } from '@shared/operations/charity';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
-import { Fold } from '@shared/components/ui';
+import { Fold, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import { formatCount } from '@shared/utils/formatNumber';
 import './dashboard.css';
 
@@ -21,11 +23,13 @@ import './dashboard.css';
 function AttentionCard({
   label,
   count,
+  detail,
   to,
   action,
 }: {
   label: string;
   count: string | undefined;
+  detail?: string;
   to: string;
   action: string;
 }) {
@@ -37,6 +41,7 @@ function AttentionCard({
       <strong className="overview-attention__count">
         {count === undefined ? '—' : formatCount(count).display}
       </strong>
+      {detail ? <span className="overview-attention__sub">{detail}</span> : null}
       <span className="overview-attention__action">
         {count === '0' ? t('admin.dashboard.nothingPending') : action} →
       </span>
@@ -74,7 +79,8 @@ export function DashboardPage() {
     retry: false,
   });
   const reports = useQuery({
-    queryKey: adminReportKeys.badge,
+    queryKey: reportPageKeys.badge(account || 'anonymous'),
+    enabled: Boolean(account) && !session.error,
     queryFn: ({ signal }) => getReportBadge(signal),
     retry: false,
   });
@@ -96,12 +102,20 @@ export function DashboardPage() {
       to: '/endpoints',
     },
   ];
+  const alerts = useAdminAlertPage(
+    account ? 'admin:' + account : undefined,
+    'false',
+    '1',
+    20,
+    Boolean(account) && !session.error,
+  );
+  const reportBreakdown =
+    !reports.error && reports.data
+      ? `${t('admin.dashboard.pendingIndexing')} ${formatCount(reports.data.by_status.pending_indexing).display} · ${t('admin.dashboard.pendingReview')} ${formatCount(reports.data.by_status.pending_review).display} · ${t('admin.dashboard.approvedProcessing')} ${formatCount(reports.data.by_status.approved_processing).display}`
+      : undefined;
   return (
     <div className="page ops-page admin-overview">
-      <PageHeader
-        title={t('admin.dashboard.title')}
-        description={t('admin.dashboard.description')}
-      />
+      <PageHeader title={t('admin.dashboard.title')} />
       <section className="overview-attention" aria-labelledby="overview-attention-title">
         <h2 id="overview-attention-title">{t('admin.dashboard.attentionTitle')}</h2>
         <div className="overview-attention__grid">
@@ -112,45 +126,65 @@ export function DashboardPage() {
             action={t('admin.dashboard.openDonations')}
           />
           <AttentionCard
+            label={t('admin.dashboard.unresolvedAlerts')}
+            count={alerts.error ? undefined : alerts.data?.pagination.total_items}
+            to="/alerts?resolved=false"
+            action={t('admin.dashboard.openAlerts')}
+          />
+          <AttentionCard
             label={t('admin.dashboard.nonTerminalReports')}
             count={reports.error ? undefined : reports.data?.total}
+            detail={reportBreakdown}
             to="/reports"
             action={t('admin.dashboard.openReportInbox')}
           />
         </div>
+        {alerts.error && <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} />}
+        {reports.error && (
+          <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
+        )}
         {donations.error ? (
           <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
         ) : null}
       </section>
-      <section aria-label={t('admin.dashboard.usageTitle')}>
-        <div className="nb-stats">
-          {stats.map((stat) => (
-            <div className="nb-stat" key={stat.label}>
-              <div className="nb-stat__label">
-                {stat.to ? <Link to={stat.to}>{stat.label}</Link> : stat.label}
+      <Panel aria-label={t('admin.dashboard.usageTitle')}>
+        <PanelHead title={t('admin.dashboard.usageTitle')} />
+        <PanelBody>
+          <div className="nb-stats">
+            {stats.map((stat) => (
+              <div className="nb-stat" key={stat.label}>
+                <div className="nb-stat__label">
+                  {stat.to ? (
+                    <Link className="overview-stat-link" to={stat.to}>
+                      {stat.label}
+                      <span aria-hidden="true">→</span>
+                    </Link>
+                  ) : (
+                    stat.label
+                  )}
+                </div>
+                <div className="nb-stat__value">
+                  {stat.value === undefined ? '—' : formatCount(stat.value).display}
+                </div>
               </div>
-              <div className="nb-stat__value">{stat.value ?? '—'}</div>
-            </div>
-          ))}
-        </div>
-        <p className="overview-usage-note">
-          {t('admin.dashboard.usageTitle')} · {t('admin.dashboard.unknownUsage')}:{' '}
-          {usage.data?.total_unknown_usage_requests ?? '—'}
-        </p>
-        {usage.isPending || endpoints.isPending || reports.isPending ? <LoadingState /> : null}
-        {usage.error ? (
-          <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
-        ) : null}
-        {endpointError ? (
-          <ErrorState
-            error={endpointError}
-            onRetry={() => void (session.error ? session.refetch() : endpoints.refetch())}
-          />
-        ) : null}
-        {reports.error ? (
-          <ErrorState error={reports.error} onRetry={() => void reports.refetch()} />
-        ) : null}
-      </section>
+            ))}
+          </div>
+          <p className="overview-usage-note">
+            {t('admin.dashboard.unknownUsage')}：
+            {!usage.data ? '—' : formatCount(usage.data.total_unknown_usage_requests).display}
+          </p>
+          {usage.isPending || endpoints.isPending || reports.isPending ? <LoadingState /> : null}
+          {usage.error ? (
+            <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
+          ) : null}
+          {endpointError ? (
+            <ErrorState
+              error={endpointError}
+              onRetry={() => void (session.error ? session.refetch() : endpoints.refetch())}
+            />
+          ) : null}
+        </PanelBody>
+      </Panel>
       {activity.isPending ? (
         <LoadingState />
       ) : activity.error ? (
@@ -172,9 +206,9 @@ export function DashboardPage() {
                 )}
               </dd>
               <dt>{t('admin.dashboard.generalCheckins')}</dt>
-              <dd>{activity.data.data[0]?.checkins}</dd>
+              <dd>{formatCount(activity.data.data[0]?.checkins ?? 0).display}</dd>
               <dt>{t('admin.dashboard.gameCheckins')}</dt>
-              <dd>{activity.data.data[0]?.game_checkins}</dd>
+              <dd>{formatCount(activity.data.data[0]?.game_checkins ?? 0).display}</dd>
               <dt>{t('admin.dashboard.gameActive')}</dt>
               <dd>
                 {t(
@@ -192,21 +226,6 @@ export function DashboardPage() {
           )}
         </Fold>
       )}
-      {reports.data ? (
-        <Fold title={t('admin.dashboard.reportsTitle')}>
-          <dl className="nb-facts nb-facts--inline">
-            <dt>{t('admin.dashboard.pendingIndexing')}</dt>
-            <dd>{reports.data.by_status.pending_indexing}</dd>
-            <dt>{t('admin.dashboard.pendingReview')}</dt>
-            <dd>{reports.data.by_status.pending_review}</dd>
-            <dt>{t('admin.dashboard.approvedProcessing')}</dt>
-            <dd>{reports.data.by_status.approved_processing}</dd>
-          </dl>
-          <Link className="nb-btn nb-btn--secondary" to="/reports">
-            {t('admin.dashboard.openReportInbox')}
-          </Link>
-        </Fold>
-      ) : null}
     </div>
   );
 }

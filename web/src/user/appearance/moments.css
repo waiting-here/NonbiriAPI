@@ -1,16 +1,20 @@
 .nb-moment-picker__selection {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 1fr);
-  gap: var(--nb-space-5);
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--nb-space-4);
   align-items: center;
-  margin-bottom: var(--nb-space-5);
+  margin-bottom: var(--nb-space-4);
+  padding: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
 }
 .nb-moment-picker__preview {
   width: 100%;
-  height: 16rem;
+  height: 10rem;
   object-fit: contain;
   background: var(--nb-color-surface-muted);
-  border-radius: var(--nb-radius-md);
+  border-radius: var(--nb-radius-sm);
 }
 .nb-moment-picker__copy {
   display: grid;
@@ -94,11 +98,6 @@
   object-fit: cover;
   object-position: center;
 }
-.nb-moment-backdrop[data-registered='true']:not([data-viewport='true'])
-  > .nb-moment-backdrop__scene {
-  filter: blur(1.25rem);
-  transform: scale(1.06);
-}
 .nb-moment-character {
   position: absolute;
   bottom: 0;
@@ -162,17 +161,11 @@
  */
 @media (width >= 80rem) {
   html[data-appearance='heart-moment'] {
+    --nb-portrait-reserve: calc(var(--nb-moment-gutter) + var(--nb-moment-extra-reserve, 0px));
     --nb-moment-gutter: min(
       calc((100dvh - 4.25rem) * 2 / 3 / var(--nb-moment-height-ratio, 1)),
       max(20rem, calc(100vw - 64rem)),
       calc((100vw - 45rem) / var(--nb-moment-width-ratio, 1))
-    );
-  }
-  html[data-appearance='heart-moment']
-    .nb-user-shell:not([data-layout='game'])
-    > :is(.nb-user-shell__main, .nb-user-shell__footer) {
-    padding-inline-end: calc(
-      var(--nb-moment-gutter) + var(--nb-moment-extra-reserve, 0px) + var(--nb-space-8)
     );
   }
   html[data-appearance='heart-moment']:has(.nb-user-shell:not([data-layout='game']))
@@ -190,11 +183,35 @@
     height: min(calc((100% - 4.25rem) / var(--nb-moment-height-ratio, 1)), 150vw);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .nb-moment-character > canvas {
-    display: none;
+
+.nb-art-stage .nb-moment-character:not([data-expanded='true']) {
+  max-width: 96%;
+}
+@media (width < 80rem) {
+  .nb-user-shell
+    .nb-art-stage
+    .nb-moment-backdrop:not([data-viewport='true'])
+    .nb-moment-character {
+    height: min(
+      calc(95% / var(--nb-moment-height-ratio, 1)),
+      calc(140vw / var(--nb-moment-width-ratio, 1))
+    );
+    width: auto;
+    right: 50%;
+    transform: translateX(var(--nb-moment-center, 50%));
   }
-  .nb-moment-character:has(canvas[data-ready='true']) > img {
-    visibility: visible;
+}
+
+/* This workspace also uses a short band past the desktop breakpoint. Size the
+   original character frame by the height of that band, including expanded hair. */
+@media (80rem <= width < 88rem) {
+  html:not([data-background-view='true'])
+    .nb-user-shell[data-layout='wide']
+    .nb-moment-backdrop:not([data-viewport='true'])
+    .nb-moment-character {
+    width: auto;
+    height: calc(95% / var(--nb-moment-height-ratio, 1));
+    right: 50%;
+    transform: translateX(var(--nb-moment-center, 50%));
   }
 }

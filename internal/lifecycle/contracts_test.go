@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 36 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 38 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -48,7 +48,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	want := []string{
 		"connections", "credentials", "credential_versions", "grants", "discovery_sources", "source_revisions", "binding_targets", "donation_uses", "native_service_evidence",
 		"request_adaptations", "continuity", "fat_fish", "browser_associations",
-		"limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards", "attendance",
+		"limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards", "attendance", "whale_haven",
 		"game_onboarding_holds", "loans", "game_rankings", "penalties",
 		"bidding", "likes", "steadycatch", "gwent", "blackjack", "randomness",
 		"caller_key", "catalog_pairs", "charity", "checkins", "game_onboarding", "credit_ledger", "donations", "endpoints",
@@ -65,7 +65,7 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, BrowserAssociationExport{}, "first_seen", "last_seen", "expires_at")
 	assertClosedJSONKeys(t, PersonalAutomationBatchExport{}, "id", "kind", "target_id", "item_count", "created_at", "expires_at", "results")
 	assertClosedJSONKeys(t, PersonalAutomationStepExport{Outcome: "imported", EndpointKeyID: "key", BindingID: "binding", Code: "code", Message: "message"}, "index", "status", "outcome", "endpoint_key_id", "binding_id", "code", "message")
-	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards", "attendance")
+	assertClosedJSONKeys(t, GovernanceExport{LakeNotes: testLakeNotesExport()}, "limited_activities", "image_tasks", "inactivity", "lake_notes", "gacha", "appearance", "rewards", "attendance", "whale_haven")
 	assertClosedJSONKeys(t, testLakeNotesExport(), "rules_id", "profile_revision", "profile", "casts", "entries", "exchanges")
 	assertClosedJSONKeys(t, ImageTaskExport{}, "id", "status", "n", "created_at", "dispatched_at", "completed_at", "billing_state", "charge", "refund", "actual_images")
 	assertClosedJSONKeys(t, LimitedActivityExport{}, "wallet", "exchanges")
@@ -94,9 +94,9 @@ func TestExportEndpointAndDonationSchemasAreClosed(t *testing.T) {
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
 		"physical_enabled", "charity_state", "rate_limited_until", "limits", "usage", "token_reserve",
 		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits", "model_limits", "review", "manual_models")
-	assertClosedJSONKeys(t, DonationModelLimitExport{}, "upstream_model_id", "limits", "used", "reserved", "remaining", "unattributed_total_tokens", "tracking_started_at", "recurring_limits")
-	assertClosedJSONKeys(t, ModelTokenLimitsExport{}, "tokens", "input_tokens", "output_tokens")
-	assertClosedJSONKeys(t, ModelTokenAmountsExport{}, "tokens", "input_tokens", "output_tokens")
+	assertClosedJSONKeys(t, DonationModelLimitExport{}, "historical_costs_partial", "upstream_model_id", "limits", "used", "reserved", "remaining", "unattributed_total_tokens", "tracking_started_at", "recurring_limits")
+	assertClosedJSONKeys(t, ModelQuotaLimitsExport{}, "credits", "calls", "tokens", "input_tokens", "output_tokens")
+	assertClosedJSONKeys(t, ModelQuotaAmountsExport{}, "credits", "calls", "tokens", "input_tokens", "output_tokens")
 	assertClosedJSONKeys(t, DonationKeyReviewExport{}, "required", "revision", "material_available")
 	assertClosedJSONKeys(t, DonationManualModelExport{}, "upstream_model_id", "display_name")
 	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "anchor_local", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")

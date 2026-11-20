@@ -1,7 +1,8 @@
+import { cp, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type ConfigEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import catalogPairPlugin from './scripts/catalogPairPlugin.mjs';
 
 /**
  * Two independent stations, each a separate Vite build producing its own
@@ -14,35 +15,6 @@ interface StationConfig {
   devPort: number;
   previewPort: number;
 }
-
-function normalized(id: string): string {
-  return id.replaceAll('\\', '/');
-}
-
-function isCopyModule(id: string): boolean {
-  const value = normalized(id);
-  return (
-    value.endsWith('/src/user/games/copy.ts') ||
-    value.endsWith('/src/user/features/core/copy.ts') ||
-    value.endsWith('/src/user/features/credits/copy.ts') ||
-    value.includes('nonbiri-catalog-pair:') ||
-    value.includes('nonbiri-catalog-wrapper:')
-  );
-}
-
-const copyGroups = {
-  includeDependenciesRecursively: false,
-  groups: [
-    {
-      name: 'copy-combined',
-      test: isCopyModule,
-      minSize: 0,
-      minModuleSize: 0,
-      minShareCount: 1,
-      entriesAware: false,
-    },
-  ],
-};
 
 const STATIONS: Record<'admin' | 'user', StationConfig> = {
   admin: { root: 'src/admin', distDir: 'admin', devPort: 5173, previewPort: 4173 },
@@ -58,12 +30,33 @@ function stationFor(mode: string): StationConfig {
   );
 }
 
-export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
+export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
   const station = stationFor(mode);
   return {
     root: station.root,
     publicDir: fileURLToPath(new URL('./public/', import.meta.url)),
-    plugins: [react(), ...(command === 'build' ? [catalogPairPlugin()] : [])],
+    plugins: [
+      react(),
+      ...(mode === 'admin'
+        ? [
+            {
+              name: 'admin-public-assets',
+              apply: 'build' as const,
+              async writeBundle() {
+                const publicDir = fileURLToPath(new URL('./public/', import.meta.url));
+                const userArt = join(publicDir, 'assets', 'whale-haven');
+                const out = fileURLToPath(new URL('./dist/admin/', import.meta.url));
+                for (const entry of await readdir(publicDir)) {
+                  await cp(join(publicDir, entry), join(out, entry), {
+                    recursive: true,
+                    filter: (path) => path !== userArt,
+                  });
+                }
+              },
+            },
+          ]
+        : []),
+    ],
     resolve: {
       alias: {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
@@ -78,6 +71,7 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
       strictPort: true,
     },
     build: {
+      copyPublicDir: mode === 'user',
       // Absolute path so the output lands in web/dist/<station> regardless of
       // the per-station root. Both station builds share web/dist/.
       outDir: fileURLToPath(new URL(`./dist/${station.distDir}`, import.meta.url)),
@@ -85,7 +79,17 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
       sourcemap: false,
       rolldownOptions: {
         output: {
-          codeSplitting: copyGroups,
+          codeSplitting: {
+            groups: [
+              {
+                name: 'station-shell',
+                // Every visit uses this entry and its static dependencies. Keep lazy pages
+                // and the inactive locale behind their own import boundaries.
+                test: /[\\/]src[\\/](?:admin|user)[\\/]main\.tsx$/,
+                includeDependenciesRecursively: true,
+              },
+            ],
+          },
         },
       },
     },

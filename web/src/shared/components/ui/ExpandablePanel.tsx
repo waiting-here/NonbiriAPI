@@ -13,7 +13,7 @@ export function ExpandablePanel({
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: ReactNode;
   closeLabel: string;
   busy?: boolean;
   children: ReactNode;

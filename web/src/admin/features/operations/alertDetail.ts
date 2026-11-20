@@ -1,5 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { decoded } from '@shared/operations/api';
+import { logRequestID } from '@shared/components/log/data';
+import {
+  logAttemptSequence,
+  normalizeAttemptFailureReason,
+  normalizeFailureDisablement,
+  type AttemptFailureReason,
+  type FailureDisablement,
+} from '@shared/components/log/managementFailures';
 import {
   array,
   boolean,
@@ -55,6 +63,31 @@ export interface AdminAlertDetail {
   current_state: AlertFact[];
   related_logs: AlertLogWindow | null;
   resolution_kind: string;
+  trigger_attempt?: AlertTriggerAttempt;
+}
+
+export interface AlertTriggerAttempt extends FailureDisablement, AttemptFailureReason {
+  request_id: string;
+  attempt_seq: string;
+  available: boolean;
+}
+
+function normalizeTriggerAttempt(value: unknown): AlertTriggerAttempt | undefined {
+  if (!value || typeof value !== 'object') return;
+  const row = value as Record<string, unknown>;
+  const requestID = logRequestID(row.request_id);
+  const attemptSeq = logAttemptSequence(row.attempt_seq);
+  const failure = normalizeAttemptFailureReason(row);
+  const disablement = normalizeFailureDisablement(row);
+  if (!requestID || !attemptSeq || !failure || !disablement || typeof row.available !== 'boolean')
+    return;
+  return {
+    ...disablement,
+    ...failure,
+    request_id: requestID,
+    attempt_seq: attemptSeq,
+    available: row.available,
+  };
 }
 
 export type DiagnosticTargetKind = 'issue' | 'issue_user' | 'fishing_batch' | 'rps_session';
@@ -170,19 +203,17 @@ function target(value: unknown): AlertTarget {
 }
 
 export function normalizeAdminAlertDetail(value: unknown): AdminAlertDetail {
-  const fields = record(
-    value,
-    [
-      'alert',
-      'context_version',
-      'occurred_facts',
-      'targets',
-      'current_state',
-      'related_logs',
-      'resolution_kind',
-    ],
-    'alert detail',
-  );
+  const required = [
+    'alert',
+    'context_version',
+    'occurred_facts',
+    'targets',
+    'current_state',
+    'related_logs',
+    'resolution_kind',
+  ];
+  const fields = record(value, [...required, 'trigger_attempt'], 'alert detail', required);
+  const alert = normalizeAdminAlert(fields.alert);
   const related =
     fields.related_logs === null
       ? null
@@ -197,7 +228,10 @@ export function normalizeAdminAlertDetail(value: unknown): AdminAlertDetail {
           const reason =
             row.unavailable_reason === undefined
               ? undefined
-              : string(row.unavailable_reason, 'related log unavailable reason', { min: 1, ascii: true });
+              : string(row.unavailable_reason, 'related log unavailable reason', {
+                  min: 1,
+                  ascii: true,
+                });
           if (available === Boolean(reason)) invalidResponse('related log availability');
           const from = unixSecond(row.from, 'related log start');
           const to = unixSecond(row.to, 'related log end');
@@ -211,12 +245,16 @@ export function normalizeAdminAlertDetail(value: unknown): AdminAlertDetail {
           };
         })();
   return {
-    alert: normalizeAdminAlert(fields.alert),
+    alert,
     context_version: integer(fields.context_version, 'alert context version', 0, 1),
     occurred_facts: array(fields.occurred_facts, 'occurred facts', 32).map(fact),
     targets: array(fields.targets, 'alert targets', 8).map(target),
     current_state: array(fields.current_state, 'current state', 32).map(fact),
     related_logs: related,
+    trigger_attempt:
+      alert.kind === 'donation_failure_disabled'
+        ? normalizeTriggerAttempt(fields.trigger_attempt)
+        : undefined,
     resolution_kind: oneOf(
       fields.resolution_kind,
       ['', 'manual', 'automatic_blacklist', 'worker_recovered', 'legacy'] as const,

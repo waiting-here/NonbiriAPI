@@ -1,3 +1,6 @@
+import { StatusBadge } from '@shared/components/ui/StatusBadge';
+import { reportStatusTone } from '../features/operations/reports';
+import { DataTable } from '@shared/components/ui/DataTable';
 import { FormActions } from '@shared/components/ui/Fields';
 import { Field } from '@shared/components/ui/Field';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
@@ -8,14 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession, stationSessionWrite } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { listReturnPath } from '@shared/operations/listReturn';
@@ -136,7 +132,8 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
       effectiveLineageTargetId
         ? targetDonations.refetch({ cancelRefetch: false })
         : Promise.resolve(),
-      client.invalidateQueries({ queryKey: reportPageKeys.badge(accountId || 'anonymous') }),
+      client.invalidateQueries({ queryKey: reportPageKeys.badge(accountId) }),
+      client.invalidateQueries({ queryKey: reportPageKeys.lists(accountId) }),
     ]);
   };
   const retryAuthority = async () => {
@@ -336,11 +333,9 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               <dd>{detail.data.id}</dd>
               <dt>{t('admin.reports.detail.status')}</dt>
               <dd>
-                <StatusBadge
-                  active={detail.data.status === 'pending_review'}
-                  danger={detail.data.status === 'approved_processing'}
-                  label={statusLabels[detail.data.status]}
-                />
+                <StatusBadge tone={reportStatusTone[detail.data.status]}>
+                  {statusLabels[detail.data.status]}
+                </StatusBadge>
               </dd>
               <dt>{t('admin.reports.detail.progress')}</dt>
               <dd>{progressLabels[detail.data.progress_state]}</dd>
@@ -396,9 +391,9 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               ) : (
                 <div className="ops-stack">
                   {detail.data.materials.data.map((item) => (
-                    <article className="card" key={item.id}>
+                    <article className="ops-subcard" key={item.id}>
                       <p>{item.note_text || t('admin.reports.detail.noReporterNote')}</p>
-                      <dl className="ops-kv">
+                      <dl className="nb-facts nb-facts--inline">
                         <dt>{t('admin.reports.detail.reporter')}</dt>
                         <dd>
                           {item.reporter
@@ -406,7 +401,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
                             : t('admin.reports.detail.anonymous')}
                         </dd>
                         <dt>{t('admin.reports.detail.sourceIp')}</dt>
-                        <dd>{item.source_ip}</dd>
+                        <dd className="mono">{item.source_ip}</dd>
                         <dt>{t('admin.reports.detail.submitted')}</dt>
                         <dd>{formatDateTime(item.created_at)}</dd>
                       </dl>
@@ -448,83 +443,111 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
             </>
           ) : (
             <>
-              <div className="ops-table-scroll">
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>{t('admin.reports.detail.sequence')}</th>
-                      <th>{t('admin.reports.detail.state')}</th>
-                      <th>{t('admin.reports.detail.owner')}</th>
-                      <th>{t('common.userId')}</th>
-                      <th>{t('admin.reports.detail.endpoint')}</th>
-                      <th>{t('admin.reports.detail.keySnapshot')}</th>
-                      <th>{t('admin.reports.detail.keyReference')}</th>
-                      <th>{t('admin.reports.detail.donationMatches')}</th>
-                      <th>{t('admin.reports.detail.lineageAction')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {targetList.data.data.map((target) => (
-                      <tr key={target.id}>
-                        <td data-label={t('admin.reports.detail.sequence')}>{target.target_seq}</td>
-                        <td data-label={t('admin.reports.detail.state')}>
-                          {targetStateLabels[target.state]}
-                        </td>
-                        <td className="ops-cell-wide" data-label={t('admin.reports.detail.owner')}>
-                          {target.owner
-                            ? target.owner.display_name
-                            : t('admin.reports.detail.deidentified')}
-                        </td>
-                        <td className="ops-id" data-label={t('common.userId')}>
-                          {target.owner?.user_id ?? '—'}
-                        </td>
-                        <td
-                          className="ops-cell-wide"
-                          data-label={t('admin.reports.detail.endpoint')}
-                        >
-                          <GatewayConnectorLabel value={target.endpoint.connector_type} />
-                          <br />
+              <DataTable
+                caption={t('admin.reports.detail.targetsTitle')}
+                rows={targetList.data.data}
+                rowKey={(target) => target.id}
+                columns={[
+                  {
+                    key: 'sequence',
+                    header: t('admin.reports.detail.sequence'),
+                    cell: 'title',
+                    render: (target) => `#${target.target_seq}`,
+                  },
+                  {
+                    key: 'state',
+                    header: t('admin.reports.detail.state'),
+                    cell: 'status',
+                    render: (target) => targetStateLabels[target.state],
+                  },
+                  {
+                    key: 'owner',
+                    header: t('admin.reports.detail.owner'),
+                    mobileLabel: t('admin.reports.detail.owner'),
+                    cell: 'meta',
+                    render: (target) =>
+                      target.owner
+                        ? target.owner.display_name
+                        : t('admin.reports.detail.deidentified'),
+                  },
+                  {
+                    key: 'userId',
+                    header: t('common.userId'),
+                    mobileLabel: t('common.userId'),
+                    cell: 'meta',
+                    render: (target) => (
+                      <span className="mono">{target.owner?.user_id ?? '—'}</span>
+                    ),
+                  },
+                  {
+                    key: 'endpoint',
+                    header: t('admin.reports.detail.endpoint'),
+                    mobileLabel: t('admin.reports.detail.endpoint'),
+                    cell: 'meta',
+                    render: (target) => (
+                      <div className="nb-stack nb-stack--sm">
+                        <GatewayConnectorLabel value={target.endpoint.connector_type} />
+                        <span className="nb-small nb-muted ops-wrap">
                           {target.endpoint.canonical_base_url}
-                        </td>
-                        <td data-label={t('admin.reports.detail.keySnapshot')}>
-                          {target.endpoint.display_head}…{target.endpoint.display_tail}
-                        </td>
-                        <td className="ops-id" data-label={t('admin.reports.detail.keyReference')}>
-                          {target.key_ref}
-                        </td>
-                        <td data-label={t('admin.reports.detail.donationMatches')}>
-                          {target.donation_match_count}
-                        </td>
-                        <td
-                          className="ops-cell-wide"
-                          data-label={t('admin.reports.detail.lineageAction')}
-                        >
-                          <button
-                            className="nb-btn nb-btn--secondary"
-                            type="button"
-                            disabled={targetList.isFetching}
-                            onClick={() => {
-                              setSearchParams((current) => {
-                                const next = new URLSearchParams(current);
-                                next.delete('lineage_target');
-                                next.set('lineage_target', target.id);
-                                next.delete('lineage_page');
-                                next.set('lineage_page', '1');
-                                next.delete('lineage_page_size');
-                                next.set('lineage_page_size', String(lineage.pageSize));
-                                return next;
-                              });
-                              setLineageTarget(target);
-                            }}
-                          >
-                            {t('admin.reports.detail.openLineage')}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </span>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'keySnapshot',
+                    header: t('admin.reports.detail.keySnapshot'),
+                    mobileLabel: t('admin.reports.detail.keySnapshot'),
+                    cell: 'meta',
+                    render: (target) => (
+                      <span className="mono">
+                        {target.endpoint.display_head}…{target.endpoint.display_tail}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'keyReference',
+                    header: t('admin.reports.detail.keyReference'),
+                    mobileLabel: t('admin.reports.detail.keyReference'),
+                    cell: 'meta',
+                    render: (target) => <span className="mono">{target.key_ref}</span>,
+                  },
+                  {
+                    key: 'donationMatches',
+                    header: t('admin.reports.detail.donationMatches'),
+                    mobileLabel: t('admin.reports.detail.donationMatches'),
+                    cell: 'meta',
+                    align: 'num',
+                    render: (target) => target.donation_match_count,
+                  },
+                  {
+                    key: 'lineageAction',
+                    header: t('admin.reports.detail.lineageAction'),
+                    cell: 'action',
+                    render: (target) => (
+                      <button
+                        className="nb-btn nb-btn--secondary nb-btn--sm"
+                        type="button"
+                        disabled={targetList.isFetching}
+                        onClick={() => {
+                          setSearchParams((current) => {
+                            const next = new URLSearchParams(current);
+                            next.delete('lineage_target');
+                            next.set('lineage_target', target.id);
+                            next.delete('lineage_page');
+                            next.set('lineage_page', '1');
+                            next.delete('lineage_page_size');
+                            next.set('lineage_page_size', String(lineage.pageSize));
+                            return next;
+                          });
+                          setLineageTarget(target);
+                        }}
+                      >
+                        {t('admin.reports.detail.openLineage')}
+                      </button>
+                    ),
+                  },
+                ]}
+              />
               <PagePagination
                 metadata={targetList.data.pagination}
                 requestedPage={targets.page}
@@ -586,48 +609,59 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
               </>
             ) : (
               <>
-                <div className="ops-table-scroll">
-                  <table className="ops-table ops-table--responsive">
-                    <thead>
-                      <tr>
-                        <th>{t('admin.reports.detail.lineage.donation')}</th>
-                        <th>{t('admin.reports.detail.lineage.key')}</th>
-                        <th>{t('admin.reports.detail.lineage.donationStatus')}</th>
-                        <th>{t('admin.reports.detail.lineage.keyStatus')}</th>
-                        <th>{t('admin.reports.detail.lineage.expires')}</th>
-                        <th>{t('admin.reports.detail.lineage.ended')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {targetDonations.data.data.map((match) => (
-                        <tr key={match.donation_key_id}>
-                          <td data-label={t('admin.reports.detail.lineage.donation')}>
-                            {match.donation_id}
-                          </td>
-                          <td data-label={t('admin.reports.detail.lineage.key')}>
-                            {match.donation_key_id}
-                          </td>
-                          <td data-label={t('admin.reports.detail.lineage.donationStatus')}>
-                            {donationStatusLabels[match.donation_status]}
-                          </td>
-                          <td data-label={t('admin.reports.detail.lineage.keyStatus')}>
-                            {donationKeyStateLabels[match.key_state]}
-                          </td>
-                          <td data-label={t('admin.reports.detail.lineage.expires')}>
-                            {match.expires_at === null
-                              ? t('admin.reports.detail.lineage.never')
-                              : formatDateTime(match.expires_at)}
-                          </td>
-                          <td data-label={t('admin.reports.detail.lineage.ended')}>
-                            {match.ended_at === null
-                              ? t('admin.reports.detail.lineage.notEnded')
-                              : `${formatDateTime(match.ended_at)}${match.ended_reason ? ` · ${donationEndedReasonLabels[match.ended_reason]}` : ''}`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  caption={t('admin.reports.detail.lineageTitle')}
+                  rows={targetDonations.data.data}
+                  rowKey={(match) => match.donation_key_id}
+                  columns={[
+                    {
+                      key: 'donation',
+                      header: t('admin.reports.detail.lineage.donation'),
+                      cell: 'title',
+                      render: (match) => <span className="mono">{match.donation_id}</span>,
+                    },
+                    {
+                      key: 'key',
+                      header: t('admin.reports.detail.lineage.key'),
+                      mobileLabel: t('admin.reports.detail.lineage.key'),
+                      cell: 'meta',
+                      render: (match) => <span className="mono">{match.donation_key_id}</span>,
+                    },
+                    {
+                      key: 'donationStatus',
+                      header: t('admin.reports.detail.lineage.donationStatus'),
+                      cell: 'status',
+                      render: (match) => donationStatusLabels[match.donation_status],
+                    },
+                    {
+                      key: 'keyStatus',
+                      header: t('admin.reports.detail.lineage.keyStatus'),
+                      mobileLabel: t('admin.reports.detail.lineage.keyStatus'),
+                      cell: 'meta',
+                      render: (match) => donationKeyStateLabels[match.key_state],
+                    },
+                    {
+                      key: 'expires',
+                      header: t('admin.reports.detail.lineage.expires'),
+                      mobileLabel: t('admin.reports.detail.lineage.expires'),
+                      cell: 'meta',
+                      render: (match) =>
+                        match.expires_at === null
+                          ? t('admin.reports.detail.lineage.never')
+                          : formatDateTime(match.expires_at),
+                    },
+                    {
+                      key: 'ended',
+                      header: t('admin.reports.detail.lineage.ended'),
+                      mobileLabel: t('admin.reports.detail.lineage.ended'),
+                      cell: 'meta',
+                      render: (match) =>
+                        match.ended_at === null
+                          ? t('admin.reports.detail.lineage.notEnded')
+                          : `${formatDateTime(match.ended_at)}${match.ended_reason ? ` · ${donationEndedReasonLabels[match.ended_reason]}` : ''}`,
+                    },
+                  ]}
+                />
                 <PagePagination
                   metadata={targetDonations.data.pagination}
                   requestedPage={lineage.page}

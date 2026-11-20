@@ -21,7 +21,7 @@ const pageOf = (data: unknown[]) => ({
   pagination: { page: '1', page_size: 20, total_items: String(data.length), total_pages: '1' },
 });
 
-export async function appearanceFixtures(page: Page, design: string) {
+export async function appearanceFixtures(page: Page, design: string, moment = 'cover:h') {
   await mockRoleSession(page, 'user', 'level6');
   await mockPublicConfig(page, 'user');
   await page.route('**/api/**', async (route) => {
@@ -30,8 +30,8 @@ export async function appearanceFixtures(page: Page, design: string) {
       return route.fulfill({
         json: {
           selected: design,
-          moment: 'cover:h',
-          moments: ['cover:permanent', 'cover:h', 'cover:i'],
+          moment,
+          moments: [...new Set(['cover:permanent', 'cover:h', 'cover:i', moment])],
           unlocked: ALL_APPEARANCES,
           visible: ALL_APPEARANCES,
           updated_at: now,
@@ -142,6 +142,8 @@ export async function appearanceFixtures(page: Page, design: string) {
       });
     if (path === '/api/steward/maintenance')
       return route.fulfill({ json: { enabled: false, revision: '1' } });
+    if (path === '/api/issues')
+      return route.fulfill({ json: { ...pageOf([]), projection_incomplete: false } });
     if (path === '/api/logs')
       return route.fulfill({
         json: pageOf([

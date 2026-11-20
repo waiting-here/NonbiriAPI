@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"math/big"
 	"net/url"
 	"strconv"
@@ -15,9 +14,12 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/blacklist"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
@@ -164,6 +166,9 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 	if role == "user" && (filter.ErrorCategory != "" || filter.ErrorPhase != "") {
 		return ListFilter{}, ErrInvalid
 	}
+	if !validOutcome(role, filter.Outcome) {
+		return ListFilter{}, ErrInvalid
+	}
 	if filter.Phase != "" && filter.Phase != "handler" && filter.Phase != "pre_handler" {
 		return ListFilter{}, ErrInvalid
 	}
@@ -223,6 +228,18 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 }
 
 func normalizeAttemptFilter(filter AttemptFilter) (AttemptFilter, error) {
+	if filter.FocusSeq != 0 {
+		if filter.FocusSeq < 1 || filter.FocusSeq > maximumLimit || filter.Cursor != "" || filter.Limit != 0 {
+			return AttemptFilter{}, ErrInvalid
+		}
+		if filter.Page == nil {
+			page := pagination.Default()
+			filter.Page = &page
+		}
+		if filter.Page.Page != 1 {
+			return AttemptFilter{}, ErrInvalid
+		}
+	}
 	if filter.Page != nil {
 		if !filter.Page.Valid() || filter.Cursor != "" || filter.Limit != 0 {
 			return AttemptFilter{}, ErrInvalid
@@ -383,6 +400,9 @@ func filterOwner(role string, actorID int64, filter ListFilter) string {
 	writePart(optionalBool(filter.UsageTotalMismatch))
 	writePart(optionalInt64(filter.From))
 	writePart(optionalInt64(filter.To))
+	if filter.Outcome != "" {
+		writePart("outcome=" + filter.Outcome)
+	}
 	if filter.Phase != "" {
 		writePart(filter.Phase)
 	}
@@ -479,6 +499,9 @@ func scanCommon(scanner rowScanner, extra ...any) (commonLogRecord, error) {
 		return commonLogRecord{}, err
 	}
 	record.rejectionDetail = requestattempt.DecodeDetail(detail.String)
+	if !record.rejectionStage.Valid && (record.callerErrorCode.String == httperr.CodeServiceUnavailable || record.callerErrorCode.String == httperr.CodeInternal) && !requestattempt.IsServiceAdmissionDetail(record.rejectionDetail) {
+		record.rejectionDetail = nil
+	}
 	if err := validateCommonRecord(record); err != nil {
 		return commonLogRecord{}, err
 	}

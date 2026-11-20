@@ -15,32 +15,15 @@
   overflow-wrap: anywhere;
 }
 .economy-audit .audit-coverage {
-  font-size: 0.9rem;
+  font-size: var(--nb-font-size-sm);
   overflow-wrap: anywhere;
 }
 .economy-audit .audit-table {
   overflow-x: auto;
 }
-.economy-audit table {
-  border-collapse: collapse;
-  width: 100%;
-  font-variant-numeric: tabular-nums;
-}
-.economy-audit th,
-.economy-audit td {
-  padding: 0.7rem;
-  text-align: start;
-  vertical-align: top;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  overflow-wrap: anywhere;
-}
-.economy-audit table caption {
-  text-align: start;
-  margin-block: 0.6rem;
-}
 .economy-audit .audit-chart {
   min-width: 0;
-  margin: 0.75rem 0;
+  margin: var(--nb-space-3) 0;
 }
 .economy-audit .audit-chart-canvas {
   position: relative;
@@ -59,14 +42,16 @@
   height: 100%;
 }
 .economy-audit .audit-chart figcaption {
-  font-size: 0.9rem;
+  font-size: var(--nb-font-size-sm);
 }
 .economy-audit .audit-chart-selection {
   display: block;
-  margin-block: 0.6rem;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid var(--nb-color-border);
-  border-radius: 0.4rem;
+  margin-block: var(--nb-space-2);
+  padding: var(--nb-space-2) var(--nb-space-3);
+  border: 0;
+  border-inline-start: 3px solid var(--nb-color-accent);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface-muted);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }

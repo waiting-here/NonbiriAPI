@@ -59,13 +59,11 @@
   height: 1rem;
 }
 
-/* A column, so actions line up at the bottom when steps sit side by side. */
 .nb-stepper__body {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  align-content: start;
   gap: var(--nb-space-2);
   min-width: 0;
-  height: 100%;
 }
 
 .nb-stepper__title {
@@ -89,8 +87,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--nb-space-2);
-  margin-top: auto;
-  padding-top: var(--nb-space-1);
+  margin-top: var(--nb-space-1);
 }
 
 @container nb-stepper (width < 44rem) {

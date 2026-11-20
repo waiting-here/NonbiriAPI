@@ -40,6 +40,7 @@ export function UserResources({
     gacha: t('management.resources.groups.gacha'),
     cards: t('management.resources.groups.cards'),
     lake: t('management.resources.groups.lake'),
+    whale: t('management.resources.groups.whale'),
   };
 
   const editor = useRef<HTMLDivElement>(null);
@@ -179,9 +180,16 @@ export function UserResources({
                 />
               )}
             </Field>
-            <Note>{t('management.resources.relatedChanges')}</Note>
+            <Note>
+              {t(
+                selected.group === 'whale'
+                  ? 'management.resources.whaleBalance'
+                  : 'management.resources.relatedChanges',
+              )}
+            </Note>
             <div className="nb-actions">
               <Button
+                variant="primary"
                 disabled={locked || !valid}
                 onClick={() =>
                   setConfirm({
@@ -204,30 +212,38 @@ export function UserResources({
       ) : null}
       <OutcomeNote outcome={outcome} busy={mutation.isPending} />
       {mutation.error && outcome.kind === 'idle' ? <ErrorState error={mutation.error} /> : null}
-      <div className="nb-stack">
-        <Field label={t('management.resources.search')}>
-          {(field) => (
-            <input {...field} value={filter} onChange={(event) => setFilter(event.target.value)} />
-          )}
-        </Field>
-        <Field label={t('management.resources.group')}>
-          {(field) => (
-            <select {...field} value={group} onChange={(event) => setGroup(event.target.value)}>
-              <option value="all">{t('management.resources.allGroups')}</option>
-              {[...new Set(query.data.map((r) => r.group))].map((id) => (
-                <option key={id} value={id}>
-                  {groupNames[id] ?? id}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Button
-          disabled={locked || query.isFetching}
-          onClick={() => void refresh().catch(() => undefined)}
-        >
-          {t('common.refresh')}
-        </Button>
+      <div className="ops-toolbar">
+        <div className="ops-actions">
+          <Field label={t('management.resources.search')} size="medium">
+            {(field) => (
+              <input
+                {...field}
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label={t('management.resources.group')} size="short">
+            {(field) => (
+              <select {...field} value={group} onChange={(event) => setGroup(event.target.value)}>
+                <option value="all">{t('management.resources.allGroups')}</option>
+                {[...new Set(query.data.map((r) => r.group))].map((id) => (
+                  <option key={id} value={id}>
+                    {groupNames[id] ?? id}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        </div>
+        <div className="nb-actions">
+          <Button
+            disabled={locked || query.isFetching}
+            onClick={() => void refresh().catch(() => undefined)}
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
       </div>
       {items.length === 0 ? (
         <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
@@ -255,6 +271,7 @@ export function UserResources({
               header: t('management.resources.owned'),
               mobileLabel: t('management.resources.owned'),
               cell: 'meta',
+              align: 'num',
               render: (r) => r.quantity,
             },
             ...(editable

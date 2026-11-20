@@ -128,7 +128,8 @@
     'Inter Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei',
     'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --nb-font-mono:
-    ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
+    ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, 'Liberation Mono', 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', monospace;
   --nb-font-size-xs: 0.75rem;
   --nb-font-size-sm: 0.875rem;
   --nb-font-size-md: 1rem;
@@ -166,6 +167,7 @@
 
   /* Layout and layering */
   --nb-content-readable: 62rem;
+  --nb-content-workspace: 70rem;
   --nb-content-wide: 88rem;
   --nb-shell-breakpoint: 70rem;
   --nb-z-base: 0;
@@ -299,7 +301,8 @@
 }
 
 /* Account cosmetics share all dimensions with the default appearance. */
-:root[data-appearance='celestial'] {
+:root[data-appearance='celestial'],
+.nb-appearance-option[data-preview='celestial'] {
   --nb-color-bg: #edf3ef;
   --nb-color-surface: #fbfdf9ed;
   --nb-color-surface-raised: #ffffff;
@@ -318,7 +321,8 @@
   --nb-color-accent-contrast: #ffffff;
   --nb-elevation-1: 0 3px 16px #59775512;
 }
-:root[data-appearance='celestial'][data-theme='dark'] {
+:root[data-appearance='celestial'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='celestial'] {
   --nb-color-bg: #0b142b;
   --nb-color-surface: #122139ed;
   --nb-color-surface-raised: #1a2d43;
@@ -337,7 +341,8 @@
   --nb-color-accent-contrast: #102a26;
   --nb-elevation-1: 0 3px 16px #020d2240;
 }
-:root[data-appearance='wandering'] {
+:root[data-appearance='wandering'],
+.nb-appearance-option[data-preview='wandering'] {
   --nb-color-bg: #e9f3f3;
   --nb-color-surface: #fbfefced;
   --nb-color-surface-raised: #ffffff;
@@ -356,7 +361,8 @@
   --nb-color-accent-contrast: #ffffff;
   --nb-elevation-1: 0 3px 16px #3f7b8212;
 }
-:root[data-appearance='wandering'][data-theme='dark'] {
+:root[data-appearance='wandering'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='wandering'] {
   --nb-color-bg: #071e2a;
   --nb-color-surface: #102c39ed;
   --nb-color-surface-raised: #183a47;
@@ -376,8 +382,9 @@
   --nb-elevation-1: 0 3px 16px #01101740;
 }
 
-/* Artwork supplies only the hue; lightness stays bounded for readable controls. */
-:root[data-appearance='heart-moment'] {
+/* Moment palettes use the registered theme hue and bounded surface and text lightness. */
+:root[data-appearance='heart-moment'],
+.nb-appearance-option[data-preview='heart-moment'] {
   --nb-moment-hue: 215deg;
   --nb-color-bg: hsl(var(--nb-moment-hue) 24% 94%);
   --nb-color-surface: hsl(var(--nb-moment-hue) 32% 98%);
@@ -385,24 +392,25 @@
   --nb-color-surface-muted: hsl(var(--nb-moment-hue) 26% 93%);
   --nb-color-surface-emphasis: hsl(var(--nb-moment-hue) 28% 89%);
   --nb-color-surface-alt: hsl(var(--nb-moment-hue) 26% 95%);
-  --nb-color-text: hsl(var(--nb-moment-hue) 25% 15%);
+  --nb-color-text: hsl(var(--nb-moment-hue) 13% 15%);
   --nb-color-text-muted: hsl(var(--nb-moment-hue) 18% 28%);
   --nb-color-text-subtle: hsl(var(--nb-moment-hue) 14% 30%);
   --nb-color-border: hsl(var(--nb-moment-hue) 24% 78%);
   --nb-color-border-strong: hsl(var(--nb-moment-hue) 26% 57%);
   --nb-color-accent: hsl(var(--nb-moment-hue) 44% 24%);
-  --nb-color-accent-hover: hsl(var(--nb-moment-hue) 44% 22%);
+  --nb-color-accent-hover: hsl(var(--nb-moment-hue) 23% 22%);
   --nb-color-accent-soft: hsl(var(--nb-moment-hue) 30% 89%);
   --nb-color-accent-quiet: hsl(var(--nb-moment-hue) 26% 94%);
   --nb-color-accent-contrast: #ffffff;
 }
-:root[data-appearance='heart-moment'][data-theme='dark'] {
-  --nb-color-bg: hsl(var(--nb-moment-hue) 30% 8%);
-  --nb-color-surface: hsl(var(--nb-moment-hue) 24% 13%);
-  --nb-color-surface-raised: hsl(var(--nb-moment-hue) 23% 16%);
-  --nb-color-surface-muted: hsl(var(--nb-moment-hue) 22% 18%);
-  --nb-color-surface-emphasis: hsl(var(--nb-moment-hue) 24% 22%);
-  --nb-color-surface-alt: hsl(var(--nb-moment-hue) 22% 15%);
+:root[data-appearance='heart-moment'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='heart-moment'] {
+  --nb-color-bg: hsl(var(--nb-moment-hue) 16% 8%);
+  --nb-color-surface: hsl(var(--nb-moment-hue) 12% 13%);
+  --nb-color-surface-raised: hsl(var(--nb-moment-hue) 12% 16%);
+  --nb-color-surface-muted: hsl(var(--nb-moment-hue) 11% 18%);
+  --nb-color-surface-emphasis: hsl(var(--nb-moment-hue) 12% 22%);
+  --nb-color-surface-alt: hsl(var(--nb-moment-hue) 11% 15%);
   --nb-color-text: hsl(var(--nb-moment-hue) 28% 94%);
   --nb-color-text-muted: hsl(var(--nb-moment-hue) 20% 80%);
   --nb-color-text-subtle: hsl(var(--nb-moment-hue) 16% 72%);
@@ -411,57 +419,8 @@
   --nb-color-accent: hsl(var(--nb-moment-hue) 50% 76%);
   --nb-color-accent-hover: hsl(var(--nb-moment-hue) 52% 86%);
   --nb-color-accent-soft: hsl(var(--nb-moment-hue) 30% 24%);
-  --nb-color-accent-quiet: hsl(var(--nb-moment-hue) 26% 18%);
+  --nb-color-accent-quiet: hsl(var(--nb-moment-hue) 14% 18%);
   --nb-color-accent-contrast: hsl(var(--nb-moment-hue) 30% 14%);
-}
-
-/* Frosted surfaces admit the artwork's colors without lowering text opacity. */
-:root:is(
-  [data-appearance='celestial'],
-  [data-appearance='wandering'],
-  [data-appearance='heart-moment'],
-  [data-appearance='mirrorsea'],
-  [data-appearance='amber'],
-  [data-appearance='elopement'],
-  [data-appearance='heart-thief'],
-  [data-appearance='tomorrow']
-) {
-  --nb-appearance-glass-edge: color-mix(
-    in srgb,
-    var(--nb-color-surface-raised) max(82%, var(--nb-appearance-edge-floor)),
-    transparent
-  );
-  --nb-appearance-glass-core: color-mix(
-    in srgb,
-    var(--nb-color-surface-raised) max(88%, var(--nb-appearance-core-floor)),
-    transparent
-  );
-  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 42%, transparent);
-  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 26%, transparent);
-  --nb-appearance-glass-divider: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
-}
-:root:is(
-    [data-appearance='celestial'],
-    [data-appearance='wandering'],
-    [data-appearance='heart-moment'],
-    [data-appearance='mirrorsea'],
-    [data-appearance='amber'],
-    [data-appearance='elopement'],
-    [data-appearance='heart-thief'],
-    [data-appearance='tomorrow']
-  )[data-theme='dark'] {
-  --nb-appearance-glass-edge: color-mix(
-    in srgb,
-    var(--nb-color-surface) max(94%, var(--nb-appearance-edge-floor)),
-    transparent
-  );
-  --nb-appearance-glass-core: color-mix(
-    in srgb,
-    var(--nb-color-surface) max(96%, var(--nb-appearance-core-floor)),
-    transparent
-  );
-  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
-  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 62%, transparent);
 }
 
 /*
@@ -484,6 +443,10 @@
 }
 /* Phones: the artwork becomes an ambient backdrop and content stays nearly opaque. */
 @media (width < 48rem) {
+  :root[data-appearance-intensity='vivid'] {
+    --nb-appearance-edge-floor: 90%;
+    --nb-appearance-core-floor: 94%;
+  }
   :root[data-appearance-intensity='balanced'] {
     --nb-appearance-edge-floor: 94%;
     --nb-appearance-core-floor: 97%;
@@ -491,7 +454,8 @@
   }
 }
 
-:root[data-appearance='mirrorsea'] {
+:root[data-appearance='mirrorsea'],
+.nb-appearance-option[data-preview='mirrorsea'] {
   --nb-color-bg: #efedf7;
   --nb-color-surface: #faf8ff;
   --nb-color-surface-raised: #fefbff;
@@ -510,7 +474,8 @@
   --nb-color-accent-contrast: #ffffff;
   --nb-elevation-1: 0 3px 16px #6a4b9e16;
 }
-:root[data-appearance='mirrorsea'][data-theme='dark'] {
+:root[data-appearance='mirrorsea'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='mirrorsea'] {
   --nb-color-bg: #141329;
   --nb-color-surface: #22203c;
   --nb-color-surface-raised: #2b2947;
@@ -534,7 +499,8 @@
  * Amber, elopement and heart-thief art stays mid-to-dark even in light mode, so ink is
  * darker than the default palette to hold 4.5:1 over the weakest glass stop.
  */
-:root[data-appearance='amber'] {
+:root[data-appearance='amber'],
+.nb-appearance-option[data-preview='amber'] {
   --nb-color-bg: #f6efe6;
   --nb-color-surface: #fffbf5ed;
   --nb-color-surface-raised: #ffffff;
@@ -553,7 +519,8 @@
   --nb-color-accent-contrast: #ffffff;
   --nb-elevation-1: 0 3px 16px #7a4a1a14;
 }
-:root[data-appearance='amber'][data-theme='dark'] {
+:root[data-appearance='amber'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='amber'] {
   --nb-color-bg: #1c130c;
   --nb-color-surface: #2a1d13;
   --nb-color-surface-raised: #33251a;
@@ -572,7 +539,8 @@
   --nb-color-accent-contrast: #2c1a0a;
   --nb-elevation-1: 0 3px 16px #0d070340;
 }
-:root[data-appearance='elopement'] {
+:root[data-appearance='elopement'],
+.nb-appearance-option[data-preview='elopement'] {
   --nb-color-bg: #f5ecef;
   --nb-color-surface: #fffafced;
   --nb-color-surface-raised: #ffffff;
@@ -591,7 +559,8 @@
   --nb-color-accent-contrast: #ffffff;
   --nb-elevation-1: 0 3px 16px #6a2a4814;
 }
-:root[data-appearance='elopement'][data-theme='dark'] {
+:root[data-appearance='elopement'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='elopement'] {
   --nb-color-bg: #1c1219;
   --nb-color-surface: #2b1c27;
   --nb-color-surface-raised: #352331;
@@ -610,7 +579,8 @@
   --nb-color-accent-contrast: #34142a;
   --nb-elevation-1: 0 3px 16px #0e060b40;
 }
-:root[data-appearance='heart-thief'] {
+:root[data-appearance='heart-thief'],
+.nb-appearance-option[data-preview='heart-thief'] {
   --nb-color-bg: #eceef6;
   --nb-color-surface: #fbfbffed;
   --nb-color-surface-raised: #ffffff;
@@ -629,7 +599,8 @@
   --nb-color-accent-contrast: #ffffff;
   --nb-elevation-1: 0 3px 16px #2a2c6014;
 }
-:root[data-appearance='heart-thief'][data-theme='dark'] {
+:root[data-appearance='heart-thief'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='heart-thief'] {
   --nb-color-bg: #10111d;
   --nb-color-surface: #1b1d2e;
   --nb-color-surface-raised: #232538;
@@ -649,7 +620,9 @@
   --nb-elevation-1: 0 3px 16px #05061040;
 }
 
-:root[data-appearance='tomorrow'] {
+:root[data-appearance='tomorrow'],
+.nb-appearance-option[data-preview='tomorrow'] {
+  --nb-color-surface-emphasis: #dae9da;
   --nb-color-bg: #f2f6ee;
   --nb-color-surface: #f7fbf5;
   --nb-color-surface-raised: #ffffff;
@@ -666,7 +639,9 @@
   --nb-color-accent-quiet: #edf7ed;
   --nb-color-accent-contrast: #ffffff;
 }
-:root[data-appearance='tomorrow'][data-theme='dark'] {
+:root[data-appearance='tomorrow'][data-theme='dark'],
+[data-theme='dark'] .nb-appearance-option[data-preview='tomorrow'] {
+  --nb-color-surface-emphasis: #2f484b;
   --nb-color-bg: #111e28;
   --nb-color-surface: #1b2b34;
   --nb-color-surface-raised: #22363d;

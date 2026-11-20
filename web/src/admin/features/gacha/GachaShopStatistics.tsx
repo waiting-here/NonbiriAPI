@@ -168,7 +168,7 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
               <FilterBar
                 query={query}
                 ariaLabel={t('admin.gachaStats.cardFilters')}
-                activeCount={q || sort !== 'count' ? 1 : 0}
+                activeCount={Number(Boolean(q)) + Number(sort !== 'count')}
                 secondaryAlwaysVisible
                 onSubmit={() => change('stats_shop_q', draft.trim())}
                 onReset={() => {
@@ -228,7 +228,10 @@ export function GachaShopStatistics({ accountKey }: { accountKey: string }) {
                       header: t('admin.gachaStats.rarity'),
                       cell: 'status',
                       render: (row) => (
-                        <span className="nb-badge gacha-stats-rarity" data-rarity={row.rarity}>
+                        <span
+                          className="nb-badge nb-badge--plain gacha-stats-rarity"
+                          data-rarity={row.rarity}
+                        >
                           {row.rarity ?? t('admin.gachaStats.unspecifiedRarity')}
                         </span>
                       ),

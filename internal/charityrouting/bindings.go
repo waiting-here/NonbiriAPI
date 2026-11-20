@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationstate"
 	"github.com/waiting-here/NonbiriAPI/internal/gatewaypolicy"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/modeltype"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -95,7 +96,7 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 	if err := annotateBindingCandidates(ctx, tx, items, modelID, scope.Trainee); err != nil {
 		return nil, 0, "", err
 	}
-	if err := annotateCandidateServicesTx(ctx, tx, items, modelID); err != nil {
+	if err := annotateCandidateServicesTx(ctx, tx, items, modelID, now); err != nil {
 		return nil, 0, "", err
 	}
 	nextKey, nextModel := int64(0), ""
@@ -119,7 +120,7 @@ func (s *Service) GetBindingsAdmin(ctx context.Context, modelID int64) (AdminBin
 		return AdminBindings{}, err
 	}
 	defer tx.Rollback()
-	value, err := readAdminBindingsTx(ctx, tx, modelID)
+	value, err := readBindingGroupsTx(ctx, tx, modelID, true)
 	if err != nil {
 		return AdminBindings{}, err
 	}
@@ -142,7 +143,7 @@ func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID i
 		return StewardBindings{}, fmt.Errorf("charity routing: begin steward bindings read: %w", err)
 	}
 	defer tx.Rollback()
-	value, err := readAdminBindingsTx(ctx, tx, modelID)
+	value, err := readBindingGroupsTx(ctx, tx, modelID, true)
 	if err != nil {
 		return StewardBindings{}, err
 	}
@@ -150,6 +151,7 @@ func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID i
 	if err != nil {
 		return StewardBindings{}, err
 	}
+	allBindings := len(value.Bindings)
 	value, err = scopedBindingsTx(ctx, tx, scope, value, now)
 	if err != nil {
 		return StewardBindings{}, err
@@ -160,7 +162,10 @@ func (s *Service) GetBindingsSteward(ctx context.Context, actorUserID, modelID i
 	if err := tx.Commit(); err != nil {
 		return StewardBindings{}, fmt.Errorf("charity routing: commit steward bindings read: %w", err)
 	}
-	return stewardBindings(value), nil
+	result := stewardBindings(value)
+	canReorder := len(value.Bindings) == allBindings
+	result.CanReorder = &canReorder
+	return result, nil
 }
 
 func (s *Service) AddBindingsAdmin(ctx context.Context, modelID int64, mutation resources.ControlMutation, input BindingBatch) (resources.MutationResult[AdminBindings], error) {
@@ -567,9 +572,14 @@ func readAdminBindingsDB(ctx context.Context, database *sql.DB, modelID int64) (
 }
 
 func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminBindings, error) {
+	return readBindingGroupsTx(ctx, tx, modelID, false)
+}
+
+func readBindingGroupsTx(ctx context.Context, tx *sql.Tx, modelID int64, includeGuide bool) (AdminBindings, error) {
 	var out AdminBindings
+	var types modeltype.Set
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT binding_revision FROM charity_models WHERE id=?`, modelID).Scan(&revision); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT binding_revision,model_types FROM charity_models WHERE id=?`, modelID).Scan(&revision, &types); errors.Is(err, sql.ErrNoRows) {
 		return AdminBindings{}, ErrNotFound
 	} else if err != nil {
 		return AdminBindings{}, fmt.Errorf("charity routing: read bindings revision: %w", err)
@@ -618,7 +628,16 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 			item.Targets = []BindingTarget{}
 			out.Bindings = append(out.Bindings, item)
 		}
-		targets = append(targets, targetRow{group: group, keyID: donationKeyID, mask: mask, value: BindingTarget{ID: strconv.FormatInt(targetID, 10), Revision: strconv.FormatInt(targetRevision, 10), DonationID: item.DonationID, DonationKeyID: item.DonationKeyID, UpstreamModelID: item.UpstreamModelID, EndpointID: strconv.FormatInt(endpointID, 10), ConnectorType: contract.Type(item.Source.ConnectorType), ConfigurationType: contract.Type(item.Source.ConnectorType).ConfigurationType(), BaseURL: item.Source.CanonicalBaseURL}})
+		target := BindingTarget{
+			ID: strconv.FormatInt(targetID, 10), Revision: strconv.FormatInt(targetRevision, 10),
+			DonationID: item.DonationID, DonationKeyID: item.DonationKeyID, UpstreamModelID: item.UpstreamModelID,
+			EndpointID: strconv.FormatInt(endpointID, 10), ConnectorType: contract.Type(item.Source.ConnectorType),
+			ConfigurationType: contract.Type(item.Source.ConnectorType).ConfigurationType(), BaseURL: item.Source.CanonicalBaseURL,
+		}
+		if includeGuide {
+			target.GatewayCapabilities = item.GatewayCapabilities
+		}
+		targets = append(targets, targetRow{group: group, keyID: donationKeyID, mask: mask, value: target})
 		keyIDs = append(keyIDs, donationKeyID)
 	}
 	if err := rows.Err(); err != nil {
@@ -634,6 +653,7 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 	if err != nil {
 		return AdminBindings{}, targetConnectionError(err)
 	}
+	guides := make(map[int64]*BindingGuide)
 	for _, row := range targets {
 		selected, err := contract.NativeServicesFromMask(row.mask)
 		if err != nil || selected.Empty() {
@@ -642,6 +662,18 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 		row.value.ServiceProjection, row.value.Uses, err = readTargetProjection(uses[row.keyID], selected)
 		if err != nil {
 			return AdminBindings{}, err
+		}
+		if includeGuide {
+			guide, ok := guides[row.keyID]
+			if !ok {
+				projection, err := approvedServiceProjection(uses[row.keyID])
+				if err != nil {
+					return AdminBindings{}, err
+				}
+				guide = bindingGuide(types, projection)
+				guides[row.keyID] = guide
+			}
+			row.value.Guide = guide
 		}
 		out.Bindings[row.group].Targets = append(out.Bindings[row.group].Targets, row.value)
 	}
@@ -758,7 +790,7 @@ func stewardCandidate(value AdminBindingCandidate) StewardBindingCandidate {
 }
 
 func stewardBindings(value AdminBindings) StewardBindings {
-	out := StewardBindings{BindingRevision: value.BindingRevision, Bindings: make([]StewardBinding, len(value.Bindings))}
+	out := StewardBindings{Coverage: value.Coverage, BindingRevision: value.BindingRevision, Bindings: make([]StewardBinding, len(value.Bindings))}
 	for index, binding := range value.Bindings {
 		out.Bindings[index] = StewardBinding{
 			Targets:             binding.Targets,

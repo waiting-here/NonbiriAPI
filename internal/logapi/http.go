@@ -281,6 +281,7 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	filter := ListFilter{}
 	allowed := map[string]bool{
 		"operation":  true,
+		"outcome":    true,
 		"phase":      true,
 		"error_code": true, "status": true, "from": true, "to": true,
 	}
@@ -321,6 +322,11 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 			if !validLogOperation(filter.Operation) {
 				return ListFilter{}, ErrInvalid
 			}
+		case "outcome":
+			if !validOutcome(role, value) || value == "" {
+				return ListFilter{}, ErrInvalid
+			}
+			filter.Outcome = value
 		case "phase":
 			if value != "pre_handler" && value != "handler" {
 				return ListFilter{}, ErrInvalid
@@ -422,6 +428,12 @@ func parseAttemptFilter(rawQuery string) (AttemptFilter, error) {
 		}
 		switch name {
 		case "attempt_page", "attempt_page_size":
+		case "attempt_seq":
+			sequence, ok := parseCanonicalInt64(entries[0], 1, maximumLimit)
+			if !ok || values.Has("attempt_page") || values.Has("attempt_cursor") || values.Has("attempt_limit") {
+				return AttemptFilter{}, ErrInvalid
+			}
+			filter.FocusSeq = sequence
 		case "attempt_cursor":
 			if entries[0] == "" {
 				return AttemptFilter{}, ErrInvalid

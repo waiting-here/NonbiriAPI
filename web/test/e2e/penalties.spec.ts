@@ -207,7 +207,7 @@ for (const { role, width } of logExportScenarios) {
       return route.fulfill({ json: detail });
     });
     await page.goto(origin + (role === 'steward' ? '/steward?tab=logs' : '/logs'));
-    await page.getByTestId('log-filters').locator('summary').click();
+    await page.getByTestId('log-filters').getByText('More filters', { exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Request stage', exact: true })
       .selectOption('pre_handler');
@@ -233,7 +233,9 @@ for (const { role, width } of logExportScenarios) {
       });
     }
     await page.getByRole('button', { name: 'Details', exact: true }).click();
-    const detail = page.getByRole('region', { name: `Log details ${base.id}`, exact: true });
+    const detail = page
+      .locator('.inspection-dock, .nb-sheet:has(.log-detail-content)')
+      .filter({ hasText: base.id });
     await expect(detail.getByText('Rejected before a call', { exact: true })).toBeVisible();
     await expect(detail.getByText('POST /v1/chat/completions', { exact: true })).toBeVisible();
     guard.assertNone();

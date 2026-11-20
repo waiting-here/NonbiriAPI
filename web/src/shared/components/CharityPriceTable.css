@@ -1,7 +1,20 @@
 .charity-prices-compact dl {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
-  gap: var(--nb-space-2) var(--nb-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.25rem), 1fr));
+  gap: var(--nb-space-2) var(--nb-space-3);
+  margin: 0;
+}
+@media (width >= 48rem) {
+  .charity-prices-compact:has(> dl > div:nth-child(2)) {
+    min-width: 13.5rem;
+  }
+}
+.charity-price-notes {
+  display: grid;
+  gap: var(--nb-space-1);
+  margin-top: var(--nb-space-2);
+}
+.charity-price-notes > .nb-sub {
   margin: 0;
 }
 .charity-prices-compact dt {

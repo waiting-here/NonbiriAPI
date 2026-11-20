@@ -192,7 +192,8 @@ function EndpointPoliciesContent({
               <Button type="button" variant="ghost" onClick={back}>
                 {t('common.endpointPolicies.backList')}
               </Button>
-            ) : (
+            ) : role === 'steward' ||
+              Boolean((location.state as { returnTo?: string } | null)?.returnTo) ? (
               <Link
                 to={listReturnPath(
                   location.state,
@@ -201,7 +202,25 @@ function EndpointPoliciesContent({
               >
                 {t('common.endpointPolicies.backManagement')}
               </Link>
-            )
+            ) : undefined
+          }
+          actions={
+            view === 'rules' && rulesAllowed && !selection ? (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  remember();
+                  setParams((previous) => {
+                    const next = new URLSearchParams(previous);
+                    next.set('new', '1');
+                    return next;
+                  });
+                }}
+              >
+                {t('common.endpointPolicies.configureEndpoint')}
+              </Button>
+            ) : undefined
           }
         />
         <Tabs
@@ -223,135 +242,126 @@ function EndpointPoliciesContent({
             {rulesAllowed ? (
               <>
                 <div hidden={Boolean(selection)} ref={listRef} tabIndex={-1} className="nb-form">
-                  <FilterBar
-                    query={list}
-                    activeCount={q ? 1 : 0}
-                    onReset={() => {
-                      setSearch('');
-                      setParams((previous) => {
-                        const next = new URLSearchParams(previous);
-                        next.delete('q');
-                        next.set('page', '1');
-                        return next;
-                      });
-                    }}
-                    onSubmit={() => {
-                      if (validManagementSearch(search))
-                        setParams((previous) => {
-                          const next = new URLSearchParams(previous);
-                          next.set('q', search.trim());
-                          next.set('page', '1');
-                          return next;
-                        });
-                    }}
-                    search={
-                      <>
-                        <Field label={t('common.endpointPolicies.search')}>
-                          {(props) => (
-                            <input
-                              {...props}
-                              type="search"
-                              value={search}
-                              maxLength={256}
-                              placeholder={t('common.endpointPolicies.searchPlaceholder')}
-                              onChange={(event) => setSearch(event.target.value)}
+                  <Panel>
+                    <PanelBody>
+                      <FilterBar
+                        query={list}
+                        activeCount={q ? 1 : 0}
+                        onReset={() => {
+                          setSearch('');
+                          setParams((previous) => {
+                            const next = new URLSearchParams(previous);
+                            next.delete('q');
+                            next.set('page', '1');
+                            return next;
+                          });
+                        }}
+                        onSubmit={() => {
+                          if (validManagementSearch(search))
+                            setParams((previous) => {
+                              const next = new URLSearchParams(previous);
+                              next.set('q', search.trim());
+                              next.set('page', '1');
+                              return next;
+                            });
+                        }}
+                        search={
+                          <>
+                            <Field label={t('common.endpointPolicies.search')}>
+                              {(props) => (
+                                <input
+                                  {...props}
+                                  type="search"
+                                  value={search}
+                                  maxLength={256}
+                                  placeholder={t('common.endpointPolicies.searchPlaceholder')}
+                                  onChange={(event) => setSearch(event.target.value)}
+                                />
+                              )}
+                            </Field>
+                          </>
+                        }
+                      />
+                      {list.isPending ? (
+                        <LoadingState />
+                      ) : list.error ? (
+                        <ErrorState error={list.error} onRetry={() => void list.refetch()} />
+                      ) : (
+                        <>
+                          {list.data.data.length ? (
+                            <DataTable
+                              caption={t('common.endpointPolicies.endpoints')}
+                              rows={list.data.data}
+                              rowKey={endpointIdentityKey}
+                              columns={[
+                                {
+                                  key: 'endpoint',
+                                  header: t('common.endpointPolicies.endpoint'),
+                                  mobileLabel: t('common.endpointPolicies.endpoint'),
+                                  cell: 'title',
+                                  render: (row) => (
+                                    <>
+                                      <span className="mono endpoint-policy-url">
+                                        {row.base_url}
+                                      </span>
+                                      <small>
+                                        <GatewayConnectorLabel value={row.connector_type} />
+                                      </small>
+                                    </>
+                                  ),
+                                },
+                                {
+                                  key: 'rules',
+                                  header: t('common.endpointPolicies.ruleCount'),
+                                  mobileLabel: t('common.endpointPolicies.ruleCount'),
+                                  cell: 'meta',
+                                  align: 'num',
+                                  render: (row) => formatCount(row.rule_count).display,
+                                },
+                                {
+                                  key: 'keys',
+                                  header: t('common.endpointPolicies.keyCount'),
+                                  mobileLabel: t('common.endpointPolicies.keyCount'),
+                                  cell: 'meta',
+                                  align: 'num',
+                                  render: (row) => formatCount(row.key_count).display,
+                                },
+                                {
+                                  key: 'actions',
+                                  header: t('common.workflow.actions'),
+                                  mobileLabel: t('common.workflow.actions'),
+                                  cell: 'action',
+                                  align: 'action',
+                                  render: (row) => (
+                                    <Button
+                                      type="button"
+                                      id={`endpoint-policy-${encodeURIComponent(endpointIdentityKey(row))}`}
+                                      onClick={() => open(row)}
+                                    >
+                                      {t('common.endpointPolicies.edit')}
+                                    </Button>
+                                  ),
+                                },
+                              ]}
+                            />
+                          ) : (
+                            <EmptyState
+                              title={t('common.endpointPolicies.empty')}
+                              body={t('common.endpointPolicies.emptyHelp')}
                             />
                           )}
-                        </Field>
-                      </>
-                    }
-                  />
-                  <div className="nb-actions">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={() => {
-                        remember();
-                        setParams((previous) => {
-                          const next = new URLSearchParams(previous);
-                          next.set('new', '1');
-                          return next;
-                        });
-                      }}
-                    >
-                      {t('common.endpointPolicies.configureEndpoint')}
-                    </Button>
-                  </div>
-                  {list.isPending ? (
-                    <LoadingState />
-                  ) : list.error ? (
-                    <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-                  ) : (
-                    <>
-                      {list.data.data.length ? (
-                        <DataTable
-                          caption={t('common.endpointPolicies.endpoints')}
-                          rows={list.data.data}
-                          rowKey={endpointIdentityKey}
-                          columns={[
-                            {
-                              key: 'endpoint',
-                              header: t('common.endpointPolicies.endpoint'),
-                              mobileLabel: t('common.endpointPolicies.endpoint'),
-                              cell: 'title',
-                              render: (row) => (
-                                <>
-                                  <span className="mono endpoint-policy-url">{row.base_url}</span>
-                                  <small>
-                                    <GatewayConnectorLabel value={row.connector_type} />
-                                  </small>
-                                </>
-                              ),
-                            },
-                            {
-                              key: 'rules',
-                              header: t('common.endpointPolicies.ruleCount'),
-                              mobileLabel: t('common.endpointPolicies.ruleCount'),
-                              cell: 'meta',
-                              align: 'num',
-                              render: (row) => formatCount(row.rule_count).display,
-                            },
-                            {
-                              key: 'keys',
-                              header: t('common.endpointPolicies.keyCount'),
-                              mobileLabel: t('common.endpointPolicies.keyCount'),
-                              cell: 'meta',
-                              align: 'num',
-                              render: (row) => formatCount(row.key_count).display,
-                            },
-                            {
-                              key: 'actions',
-                              header: t('common.workflow.actions'),
-                              mobileLabel: t('common.workflow.actions'),
-                              cell: 'action',
-                              render: (row) => (
-                                <Button
-                                  type="button"
-                                  id={`endpoint-policy-${encodeURIComponent(endpointIdentityKey(row))}`}
-                                  onClick={() => open(row)}
-                                >
-                                  {t('common.endpointPolicies.edit')}
-                                </Button>
-                              ),
-                            },
-                          ]}
-                        />
-                      ) : (
-                        <EmptyState
-                          title={t('common.endpointPolicies.empty')}
-                          body={t('common.endpointPolicies.emptyHelp')}
-                        />
+                          <PagePagination
+                            alwaysShowJump
+                            metadata={list.data.pagination}
+                            requestedPage={pager.page}
+                            onPageChange={pager.setPage}
+                            onPageSizeChange={pager.setPageSize}
+                            busy={list.isFetching}
+                          />
+                        </>
                       )}
-                      <PagePagination
-                        alwaysShowJump
-                        metadata={list.data.pagination}
-                        requestedPage={pager.page}
-                        onPageChange={pager.setPage}
-                        onPageSizeChange={pager.setPageSize}
-                        busy={list.isFetching}
-                      />
-                    </>
-                  )}
+                    </PanelBody>
+                  </Panel>
                 </div>
                 <div ref={detailRef} tabIndex={-1} hidden={!selection} className="nb-form">
                   <div hidden={!isNew || Boolean(selected)}>
@@ -861,101 +871,118 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
   const page = Math.min(Number(pager.page), pages);
   if (routes.data && String(page) !== pager.page) pager.setPage(String(page));
   return (
-    <div className="nb-form">
-      <Note>{t('common.endpointPolicies.routesHelp')}</Note>
-      <div className="nb-actions">
-        <Button type="button" disabled={routes.isFetching} onClick={() => void routes.refetch()}>
-          {t('common.refresh')}
-        </Button>
-      </div>
-      {routes.isPending ? (
-        <LoadingState />
-      ) : routes.error ? (
-        <ErrorState error={routes.error} onRetry={() => void routes.refetch()} />
-      ) : (
-        <>
-          <dl className="nb-facts">
-            <div>
-              <dt>{t('common.endpointPolicies.proxyStatus')}</dt>
-              <dd>{t(proxyModeCopy[routes.data.mode])}</dd>
-            </div>
-            {routes.data.worker_origin ? (
-              <div>
-                <dt>{t('common.endpointPolicies.workerOrigin')}</dt>
-                <dd className="mono endpoint-policy-url">{routes.data.worker_origin}</dd>
-              </div>
-            ) : null}
-          </dl>
-          {routes.data.mode === 'worker' && routes.data.routes.length > 0 ? (
-            <Note>{t('common.endpointPolicies.legacyInactive')}</Note>
-          ) : null}
-          {routes.data.routes.length ? (
+    <Panel>
+      <PanelBody>
+        <div className="nb-form">
+          <Note>{t('common.endpointPolicies.routesHelp')}</Note>
+          <div className="nb-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={routes.isFetching}
+              onClick={() => void routes.refetch()}
+            >
+              {t('common.refresh')}
+            </Button>
+          </div>
+          {routes.isPending ? (
+            <LoadingState />
+          ) : routes.error ? (
+            <ErrorState error={routes.error} onRetry={() => void routes.refetch()} />
+          ) : (
             <>
-              <p>
-                {t('common.endpointPolicies.loadedCount', { count: routes.data.routes.length })}
-              </p>
-              <DataTable
-                caption={t('common.endpointPolicies.loadedRoutes')}
-                rows={routes.data.routes.slice((page - 1) * pager.pageSize, page * pager.pageSize)}
-                rowKey={(row) => row.source_base_url}
-                columns={[
-                  {
-                    key: 'source',
-                    header: t('common.endpointPolicies.sourceURL'),
-                    mobileLabel: t('common.endpointPolicies.sourceURL'),
-                    cell: 'title',
-                    render: (row) => (
-                      <span className="mono endpoint-policy-url">{row.source_base_url}</span>
-                    ),
-                  },
-                  {
-                    key: 'gateway',
-                    header: t('common.endpointPolicies.gatewayOrigin'),
-                    mobileLabel: t('common.endpointPolicies.gatewayOrigin'),
-                    cell: 'meta',
-                    render: (row) => (
-                      <span className="mono endpoint-policy-url">{row.gateway_origin}</span>
-                    ),
-                  },
-                  {
-                    key: 'credentials',
-                    header: t('common.endpointPolicies.credentialMode'),
-                    mobileLabel: t('common.endpointPolicies.credentialMode'),
-                    cell: 'meta',
-                    render: (row) =>
-                      t(
-                        row.credential_query_parameter
-                          ? row.retain_credential_header
-                            ? 'common.endpointPolicies.headerAndQuery'
-                            : 'common.endpointPolicies.queryOnly'
-                          : 'common.endpointPolicies.headerOnly',
-                        { header: row.credential_header, query: row.credential_query_parameter },
-                      ),
-                  },
-                ]}
-              />
-              <PagePagination
-                alwaysShowJump
-                metadata={{
-                  page: String(page),
-                  page_size: pager.pageSize,
-                  total_items: String(count),
-                  total_pages: String(pages),
-                }}
-                requestedPage={String(page)}
-                onPageChange={pager.setPage}
-                onPageSizeChange={pager.setPageSize}
-                busy={routes.isFetching}
-              />
+              <dl className="nb-facts">
+                <div>
+                  <dt>{t('common.endpointPolicies.proxyStatus')}</dt>
+                  <dd>{t(proxyModeCopy[routes.data.mode])}</dd>
+                </div>
+                {routes.data.worker_origin ? (
+                  <div>
+                    <dt>{t('common.endpointPolicies.workerOrigin')}</dt>
+                    <dd className="mono endpoint-policy-url">{routes.data.worker_origin}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {routes.data.mode === 'worker' && routes.data.routes.length > 0 ? (
+                <Note>{t('common.endpointPolicies.legacyInactive')}</Note>
+              ) : null}
+              {routes.data.routes.length ? (
+                <>
+                  <p className="nb-small nb-muted">
+                    {t('common.endpointPolicies.loadedCount', {
+                      count: routes.data.routes.length,
+                    })}
+                  </p>
+                  <DataTable
+                    caption={t('common.endpointPolicies.loadedRoutes')}
+                    rows={routes.data.routes.slice(
+                      (page - 1) * pager.pageSize,
+                      page * pager.pageSize,
+                    )}
+                    rowKey={(row) => row.source_base_url}
+                    columns={[
+                      {
+                        key: 'source',
+                        header: t('common.endpointPolicies.sourceURL'),
+                        mobileLabel: t('common.endpointPolicies.sourceURL'),
+                        cell: 'title',
+                        render: (row) => (
+                          <span className="mono endpoint-policy-url">{row.source_base_url}</span>
+                        ),
+                      },
+                      {
+                        key: 'gateway',
+                        header: t('common.endpointPolicies.gatewayOrigin'),
+                        mobileLabel: t('common.endpointPolicies.gatewayOrigin'),
+                        cell: 'meta',
+                        render: (row) => (
+                          <span className="mono endpoint-policy-url">{row.gateway_origin}</span>
+                        ),
+                      },
+                      {
+                        key: 'credentials',
+                        header: t('common.endpointPolicies.credentialMode'),
+                        mobileLabel: t('common.endpointPolicies.credentialMode'),
+                        cell: 'meta',
+                        render: (row) =>
+                          t(
+                            row.credential_query_parameter
+                              ? row.retain_credential_header
+                                ? 'common.endpointPolicies.headerAndQuery'
+                                : 'common.endpointPolicies.queryOnly'
+                              : 'common.endpointPolicies.headerOnly',
+                            {
+                              header: row.credential_header,
+                              query: row.credential_query_parameter,
+                            },
+                          ),
+                      },
+                    ]}
+                  />
+                  <PagePagination
+                    alwaysShowJump
+                    metadata={{
+                      page: String(page),
+                      page_size: pager.pageSize,
+                      total_items: String(count),
+                      total_pages: String(pages),
+                    }}
+                    requestedPage={String(page)}
+                    onPageChange={pager.setPage}
+                    onPageSizeChange={pager.setPageSize}
+                    busy={routes.isFetching}
+                  />
+                </>
+              ) : routes.data.mode !== 'worker' ? (
+                <EmptyState
+                  title={t('common.endpointPolicies.routesEmpty')}
+                  body={t('common.endpointPolicies.routesEmptyHelp')}
+                />
+              ) : null}
             </>
-          ) : routes.data.mode !== 'worker' ? (
-            <EmptyState
-              title={t('common.endpointPolicies.routesEmpty')}
-              body={t('common.endpointPolicies.routesEmptyHelp')}
-            />
-          ) : null}
-        </>
-      )}
-    </div>
+          )}
+        </div>
+      </PanelBody>
+    </Panel>
   );
 }

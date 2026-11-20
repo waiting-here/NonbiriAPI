@@ -127,7 +127,7 @@ export function DonationManualCandidates({
     Boolean(query.error);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   return (
-    <section className="ops-subcard ops-stack">
+    <section className="ops-stack">
       <h4>{t('common.manualCandidates.title')}</h4>
       <p>{t('common.manualCandidates.help')}</p>
       <FilterBar
@@ -173,9 +173,9 @@ export function DonationManualCandidates({
           {query.data.candidates.data.length === 0 ? (
             <p>{t('common.manualCandidates.empty')}</p>
           ) : (
-            <ul className="ops-stack">
+            <ul className="nb-list">
               {query.data.candidates.data.map((candidate) => (
-                <li key={candidate.upstream_model_id} className="ops-subcard">
+                <li key={candidate.upstream_model_id} className="nb-row nb-stack nb-stack--xs">
                   <strong className="ops-break">{candidate.display_name}</strong>
                   <p>
                     {t(sourceCopy[candidate.source])} ·{' '}

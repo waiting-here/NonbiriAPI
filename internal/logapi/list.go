@@ -17,7 +17,7 @@ COALESCE((SELECT ce.delta_mag
    AND co.kind IN ('forward_settle','charity_settle')
    AND ce.account_kind_snapshot='platform' AND ce.delta_sign=1
  ORDER BY co.ledger_seq DESC,ce.line_no ASC LIMIT 1),zeroblob(16)),l.rejection_stage,l.rejection_reason,l.request_method,l.request_path,l.requested_streaming,l.automatic_actions,l.usage_details,CASE WHEN l.rejection_stage IS NOT NULL OR
- (l.attempt_count=0 AND l.caller_result_class='failed' AND l.error_source='platform' AND l.caller_error_code IN ('unbound_model','rate_limited')) THEN l.error_diag END`
+ (l.attempt_count=0 AND l.caller_result_class='failed' AND l.error_source='platform' AND l.caller_error_code IN ('unbound_model','rate_limited','service_unavailable','internal')) THEN l.error_diag END`
 
 // Each condition can match a different attempt. Independent sets also prevent
 // repeated attempts from duplicating logical requests or their count.
@@ -64,7 +64,7 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, filter.Operation)
 	}
-	query += phaseFilter(filter.Phase)
+	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.Model != nil {
 		query += ` AND l.model=?`
@@ -208,7 +208,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, filter.Operation)
 	}
-	query += phaseFilter(filter.Phase)
+	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`
@@ -364,7 +364,7 @@ func (repository *Repository) ListSteward(
 		query += " AND " + logOperationSQL + "=?"
 		args = append(args, filter.Operation)
 	}
-	query += phaseFilter(filter.Phase)
+	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
 	query, args = diagnosisFilter(query, args, filter)
 	if filter.UserID != nil {
 		query += ` AND l.origin_user_id=?`

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useParams } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { Tabs } from '@shared/components/ui';
 import { isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
@@ -37,11 +37,10 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
   const valid = validDonationID(donationID);
   const donation = useDonation(valid ? donationID : undefined, valid);
   return (
-    <div className="page economy-page economy-charity-page">
+    <div className="page page--detail economy-page economy-charity-page">
       <PageHeader
         title={t('user.charity.donationDetailTitle')}
         description={t('user.charity.donationDetailDescription')}
-        icon="charity"
         back={<Link to={returnTo}>{t('user.charity.backToDonations')}</Link>}
       />
       {!valid ? (
@@ -123,7 +122,7 @@ function CharityContent() {
     : publicConfig.data?.charityDonationNoticeEn;
 
   return (
-    <div className="page economy-page economy-charity-page">
+    <div className="page economy-page economy-charity-page page--wide">
       <PageHeader
         title={t('user.charity.title')}
         description={t('user.charity.description')}
@@ -171,18 +170,18 @@ function CharityContent() {
               enabled={tab === 'models'}
             />
           </section>
-          <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
+          <section
+            hidden={tab !== 'donations'}
+            className="ops-stack"
+            aria-label={t('user.charity.donationsTitle')}
+          >
             {session.data ? (
-              <div className="nb-stats charity-donation-stats">
-                <div className="nb-stat">
-                  <div className="nb-stat__label">
-                    {t('user.charity.presentation.donationCredit')}
-                  </div>
-                  <div className="nb-stat__value">
-                    <CreditAmount value={session.data.user.donation_credit} />
-                  </div>
-                </div>
-              </div>
+              <Card className="economy-donation-credit-bar">
+                <span>{t('user.charity.presentation.donationCredit')}</span>
+                <strong>
+                  <CreditAmount value={session.data.user.donation_credit} />
+                </strong>
+              </Card>
             ) : null}
             {accountID ? (
               <OwnerDonationsPanel accountID={accountID} enabled={tab === 'donations'} />

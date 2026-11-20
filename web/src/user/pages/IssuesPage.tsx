@@ -1,10 +1,10 @@
 import { QueryFeedback } from '@shared/components/QueryFeedback';
-import { Tabs } from '@shared/components/ui/Tabs';
+import { Panel, PanelBody, StatusBadge, Tabs } from '@shared/components/ui';
 import { RecordsHeader } from '../components/RecordsHeader';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
+import { EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -45,6 +45,7 @@ const DETAIL_LABEL_KEYS: Readonly<Record<string, string>> = {
 
 export function IssuesPage() {
   const { t } = useTranslation();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchState();
   const state: IssueState = searchParams.get(ISSUE_STATE_PARAM) === 'closed' ? 'closed' : 'current';
   const session = useUserAuthority();
@@ -92,112 +93,123 @@ export function IssuesPage() {
             : undefined
         }
       />
-      <Tabs
-        label={t('user.issues.stateLabel')}
-        value={state}
-        onChange={selectState}
-        tabs={[
-          { value: 'current', label: t('user.issues.currentTab') },
-          { value: 'closed', label: t('user.issues.closedTab') },
-        ]}
-      >
-        <QueryFeedback query={issues} />
-        {session.error ? (
-          <ErrorState error={session.error} onRetry={() => void session.refetch()} />
-        ) : session.isPending || (issues.isPending && !pageData) ? (
-          <LoadingState />
-        ) : issues.error && !pageData ? (
-          <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
-        ) : pageData ? (
-          <div aria-busy={busy}>
-            {issues.error ? (
+      <Panel>
+        <PanelBody>
+          <Tabs
+            label={t('user.issues.stateLabel')}
+            value={state}
+            onChange={selectState}
+            tabs={[
+              { value: 'current', label: t('user.issues.currentTab') },
+              { value: 'closed', label: t('user.issues.closedTab') },
+            ]}
+          >
+            <QueryFeedback query={issues} />
+            {session.error ? (
+              <ErrorState error={session.error} onRetry={() => void session.refetch()} />
+            ) : session.isPending || (issues.isPending && !pageData) ? (
+              <LoadingState />
+            ) : issues.error && !pageData ? (
               <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
-            ) : null}
-            {pageData.projection_incomplete ? (
-              <p className="inline-notice" role="status">
-                {t('user.issues.projectionIncomplete')}
-              </p>
-            ) : null}
-            {pageData.data.length === 0 ? (
-              <EmptyState
-                title={t('user.issues.empty')}
-                body={
-                  state === 'current'
-                    ? t('user.issues.emptyCurrentBody')
-                    : t('user.issues.emptyClosedBody')
-                }
-              />
-            ) : (
-              <Card>
-                {pageData.data.map((issue) => (
-                  <div key={issue.id} className="nb-row records-issue">
-                    <div className="records-issue__heading">
-                      <h2>{t(SUMMARY_LABEL_KEYS[issue.summary_code])}</h2>
-                      <StatusBadge
-                        active={issue.state === 'current'}
-                        label={t(STATE_LABEL_KEYS[issue.state])}
-                        danger={issue.state === 'current'}
-                      />
-                    </div>
-                    {issue.safe_detail ? (
-                      <p>
-                        {Object.hasOwn(DETAIL_LABEL_KEYS, issue.safe_detail)
-                          ? t(DETAIL_LABEL_KEYS[issue.safe_detail])
-                          : issue.safe_detail}
-                      </p>
-                    ) : null}
-                    <dl className="nb-facts nb-facts--inline">
-                      <dt>{t('user.issues.resourceType')}</dt>
-                      <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
-                      <dt>{t('user.issues.firstSeen')}</dt>
-                      <dd>{formatDateTime(issue.first_seen_at)}</dd>
-                      <dt>{t('user.issues.lastSeen')}</dt>
-                      <dd>{formatDateTime(issue.last_seen_at)}</dd>
-                      <dt>{t('user.issues.observations')}</dt>
-                      <dd className="mono">{issue.count}</dd>
-                      {issue.closed_at !== null ? (
-                        <>
-                          <dt>{t('user.issues.closedAt')}</dt>
-                          <dd>{formatDateTime(issue.closed_at)}</dd>
-                        </>
-                      ) : null}
-                    </dl>
-                    {issue.deep_link ? (
-                      <Link
-                        className="nb-btn nb-btn--secondary"
-                        to={
-                          issue.deep_link.route_id === 'endpoint-detail'
-                            ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`
-                            : '/models'
-                        }
-                      >
-                        {t('user.issues.openResource')}
-                      </Link>
-                    ) : (
-                      <p className="table-note">
-                        {t(
-                          issue.state === 'closed'
-                            ? 'user.issues.closedResourceUnavailable'
-                            : 'user.issues.resourceUnavailable',
+            ) : pageData ? (
+              <div className="nb-stack" aria-busy={busy}>
+                {issues.error ? (
+                  <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
+                ) : null}
+                {pageData.projection_incomplete ? (
+                  <p className="inline-notice" role="status">
+                    {t('user.issues.projectionIncomplete')}
+                  </p>
+                ) : null}
+                {pageData.data.length === 0 ? (
+                  <EmptyState
+                    title={t('user.issues.empty')}
+                    body={
+                      state === 'current'
+                        ? t('user.issues.emptyCurrentBody')
+                        : t('user.issues.emptyClosedBody')
+                    }
+                  />
+                ) : (
+                  <div className="nb-list">
+                    {pageData.data.map((issue) => (
+                      <div key={issue.id} className="nb-row records-issue">
+                        <div className="records-issue__heading">
+                          <h2>{t(SUMMARY_LABEL_KEYS[issue.summary_code])}</h2>
+                          <StatusBadge tone={issue.state === 'current' ? 'bad' : 'neutral'}>
+                            {t(STATE_LABEL_KEYS[issue.state])}
+                          </StatusBadge>
+                        </div>
+                        {issue.safe_detail ? (
+                          <p>
+                            {Object.hasOwn(DETAIL_LABEL_KEYS, issue.safe_detail)
+                              ? t(DETAIL_LABEL_KEYS[issue.safe_detail])
+                              : issue.safe_detail}
+                          </p>
+                        ) : null}
+                        <dl className="nb-facts nb-facts--inline">
+                          <div>
+                            <dt>{t('user.issues.resourceType')}</dt>
+                            <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('user.issues.firstSeen')}</dt>
+                            <dd>{formatDateTime(issue.first_seen_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('user.issues.lastSeen')}</dt>
+                            <dd>{formatDateTime(issue.last_seen_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>{t('user.issues.observations')}</dt>
+                            <dd className="mono">{issue.count}</dd>
+                          </div>
+                          {issue.closed_at !== null ? (
+                            <div>
+                              <dt>{t('user.issues.closedAt')}</dt>
+                              <dd>{formatDateTime(issue.closed_at)}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                        {issue.deep_link ? (
+                          <Link
+                            className="nb-btn nb-btn--secondary"
+                            to={
+                              issue.deep_link.route_id === 'endpoint-detail'
+                                ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`
+                                : `/models?model_id=${encodeURIComponent(issue.deep_link.resource_id)}`
+                            }
+                            state={{ returnTo: location.pathname + location.search }}
+                          >
+                            {t('user.issues.openResource')}
+                          </Link>
+                        ) : (
+                          <p className="table-note">
+                            {t(
+                              issue.state === 'closed'
+                                ? 'user.issues.closedResourceUnavailable'
+                                : 'user.issues.resourceUnavailable',
+                            )}
+                          </p>
                         )}
-                      </p>
-                    )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </Card>
+                )}
+                <PagePagination
+                  metadata={pageData.pagination}
+                  busy={busy}
+                  onPageChange={pager.setPage}
+                  onPageSizeChange={pager.setPageSize}
+                  requestedPage={pager.page}
+                />
+              </div>
+            ) : (
+              <LoadingState />
             )}
-            <PagePagination
-              metadata={pageData.pagination}
-              busy={busy}
-              onPageChange={pager.setPage}
-              onPageSizeChange={pager.setPageSize}
-              requestedPage={pager.page}
-            />
-          </div>
-        ) : (
-          <LoadingState />
-        )}
-      </Tabs>
+          </Tabs>
+        </PanelBody>
+      </Panel>
     </div>
   );
 }

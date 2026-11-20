@@ -9,6 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/rewardasset"
+	whaleasset "github.com/waiting-here/NonbiriAPI/internal/whalehaven/assets"
 	"math/big"
 	"strings"
 )
@@ -21,7 +22,8 @@ var assets = func() []rewardasset.Asset {
 		{ID: "sketch_brush", Name: "画笔", NameEN: "Paintbrush", Group: "drawing", Maximum: "9000000000000"},
 	}
 	out = append(out, gacha.RewardAssets()...)
-	return append(out, lakenotes.RewardAssets()...)
+	out = append(out, lakenotes.RewardAssets()...)
+	return append(out, whaleasset.Catalog()...)
 }()
 var assetByID = func() map[string]rewardasset.Asset {
 	out := map[string]rewardasset.Asset{}
@@ -107,7 +109,7 @@ func validateRewards(items []rewardasset.Item) error {
 	}
 	return nil
 }
-func grant(ctx context.Context, tx *sql.Tx, user, actor, at int64, title string, items []rewardasset.Item) ([]rewardasset.Result, error) {
+func grant(ctx context.Context, tx *sql.Tx, user, actor, at int64, title string, items []rewardasset.Item, reason, sourceID string) ([]rewardasset.Result, error) {
 	out := []rewardasset.Result{}
 	for _, item := range items {
 		var r rewardasset.Result
@@ -115,6 +117,8 @@ func grant(ctx context.Context, tx *sql.Tx, user, actor, at int64, title string,
 		switch {
 		case strings.HasPrefix(item.Asset, "gacha:"):
 			r, err = gacha.GrantRewardTx(ctx, tx, user, at, item)
+		case strings.HasPrefix(item.Asset, "whale:"):
+			r, err = whaleasset.GrantRewardTx(ctx, tx, user, at, item, reason, sourceID)
 		case strings.HasPrefix(item.Asset, "lake:"):
 			r, err = lakenotes.GrantRewardTx(ctx, tx, user, at, item)
 		default:
@@ -148,7 +152,7 @@ func grant(ctx context.Context, tx *sql.Tx, user, actor, at int64, title string,
 			r = rewardasset.Result{Item: item, Granted: item.Quantity}
 		}
 		if err != nil {
-			if errors.Is(err, gacha.ErrCapacity) || errors.Is(err, lakenotes.ErrCapacity) || errors.Is(err, ledger.ErrCapacityExhausted) {
+			if errors.Is(err, whaleasset.ErrCapacity) || errors.Is(err, gacha.ErrCapacity) || errors.Is(err, lakenotes.ErrCapacity) || errors.Is(err, ledger.ErrCapacityExhausted) {
 				return nil, ErrCapacity
 			}
 			return nil, err

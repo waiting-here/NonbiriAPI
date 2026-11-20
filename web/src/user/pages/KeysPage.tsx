@@ -1,21 +1,17 @@
-import { Fold, Note, OutcomeNote } from '@shared/components/ui';
+import { CopyValue } from '@shared/components/CopyValue';
+import { Fold, OutcomeNote, PanelBody, PanelHead } from '@shared/components/ui';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
-import { Link, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 import { ApiAddressCopy, apiAddress, markOnboarding } from '../features/core/onboarding';
 import { PersonalAutomationGuide } from '../features/core/PersonalAutomationGuide';
+import { ClientModelField } from '../features/core/ClientModelField';
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
 import { useOperation } from '@shared/operations/useOperation';
 import { regenerateCallerKey } from '../features/core/api';
-import {
-  CoreErrorPanel,
-  CoreLoading,
-  CoreTime,
-  CoreUserGate,
-  SafeCopyValue,
-} from '../features/core/components';
+import { CoreErrorPanel, CoreLoading, CoreTime, CoreUserGate } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
 import { coreKeys, coreSessionMatchesAccount, useCallerKey } from '../features/core/queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from '../features/core/request';
@@ -27,23 +23,17 @@ import {
 import type { CallerKeyAuthority } from '../features/core/types';
 import '../features/core/core.css';
 import '../features/core/home.css';
+import '../features/core/api-access.css';
 
 const pageCopyKeys = {
-  'user.core.keys.apiAddress': 'user.core.keys.apiAddress',
-  'user.core.keys.charityModels': 'user.core.keys.charityModels',
-  'user.core.keys.charityModelExample': 'user.core.keys.charityModelExample',
-  'user.core.keys.ownModelExample': 'user.core.keys.ownModelExample',
-  'user.core.keys.clientHelp': 'user.core.keys.clientHelp',
-  'user.core.keys.clientKey': 'user.core.keys.clientKey',
-  'user.core.keys.clientTitle': 'user.core.keys.clientTitle',
-  'user.core.keys.copyModel': 'user.core.keys.copyModel',
-  'user.core.keys.curlHelp': 'user.core.keys.curlHelp',
-  'user.core.keys.curlPlaceholder': 'user.core.keys.curlPlaceholder',
-  'user.core.keys.curlTitle': 'user.core.keys.curlTitle',
-  'user.core.keys.metadataTitle': 'user.core.keys.metadataTitle',
-  'user.core.keys.modelName': 'user.core.keys.modelName',
-  'user.core.keys.ownModels': 'user.core.keys.ownModels',
-  'user.core.keys.supportedPaths': 'user.core.keys.supportedPaths',
+  apiAddress: 'user.core.keys.apiAddress',
+  clientHelp: 'user.core.keys.clientHelp',
+  clientTitle: 'user.core.keys.clientTitle',
+  savedKey: 'user.core.keys.savedKey',
+  curlTitle: 'user.core.keys.curlTitle',
+  curlHelp: 'user.core.keys.curlHelp',
+  curlPlaceholder: 'user.core.keys.curlPlaceholder',
+  curlResult: 'user.core.keys.curlResult',
 } as const;
 
 function pageInstanceIdentity(): string {
@@ -67,65 +57,18 @@ type SecretCopyResult = {
   status: 'copied' | 'failed';
 };
 
-function ClientInstructions() {
+function AccessCheck() {
   const { t } = useRegisteredCopy(pageCopyKeys);
-  const location = useLocation();
-  useEffect(() => {
-    if (location.hash === '#client') markOnboarding('client');
-  }, [location.hash]);
-  const curl = `curl "${apiAddress()}/chat/completions" \\
-  -H "Authorization: Bearer $NONBIRI_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"my/model","messages":[{"role":"user","content":"Hello"}]}'`;
+  const modelsUrl = (apiAddress() + '/models').replaceAll("'", "'\\''");
+  const curl = `curl -i -H "Authorization: Bearer $NONBIRI_KEY" '${modelsUrl}'`;
   return (
-    <>
-      <section className="nb-panel" id="client" aria-labelledby="client-title">
-        <div className="nb-panel__head">
-          <div>
-            <h2 id="client-title">{t('user.core.keys.clientTitle')}</h2>
-            <p>{t('user.core.keys.clientHelp')}</p>
-          </div>
-        </div>
-        <div className="nb-panel__body">
-          <dl className="nb-facts nb-facts--inline">
-            <div>
-              <dt>{t('user.core.keys.apiAddress')}</dt>
-              <dd>
-                <ApiAddressCopy />
-              </dd>
-            </div>
-            <div>
-              <dt>{t('user.core.keys.metadataTitle')}</dt>
-              <dd>{t('user.core.keys.clientKey')}</dd>
-            </div>
-            <div>
-              <dt>{t('user.core.keys.modelName')}</dt>
-              <dd>
-                <p>
-                  <Link to="/charity">{t('user.core.keys.charityModels')}</Link> ·{' '}
-                  <code>{t('user.core.keys.charityModelExample')}</code>
-                </p>
-                <p>
-                  <Link to="/models">{t('user.core.keys.ownModels')}</Link> ·{' '}
-                  <code>{t('user.core.keys.ownModelExample')}</code>
-                </p>
-                <span className="nb-small nb-muted">{t('user.core.keys.copyModel')}</span>
-              </dd>
-            </div>
-          </dl>
-          <p className="nb-small nb-muted api-paths">
-            <code>/v1/chat/completions</code> · <code>/v1/embeddings</code> ·{' '}
-            <code>/v1/images/generations</code> · <code>/v1/decisions</code>
-            <br />
-            {t('user.core.keys.supportedPaths')} <code>/v1/models</code>
-          </p>
-        </div>
-      </section>
-      <Fold title={t('user.core.keys.curlTitle')} summary={t('user.core.keys.curlHelp')}>
-        <p>{t('user.core.keys.curlPlaceholder')}</p>
-        <SafeCopyValue value={curl} label={t('user.core.keys.curlTitle')} />
-      </Fold>
-    </>
+    <Fold lazy title={t('curlTitle')} summary={t('curlHelp')}>
+      <div className="api-access-check">
+        <p>{t('curlPlaceholder')}</p>
+        <CopyValue value={curl} label={t('curlTitle')} variant="secondary" />
+        <p className="nb-small nb-muted">{t('curlResult')}</p>
+      </div>
+    </Fold>
   );
 }
 
@@ -138,6 +81,10 @@ export function CallerKeyPanel({
   children?: ReactNode;
 }) {
   const { t } = useCoreCopy();
+  const { t: text } = useRegisteredCopy(pageCopyKeys);
+  const location = useLocation();
+  const clientRef = useRef<HTMLElement>(null);
+  const revealRef = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
   const authority = useCallerKey(accountId);
   const [pageInstanceId] = useState(pageInstanceIdentity);
@@ -148,6 +95,12 @@ export function CallerKeyPanel({
   const [copyResult, setCopyResult] = useState<SecretCopyResult | null>(null);
   const revealActionRef = useRef<string | null>(null);
   const copyAttemptRef = useRef(0);
+
+  useEffect(() => {
+    if (location.hash !== '#client') return;
+    markOnboarding('client');
+    clientRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [location.hash]);
 
   const clearCopyFeedback = () => {
     copyAttemptRef.current += 1;
@@ -194,6 +147,7 @@ export function CallerKeyPanel({
   useEffect(() => {
     revealActionRef.current = state.reveal?.actionId ?? null;
     copyAttemptRef.current += 1;
+    if (state.reveal?.actionId) revealRef.current?.focus();
   }, [state.reveal?.actionId]);
 
   useEffect(
@@ -357,113 +311,147 @@ export function CallerKeyPanel({
     <div className="page core-page core-stack api-access-page">
       <PageHeader icon="keys" title={t('keys.title')} description={t('keys.description')} />
 
-      {state.reveal ? (
-        <section className="nb-panel core-secret-panel api-secret-panel" aria-live="polite">
-          <div className="nb-panel__head">
-            <h2>{t('keys.oneTimeTitle')}</h2>
+      <section
+        className="nb-panel api-client"
+        id="client"
+        aria-label={text('clientTitle')}
+        ref={clientRef}
+      >
+        <PanelHead title={text('clientTitle')} description={text('clientHelp')} />
+        <PanelBody>
+          <div className="api-client-row">
+            <h3>{text('apiAddress')}</h3>
+            <div className="api-client-row__value">
+              <ApiAddressCopy />
+            </div>
           </div>
-          <p>{t('keys.oneTimeBody')}</p>
-          <div className="nb-copy api-secret-copy">
-            <code className="core-secret-value">{state.reveal.secret}</code>
-            {state.readState === 'error' ? (
-              <p className="core-inline-warning">{t('keys.refreshError')}</p>
-            ) : null}
-            <button
-              type="button"
-              className="nb-btn nb-btn--primary"
-              onClick={() => {
-                if (state.reveal) copyReveal(state.reveal);
-              }}
-            >
-              {copyResult?.actionId === state.reveal.actionId && copyResult.status === 'copied'
-                ? t('common.copied')
-                : t('common.copy')}
-            </button>
-          </div>
-          <div className="core-form-actions">
-            <button type="button" className="nb-btn nb-btn--secondary" onClick={closeReveal}>
-              {t('keys.closeReveal')}
-            </button>
-          </div>
-          {copyResult?.actionId === state.reveal.actionId && copyResult.status === 'failed' ? (
-            <p role="status" className="core-inline-warning">
-              {t('common.copyFailed')}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
 
-      <div className="api-access-layout">
-        <section className="nb-panel api-access-key">
-          <div className="nb-panel__head">
-            <h2>{t('keys.metadataTitle')}</h2>
-            <button
-              type="button"
-              className={metadata ? 'nb-btn nb-btn--secondary' : 'nb-btn nb-btn--primary'}
-              disabled={actionDisabled}
-              onClick={trigger}
-            >
-              {state.mutation === 'pending'
-                ? t('common.working')
-                : metadata
-                  ? t('keys.rotate')
-                  : t('keys.generate')}
-            </button>
-          </div>
-          {authority.isPending && !state.authority ? (
-            <CoreLoading compact />
-          ) : authority.error && !state.authority ? (
-            <CoreErrorPanel
-              error={authority.error}
-              compact
-              onRetry={() => void authority.refetch()}
-            />
-          ) : state.authority && metadata ? (
-            <dl className="nb-facts">
-              <div>
-                <dt>{t('keys.display')}</dt>
-                <dd>
-                  <code className="core-mono">{metadata.display}</code>
-                </dd>
+          <div className="api-client-row">
+            <h3>{t('keys.metadataTitle')}</h3>
+            <div className="api-client-row__value">
+              <div className="api-key-summary">
+                {authority.isPending && !state.authority ? (
+                  <CoreLoading compact />
+                ) : authority.error && !state.authority ? (
+                  <CoreErrorPanel
+                    error={authority.error}
+                    compact
+                    onRetry={() => void authority.refetch()}
+                  />
+                ) : metadata ? (
+                  <div className="nb-stack nb-stack--sm">
+                    {!state.reveal ? <p className="nb-small nb-muted">{text('savedKey')}</p> : null}
+                    <dl className="api-key-facts">
+                      <div>
+                        <dt>{t('keys.display')}</dt>
+                        <dd>
+                          <code>{metadata.display}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('common.created')}</dt>
+                        <dd>
+                          <CoreTime value={metadata.created_at} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('common.updated')}</dt>
+                        <dd>
+                          <CoreTime value={metadata.updated_at} />
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : state.authority ? (
+                  <div className="nb-stack nb-stack--xs">
+                    <strong>{t('keys.noKeyTitle')}</strong>
+                    <p className="nb-small nb-muted">{t('keys.noKeyBody')}</p>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className={metadata ? 'nb-btn nb-btn--secondary' : 'nb-btn nb-btn--primary'}
+                  disabled={actionDisabled}
+                  onClick={trigger}
+                >
+                  {state.mutation === 'pending'
+                    ? t('common.working')
+                    : metadata
+                      ? t('keys.rotate')
+                      : t('keys.generate')}
+                </button>
               </div>
-              <div>
-                <dt>{t('common.created')}</dt>
-                <dd>
-                  <CoreTime value={metadata.created_at} />
-                </dd>
-              </div>
-              <div>
-                <dt>{t('common.updated')}</dt>
-                <dd>
-                  <CoreTime value={metadata.updated_at} />
-                </dd>
-              </div>
-            </dl>
-          ) : state.authority ? (
-            <Note title={t('keys.noKeyTitle')}>{t('keys.noKeyBody')}</Note>
-          ) : null}
-          <OutcomeNote
-            busy={regeneration.isPending || authority.isFetching}
-            outcome={
-              state.mutation === 'conflict'
-                ? { kind: 'conflict', reload: () => void authority.refetch() }
-                : state.mutation === 'unknown'
-                  ? {
-                      kind: 'unknown',
-                      oneTimeSecret: true,
-                      recheck: () => void authority.refetch(),
-                    }
-                  : state.mutation === 'error'
-                    ? { kind: 'oneTimeMissed' }
-                    : { kind: 'idle' }
-            }
-          />
-        </section>
 
-        <div className="api-access-main">
-          <ClientInstructions />
-          {children}
-        </div>
+              {state.reveal ? (
+                <section
+                  className="core-secret-panel api-secret-panel"
+                  aria-labelledby="api-secret-title"
+                  aria-live="polite"
+                  tabIndex={-1}
+                  ref={revealRef}
+                >
+                  <h4 id="api-secret-title">{t('keys.oneTimeTitle')}</h4>
+                  <p>{t('keys.oneTimeBody')}</p>
+                  <code className="core-secret-value">{state.reveal.secret}</code>
+                  {state.readState === 'error' ? (
+                    <p className="core-inline-warning">{t('keys.refreshError')}</p>
+                  ) : null}
+                  <div className="nb-actions">
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--primary"
+                      onClick={() => {
+                        if (state.reveal) copyReveal(state.reveal);
+                      }}
+                    >
+                      {copyResult?.actionId === state.reveal.actionId &&
+                      copyResult.status === 'copied'
+                        ? t('common.copied')
+                        : t('common.copy')}
+                    </button>
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--secondary"
+                      onClick={closeReveal}
+                    >
+                      {t('keys.closeReveal')}
+                    </button>
+                  </div>
+                  {copyResult?.actionId === state.reveal.actionId &&
+                  copyResult.status === 'failed' ? (
+                    <p role="status" className="core-inline-warning">
+                      {t('common.copyFailed')}
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+
+              <OutcomeNote
+                busy={regeneration.isPending || authority.isFetching}
+                outcome={
+                  state.mutation === 'conflict'
+                    ? { kind: 'conflict', reload: () => void authority.refetch() }
+                    : state.mutation === 'unknown'
+                      ? {
+                          kind: 'unknown',
+                          oneTimeSecret: true,
+                          recheck: () => void authority.refetch(),
+                        }
+                      : state.mutation === 'error'
+                        ? { kind: 'oneTimeMissed' }
+                        : { kind: 'idle' }
+                }
+              />
+            </div>
+          </div>
+
+          <ClientModelField key={accountId} accountId={accountId} />
+        </PanelBody>
+      </section>
+
+      <div className="api-reference">
+        <AccessCheck />
+        {children}
       </div>
 
       <ConfirmDialog

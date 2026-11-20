@@ -149,9 +149,20 @@ html:is(
   display: block;
 }
 @media (width < 40rem) {
+  .nb-appearance-options {
+    gap: var(--nb-space-2);
+    margin-top: var(--nb-space-3);
+  }
   .nb-appearance-option {
-    grid-template-columns: 6rem 1fr;
+    grid-template-columns: 5.25rem 1fr;
     gap: var(--nb-space-3);
+    min-height: 4.75rem;
+  }
+  .nb-appearance-option__image {
+    min-height: 4.75rem;
+  }
+  .nb-appearance-option__copy {
+    padding: var(--nb-space-2) var(--nb-space-2) var(--nb-space-2) 0;
   }
   .nb-appearance-still {
     object-position: 100% center;
@@ -176,9 +187,6 @@ html:is(
 
 /* Matches the user station drawer breakpoint (--nb-shell-breakpoint). */
 @media (width < 70rem) {
-  .nb-user-header__actions > .nb-appearance-control {
-    display: none;
-  }
   html[data-appearance='celestial'] .nb-user-header,
   html:is(
       [data-appearance='wandering'],
@@ -222,27 +230,6 @@ html:is(
   border-radius: var(--nb-radius-sm);
 }
 
-/*
- * A decorated appearance keeps the content in a centred column of at most 60% of the window,
- * so wide screens show the artwork on both sides. The column stays at least 72rem wide, the
- * same content width as a 1152px window, so it has no effect on narrower windows. Heart
- * moment reserves its own character column (moments.css), and game pages keep their layout.
- */
-html:is(
-    [data-appearance='celestial'],
-    [data-appearance='wandering'],
-    [data-appearance='mirrorsea'],
-    [data-appearance='amber'],
-    [data-appearance='elopement'],
-    [data-appearance='heart-thief'],
-    [data-appearance='tomorrow']
-  )
-  .nb-user-shell:not([data-layout='game'])
-  > :is(.nb-user-shell__main, .nb-shell-status) {
-  max-width: clamp(72rem, 60vw, 76rem);
-  margin-inline: auto;
-}
-
 .nb-appearance-backdrop {
   position: fixed;
   inset: 0;
@@ -277,9 +264,6 @@ html[data-appearance='default'] body::after {
 .nb-appearance-still[data-scene] {
   object-position: 78% top;
 }
-.nb-appearance-still[data-scene='amber'] {
-  object-position: 82% top;
-}
 .nb-amber-still-character,
 .nb-romance-still-character,
 .nb-mirror-still-character,
@@ -300,11 +284,6 @@ html[data-appearance='default'] body::after {
 }
 .nb-mirror-still-light {
   mix-blend-mode: plus-lighter;
-}
-@media (prefers-reduced-motion: reduce) {
-  .nb-appearance-backdrop {
-    display: none;
-  }
 }
 
 html:is(
@@ -381,7 +360,7 @@ html:is(
     [data-appearance='heart-thief'],
     [data-appearance='tomorrow']
   )
-  :is(.nb-filter, .nb-pager, .economy-owner-filters, .core-resource-filters, form.ops-toolbar) {
+  :is(.nb-filter, .nb-pager, .core-resource-filters, form.ops-toolbar) {
   padding: var(--nb-space-3) var(--nb-space-4);
   border-radius: var(--nb-radius-md);
   background: var(--nb-appearance-glass-core);
@@ -471,7 +450,6 @@ html:is(
       .ops-subcard,
       .nb-filter,
       .nb-pager,
-      .economy-owner-filters,
       .core-resource-filters,
       form.ops-toolbar
     ) {
@@ -491,9 +469,20 @@ html:is(
     [data-appearance='tomorrow']
   )
   :is(
-    :is(.page, .nb-page) > :is(h2, .field-help, .time-context-notice),
-    :is(.page, .nb-page) > section > h2,
-    :is(.page, .nb-page) > .nb-section-head
+    :is(.page, .nb-page)
+      > :is(
+        h2,
+        .field-help,
+        .time-context-notice,
+        .game-privacy-control,
+        [role='status']:not(.nb-note)
+      ),
+    :is(.page, .nb-page)
+      > section:not(.nb-panel, .card, .core-card)
+      > :is(h2, .nb-section-head, .field-help, .time-context-notice),
+    :is(.page, .nb-page) > .nb-section-head,
+    .home-checkins > .nb-section-head,
+    .nb-pager:not(:has(.nb-pager__pages, .nb-pager__size, .nb-pager__notice))
   ) {
   justify-self: start;
   width: fit-content;
@@ -503,6 +492,21 @@ html:is(
   border-radius: var(--nb-radius-md);
   background: var(--nb-appearance-glass-core);
   backdrop-filter: blur(16px);
+}
+
+html:is(
+    [data-appearance='celestial'],
+    [data-appearance='wandering'],
+    [data-appearance='heart-moment'],
+    [data-appearance='mirrorsea'],
+    [data-appearance='amber'],
+    [data-appearance='elopement'],
+    [data-appearance='heart-thief'],
+    [data-appearance='tomorrow']
+  )
+  :is(.page, .nb-page)
+  > .nb-note {
+  backdrop-filter: blur(12px);
 }
 
 html[data-background-view='true'] .nb-user-shell,
@@ -551,4 +555,239 @@ html[data-appearance='tomorrow'][data-theme='light'] .gacha-app {
 }
 html[data-appearance='tomorrow'] .gacha-reward-dot {
   color: #182d25;
+}
+
+/* Resolve glass against the roles of the surface carrying it. */
+html[data-appearance]:not([data-appearance='default'])
+  :where(
+    .nb-panel,
+    .card,
+    .core-card,
+    .nb-list,
+    .nb-table-wrap,
+    .table-wrap,
+    .nb-filter,
+    .nb-fold,
+    .nb-page-header,
+    .ops-subcard,
+    .nb-pager,
+    .core-resource-filters,
+    .ops-toolbar,
+    .nb-panel__head,
+    .nb-panel__foot,
+    .nb-section-head,
+    .field-help,
+    .time-context-notice,
+    .game-privacy-control,
+    [role='status'],
+    h2
+  ) {
+  --nb-appearance-glass-edge: color-mix(
+    in srgb,
+    var(--nb-color-surface-raised) max(82%, var(--nb-appearance-edge-floor)),
+    transparent
+  );
+  --nb-appearance-glass-core: color-mix(
+    in srgb,
+    var(--nb-color-surface-raised) max(88%, var(--nb-appearance-core-floor)),
+    transparent
+  );
+  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 42%, transparent);
+  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 26%, transparent);
+  --nb-appearance-glass-divider: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
+}
+html[data-theme='dark'][data-appearance]:not([data-appearance='default'])
+  :where(
+    .nb-panel,
+    .card,
+    .core-card,
+    .nb-list,
+    .nb-table-wrap,
+    .table-wrap,
+    .nb-filter,
+    .nb-fold,
+    .nb-page-header,
+    .ops-subcard,
+    .nb-pager,
+    .core-resource-filters,
+    .ops-toolbar,
+    .nb-panel__head,
+    .nb-panel__foot,
+    .nb-section-head,
+    .field-help,
+    .time-context-notice,
+    .game-privacy-control,
+    [role='status'],
+    h2
+  ) {
+  --nb-appearance-glass-edge: color-mix(
+    in srgb,
+    var(--nb-color-surface) max(94%, var(--nb-appearance-edge-floor)),
+    transparent
+  );
+  --nb-appearance-glass-core: color-mix(
+    in srgb,
+    var(--nb-color-surface) max(96%, var(--nb-appearance-core-floor)),
+    transparent
+  );
+  --nb-appearance-glass-line: color-mix(in srgb, var(--nb-color-border) 50%, transparent);
+  --nb-appearance-glass-shadow: color-mix(in srgb, var(--nb-color-bg) 62%, transparent);
+}
+
+.nb-art-stage {
+  --nb-art-band-height: clamp(13rem, min(34vw, 36dvh), 25rem);
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: clip;
+  background: var(--nb-color-bg);
+  isolation: isolate;
+}
+.nb-art-stage
+  > :is(
+    .nb-appearance-still,
+    .nb-appearance-backdrop,
+    .nb-moment-backdrop,
+    .nb-tomorrow-still.tomorrow-art,
+    .nb-amber-still-character,
+    .nb-romance-still-character,
+    .nb-mirror-still-character,
+    .nb-mirror-still-light,
+    .nb-mirror-still-reflection
+  ) {
+  position: absolute;
+  z-index: auto;
+}
+.nb-art-stage:has(> canvas[data-ready='true']) > :not(canvas) {
+  visibility: hidden;
+}
+html[data-background-view='true']
+  .nb-art-stage[data-composition='group']
+  .nb-moment-backdrop__scene {
+  object-fit: contain;
+}
+html[data-background-view='true'] .nb-art-stage {
+  visibility: visible;
+}
+/* Compose the workspace wallpaper inside the visible area below the sticky navigation. */
+html:not([data-background-view='true'], [data-appearance='heart-moment'])
+  .nb-user-shell
+  > .nb-art-stage,
+html:not([data-background-view='true']) .nb-user-shell > .nb-art-stage[data-composition='group'] {
+  top: var(--nb-art-header-height, 0px);
+}
+@media (width < 80rem) {
+  html:not([data-background-view='true'])
+    .nb-user-shell
+    > .nb-art-stage[data-composition='portrait'] {
+    position: relative;
+    inset: auto;
+    z-index: 0;
+    flex: none;
+    height: var(--nb-art-band-height);
+  }
+}
+@media (width >= 80rem) {
+  html:not([data-background-view='true'])
+    .nb-user-shell:has(> .nb-art-stage[data-composition='portrait']):not([data-layout='game'])
+    > :is(.nb-user-shell__main, .nb-shell-status, .nb-user-shell__footer) {
+    margin-inline-start: 0;
+    margin-inline-end: auto;
+    max-width: calc(100% - var(--nb-portrait-reserve, clamp(18rem, 28vw, 34rem)));
+  }
+  html
+    .nb-user-shell:has(> .nb-art-stage[data-composition='group'])
+    > :is(.nb-user-shell__main, .nb-user-shell__footer) {
+    padding-inline-end: var(--nb-space-6);
+  }
+}
+@media (width < 70rem) {
+  .nb-user-header__actions > .nb-background-view-trigger {
+    display: none;
+  }
+  .nb-user-header__actions .nb-appearance-control > button {
+    min-width: 2.5rem;
+  }
+  .nb-user-header__actions .nb-appearance-control__label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+  }
+}
+
+.nb-background-view__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+  padding: var(--nb-space-2);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-raised);
+}
+.nb-appearance-setting {
+  display: grid;
+  gap: var(--nb-space-2);
+}
+.nb-sheet-backdrop:has(.nb-appearance-options) {
+  background: color-mix(in srgb, var(--nb-color-bg) 20%, transparent);
+}
+@media (width >= 70rem) {
+  .nb-background-view-in-sheet {
+    display: none;
+  }
+}
+.nb-appearance-option {
+  color: var(--nb-color-text);
+}
+.nb-appearance-option[data-preview='default'] {
+  --nb-color-surface: var(--nb-palette-sand-25);
+  --nb-color-surface-muted: var(--nb-palette-sand-150);
+  --nb-color-border: var(--nb-palette-sand-250);
+  --nb-color-text: var(--nb-palette-sand-900);
+  --nb-color-text-muted: var(--nb-palette-sand-600);
+  --nb-color-text-subtle: var(--nb-palette-sand-500);
+  --nb-color-accent: var(--nb-palette-teal-700);
+  --nb-color-accent-soft: var(--nb-palette-teal-100);
+}
+[data-theme='dark'] .nb-appearance-option[data-preview='default'] {
+  --nb-color-surface: var(--nb-palette-ink-900);
+  --nb-color-surface-muted: var(--nb-palette-ink-850);
+  --nb-color-border: var(--nb-palette-ink-700);
+  --nb-color-text: var(--nb-palette-ink-100);
+  --nb-color-text-muted: var(--nb-palette-ink-300);
+  --nb-color-text-subtle: var(--nb-palette-ink-400);
+  --nb-color-accent: var(--nb-palette-teal-400);
+  --nb-color-accent-soft: var(--nb-palette-teal-900);
+}
+
+/* Keep the full landscape canvas visible in appreciation mode. */
+html[data-background-view='true']:not([data-appearance='heart-moment']) .nb-art-stage {
+  inset: 50% auto auto 50%;
+  width: min(100vw, calc(100dvh * 16 / 9));
+  height: auto;
+  aspect-ratio: 16 / 9;
+  transform: translate(-50%, -50%);
+}
+
+/* At tablet-desktop widths a dense workspace keeps its columns and gets a full artwork band. */
+@media (80rem <= width < 88rem) {
+  html:not([data-background-view='true'])
+    .nb-user-shell[data-layout='wide']
+    > .nb-art-stage[data-composition='portrait'] {
+    position: relative;
+    inset: auto;
+    z-index: 0;
+    flex: none;
+    width: 100%;
+    height: var(--nb-art-band-height);
+  }
+  html:not([data-background-view='true'])
+    .nb-user-shell[data-layout='wide']:has(> .nb-art-stage[data-composition='portrait'])
+    > :is(.nb-user-shell__main, .nb-shell-status, .nb-user-shell__footer) {
+    max-width: 100%;
+  }
 }

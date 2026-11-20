@@ -249,7 +249,7 @@ func TestGatewayResponsesAdmissionKeepsFiniteMappingAndStoragePolicy(t *testing.
 	if !errors.As(err, &rejected) || rejected.Field != "store" {
 		t.Fatalf("missing verified storage policy admitted: %v", err)
 	}
-	for _, extra := range []string{`,"reasoning":{"effort":"low"}`, `,"metadata":{"a":1}`, `,"tools":[{"type":"web_search"}]`, `,"include":["reasoning.encrypted_content"]`} {
+	for _, extra := range []string{`,"reasoning":{"effort":"low","summary":"auto"}`, `,"metadata":{"a":1}`, `,"tools":[{"type":"web_search"}]`, `,"include":["reasoning.encrypted_content"]`} {
 		input := gatewayWiringInput(t, kind, contract.OperationResponses, `{"model":"public","input":"hello"`+extra+`}`)
 		input.Policy.GatewayModel = &gatewaypolicy.Model{Storage: gatewaypolicy.OmitFalse}
 		if r.SupportsInferenceRequest(kind, input.Inference) || gatewayWiringCheck(r, input) == nil {

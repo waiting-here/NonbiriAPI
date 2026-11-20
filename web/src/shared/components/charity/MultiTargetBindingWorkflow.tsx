@@ -22,11 +22,12 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { CharityBindingPicker, type CharitySelection } from '../CharityBindingPicker';
+import { BindingServiceEditor } from './BindingRouteGuide';
 import { DonationKeyModels } from '../DonationKeyModels';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 import { CharityModelScope } from '../CharityModelScope';
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../States';
-import { Button, DataTable, Field, FilterBar, Note, OutcomeNote } from '../ui';
+import { EmptyState, ErrorState, LoadingState, SectionHead } from '../States';
+import { Button, DataTable, Field, FilterBar, Note, OutcomeNote, StatusBadge } from '../ui';
 import { BindingBatchResults, type BindingResultLabel } from './BindingBatchResults';
 
 interface Selection extends BindingResultLabel {
@@ -256,9 +257,7 @@ export function MultiTargetBindingWorkflow({
           charity_model_id: row.target.charity_model_id,
           expected_binding_revision: row.target.binding_revision,
           upstream_model_id: row.upstream_model_id,
-          ...(row.candidate.native_services === undefined
-            ? {}
-            : { native_services: row.candidate.selected_native_services ?? [] }),
+          native_services: row.candidate.selected_native_services ?? [],
         })),
       },
       labels: entries.map(([, row]) => ({
@@ -271,11 +270,7 @@ export function MultiTargetBindingWorkflow({
     locked ||
     add.outcome === 'conflict' ||
     entries.length === 0 ||
-    entries.some(
-      ([, entry]) =>
-        entry.candidate.native_services !== undefined &&
-        !entry.candidate.selected_native_services?.length,
-    ) ||
+    entries.some(([, entry]) => !entry.candidate.selected_native_services?.length) ||
     entries.some(([, entry]) => entry.unavailable) ||
     (Boolean(target) && pickerBlocked);
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
@@ -289,7 +284,7 @@ export function MultiTargetBindingWorkflow({
           new URLSearchParams(nextLocation.search).get('donation_id') === item.donation_id
         }
       />
-      <PageHeader
+      <SectionHead
         title={t('common.workflow.addConnections')}
         description={t('common.bindingBatch.fixedKeyHelp', {
           name: item.safe_note || t('common.bindingBatch.keyNumber', { id: item.key_id }),
@@ -428,10 +423,9 @@ export function MultiTargetBindingWorkflow({
                       mobileLabel: t('common.operations.charity.state'),
                       cell: 'status',
                       render: (row) => (
-                        <StatusBadge
-                          active={row.enabled}
-                          label={t(row.enabled ? 'common.enabled' : 'common.disabled')}
-                        />
+                        <StatusBadge tone={row.enabled ? 'ok' : 'neutral'}>
+                          {t(row.enabled ? 'common.enabled' : 'common.disabled')}
+                        </StatusBadge>
                       ),
                     },
                     {
@@ -439,6 +433,7 @@ export function MultiTargetBindingWorkflow({
                       header: t('common.workflow.actions'),
                       mobileLabel: t('common.workflow.actions'),
                       cell: 'action',
+                      align: 'action',
                       render: (row) => (
                         <Button
                           type="button"
@@ -519,8 +514,30 @@ export function MultiTargetBindingWorkflow({
                     header: t('common.bindingBatch.upstream'),
                     mobileLabel: t('common.bindingBatch.upstream'),
                     cell: 'meta',
-                    render: ([, row]) => (
-                      <span className="mono nb-workflow-id">{row.upstream_model_id}</span>
+                    render: ([id, row]) => (
+                      <div className="nb-stack nb-stack--sm">
+                        <span className="mono nb-workflow-id">{row.upstream_model_id}</span>
+                        <BindingServiceEditor
+                          guide={row.candidate.binding_guide}
+                          source={row.candidate}
+                          options={row.candidate.native_services}
+                          value={row.candidate.selected_native_services ?? []}
+                          disabled={locked || add.outcome === 'conflict'}
+                          onChange={(services) => {
+                            setBasket((previous) => ({
+                              ...previous,
+                              [id]: {
+                                ...row,
+                                candidate: {
+                                  ...row.candidate,
+                                  selected_native_services: services,
+                                },
+                              },
+                            }));
+                            add.reset();
+                          }}
+                        />
+                      </div>
                     ),
                   },
                   {

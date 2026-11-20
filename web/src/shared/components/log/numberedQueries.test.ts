@@ -453,6 +453,92 @@ it('keeps readable delivery and attempt details when an independent diagnostic i
   expect(normalizeRoleLogDetail(detail(), 'user', '1', 20).delivery).toBeUndefined();
 });
 
+const disablement = {
+  connector_type: 'google-gemini',
+  native_service: 'gemini_generate_content',
+  streak_before: '9999999999999999999999',
+  streak_after: '10000000000000000000000',
+  threshold: '10000000000000000000000',
+};
+const providerFailure = { code: 'upstream_error', provider_reason: 'google_api_key_invalid' };
+const failureSummary = [
+  { reason: 'google_api_key_invalid', status_code: 400, count: 6 },
+  { reason: 'network_timeout', count: 8 },
+];
+
+it.each(['admin', 'steward'] as const)(
+  'reads the server-selected %s attempt window and all-page failure groups',
+  async (role) => {
+    const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+    const exactAttempt = {
+      ...adminAttempt,
+      attempt_seq: '23',
+      connector_type: 'google-gemini',
+      status_code: 400,
+      error_diagnostics: providerFailure,
+      failure_disablement: disablement,
+    };
+    installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: `${root}/${requestID}?attempt_seq=23&attempt_page_size=10`,
+        body: adminDetail(
+          {
+            attempts: { data: [exactAttempt], next_cursor: null },
+            failure_summary: [...failureSummary, { reason: '<malformed>', count: 1 }],
+          },
+          pagination('2', 10, 14, 2),
+        ),
+      },
+    ]);
+    const result = await getRoleLogDetailPage(role, requestID, '1', 10, undefined, '23');
+    expect(result).toMatchObject({
+      attempt_pagination: { page: '2', total_items: '14' },
+      failure_summary: failureSummary,
+      attempts: { data: [exactAttempt] },
+    });
+    expect(numberedLogKeys.detail(role, 'operator', requestID, '1', 10)).not.toEqual(
+      numberedLogKeys.detail(role, 'operator', requestID, '1', 10, '23'),
+    );
+  },
+);
+
+it('keeps management failure facts out of ordinary log decoding and requests', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(getRoleLogDetailPage('user', requestID, '1', 10, undefined, '23')).rejects.toThrow();
+  expect(fetchMock).not.toHaveBeenCalled();
+  const result = normalizeRoleLogDetail(
+    detail({
+      failure_summary: failureSummary,
+      attempts: {
+        data: [
+          {
+            ...userAttempt,
+            error_diagnostics: providerFailure,
+            failure_disablement: disablement,
+            native_service: 'gemini_generate_content',
+            health_impact: {
+              streak_effect: 'unchanged',
+              backoff: { reason: 'google_model_overloaded', scope: 'service', retry_at: 60 },
+            },
+          },
+        ],
+        next_cursor: null,
+      },
+    }),
+    'user',
+    '1',
+    20,
+  );
+  expect(result).not.toHaveProperty('failure_summary');
+  expect(result).not.toHaveProperty('attempts.data.0.failure_disablement');
+  expect(result).not.toHaveProperty('attempts.data.0.health_impact');
+  expect(result).not.toHaveProperty('attempts.data.0.native_service');
+  expect(result).not.toHaveProperty('attempts.data.0.error_diagnostics.provider_reason');
+  expect(result).toHaveProperty('attempts.data.0.error_diagnostics.code', 'upstream_error');
+});
+
 it.each(['admin', 'steward'] as const)(
   'sends %s diagnostic filters only in the page query',
   async (role) => {

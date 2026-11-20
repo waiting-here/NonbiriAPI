@@ -103,7 +103,7 @@ for (const role of ['admin', 'level6', 'level5'] as const) {
       (role === 'admin' ? '/logs?' : '/steward?tab=logs&') +
       `charity_model=historical&page=2&page_size=20&from=&to=&request_id=${detail.request.id}&attempt_page=1&attempt_page_size=20`;
     await page.goto(start);
-    const panel = page.locator('.nb-expandable-panel:not([hidden])');
+    const panel = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await expect(
       panel.getByRole('link', { name: 'Manage charity model', exact: true }),
     ).toBeVisible();

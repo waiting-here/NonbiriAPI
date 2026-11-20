@@ -1,6 +1,7 @@
+import { channelPreset } from '../../../../../test/fixtures/resourceScopes';
 import { useState } from 'react';
 import { QueryObserver, type QueryClient } from '@tanstack/react-query';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { Sheet } from '@shared/components/ui/Sheet';
@@ -50,6 +51,7 @@ const options = {
   ],
   mainstream_channels: [
     {
+      ...channelPreset,
       id: 'mch_' + 'A'.repeat(22),
       name: 'Example preset',
       revision: '1',
@@ -217,6 +219,52 @@ async function fillCustom(
   return view;
 }
 describe('service setup as one task', () => {
+  it('validates the address before saving and accepts a corrected address with a trailing slash', async () => {
+    const view = await fillCustom();
+    const address = screen.getByLabelText(userEn.user.services.serviceAddress);
+    const submit = screen.getByRole('button', { name: userEn.user.services.addAndFetch });
+    const invalidAddress = 'ftp://old.example/v1';
+    await view.user.clear(address);
+    await view.user.type(address, invalidAddress);
+    await view.user.click(submit);
+
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(address).toHaveValue(invalidAddress);
+    expect(address).toHaveFocus();
+    expect(address).toHaveAccessibleDescription(userEn.user.services.serviceAddressError);
+
+    await view.user.clear(address);
+    await view.user.type(address, 'https://service.example/v1/');
+    expect(screen.queryByText(userEn.user.services.serviceAddressError)).not.toBeInTheDocument();
+    await view.user.click(submit);
+    await screen.findByText(userEn.user.workflows.serviceReady);
+
+    expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
+      'connection',
+      'endpoint',
+      'credential',
+      'key',
+    ]);
+    expect(mocks.execute.mock.calls[1]![0].input).toMatchObject({
+      base_url: 'https://service.example/v1',
+    });
+    expect(mocks.execute.mock.calls[2]![1]).toBe('synthetic-upstream-secret');
+  });
+
+  it('preserves an invalid additional key without creating a partial service', async () => {
+    const view = await fillCustom();
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));
+    const label = userEn.user.services.additionalKey.replace('{{number}}', '2');
+    const field = screen.getByLabelText(label);
+    const invalid = 'synthetic' + String.fromCharCode(1) + 'key';
+    fireEvent.change(field, { target: { value: invalid } });
+    await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAndFetch }));
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(field).toHaveValue(invalid);
+    view.unmount();
+    expect(document.body.innerHTML).not.toContain(invalid);
+  });
+
   it('creates a dedicated HTTP rerank service using its registered path capability', async () => {
     const dedicated = { ...options.native_service_options[0]! };
     Object.assign(dedicated, {

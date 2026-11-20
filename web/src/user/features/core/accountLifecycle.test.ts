@@ -268,9 +268,9 @@ describe('production account lifecycle adapter', () => {
       .mockResolvedValueOnce(exportResponse({ ...exportDocument(), schema_version: 30 }))
       .mockResolvedValueOnce(
         exportResponse(
-          { ...exportDocument(), schema_version: 37 },
+          { ...exportDocument(), schema_version: 39 },
           {
-            'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v37.json"',
+            'Content-Disposition': 'attachment; filename="nonbiriapi-account-export-v39.json"',
           },
         ),
       )
@@ -292,13 +292,64 @@ describe('production account lifecycle adapter', () => {
 
   it.each([
     12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
-    36,
+    36, 37, 38,
   ])(
     'downloads a v%s attachment and rejects a version mismatch in its filename',
     async (version) => {
       const document = {
         ...exportDocument(),
         schema_version: version,
+        ...(version >= 37
+          ? {
+              donations: [
+                {
+                  id: '41',
+                  keys: [
+                    {
+                      id: '51',
+                      model_limits: [
+                        {
+                          upstream_model_id: 'shared-upstream',
+                          historical_costs_partial: true,
+                          limits: {
+                            credits: '123.456',
+                            calls: null,
+                            tokens: null,
+                            input_tokens: null,
+                            output_tokens: null,
+                          },
+                          used: {
+                            credits: '10.025',
+                            calls: '7',
+                            tokens: '10',
+                            input_tokens: '4',
+                            output_tokens: '6',
+                          },
+                          reserved: {
+                            credits: '0',
+                            calls: '0',
+                            tokens: '0',
+                            input_tokens: '0',
+                            output_tokens: '0',
+                          },
+                          remaining: {
+                            credits: '113.431',
+                            calls: null,
+                            tokens: null,
+                            input_tokens: null,
+                            output_tokens: null,
+                          },
+                          tracking_started_at: 1_700_000_000,
+                          unattributed_total_tokens: '0',
+                          recurring_limits: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }
+          : {}),
         ...(version >= 36
           ? {
               endpoints: [{ id: '41', rerank_path: '/compatible-api/v1/reranks' }],

@@ -273,7 +273,7 @@ describe('charity catalog panel', () => {
 
     await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), 'all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Reset' })[0]!);
+    await rendered.user.click(screen.getByRole('button', { name: 'Clear all filters' }));
     expect(screen.getByLabelText('Allowed for level')).toHaveValue('all');
     expect(screen.getByLabelText('Your access')).toHaveValue('all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
@@ -399,6 +399,25 @@ describe('charity catalog panel', () => {
       catalogPath('1', 20, '', 'true', '', 'true', 'images_generations'),
       catalogPath('1', 20, '', 'all', 'all', 'all'),
     ]);
+  });
+
+  it('clears an unmatched search while keeping the availability and access choices', async () => {
+    installJsonFetchFixtures([
+      { method: 'GET', path: catalogPath('1', 20, 'no-match'), body: catalogPage([]) },
+      { method: 'GET', path: catalogPath(), body: catalogPage([catalogModel('1', 'visible')]) },
+    ]);
+    const view = await renderWithProviders(<CharityCatalogPanel accountID="7" />, {
+      station: 'user',
+      role: 'user',
+      route: '/charity?q=no-match',
+    });
+    const search = await screen.findByRole('searchbox');
+    await view.user.click(await screen.findByRole('button', { name: 'Clear search term' }));
+    await screen.findByText('[公益]provider/visible');
+    expect(search).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Remove access filter' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Remove availability filter' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Clear all filters' })).toBeVisible();
   });
 
   it('keeps the three filter labels and applied state readable in Chinese', async () => {

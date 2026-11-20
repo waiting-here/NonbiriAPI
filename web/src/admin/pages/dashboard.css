@@ -10,11 +10,12 @@
 }
 .overview-attention__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: var(--nb-space-3);
 }
 .overview-attention__card {
   display: grid;
+  align-content: start;
   gap: var(--nb-space-1);
   min-width: 0;
   padding: var(--nb-space-4) var(--nb-space-5);
@@ -45,13 +46,34 @@
 .overview-attention__card.is-waiting .overview-attention__count {
   color: var(--nb-color-highlight);
 }
+.overview-attention__sub {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
 .overview-attention__action {
   color: var(--nb-color-accent);
   font-size: var(--nb-font-size-sm);
   font-weight: var(--nb-font-weight-semibold);
 }
 .admin-overview .nb-stats {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nb-space-3);
+}
+@media (width >= 64rem) {
+  .admin-overview .nb-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.overview-stat-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nb-space-1);
+}
+.overview-stat-link:hover {
+  color: var(--nb-color-accent);
 }
 .admin-overview .nb-stat__value {
   white-space: nowrap;
@@ -62,7 +84,7 @@
 .overview-usage-note {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-xs);
-  margin-block: var(--nb-space-3);
+  margin: 0;
 }
 .admin-overview .nb-facts {
   margin-bottom: var(--nb-space-4);

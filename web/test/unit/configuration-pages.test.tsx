@@ -1,3 +1,4 @@
+import { endpointScope } from '../fixtures/resourceScopes';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, test, vi, type Mock } from 'vitest';
@@ -653,7 +654,9 @@ describe('authoritative site-config frontend', () => {
     form = textarea.closest<HTMLElement>('.nb-setting');
     fireEvent.change(textarea, { target: { value: 'x'.repeat(65_537) } });
     expect(within(form!).getByText('65537 / 65536 UTF-8 bytes')).toBeVisible();
-    expect(within(form!).getByRole('alert')).toHaveTextContent(/too long; shorten it/i);
+    expect(within(form!).getByRole('alert')).toHaveTextContent(
+      'This text is too long. Shorten it to 65536 UTF-8 bytes or fewer.',
+    );
     expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(server.patches).toHaveLength(1);
   });
@@ -1183,7 +1186,9 @@ describe('standalone Admin Games feature', () => {
     ).not.toBeInTheDocument();
     expect(treasures).toHaveAttribute('open');
     expect(worm).toBeVisible();
-    await rendered.user.click(within(fishing).getByRole('button', { name: 'Cancel' }));
+    await rendered.user.click(
+      within(fishing).getByRole('button', { name: /Discard edits made to/ }),
+    );
     expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument();
     await rendered.user.click(screen.getByRole('switch', { name: 'Enable Fishing' }));
     expect(screen.queryByRole('region', { name: 'Fishing' })).not.toBeInTheDocument();
@@ -1229,11 +1234,10 @@ describe('standalone Admin Games feature', () => {
     await rendered.user.click(await screen.findByRole('switch', { name: 'Enable Blackjack' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Fishing Game settings' }));
     const save = screen.getByRole('button', { name: 'Save all changes' });
-    expect(screen.getByText(/Phase: Unknown value \(casting\) · 9007199254740993/)).toBeVisible();
-    expect(
-      screen.getByText(/Specification: 10×10 · Phase: Unknown value \(playing\) · 2/),
-    ).toBeVisible();
-    expect(screen.getByText(/Mode: Deathmatch · Phase: Gesture selection · 3/)).toBeVisible();
+    const games = screen.getByRole('heading', { name: 'Games' }).closest('section');
+    expect(games).toHaveTextContent('Phase: Unknown value (casting) · 9,007,199,254,740,993');
+    expect(games).toHaveTextContent('Specification: 10×10 · Phase: Unknown value (playing) · 2');
+    expect(games).toHaveTextContent('Mode: Deathmatch · Phase: Gesture selection · 3');
     const queues = screen.getByRole('heading', { name: 'Matchmaking queues' }).closest('section');
     expect(queues).toHaveTextContent('Quick: 5');
     expect(queues).toHaveTextContent('Standard: 0');
@@ -1327,7 +1331,7 @@ describe('standalone Admin Games feature', () => {
     expect(within(rps).getByRole('alert')).toHaveTextContent(/must total less than 100%/i);
     expect(server.patches).toHaveLength(0);
     fireEvent.change(quickPlatform, { target: { value: '1' } });
-    await rendered.user.click(within(rps).getByRole('button', { name: 'Cancel' }));
+    await rendered.user.click(within(rps).getByRole('button', { name: /Discard edits made to/ }));
     await rendered.user.click(screen.getByRole('button', { name: 'Fishing Game settings' }));
     const fishing = screen.getByRole('region', { name: 'Fishing' });
     const save = within(fishing).getByRole('button', { name: 'Save all changes' });
@@ -1393,7 +1397,7 @@ describe('standalone Admin Games feature', () => {
     expect(screen.getByRole('button', { name: 'Three-player RPS Game settings' })).toBeDisabled();
     for (const input of within(fishing).getAllByRole('spinbutton')) expect(input).toBeDisabled();
     expect(within(fishing).getByRole('button', { name: 'Close' })).toBeDisabled();
-    expect(within(fishing).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(within(fishing).getByRole('button', { name: /Discard edits made to/ })).toBeDisabled();
     expect(within(fishing).getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save game configuration' })).toBeDisabled();
     expect(
@@ -1693,6 +1697,7 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(() => normalizeCoreEndpoint({ id: '1' })).toThrow(/invalid endpoint/i);
     expect(() =>
       normalizeCoreEndpoint({
+        ...endpointScope,
         id: '1',
         connector_type: 'unknown',
         base_url: 'https://upstream.test/v1',
@@ -1731,6 +1736,7 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toThrow(/unexpected store policy/i);
 
     const validEndpoint = {
+      ...endpointScope,
       id: '1',
       connector_type: 'openai-compatible',
       base_url: 'https://upstream.test/v1',

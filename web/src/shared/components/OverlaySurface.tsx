@@ -51,7 +51,10 @@ export function ModalSurface({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
-  const previous = useRef<HTMLElement | null>(null);
+  const focusRestore = useRef<{ target: HTMLElement | null; version: number }>({
+    target: null,
+    version: 0,
+  });
   const state = overlayState(open, onClose);
   const { modalProps, underlayProps } = useModalOverlay(
     {
@@ -63,12 +66,16 @@ export function ModalSurface({
   );
   useLayoutEffect(() => {
     if (!open) return;
-    previous.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const restore = focusRestore.current;
+    const version = ++restore.version;
+    const focused = document.activeElement;
+    if (!restore.target && focused instanceof HTMLElement) restore.target = focused;
     return () => {
-      const target = previous.current;
-      previous.current = null;
       queueMicrotask(() => {
+        // A replay or a later opening supersedes this restoration.
+        if (restore.version !== version) return;
+        const target = restore.target;
+        restore.target = null;
         if (target?.isConnected) target.focus({ preventScroll: true });
       });
     };

@@ -132,10 +132,7 @@ async function openDonationKeys(page: Page, endpoint: Entry, name: string) {
   return { picker, candidates: (await response.json()) as KeyPage };
 }
 function keyChoice(picker: Locator, note: string) {
-  return picker
-    .locator('.donation-resource-picker__key-list > li')
-    .filter({ has: picker.page().getByText(note, { exact: true }) })
-    .getByRole('checkbox');
+  return picker.getByRole('checkbox', { name: note });
 }
 
 test('protocol unlink preserves a shared credential and deletion refreshes donation candidates', async ({
@@ -260,9 +257,6 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
       .getByRole('group', { name: c.entries, exact: true })
       .locator(`[data-entry-id="${anthropic.id}"]`)
       .click();
-    await page
-      .getByRole('combobox', { name: services.currentKey, exact: true })
-      .selectOption(kept.id);
     const keptRow = page.locator('tr.core-key-card').filter({ hasText: sharedName });
     const discovery = responseFor(page, 'POST', keptPath + '/models/refresh');
     await keptRow
@@ -339,7 +333,7 @@ test('protocol unlink preserves a shared credential and deletion refreshes donat
     await page
       .getByRole('button', { name: charity.presentation.selectionDone, exact: true })
       .click();
-    await expect(page.locator('.donation-selected-chips')).toContainText(remainingName);
+    await expect(page.locator('.donation-review-key')).toContainText(remainingName);
     await page.getByRole('button', { name: charity.presentation.openPicker, exact: true }).click();
     await expect(keyChoice(page.locator('.donation-resource-picker'), remainingName)).toBeChecked();
     await expect(keyChoice(page.locator('.donation-resource-picker'), anthropicName)).toHaveCount(

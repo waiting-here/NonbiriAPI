@@ -1,4 +1,10 @@
-import { NativeServicesField } from './NativeServicesField';
+import {
+  BindingSourceChoice,
+  BindingKeyChoice,
+  BindingModelChoice,
+} from './charity/BindingChoices';
+import { BindingRouteGuide, BindingServiceEditor } from './charity/BindingRouteGuide';
+import { Fold } from './ui';
 import type { NativeService } from '@shared/nativeServices';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
@@ -7,16 +13,11 @@ import { FilterBar } from './ui/FilterBar';
 import { KeyStateFilter } from './charity/KeyStateFilter';
 import type { KeyStateFilter as KeyState } from '@shared/operations/keyState';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import {
-  useManagementCapability,
-  captureStationSession,
-  stationSessionMatches,
-  clearStationSession,
-  StationSessionChangedError,
-} from '@shared/charityManagement';
+import { useManagementCapability } from '@shared/charityManagement';
+import { useBindingPage, sessionAccount } from './charity/useBindingPage';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import {
   getDonationSourceKeysPage,
@@ -34,16 +35,13 @@ import {
 import { validManagementSearch } from '@shared/operations/charityModelPages';
 import { usePagePager } from '@shared/operations/usePagePager';
 import {
-  charityKeys,
+  suggestedBindingServices,
   type CharityBindingCandidate,
   type CharityRole,
 } from '@shared/operations/charity';
 import type { PageMetadata } from '@shared/operations/pageNumbers';
 import { EmptyState, ErrorState, LoadingState } from './States';
-import { KeyLimitSummary } from './KeyRoutingLimits';
-import { KeyRateLimitTime } from './KeyRateLimitTime';
 import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
-import { DonationKeyNotes } from './DonationControlFacts';
 import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import './CharityBindingPicker.css';
 
@@ -62,62 +60,10 @@ type CandidateSource = '' | 'automatic' | 'manual';
 const charitySelectionKey = (entry: CharityBindingCandidate) =>
   `${entry.donation_key_id}:${entry.upstream_model_id}`;
 
-const sourceTypeKey = (source: 'automatic' | 'manual') =>
-  `common.operations.charity.sourceType.${source}`;
-
-function sessionAccount(role: CharityRole, value: unknown): string | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const root = value as Record<string, unknown>;
-  if (role === 'admin') {
-    const admin = root.admin;
-    if (admin === null || typeof admin !== 'object' || Array.isArray(admin)) return undefined;
-    const username = (admin as Record<string, unknown>).username;
-    return typeof username === 'string' && username.length > 0 ? username : undefined;
-  }
-  const user = root.user;
-  if (user === null || typeof user !== 'object' || Array.isArray(user)) return undefined;
-  const userRoot = user as Record<string, unknown>;
-  const id = userRoot.id;
-  const level = userRoot.effective_level;
-  return typeof id === 'string' && id.length > 0 && (level === 5 || level === 6) ? id : undefined;
-}
-
 function sourceTitle(source: DonationPageSafeSource, translate: TFunction): string {
   return source.kind === 'mainstream'
     ? translate('common.operations.charity.mainstreamSource', { name: source.name })
     : translate('common.operations.charity.customSource');
-}
-
-async function guardedRead<T>(
-  client: QueryClient,
-  role: CharityRole,
-  account: string | undefined,
-  request: () => Promise<T>,
-): Promise<T> {
-  const frame = role === 'admin' ? 'admin' : 'steward';
-  const snapshot = captureStationSession(client, frame);
-  if (
-    !account ||
-    sessionAccount(
-      role,
-      client.getQueryData(role === 'admin' ? ['admin', 'session'] : ['user', 'session']),
-    ) !== account
-  ) {
-    throw new StationSessionChangedError();
-  }
-  try {
-    const result = await request();
-    if (!stationSessionMatches(client, frame, snapshot)) throw new StationSessionChangedError();
-    return result;
-  } catch (error) {
-    if (!stationSessionMatches(client, frame, snapshot)) throw new StationSessionChangedError();
-    if (isUnauthorized(error)) clearStationSession(client, frame);
-    throw error;
-  }
-}
-
-function sourceBaseURL(source: DonationPageSafeSource): string {
-  return source.base_url;
 }
 
 function isTerminalKey(key: ManagedDonationKeySummary): boolean {
@@ -125,10 +71,6 @@ function isTerminalKey(key: ManagedDonationKeySummary): boolean {
 }
 
 function sourcePageFilters(query: string, scope: SourceScope, key_state: KeyState) {
-  return { q: query || undefined, scope, key_state } as const;
-}
-
-function sourceKeyPageFilters(query: string, scope: SourceScope, key_state: KeyState) {
   return { q: query || undefined, scope, key_state } as const;
 }
 
@@ -146,28 +88,6 @@ function candidatePageFilters(
     source: source || undefined,
     key_state,
   };
-}
-
-function pagePlaceholder<T>(
-  previous: T | undefined,
-  previousQuery: { queryKey: readonly unknown[] } | undefined,
-  identity: readonly unknown[],
-  page: string,
-  pageSize: number,
-): T | undefined {
-  if (!previous || !previousQuery) return undefined;
-  const previousKey = previousQuery.queryKey;
-  if (
-    previousKey.length !== identity.length + 2 ||
-    previousKey[identity.length] === page ||
-    previousKey[identity.length + 1] !== pageSize
-  ) {
-    return undefined;
-  }
-  for (let index = 0; index < identity.length; index += 1) {
-    if (previousKey[index] !== identity[index]) return undefined;
-  }
-  return previous;
 }
 
 export interface CharityPickerKeyManagerProps {
@@ -258,10 +178,12 @@ function CharityBindingPickerBody({
   sessionError: unknown;
 }) {
   const { t } = useTranslation();
-  const client = useQueryClient();
   const [keyState, setKeyState] = useState<KeyState>('all');
   const [selectedSearch, setSelectedSearch] = useState('');
   const selectedSearchInput = useRef<HTMLInputElement>(null);
+  const browserRef = useRef<HTMLDivElement>(null);
+  const selectionHeading = useRef<HTMLHeadingElement>(null);
+  const pendingFocus = useRef<{ restoreId?: string } | null>(null);
   const [scope, setScope] = useState<SourceScope>('all');
   const [sourceQueryDraft, setSourceQueryDraft] = useState('');
   const [sourceQuery, setSourceQuery] = useState('');
@@ -322,99 +244,40 @@ function CharityBindingPickerBody({
   const canRead =
     Boolean(account) && management.authorityReady && !sessionCapabilityLost && !sessionError;
   const readEnabled = canRead && !managingKey;
-  const sourceQueryIdentity = [
-    ...charityKeys.root(role),
-    'binding-picker',
-    account ?? 'no-account',
-    modelId,
-    'sources',
-    scope,
-    sourceQuery,
-    keyState,
-  ] as const;
-  const sourceQueryKey = [...sourceQueryIdentity, sourcePager.page, sourcePager.pageSize] as const;
-  const sourceKeyQueryIdentity = [
-    ...charityKeys.root(role),
-    'binding-picker',
-    account ?? 'no-account',
-    modelId,
-    'source-keys',
-    selectedSource?.source_key ?? 'no-source',
-    scope,
-    keyQuery,
-    keyState,
-  ] as const;
-  const sourceKeyQueryKey = [
-    ...sourceKeyQueryIdentity,
-    sourceKeyPager.page,
-    sourceKeyPager.pageSize,
-  ] as const;
-  const candidateQueryIdentity = [
-    ...charityKeys.root(role),
-    'binding-picker',
-    account ?? 'no-account',
-    modelId,
-    'candidates',
-    selectedSource?.source_key ?? 'no-source',
-    selectedKeySnapshot?.key_id ?? 'no-key',
-    candidateQuery,
-    candidateSource,
-    keyState,
-  ] as const;
-  const candidateQueryKey = [
-    ...candidateQueryIdentity,
-    candidatePager.page,
-    candidatePager.pageSize,
-  ] as const;
-  const sources = useQuery({
-    queryKey: sourceQueryKey,
-    queryFn: ({ signal }) =>
-      guardedRead(client, role, account, () =>
-        getDonationSourcesPage(
-          role,
-          sourcePageFilters(sourceQuery, scope, keyState),
-          sourcePager.page,
-          sourcePager.pageSize,
-          signal,
-          role === 'steward' ? modelId : undefined,
-        ),
-      ),
-    enabled: readEnabled && !fixedKey,
-    placeholderData: (previous, previousQuery) =>
-      pagePlaceholder(
-        previous,
-        previousQuery,
-        sourceQueryIdentity,
+  const bindingScope = { role, account, modelId };
+  const stewardModel = role === 'steward' ? modelId : undefined;
+  const sourceID = selectedSource?.source_key ?? 'no-source';
+  const sources = useBindingPage(
+    bindingScope,
+    ['sources', scope, sourceQuery, keyState],
+    sourcePager,
+    readEnabled && !fixedKey,
+    (signal) =>
+      getDonationSourcesPage(
+        role,
+        sourcePageFilters(sourceQuery, scope, keyState),
         sourcePager.page,
         sourcePager.pageSize,
+        signal,
+        stewardModel,
       ),
-    retry: false,
-  });
-  const sourceKeys = useQuery({
-    queryKey: sourceKeyQueryKey,
-    queryFn: ({ signal }) =>
-      guardedRead(client, role, account, () =>
-        getDonationSourceKeysPage(
-          role,
-          selectedSource?.source_key ?? '',
-          sourceKeyPageFilters(keyQuery, scope, keyState),
-          sourceKeyPager.page,
-          sourceKeyPager.pageSize,
-          signal,
-          role === 'steward' ? modelId : undefined,
-        ),
-      ),
-    enabled: readEnabled && Boolean(selectedSource) && !fixedKey,
-    placeholderData: (previous, previousQuery) =>
-      pagePlaceholder(
-        previous,
-        previousQuery,
-        sourceKeyQueryIdentity,
+  );
+  const sourceKeys = useBindingPage(
+    bindingScope,
+    ['source-keys', sourceID, scope, keyQuery, keyState],
+    sourceKeyPager,
+    readEnabled && Boolean(selectedSource) && !fixedKey,
+    (signal) =>
+      getDonationSourceKeysPage(
+        role,
+        selectedSource?.source_key ?? '',
+        sourcePageFilters(keyQuery, scope, keyState),
         sourceKeyPager.page,
         sourceKeyPager.pageSize,
+        signal,
+        stewardModel,
       ),
-    retry: false,
-  });
+  );
   const selectedKey =
     sourceKeys.data?.data.find((entry) => entry.key_id === selectedKeySnapshot?.key_id) ??
     selectedKeySnapshot;
@@ -427,35 +290,33 @@ function CharityBindingPickerBody({
       : [],
     () => sourceKeys.refetch({ throwOnError: true }),
   );
-  const candidates = useQuery({
-    queryKey: candidateQueryKey,
-    queryFn: ({ signal }) =>
-      guardedRead(client, role, account, () =>
-        getManagedBindingCandidatesPage(
-          role,
-          modelId,
-          candidatePageFilters(
-            selectedKey!,
-            candidateQuery,
-            candidateSource,
-            fixedKey ? 'all' : keyState,
-          ),
-          candidatePager.page,
-          candidatePager.pageSize,
-          signal,
+  const candidates = useBindingPage(
+    bindingScope,
+    [
+      'candidates',
+      sourceID,
+      selectedKeySnapshot?.key_id ?? 'no-key',
+      candidateQuery,
+      candidateSource,
+      keyState,
+    ],
+    candidatePager,
+    readEnabled && Boolean(selectedSource && selectedKey),
+    (signal) =>
+      getManagedBindingCandidatesPage(
+        role,
+        modelId,
+        candidatePageFilters(
+          selectedKey!,
+          candidateQuery,
+          candidateSource,
+          fixedKey ? 'all' : keyState,
         ),
-      ),
-    enabled: readEnabled && Boolean(selectedSource && selectedKey),
-    placeholderData: (previous, previousQuery) =>
-      pagePlaceholder(
-        previous,
-        previousQuery,
-        candidateQueryIdentity,
         candidatePager.page,
         candidatePager.pageSize,
+        signal,
       ),
-    retry: false,
-  });
+  );
 
   const requestErrors = [sessionError, sources.error, sourceKeys.error, candidates.error];
   const requestCapabilityLost = requestErrors.some(
@@ -500,16 +361,41 @@ function CharityBindingPickerBody({
   };
   const chooseSource = (next: DonationSourceSummary | null) => {
     if (interactionBlocked) return;
+    pendingFocus.current = next ? {} : { restoreId: selectedSource?.source_key };
     setSelectedSource(next);
     resetKeySelection();
   };
   const chooseKey = (next: ManagedDonationKeySummary | null) => {
     if (interactionBlocked || (next !== null && isTerminalKey(next))) return;
+    pendingFocus.current = next ? {} : { restoreId: selectedKey?.key_id };
     setSelectedKey(next);
     setCandidateQueryDraft('');
     setCandidateQuery('');
     setCandidateSource('');
   };
+  useEffect(() => {
+    const requested = pendingFocus.current;
+    const browser = browserRef.current;
+    if (!requested || !browser) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !browser.contains(active)) {
+      pendingFocus.current = null;
+      return;
+    }
+    let target: HTMLElement | null = null;
+    if (requested.restoreId) {
+      const choices = browser.querySelectorAll<HTMLButtonElement>(
+        'button[data-binding-choice]:enabled',
+      );
+      target =
+        Array.from(choices).find((item) => item.dataset.bindingChoice === requested.restoreId) ??
+        null;
+      if (!target && (selectedSource ? sourceKeys.isPending : sources.isPending)) return;
+    }
+    target ??= browser.querySelector<HTMLInputElement>('input[type="search"]:enabled');
+    pendingFocus.current = null;
+    target?.focus();
+  }, [selectedSource, selectedKeySnapshot, sourceKeys.isPending, sources.isPending]);
   const changeScope = (next: SourceScope) => {
     if (interactionBlocked || next === scope) return;
     setScope(next);
@@ -540,10 +426,26 @@ function CharityBindingPickerBody({
   const sourcePage = sources.data;
   const keyPage = sourceKeys.data;
   const candidatePage = candidates.data;
+  const keyGuide = candidatePage?.data[0]?.binding_guide;
+  const selectable =
+    candidatePage?.data.filter(
+      (entry) => !entry.current_binding_id && entry.capabilities.can_bind,
+    ) ?? [];
+  const selectCandidate = (entry: CharityBindingCandidate): CharitySelection => ({
+    ...entry,
+    note: selectedKey?.safe_note ?? '',
+    selected_native_services: suggestedBindingServices(entry),
+  });
   const sourceBusy = interactionBlocked || sourceReadBlocked;
   const keyBusy = interactionBlocked || sourceKeyReadBlocked;
   const candidateBusy = interactionBlocked || candidateReadBlocked;
   const allSelectedEntries = Object.entries(selected);
+  const remainingOnPage = selectable.filter(
+    (entry) => !selected[charitySelectionKey(entry)],
+  ).length;
+  const selectedOnPage = candidatePage?.data.some((entry) =>
+    Boolean(selected[charitySelectionKey(entry)]),
+  );
   const selectedEntries = allSelectedEntries.filter(([, entry]) =>
     entry.upstream_model_id.toLowerCase().includes(selectedSearch.toLowerCase()),
   );
@@ -568,682 +470,620 @@ function CharityBindingPickerBody({
       ref={listRef}
       tabIndex={-1}
     >
-      {!fixedKey ? (
-        <nav className="ops-actions" aria-label={t('common.operations.charity.bindingCandidates')}>
-          <Button
-            type="button"
-            variant="ghost"
-            aria-current={!selectedSource ? 'step' : undefined}
-            disabled={interactionBlocked}
-            onClick={clearSource}
-          >
-            {t('common.operations.charity.chooseSource')}
-          </Button>
-          {selectedSource ? (
-            <>
-              <span aria-hidden="true">/</span>
-              <Button
-                type="button"
-                variant="ghost"
-                aria-current={!selectedKey ? 'step' : undefined}
-                disabled={interactionBlocked}
-                onClick={clearKey}
-              >
-                {t('common.operations.charity.chooseKey')}
-              </Button>
-            </>
-          ) : null}
-          {selectedKey ? (
-            <>
-              <span aria-hidden="true">/</span>
-              <span aria-current="step">{t('common.operations.charity.chooseModels')}</span>
-            </>
-          ) : null}
-        </nav>
-      ) : null}
-
-      {!selectedSource ? (
-        <>
-          <FilterBar
-            query={sources}
-            activeCount={sourceQuery ? 1 : 0}
-            onSubmit={submitSourceQuery}
-            onReset={() => {
-              if (interactionBlocked) return;
-              setSourceQueryDraft('');
-              setSourceQuery('');
-              setKeyState('all');
-              changeScope('all');
-            }}
-            secondaryAlwaysVisible
-            secondary={
-              <>
-                <KeyStateFilter
-                  value={keyState}
-                  disabled={interactionBlocked}
-                  onChange={(state) => {
-                    setKeyState(state);
-                    setScope('all');
-                    setSelectedSource(null);
-                    resetKeySelection();
-                  }}
-                />
-                <Field label={t('common.operations.charity.sourceScope')} size="short">
-                  {(field) => (
-                    <select
-                      {...field}
-                      value={scope}
-                      disabled={interactionBlocked}
-                      onChange={(event) => changeScope(event.target.value as SourceScope)}
-                    >
-                      <option value="active">{t('common.operations.charity.scopeActive')}</option>
-                      <option value="all">{t('common.operations.charity.scopeAll')}</option>
-                    </select>
-                  )}
-                </Field>
-              </>
-            }
-            search={
-              <Field
-                label={t('common.operations.charity.searchSources')}
-                error={!sourceQueryValid ? t('common.operations.charity.searchInvalid') : undefined}
-              >
-                {(field) => (
-                  <input
-                    {...field}
-                    placeholder={t('common.operations.charity.searchSources')}
-                    type="search"
-                    value={sourceQueryDraft}
-                    maxLength={256}
-                    disabled={interactionBlocked}
-                    aria-invalid={!sourceQueryValid}
-                    onChange={(event) => setSourceQueryDraft(event.target.value)}
-                  />
-                )}
-              </Field>
-            }
-          />
-          {sources.isPending ? (
-            <LoadingState />
-          ) : sources.error ? (
-            <ErrorState error={sources.error} onRetry={() => void sources.refetch()} />
-          ) : sourcePage ? (
-            <div aria-busy={sources.isFetching}>
-              {sourcePage.data.length === 0 ? (
-                <EmptyState
-                  title={t('common.operations.charity.noSourceGroups')}
-                  body={t('common.operations.charity.noSourceGroupsBody')}
-                />
+      <div
+        className="binding-workspace"
+        data-selection-rail={
+          showSelectionSummary && (Boolean(selectedKey) || allSelectedEntries.length > 0)
+        }
+      >
+        <div className="binding-browser" ref={browserRef}>
+          {!fixedKey && (
+            <nav
+              className="binding-steps"
+              aria-label={t('common.operations.charity.bindingCandidates')}
+            >
+              {!selectedSource ? (
+                <strong aria-current="step">{t('common.operations.charity.chooseSource')}</strong>
               ) : (
-                <section
-                  className="nb-choice-list"
-                  aria-label={t('common.operations.charity.chooseSource')}
-                >
-                  <ul className="nb-choice-list__items">
-                    {sourcePage.data.map((entry) => (
-                      <li key={entry.source_key}>
-                        <button
-                          type="button"
-                          className="ops-picker-choice"
-                          disabled={interactionBlocked}
-                          onClick={() => chooseSource(entry)}
-                        >
-                          <strong>{sourceTitle(entry.safe_source, t)}</strong>
-                          <code>{sourceBaseURL(entry.safe_source)}</code>
-                          {entry.safe_source.kind === 'mainstream' ? (
-                            <span>{entry.safe_source.name}</span>
-                          ) : null}
-                          <small>
-                            {t('common.operations.charity.sourceDonationCount', {
-                              count: entry.donation_count,
-                            })}{' '}
-                            {t('common.operations.charity.sourceKeyCount', {
-                              count: entry.key_count,
-                            })}{' '}
-                            {t('common.operations.charity.sourceUsableKeyCount', {
-                              count: entry.usable_key_count,
-                            })}{' '}
-                            {t('common.operations.charity.sourcePendingDonationCount', {
-                              count: entry.pending_donation_count,
-                            })}
-                          </small>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              <PagePagination
-                metadata={sourcePage.pagination}
-                requestedPage={sourcePager.page}
-                busy={sourceBusy}
-                onPageChange={sourcePager.setPage}
-                onPageSizeChange={sourcePager.setPageSize}
-              />
-            </div>
-          ) : (
-            <LoadingState />
-          )}
-        </>
-      ) : (
-        <>
-          {sources.error ? (
-            <ErrorState error={sources.error} onRetry={() => void sources.refetch()} />
-          ) : null}
-          <div className="ops-picker-context">
-            <strong>{sourceTitle(selectedSource.safe_source, t)}</strong>
-            <code>{sourceBaseURL(selectedSource.safe_source)}</code>
-            <span>
-              {t('common.operations.charity.sourceDonationCount', {
-                count: selectedSource.donation_count,
-              })}{' '}
-              {t('common.operations.charity.sourceKeyCount', {
-                count: selectedSource.key_count,
-              })}
-            </span>
-          </div>
-          {!selectedKey ? (
-            <>
-              <FilterBar
-                query={sourceKeys}
-                activeCount={keyQuery ? 1 : 0}
-                onSubmit={submitKeyQuery}
-                onReset={() => {
-                  if (interactionBlocked) return;
-                  setKeyQueryDraft('');
-                  setKeyQuery('');
-                }}
-                search={
-                  <Field
-                    label={t('common.operations.charity.searchKeys')}
-                    error={
-                      !keyQueryValid ? t('common.operations.charity.searchInvalid') : undefined
-                    }
-                  >
-                    {(field) => (
-                      <input
-                        {...field}
-                        placeholder={t('common.operations.charity.searchKeys')}
-                        type="search"
-                        value={keyQueryDraft}
-                        maxLength={256}
-                        disabled={interactionBlocked}
-                        aria-invalid={!keyQueryValid}
-                        onChange={(event) => setKeyQueryDraft(event.target.value)}
-                      />
-                    )}
-                  </Field>
-                }
-              />
-              {sourceKeys.isPending ? (
-                <LoadingState />
-              ) : sourceKeys.error ? (
-                <ErrorState error={sourceKeys.error} onRetry={() => void sourceKeys.refetch()} />
-              ) : keyPage ? (
-                <div aria-busy={sourceKeys.isFetching}>
-                  {keyPage.data.length === 0 ? (
-                    <EmptyState
-                      title={t('common.operations.charity.noSourceKeys')}
-                      body={t('common.operations.charity.noSourceKeysBody')}
-                    />
-                  ) : (
-                    <section
-                      className="nb-choice-list"
-                      aria-label={t('common.operations.charity.chooseKey')}
-                    >
-                      <ul className="nb-choice-list__items">
-                        {keyPage.data.map((entry) => {
-                          const terminal = isTerminalKey(entry);
-                          return (
-                            <li key={entry.key_id}>
-                              <button
-                                type="button"
-                                className="ops-picker-choice"
-                                disabled={interactionBlocked || terminal}
-                                onClick={() => chooseKey(entry)}
-                              >
-                                <strong>
-                                  {entry.safe_note || `${entry.display_head}…${entry.display_tail}`}
-                                </strong>
-                                <DonationKeyNotes
-                                  donor={entry.donation_note}
-                                  approval={entry.approval_note}
-                                />
-                                <span>
-                                  {t('common.operations.charity.donationNumber', {
-                                    id: entry.donation_id,
-                                  })}{' '}
-                                  ·{' '}
-                                  {t('common.operations.charity.charityStateLabel', {
-                                    state: t(
-                                      `common.operations.charity.charityState.${entry.charity_state}`,
-                                    ),
-                                  })}
-                                </span>
-                                <code>
-                                  {entry.display_head}…{entry.display_tail}
-                                </code>
-                                <span>{entry.safe_source.base_url}</span>
-                                <KeyLimitSummary
-                                  concurrency={entry.max_concurrency}
-                                  rpm={entry.max_rpm}
-                                  queue={entry}
-                                  readOnly
-                                />
-                                {entry.rate_limited_until !== null || entry.smart_backoff ? (
-                                  <KeyRateLimitTime
-                                    until={entry.rate_limited_until}
-                                    smartBackoff={entry.smart_backoff}
-                                  />
-                                ) : null}
-                                <small>
-                                  {entry.idle
-                                    ? t('common.donationHandling.idle')
-                                    : t('common.donationHandling.bound', {
-                                        count: entry.binding_count,
-                                      })}
-                                  {' · '}
-                                  {t('common.donationHandling.title')}:{' '}
-                                  {t(`common.donationHandling.states.${entry.handling.state}`)}
-                                </small>
-                                {entry.ended_reason ? (
-                                  <small>
-                                    {t('common.operations.charity.endedReason')}:{' '}
-                                    {t(`common.donationHandling.reasons.${entry.ended_reason}`)}
-                                  </small>
-                                ) : null}
-                                {terminal ? (
-                                  <small>{t('common.operations.charity.keyUnavailable')}</small>
-                                ) : null}
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </section>
-                  )}
-                  <PagePagination
-                    metadata={keyPage.pagination}
-                    requestedPage={sourceKeyPager.page}
-                    busy={keyBusy}
-                    onPageChange={sourceKeyPager.setPage}
-                    onPageSizeChange={sourceKeyPager.setPageSize}
-                  />
-                </div>
-              ) : (
-                <LoadingState />
-              )}
-            </>
-          ) : (
-            <>
-              <p className="ops-picker-context">
-                {selectedKey.safe_note || `${selectedKey.display_head}…${selectedKey.display_tail}`}{' '}
-                ·{' '}
-                {t('common.operations.charity.donationNumber', {
-                  id: selectedKey.donation_id,
-                })}{' '}
-                · {selectedKey.safe_source.base_url}
-              </p>
-              <div className="charity-binding-key-shortcuts">
-                {!managingKey ? (
-                  <DonationDiscoveryControl
-                    key={selectedKey.key_id}
-                    role={role}
-                    target={{ donation_id: selectedKey.donation_id, key_id: selectedKey.key_id }}
-                    buttonLabel={t('common.operations.charity.refetchModels')}
-                    disabled={
-                      locked ||
-                      !canRead ||
-                      !(selectedKey.can_manage ?? selectedKey.charity_state === 'available')
-                    }
-                    onCapabilityLoss={onCapabilityLoss}
-                  />
-                ) : null}
-                {renderKeyManager ? (
-                  <Button
-                    type="button"
-                    disabled={locked || !canRead}
-                    onClick={() => {
-                      remember();
-                      setManagingKey(true);
-                    }}
-                  >
-                    {t('common.operations.charity.manageSelectedKey')}
-                  </Button>
-                ) : null}
-              </div>
-              {sourceKeys.error ? (
-                <ErrorState error={sourceKeys.error} onRetry={() => void sourceKeys.refetch()} />
-              ) : null}
-              <FilterBar
-                query={candidates}
-                activeCount={[candidateQuery, candidateSource].filter(Boolean).length}
-                onSubmit={submitCandidateQuery}
-                onReset={() => {
-                  if (interactionBlocked) return;
-                  setCandidateQueryDraft('');
-                  setCandidateQuery('');
-                  setCandidateSource('');
-                }}
-                search={
-                  <Field
-                    label={t('common.operations.charity.searchModels')}
-                    error={
-                      !candidateQueryValid
-                        ? t('common.operations.charity.candidateSearchInvalid')
-                        : undefined
-                    }
-                  >
-                    {(field) => (
-                      <input
-                        {...field}
-                        type="search"
-                        value={candidateQueryDraft}
-                        placeholder={t('common.workflow.upstreamSearch')}
-                        maxLength={1024}
-                        disabled={interactionBlocked}
-                        aria-invalid={!candidateQueryValid}
-                        onChange={(event) => setCandidateQueryDraft(event.target.value)}
-                      />
-                    )}
-                  </Field>
-                }
-                secondaryAlwaysVisible
-                secondary={
-                  <Field label={t('common.operations.charity.candidateSourceFilter')}>
-                    {(field) => (
-                      <select
-                        {...field}
-                        value={candidateSource}
-                        disabled={interactionBlocked}
-                        onChange={(event) => {
-                          if (interactionBlocked) return;
-                          setCandidateSource(event.target.value as CandidateSource);
-                        }}
-                      >
-                        <option value="">
-                          {t('common.operations.charity.candidateSourceAny')}
-                        </option>
-                        <option value="automatic">{t(sourceTypeKey('automatic'))}</option>
-                        <option value="manual">{t(sourceTypeKey('manual'))}</option>
-                      </select>
-                    )}
-                  </Field>
-                }
-              />
-              {candidates.isPending ? (
-                <LoadingState />
-              ) : candidates.error ? (
-                <ErrorState error={candidates.error} onRetry={() => void candidates.refetch()} />
-              ) : candidatePage ? (
-                <div aria-busy={candidates.isFetching}>
-                  {candidatePage.data.length === 0 ? (
-                    <EmptyState
-                      title={t('common.operations.charity.noCandidates')}
-                      body={t('common.operations.charity.noCandidatesBody')}
-                    />
-                  ) : (
-                    <section
-                      className="nb-choice-list"
-                      aria-label={t('common.operations.charity.chooseModels')}
-                    >
-                      <ul className="nb-choice-list__items">
-                        {candidatePage.data.map((entry) => {
-                          const key = charitySelectionKey(entry);
-                          return (
-                            <li key={key}>
-                              <Field label={entry.upstream_model_id}>
-                                {(field) => (
-                                  <>
-                                    <input
-                                      {...field}
-                                      type="checkbox"
-                                      disabled={
-                                        interactionBlocked ||
-                                        Boolean(entry.current_binding_id) ||
-                                        entry.capabilities?.can_bind === false ||
-                                        (!selected[key] && Object.keys(selected).length >= capacity)
-                                      }
-                                      checked={Boolean(selected[key])}
-                                      onChange={(event) => {
-                                        if (
-                                          interactionBlocked ||
-                                          Boolean(entry.current_binding_id) ||
-                                          entry.capabilities?.can_bind === false ||
-                                          (event.target.checked &&
-                                            !selected[key] &&
-                                            Object.keys(selected).length >= capacity)
-                                        )
-                                          return;
-                                        const next = { ...selected };
-                                        if (event.target.checked) {
-                                          next[key] = {
-                                            ...entry,
-                                            note: selectedKey.safe_note,
-                                            selected_native_services: entry.capabilities?.can_bind
-                                              ? entry.native_services?.slice()
-                                              : undefined,
-                                          };
-                                        } else {
-                                          delete next[key];
-                                        }
-                                        onChange(next);
-                                      }}
-                                    />
-                                    <span>
-                                      {entry.current_binding_id ? (
-                                        <small className="ops-picker-source-types">
-                                          {t('common.bindingBatch.boundHere')}
-                                        </small>
-                                      ) : null}
-                                      {entry.other_bindings?.length ? (
-                                        <small className="ops-picker-source-types">
-                                          {t('common.bindingBatch.boundElsewhere', {
-                                            names: entry.other_bindings
-                                              .map((binding) => binding.full_name)
-                                              .join(' / '),
-                                          })}
-                                        </small>
-                                      ) : null}
-                                      {entry.other_binding_count &&
-                                      BigInt(entry.other_binding_count) >
-                                        BigInt(entry.other_bindings?.length ?? 0) ? (
-                                        <small className="ops-picker-source-types">
-                                          {t('common.bindingBatch.moreBindings', {
-                                            count: Number(
-                                              BigInt(entry.other_binding_count) -
-                                                BigInt(entry.other_bindings?.length ?? 0),
-                                            ),
-                                          })}
-                                        </small>
-                                      ) : null}
-                                      <small className="ops-picker-source-types">
-                                        {entry.source_types
-                                          .map((source) => t(sourceTypeKey(source)))
-                                          .join(' / ')}
-                                      </small>
-                                    </span>
-                                  </>
-                                )}
-                              </Field>
-                              {entry.other_binding_count &&
-                              BigInt(entry.other_binding_count) >
-                                BigInt(entry.other_bindings?.length ?? 0) &&
-                              (onInspectBindings || renderKeyManager) ? (
-                                <Button
-                                  type="button"
-                                  disabled={interactionBlocked}
-                                  onClick={() => {
-                                    if (onInspectBindings) onInspectBindings();
-                                    else {
-                                      remember();
-                                      setManagingKey(true);
-                                    }
-                                  }}
-                                >
-                                  {t('common.keyModels.title')}
-                                </Button>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </section>
-                  )}
-                  <PagePagination
-                    metadata={candidatePage.pagination}
-                    requestedPage={candidatePager.page}
-                    busy={candidateBusy}
-                    onPageChange={candidatePager.setPage}
-                    onPageSizeChange={candidatePager.setPageSize}
-                  />
-                  <div className="nb-actions">
-                    <Button
-                      type="button"
-                      disabled={
-                        candidateBusy ||
-                        candidatePage.data.every((entry) => Boolean(entry.current_binding_id)) ||
-                        candidatePage.data.filter(
-                          (entry) =>
-                            !entry.current_binding_id && !selected[charitySelectionKey(entry)],
-                        ).length >
-                          capacity - allSelectedEntries.length
-                      }
-                      onClick={() => {
-                        const next = { ...selected };
-                        for (const entry of candidatePage.data.filter(
-                          (entry) =>
-                            !entry.current_binding_id && entry.capabilities?.can_bind !== false,
-                        ))
-                          next[charitySelectionKey(entry)] ??= {
-                            ...entry,
-                            note: selectedKey.safe_note,
-                            selected_native_services: entry.capabilities?.can_bind
-                              ? entry.native_services?.slice()
-                              : undefined,
-                          };
-                        onChange(next);
-                      }}
-                    >
-                      {t('common.workflow.selectPage', {
-                        count: candidatePage.data.filter((entry) => !entry.current_binding_id)
-                          .length,
-                      })}
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={candidateBusy}
-                      onClick={() => {
-                        const next = { ...selected };
-                        for (const entry of candidatePage.data)
-                          delete next[charitySelectionKey(entry)];
-                        onChange(next);
-                      }}
-                    >
-                      {t('common.workflow.clearPage')}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <LoadingState />
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {showSelectionSummary ? (
-        <section
-          className="charity-binding-selection"
-          aria-label={t('common.operations.charity.selectedModels')}
-        >
-          <h4>
-            {t('common.operations.charity.selectedCount', { count: Object.keys(selected).length })}
-          </h4>
-          <p>{t('common.operations.charity.crossSelectionHelp')}</p>
-          <p role="status" aria-live="polite">
-            {t('common.workflow.selectionCapacity', {
-              selected: allSelectedEntries.length,
-              capacity,
-              outside: allSelectedEntries.filter(
-                ([key]) => !candidatePage?.data.some((entry) => charitySelectionKey(entry) === key),
-              ).length,
-            })}
-          </p>
-          <Field label={t('common.workflow.searchSelected')}>
-            {(props) => (
-              <input
-                {...props}
-                type="search"
-                placeholder={t('common.workflow.upstreamSearch')}
-                value={selectedSearch}
-                ref={selectedSearchInput}
-                onChange={(event) => setSelectedSearch(event.target.value)}
-              />
-            )}
-          </Field>
-          <Button
-            type="button"
-            disabled={locked || allSelectedEntries.length === 0}
-            onClick={() => {
-              onChange({});
-              selectedSearchInput.current?.focus();
-            }}
-          >
-            {t('common.workflow.clearSelected')}
-          </Button>
-          <ul className="charity-binding-selection__list">
-            {selectedPageEntries.map(([key, entry]) => (
-              <li key={key}>
-                <div className="charity-binding-selection__metadata">
-                  <strong>
-                    {allSelectedEntries.findIndex(([id]) => id === key) + 1}.{' '}
-                    {entry.upstream_model_id}
-                  </strong>
-                  <span>
-                    {t('common.operations.charity.donationNumber', { id: entry.donation_id })} ·{' '}
-                    {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
-                  </span>
-                </div>
                 <Button
                   type="button"
                   variant="ghost"
-                  aria-label={t('common.workflow.removeSelection', { id: entry.upstream_model_id })}
+                  disabled={interactionBlocked}
+                  onClick={clearSource}
+                >
+                  {t('common.operations.charity.chooseSource')}
+                </Button>
+              )}
+              <span aria-hidden="true">›</span>
+              {selectedKey ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={interactionBlocked}
+                  onClick={clearKey}
+                >
+                  {t('common.operations.charity.chooseKey')}
+                </Button>
+              ) : (
+                <span aria-current={selectedSource ? 'step' : undefined}>
+                  {t('common.operations.charity.chooseKey')}
+                </span>
+              )}
+              <span aria-hidden="true">›</span>
+              <span aria-current={selectedKey ? 'step' : undefined}>
+                {t('common.operations.charity.chooseModels')}
+              </span>
+            </nav>
+          )}
+          {!selectedSource ? (
+            <>
+              <FilterBar
+                query={sources}
+                activeCount={
+                  Number(Boolean(sourceQuery)) +
+                  Number(scope !== 'all') +
+                  Number(keyState !== 'all')
+                }
+                submitDisabled={interactionBlocked || !sourceQueryValid}
+                resetDisabled={interactionBlocked}
+                onSubmit={submitSourceQuery}
+                onReset={() => {
+                  if (interactionBlocked) return;
+                  setSourceQueryDraft('');
+                  setSourceQuery('');
+                  setKeyState('all');
+                  changeScope('all');
+                }}
+
+                search={
+                  <>
+                    <Field
+                      label={t('common.operations.charity.searchSources')}
+                      error={
+                        !sourceQueryValid ? t('common.operations.charity.searchInvalid') : undefined
+                      }
+                    >
+                      {(field) => (
+                        <input
+                          {...field}
+                          placeholder={t('common.operations.charity.searchSources')}
+                          type="search"
+                          value={sourceQueryDraft}
+                          maxLength={256}
+                          disabled={interactionBlocked}
+                          aria-invalid={!sourceQueryValid}
+                          onChange={(event) => setSourceQueryDraft(event.target.value)}
+                        />
+                      )}
+                    </Field>
+                    <KeyStateFilter
+                      value={keyState}
+                      disabled={interactionBlocked}
+                      onChange={(state) => {
+                        setKeyState(state);
+                        setScope('all');
+                        setSelectedSource(null);
+                        resetKeySelection();
+                      }}
+                    />
+                    <Field label={t('common.operations.charity.sourceScope')} size="short">
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={scope}
+                          disabled={interactionBlocked}
+                          onChange={(event) => changeScope(event.target.value as SourceScope)}
+                        >
+                          <option value="active">
+                            {t('common.operations.charity.scopeActive')}
+                          </option>
+                          <option value="all">{t('common.operations.charity.scopeAll')}</option>
+                        </select>
+                      )}
+                    </Field>
+                  </>
+                }
+              />
+              {sources.isPending ? (
+                <LoadingState />
+              ) : sources.error ? (
+                <ErrorState error={sources.error} onRetry={() => void sources.refetch()} />
+              ) : sourcePage ? (
+                <div aria-busy={sources.isFetching}>
+                  {sourcePage.data.length === 0 ? (
+                    <EmptyState
+                      title={t('common.operations.charity.noSourceGroups')}
+                      body={t('common.operations.charity.noSourceGroupsBody')}
+                    />
+                  ) : (
+                    <section
+                      className="nb-choice-list"
+                      aria-label={t('common.operations.charity.chooseSource')}
+                    >
+                      <ul className="nb-choice-list__items">
+                        {sourcePage.data.map((entry) => (
+                          <li key={entry.source_key}>
+                            <BindingSourceChoice
+                              source={entry}
+                              disabled={interactionBlocked || sources.isPlaceholderData}
+                              onChoose={() => chooseSource(entry)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                  <PagePagination
+                    metadata={sourcePage.pagination}
+                    requestedPage={sourcePager.page}
+                    busy={sourceBusy}
+                    onPageChange={sourcePager.setPage}
+                    onPageSizeChange={sourcePager.setPageSize}
+                  />
+                </div>
+              ) : (
+                <LoadingState />
+              )}
+            </>
+          ) : (
+            <>
+              {sources.error ? (
+                <ErrorState error={sources.error} onRetry={() => void sources.refetch()} />
+              ) : null}
+              <div className="binding-current-source">
+                <span className="binding-choice-identity">
+                  <strong>{sourceTitle(selectedSource.safe_source, t)}</strong>
+                  <code>{selectedSource.safe_source.base_url}</code>
+                </span>
+                {selectedKey && (
+                  <span className="binding-current-key">
+                    <strong>
+                      {selectedKey.safe_note ||
+                        `${selectedKey.display_head}…${selectedKey.display_tail}`}
+                    </strong>
+                    <span>
+                      {t('common.operations.charity.donationNumber', {
+                        id: selectedKey.donation_id,
+                      })}
+                    </span>
+                  </span>
+                )}
+              </div>
+              {!selectedKey ? (
+                <>
+                  <FilterBar
+                    query={sourceKeys}
+                    activeCount={keyQuery ? 1 : 0}
+                    submitDisabled={interactionBlocked || !keyQueryValid}
+                    resetDisabled={interactionBlocked}
+                    onSubmit={submitKeyQuery}
+                    onReset={() => {
+                      if (interactionBlocked) return;
+                      setKeyQueryDraft('');
+                      setKeyQuery('');
+                    }}
+                    search={
+                      <Field
+                        label={t('common.operations.charity.searchKeys')}
+                        error={
+                          !keyQueryValid ? t('common.operations.charity.searchInvalid') : undefined
+                        }
+                      >
+                        {(field) => (
+                          <input
+                            {...field}
+                            placeholder={t('common.operations.charity.searchKeys')}
+                            type="search"
+                            value={keyQueryDraft}
+                            maxLength={256}
+                            disabled={interactionBlocked}
+                            aria-invalid={!keyQueryValid}
+                            onChange={(event) => setKeyQueryDraft(event.target.value)}
+                          />
+                        )}
+                      </Field>
+                    }
+                  />
+                  {sourceKeys.isPending ? (
+                    <LoadingState />
+                  ) : sourceKeys.error ? (
+                    <ErrorState
+                      error={sourceKeys.error}
+                      onRetry={() => void sourceKeys.refetch()}
+                    />
+                  ) : keyPage ? (
+                    <div aria-busy={sourceKeys.isFetching}>
+                      {keyPage.data.length === 0 ? (
+                        <EmptyState
+                          title={t('common.operations.charity.noSourceKeys')}
+                          body={t('common.operations.charity.noSourceKeysBody')}
+                        />
+                      ) : (
+                        <section
+                          className="nb-choice-list"
+                          aria-label={t('common.operations.charity.chooseKey')}
+                        >
+                          <ul className="nb-choice-list__items">
+                            {keyPage.data.map((entry) => {
+                              const terminal = isTerminalKey(entry);
+                              return (
+                                <li key={entry.key_id}>
+                                  <BindingKeyChoice
+                                    item={entry}
+                                    terminal={terminal}
+                                    disabled={interactionBlocked || sourceKeys.isPlaceholderData}
+                                    onChoose={() => chooseKey(entry)}
+                                  />
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </section>
+                      )}
+                      <PagePagination
+                        metadata={keyPage.pagination}
+                        requestedPage={sourceKeyPager.page}
+                        busy={keyBusy}
+                        onPageChange={sourceKeyPager.setPage}
+                        onPageSizeChange={sourceKeyPager.setPageSize}
+                      />
+                    </div>
+                  ) : (
+                    <LoadingState />
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="charity-binding-key-shortcuts">
+                    {!managingKey ? (
+                      <DonationDiscoveryControl
+                        key={selectedKey.key_id}
+                        role={role}
+                        target={{
+                          donation_id: selectedKey.donation_id,
+                          key_id: selectedKey.key_id,
+                        }}
+                        buttonLabel={t('common.operations.charity.refetchModels')}
+                        disabled={
+                          locked ||
+                          !canRead ||
+                          !(selectedKey.can_manage ?? selectedKey.charity_state === 'available')
+                        }
+                        onCapabilityLoss={onCapabilityLoss}
+                      />
+                    ) : null}
+                    {renderKeyManager ? (
+                      <Button
+                        type="button"
+                        disabled={locked || !canRead}
+                        onClick={() => {
+                          remember();
+                          setManagingKey(true);
+                        }}
+                      >
+                        {t('common.operations.charity.manageSelectedKey')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {sourceKeys.error ? (
+                    <ErrorState
+                      error={sourceKeys.error}
+                      onRetry={() => void sourceKeys.refetch()}
+                    />
+                  ) : null}
+                  <FilterBar
+                    query={candidates}
+                    activeCount={[candidateQuery, candidateSource].filter(Boolean).length}
+                    submitDisabled={interactionBlocked || !candidateQueryValid}
+                    resetDisabled={interactionBlocked}
+                    onSubmit={submitCandidateQuery}
+                    onReset={() => {
+                      if (interactionBlocked) return;
+                      setCandidateQueryDraft('');
+                      setCandidateQuery('');
+                      setCandidateSource('');
+                    }}
+                    search={
+                      <>
+                        <Field
+                          label={t('common.operations.charity.searchModels')}
+                          error={
+                            !candidateQueryValid
+                              ? t('common.operations.charity.candidateSearchInvalid')
+                              : undefined
+                          }
+                        >
+                          {(field) => (
+                            <input
+                              {...field}
+                              type="search"
+                              value={candidateQueryDraft}
+                              placeholder={t('common.workflow.upstreamSearch')}
+                              maxLength={1024}
+                              disabled={interactionBlocked}
+                              aria-invalid={!candidateQueryValid}
+                              onChange={(event) => setCandidateQueryDraft(event.target.value)}
+                            />
+                          )}
+                        </Field>
+                        <Field label={t('common.operations.charity.candidateSourceFilter')}>
+                          {(field) => (
+                            <select
+                              {...field}
+                              value={candidateSource}
+                              disabled={interactionBlocked}
+                              onChange={(event) => {
+                                if (interactionBlocked) return;
+                                setCandidateSource(event.target.value as CandidateSource);
+                              }}
+                            >
+                              <option value="">
+                                {t('common.operations.charity.candidateSourceAny')}
+                              </option>
+                              <option value="automatic">
+                                {t('common.operations.charity.sourceType.automatic')}
+                              </option>
+                              <option value="manual">
+                                {t('common.operations.charity.sourceType.manual')}
+                              </option>
+                            </select>
+                          )}
+                        </Field>
+                      </>
+                    }
+                  />
+                  {candidates.isPending ? (
+                    <LoadingState />
+                  ) : candidates.error ? (
+                    <ErrorState
+                      error={candidates.error}
+                      onRetry={() => void candidates.refetch()}
+                    />
+                  ) : candidatePage ? (
+                    <div aria-busy={candidates.isFetching}>
+                      {keyGuide &&
+                        (keyGuide.routes.length ? (
+                          <Fold plain lazy title={t('common.bindingGuide.preview')}>
+                            <BindingRouteGuide
+                              guide={keyGuide}
+                              selected={keyGuide.services.map((item) => item.native_service)}
+                            />
+                          </Fold>
+                        ) : (
+                          <p>{t('common.bindingGuide.noMatch')}</p>
+                        ))}
+                      {candidatePage.data.length > 0 && (
+                        <div className="binding-model-toolbar">
+                          {showSelectionSummary && allSelectedEntries.length > 0 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => selectionHeading.current?.focus()}
+                            >
+                              {t('common.bindingGuide.reviewSelected', {
+                                count: allSelectedEntries.length,
+                              })}
+                            </Button>
+                          ) : (
+                            <span>
+                              {t('common.operations.charity.selectedCount', {
+                                count: allSelectedEntries.length,
+                              })}
+                            </span>
+                          )}
+                          <div className="nb-actions">
+                            <Button
+                              type="button"
+                              disabled={
+                                candidateBusy ||
+                                remainingOnPage === 0 ||
+                                remainingOnPage > capacity - allSelectedEntries.length
+                              }
+                              onClick={() => {
+                                const next = { ...selected };
+                                for (const entry of selectable)
+                                  next[charitySelectionKey(entry)] ??= selectCandidate(entry);
+                                onChange(next);
+                              }}
+                            >
+                              {t('common.workflow.selectPage', {
+                                count: selectable.length,
+                              })}
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={candidateBusy || !selectedOnPage}
+                              onClick={() => {
+                                const next = { ...selected };
+                                for (const entry of candidatePage.data)
+                                  delete next[charitySelectionKey(entry)];
+                                onChange(next);
+                              }}
+                            >
+                              {t('common.workflow.clearPage')}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {candidatePage.data.length === 0 ? (
+                        <EmptyState
+                          title={t('common.operations.charity.noCandidates')}
+                          body={t('common.operations.charity.noCandidatesBody')}
+                        />
+                      ) : (
+                        <section
+                          className="nb-choice-list"
+                          aria-label={t('common.operations.charity.chooseModels')}
+                        >
+                          <ul className="nb-choice-list__items binding-model-options">
+                            {candidatePage.data.map((entry) => {
+                              const key = charitySelectionKey(entry);
+                              return (
+                                <li key={key}>
+                                  <BindingModelChoice
+                                    entry={entry}
+                                    selected={Boolean(selected[key])}
+                                    disabled={
+                                      interactionBlocked ||
+                                      candidates.isPlaceholderData ||
+                                      Boolean(entry.current_binding_id) ||
+                                      !entry.capabilities.can_bind ||
+                                      (!selected[key] && allSelectedEntries.length >= capacity)
+                                    }
+                                    onSelect={(checked) => {
+                                      const next = { ...selected };
+                                      if (checked) next[key] = selectCandidate(entry);
+                                      else delete next[key];
+                                      onChange(next);
+                                    }}
+                                    inspect={
+                                      !interactionBlocked && (onInspectBindings || renderKeyManager)
+                                        ? () => {
+                                            if (onInspectBindings) onInspectBindings();
+                                            else {
+                                              remember();
+                                              setManagingKey(true);
+                                            }
+                                          }
+                                        : undefined
+                                    }
+                                  />
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </section>
+                      )}
+                      <PagePagination
+                        metadata={candidatePage.pagination}
+                        requestedPage={candidatePager.page}
+                        busy={candidateBusy}
+                        onPageChange={candidatePager.setPage}
+                        onPageSizeChange={candidatePager.setPageSize}
+                      />
+                    </div>
+                  ) : (
+                    <LoadingState />
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
+        {showSelectionSummary ? (
+          <section
+            className="charity-binding-selection"
+            data-empty={allSelectedEntries.length === 0}
+            aria-label={t('common.operations.charity.selectedModels')}
+          >
+            <h4 ref={selectionHeading} tabIndex={-1}>
+              {t('common.operations.charity.selectedCount', {
+                count: Object.keys(selected).length,
+              })}
+            </h4>
+
+            <p role="status" aria-live="polite">
+              {allSelectedEntries.length === 0
+                ? fixedKey
+                  ? t('common.bindingGuide.fixedSelectionHelp')
+                  : t('common.operations.charity.crossSelectionHelp')
+                : t('common.workflow.selectionCapacity', {
+                    selected: allSelectedEntries.length,
+                    capacity,
+                    outside: allSelectedEntries.filter(
+                      ([key]) =>
+                        !candidatePage?.data.some((entry) => charitySelectionKey(entry) === key),
+                    ).length,
+                  })}
+            </p>
+            {allSelectedEntries.length > 0 && (
+              <>
+                <Field label={t('common.workflow.searchSelected')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="search"
+                      placeholder={t('common.workflow.upstreamSearch')}
+                      value={selectedSearch}
+                      ref={selectedSearchInput}
+                      onChange={(event) => setSelectedSearch(event.target.value)}
+                    />
+                  )}
+                </Field>
+                <Button
+                  type="button"
                   disabled={interactionBlocked}
                   onClick={() => {
-                    const next = { ...selected };
-                    delete next[key];
-                    onChange(next);
-                    selectedSearchInput.current?.focus();
+                    setSelectedSearch('');
+                    selectionHeading.current?.focus();
+                    onChange({});
                   }}
                 >
-                  {t('common.operations.charity.remove')}
+                  {t('common.workflow.clearSelected')}
                 </Button>
-                {entry.native_services ? (
-                  <NativeServicesField
-                    options={entry.native_services}
-                    value={entry.selected_native_services ?? []}
-                    onChange={(value) =>
-                      onChange({
-                        ...selected,
-                        [key]: { ...entry, selected_native_services: value },
-                      })
-                    }
-                    disabled={interactionBlocked}
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          <PagePagination
-            metadata={selectedPageMetadata}
-            requestedPage={selectedPager.page}
-            busy={interactionBlocked}
-            onPageChange={selectedPager.setPage}
-            onPageSizeChange={selectedPager.setPageSize}
-          />
-        </section>
-      ) : null}
+                <ul className="charity-binding-selection__list">
+                  {selectedPageEntries.map(([key, entry]) => (
+                    <li key={key}>
+                      <div className="charity-binding-selection__metadata">
+                        <strong>
+                          {allSelectedEntries.findIndex(([id]) => id === key) + 1}.{' '}
+                          {entry.upstream_model_id}
+                        </strong>
+                        <span>
+                          {t('common.operations.charity.donationNumber', { id: entry.donation_id })}{' '}
+                          · {entry.note} · {entry.source.display_head}…{entry.source.display_tail}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-label={t('common.workflow.removeSelection', {
+                          id: entry.upstream_model_id,
+                        })}
+                        disabled={interactionBlocked}
+                        onClick={() => {
+                          const next = { ...selected };
+                          delete next[key];
+                          if (Object.keys(next).length) selectedSearchInput.current?.focus();
+                          else {
+                            setSelectedSearch('');
+                            selectionHeading.current?.focus();
+                          }
+                          onChange(next);
+                        }}
+                      >
+                        {t('common.operations.charity.remove')}
+                      </Button>
+                      {entry.native_services ? (
+                        <BindingServiceEditor
+                          guide={entry.binding_guide}
+                          source={entry}
+                          options={entry.native_services}
+                          value={entry.selected_native_services ?? []}
+                          onChange={(value) =>
+                            onChange({
+                              ...selected,
+                              [key]: { ...entry, selected_native_services: value },
+                            })
+                          }
+                          disabled={interactionBlocked}
+                        />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                <PagePagination
+                  metadata={selectedPageMetadata}
+                  requestedPage={selectedPager.page}
+                  busy={interactionBlocked}
+                  onPageChange={selectedPager.setPage}
+                  onPageSizeChange={selectedPager.setPageSize}
+                />
+              </>
+            )}
+          </section>
+        ) : null}
+      </div>
     </div>
   );
   return (

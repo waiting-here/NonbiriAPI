@@ -1,12 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@shared/components/States';
-import { RoleLogPanel } from '@shared/components/log';
-import { IndependentDiagnostics } from '@shared/observability/IndependentDiagnostics';
+import { OperatorLogWorkspace } from '@shared/observability/OperatorLogWorkspace';
 import '@shared/operations/operations.css';
 import { useAdminSession } from '../data';
 
 export function LogsPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const session = useAdminSession();
   return (
     <div className="page ops-stack">
@@ -15,18 +14,12 @@ export function LogsPage() {
         title={t('admin.logs.logsTitle')}
         description={t('admin.logs.description')}
       />
-      <RoleLogPanel
-        role="admin"
-        language={i18n.resolvedLanguage}
-        accountId={session.data?.admin.username}
-        scopeReady={!session.isPending && !session.error && Boolean(session.data?.admin.username)}
-        enabled={!session.isPending && !session.error}
-      />
-      <IndependentDiagnostics
+      <OperatorLogWorkspace
         role="admin"
         accountId={session.data?.admin.username}
         scopeReady={!session.isPending && !session.error && Boolean(session.data?.admin.username)}
-        enabled={!session.isPending && !session.error}
+        canReadRequests
+        canReadActivity
       />
     </div>
   );

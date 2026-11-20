@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/requestattempt"
 )
 
 func TestRecurringAdmissionAndDispatchSkipsNeverBecomeUpstreamFailures(t *testing.T) {
@@ -74,7 +76,21 @@ func TestRecurringStorageCapacityIsSafeUnavailableAndReleasesUnsentWork(t *testi
 		}
 		response := httptest.NewRecorder()
 		request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[]}`)
-		f.service.Chat(context.Background(), response, 1, request, []byte(`{}`), "application/json", "en")
+		ctx, _, err := requestattempt.New(t.Context(), 1, "POST", "/v1/chat/completions")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.service.Chat(ctx, response, 1, request, []byte(`{}`), "application/json", "en")
+		stage := "claim"
+		if atDispatch {
+			stage = "dispatch"
+		}
+		trace := requestattempt.RouteSnapshot(ctx)
+		if trace == nil || !slices.ContainsFunc(trace.Observations, func(o requestattempt.RouteObservation) bool {
+			return o.Stage == stage && o.Reason == "quota_storage_full"
+		}) {
+			t.Fatalf("missing quota storage decision at %s: %+v", stage, trace)
+		}
 		if response.Code != 503 || !strings.Contains(response.Body.String(), `"service_unavailable"`) || f.openAI.calls != 0 || len(f.claims.outcomes) != 0 || len(f.claims.requestResults) != 1 {
 			t.Fatal(response.Code, response.Body.String(), f.claims.events)
 		}

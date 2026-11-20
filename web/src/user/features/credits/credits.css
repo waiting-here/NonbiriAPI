@@ -3,9 +3,9 @@
   gap: var(--nb-space-5);
   min-width: 0;
 }
-.credit-history__overview.nb-stats {
+.credit-history__overview .nb-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 0;
 }
 .credit-history__overview .nb-stat {
@@ -17,6 +17,14 @@
   font-size: var(--nb-font-size-sm);
   color: var(--nb-color-text-muted);
 }
+.credit-history__supply {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--nb-space-1);
+  margin: var(--nb-space-2) var(--nb-space-4) 0 0;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
 .credit-history__time-note {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
@@ -26,7 +34,6 @@
   width: 100%;
   min-width: 0;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 .credit-history__table th,
 .credit-history__table td {
@@ -34,6 +41,12 @@
   text-align: left;
   border-bottom: 1px solid var(--nb-color-border);
   overflow-wrap: anywhere;
+}
+@media (width >= 40rem) {
+  .credit-history__table .is-num {
+    text-align: right;
+    white-space: nowrap;
+  }
 }
 .credit-history__table th {
   color: var(--nb-color-text-muted);
@@ -60,7 +73,7 @@
   margin-top: var(--nb-space-5);
 }
 @media (width < 48rem) {
-  .credit-history__overview.nb-stats {
+  .credit-history__overview .nb-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .credit-history__balance--long {

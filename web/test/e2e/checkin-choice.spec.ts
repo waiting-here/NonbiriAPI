@@ -5,15 +5,17 @@ import { mockJson, mockPublicConfig, mockRoleSession } from './support';
 import { expect, test } from './test';
 
 const viewports = [
-  { width: 320, locale: 'en' },
-  { width: 390, locale: 'en' },
-  { width: 480, locale: 'en' },
-  { width: 768, locale: 'en' },
-  { width: 1440, locale: 'en' },
-  { width: 390, locale: 'zh' },
+  { width: 320, locale: 'en', columns: 1 },
+  { width: 390, locale: 'en', columns: 1 },
+  { width: 480, locale: 'en', columns: 1 },
+  { width: 512, locale: 'en', columns: 1 },
+  { width: 768, locale: 'en', columns: 2 },
+  { width: 1024, locale: 'en', columns: 1 },
+  { width: 1440, locale: 'en', columns: 1 },
+  { width: 390, locale: 'zh', columns: 1 },
 ] as const;
 
-for (const { width, locale } of viewports) {
+for (const { width, locale, columns } of viewports) {
   test(`daily check-in choice remains readable at ${width}px in ${locale}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -26,7 +28,7 @@ for (const { width, locale } of viewports) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/models?page=1&page_size=10',
+      path: '/api/models?page=1&page_size=10&connection_state=available',
       body: {
         data: [],
         next_cursor: null,
@@ -110,7 +112,10 @@ for (const { width, locale } of viewports) {
     const gameBox = await game.boundingBox();
     expect(generalBox).not.toBeNull();
     expect(gameBox).not.toBeNull();
-    if (width < 512) {
+    const checkins = await page.locator('.home-checkins').boundingBox();
+    expect(checkins).not.toBeNull();
+    expect(checkins!.width >= 512).toBe(columns === 2);
+    if (columns === 1) {
       expect(gameBox!.y).toBeGreaterThan(generalBox!.y);
     } else {
       expect(Math.abs(gameBox!.y - generalBox!.y)).toBeLessThanOrEqual(1);

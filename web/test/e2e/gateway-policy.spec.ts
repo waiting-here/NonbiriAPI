@@ -216,13 +216,7 @@ for (const [width, theme] of [
         ).toBeVisible();
         if (role === 'owner') {
           await page
-            .getByRole('button', {
-              name: userEn.user.charity.presentation.donationActions,
-              exact: true,
-            })
-            .click();
-          await page
-            .getByRole('menuitem', { name: userEn.user.charity.ownerPages.keys, exact: true })
+            .getByRole('button', { name: userEn.user.charity.ownerPages.keys, exact: true })
             .click();
         } else await page.getByRole('button', { name: 'Review', exact: true }).click();
         if (role !== 'owner') await page.getByText('Failure strategy', { exact: true }).click();

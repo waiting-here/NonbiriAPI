@@ -10,7 +10,7 @@
       "individual": "Individual operations",
       "all": "All",
       "searchHelp": "Exact object name, previous name, changed field, operator or record number.",
-      "filterHelp": "Dates use this browser's time zone; the end time is exclusive. A target ID needs its target type. Action and type identifiers are available in record details.",
+      "filterHelp": "The end time is exclusive. A target ID needs its target type. Action and type identifiers are available in record details.",
       "invalidRange": "The end time must be later than the start time.",
       "action": "Operation",
       "actionTitle": "{{action}} · {{domain}}",
@@ -120,11 +120,21 @@
         "maintenance": "Maintenance",
         "alerts": "Alerts",
         "abuse-audit": "Abuse review",
+        "activities": "Activities",
+        "attendance": "Sign-in activities",
+        "limited-activities": "Limited-time activities",
+        "inactivity-policy": "Inactivity policy",
+        "pools": "Shared pools",
         "rewards": "Rewards",
         "gacha": "Cards and shop",
         "games": "Games",
         "legal-holds": "Legal holds",
         "ai": "AI workspace",
+        "agent-requests": "AI request logs",
+        "branding": "Site branding",
+        "egress": "Outbound routes",
+        "endpoint-backoff-policy": "Endpoint backoff policy",
+        "donation-key-failure-policy": "Key failure policy",
         "management-operations": "Management history",
         "management_operations": "Management history"
       },
@@ -819,6 +829,11 @@
       "login": "Sign in"
     },
     "navigation": {
+      "findPage": "Find a page",
+      "findHint": "Page name or /path",
+      "clearSearch": "Clear page search",
+      "matchCount": "Matching pages ({{count}})",
+      "noPages": "No matching page. Try a shorter name or a route such as /logs.",
       "overview": "Overview",
       "users": "Users",
       "services": "Charity & services",
@@ -829,7 +844,6 @@
     "dashboard": {
       "nav": "Dashboard",
       "title": "Operations overview",
-      "description": "Review site health, requests, and usage.",
       "usageTitle": "Site usage",
       "endpointsTitle": "Endpoint overview",
       "requests": "Requests",
@@ -844,13 +858,14 @@
       "inactiveValue": "No activity",
       "noActivity": "No activity rows",
       "noActivityBody": "No activity has been recorded yet.",
-      "reportsTitle": "Credential reports",
       "nonTerminalReports": "Open reports",
       "pendingIndexing": "Indexing",
       "pendingReview": "Review",
       "approvedProcessing": "Processing",
       "openReportInbox": "Open report inbox",
       "attentionTitle": "Needs attention",
+      "unresolvedAlerts": "Unresolved alerts",
+      "openAlerts": "Review alerts",
       "donationsPending": "Donations to handle",
       "openDonations": "Handle donations",
       "nothingPending": "Nothing to handle",
@@ -881,8 +896,8 @@
       "filterResolved": "Resolution status",
       "resolve": "Resolve",
       "reopen": "Reopen",
-      "empty": "No alerts returned",
-      "emptyBody": "The administrator API returned no alert records.",
+      "empty": "No alerts",
+      "emptyBody": "No alert records match the current filters.",
       "action": "Action",
       "kindValue": {
         "returnDetected": "Request returned",
@@ -890,7 +905,7 @@
         "forwardError": "Forward error",
         "registrationRejected": "Registration rejected",
         "maintenanceEnabled": "Maintenance enabled",
-        "donationFailureDisabled": "Donation disabled after failures",
+        "donationFailureDisabled": "Disabled after failures",
         "issueProjectionIncomplete": "Incomplete alert information",
         "reportRetryExhausted": "Report retries exhausted",
         "fishingRetryExhausted": "Fishing recovery retries exhausted",
@@ -899,7 +914,7 @@
         "accountDeleted": "Account deleted by user"
       },
       "filterKind": "Alert type",
-      "select": "Select",
+      "filterForwardErrorsAndReturns": "Forwarding errors and returned requests",
       "selectPage": "Select unresolved alerts on this page",
       "selectAlert": "Select alert {{id}}",
       "resolveSelected": "Resolve selected ({{count}})",
@@ -915,8 +930,16 @@
         "games": "Games",
         "accounts": "Accounts",
         "worker": "Background task checkpoint failed",
-        "actions": "Alert actions",
         "deletionSnapshot": "Balances before deletion"
+      },
+      "triggerAttempt": {
+        "title": "Attempt that triggered disablement",
+        "view": "View triggering attempt",
+        "unavailable": "This attempt is no longer available in request logs."
+      },
+      "disablement": {
+        "service": "A donated service was automatically disabled after consecutive failures.",
+        "key": "The donated key was automatically disabled after consecutive failures."
       },
       "kindDescription": {
         "returnDetected": "A request carried a valid site outbound marker. Review its source; processing continued without an automatic penalty.",
@@ -924,7 +947,7 @@
         "forwardError": "An upstream request did not complete. Open the details for failure information.",
         "registrationRejected": "A registration request did not meet the site access requirements.",
         "maintenanceEnabled": "The site entered maintenance mode.",
-        "donationFailureDisabled": "A donated key was disabled after repeated failures.",
+        "donationFailureDisabled": "Consecutive failures triggered automatic disablement.",
         "issueProjectionIncomplete": "Issue records could not be fully summarized. Open the details.",
         "reportRetryExhausted": "Report processing did not complete after repeated retries and needs review.",
         "fishingRetryExhausted": "Fishing processing did not complete after repeated retries and needs review.",
@@ -946,7 +969,6 @@
       "correctErrors": "Correct these settings before saving.",
       "nav": "Site settings",
       "title": "Site settings",
-      "description": "Edit multiple settings, review your changes, and save them together.",
       "booleanValue": "Boolean setting",
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
@@ -1000,7 +1022,7 @@
         "boolean": "uses true or false",
         "canonical": "Enter a {{type}} value that {{detail}}.",
         "integerSyntax": "contains no whitespace, fractions, exponents, or leading zeroes",
-        "maxUtf8Bytes": "is too long; shorten it",
+        "maxUtf8Bytes": "This text is too long. Shorten it to {{maximum}} UTF-8 bytes or fewer.",
         "noControlCharacters": "contains no control characters",
         "notNull": "is not null",
         "rangeStep": "is within {{minimum}}–{{maximum}} at step {{step}}",
@@ -1020,7 +1042,8 @@
         "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
       },
       "searchHelp": "Find a setting by name or purpose",
-      "modified": "Modified",
+      "customValue": "Custom value",
+      "unsaved": "Unsaved",
       "original": "Previously {{value}}",
       "gatewayGroup": "Model capabilities (Gateway)",
       "legalHoldGroup": "Legal holds",
@@ -1037,6 +1060,7 @@
       "confirmationHint": "Settings requiring care will be confirmed before saving.",
       "confirmTitle": "Save settings requiring care?",
       "restoreDefault": "Restore default",
+      "levelThresholds": "Auto-promotion thresholds",
       "levelThreshold": "Level {{level}} auto-promotion threshold"
     },
     "games": {
@@ -1055,9 +1079,9 @@
       "saved": "Game settings saved.",
       "save": "Save game configuration",
       "saveAllChanges": "Save all changes",
+      "discardGameEdits": "Discard edits made to {{game}} since opening",
       "controls": {
-        "settings": "Game settings",
-        "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
+        "settings": "Game settings"
       },
       "counts": {
         "active": "Active",
@@ -1409,7 +1433,8 @@
         "title": "Report case"
       },
       "empty": {
-        "body": "The selected server-side status view is empty.",
+        "body": "New reports will appear here.",
+        "filtered": "There are no reports marked “{{status}}”. Reset the filter to see other cases.",
         "title": "No report cases"
       },
       "filter": {
@@ -1442,11 +1467,12 @@
         "counts": "Counts",
         "deadline": "Deadline",
         "materials": "materials {{count}}",
-        "open": "Open",
+        "open": "Actions",
         "processed": "processed {{count}}",
         "progress": "Progress",
         "retry": "retry {{count}}",
         "review": "Review",
+        "view": "View details",
         "status": "Status",
         "targets": "targets {{count}}"
       },
@@ -1627,7 +1653,7 @@
       "title": "Lake notes periods",
       "description": "Set opening periods, entry fees and exchange rates.",
       "openEditor": "Manage lake periods",
-      "back": "Back to limited-time activities",
+      "back": "Back to game settings",
       "availability": "Visibility and pause",
       "availabilityHelp": "Hiding, pausing or closing stops gameplay and exchanges and saves active casts. Existing profiles remain.",
       "visible": "Show the activity and allow entry",
@@ -1952,7 +1978,13 @@
         "issue_contour": "The contour cannot form a valid shape. Adjust its vertices.",
         "issue_objects": "There are too many objects, or a bowl is missing.",
         "issue_version": "The file format or rules version is unsupported.",
-        "issue_unknown": "The level needs attention. Check its properties."
+        "issue_unknown": "The level needs attention. Check its properties.",
+        "state_draft": "draft",
+        "state_open": "open",
+        "state_closed": "closed",
+        "playtest_active": "active",
+        "playtest_prepared": "prepared",
+        "general_credits_unit": "general credits"
       }
     },
     "picturebook": {
@@ -2087,7 +2119,10 @@
       "siteDate": "Site date: {{date}} (UTC{{zone}})",
       "empty": "No sign-in activities",
       "emptyBody": "Create an activity to set its dates, counting method and rewards.",
-      "tierDays": "Day {{amount}}"
+      "tierDays": "Day {{amount}}",
+      "statusActive": "Active",
+      "statusUpcoming": "Upcoming",
+      "statusEnded": "Ended"
     }
   },
   "user": {

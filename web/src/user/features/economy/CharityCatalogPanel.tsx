@@ -9,6 +9,7 @@ import { CharityPriceTable, type CharityPriceRow } from '@shared/components/Char
 import { DataTable, Field, FilterBar, StatusBadge } from '@shared/components/ui';
 import type { StatusTone } from '@shared/components/ui/StatusBadge';
 import { CopyValue } from '@shared/components/CopyValue';
+import { Icon } from '@shared/components/Icon';
 import { RecentCharitySuccess } from '@shared/components/DonationControlFacts';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -101,7 +102,26 @@ function CatalogFilters({
 }) {
   const { t } = useTranslation();
   const [queryDraft, setQueryDraft] = useState(filter.query);
+  const [submittedQuery, setSubmittedQuery] = useState(filter.query);
+  if (submittedQuery !== filter.query) {
+    setSubmittedQuery(filter.query);
+    setQueryDraft(filter.query);
+  }
+  const clear = () => {
+    setQueryDraft('');
+    onClear();
+  };
   const chips = [
+    ...(filter.query
+      ? [
+          {
+            key: 'query',
+            label: filter.query,
+            removeLabel: t('user.charity.presentation.removeSearch', { query: filter.query }),
+            onRemove: () => onQuerySubmit(''),
+          },
+        ]
+      : []),
     ...(filter.modelType === 'all'
       ? []
       : [
@@ -171,11 +191,11 @@ function CatalogFilters({
             </Field>
           </>
         }
-        onReset={onClear}
-        activeCount={chips.length}
+        onReset={clear}
+        resetLabel={t('user.charity.presentation.clearFilters')}
+        resetDisabled={!queryDraft && chips.length === 0}
+        activeCount={chips.length - Number(Boolean(filter.query))}
         chips={chips}
-        onClearAll={onClear}
-        clearAllLabel={t('common.resetFilter')}
         onSubmit={() => onQuerySubmit(queryDraft)}
         secondary={
           <>
@@ -323,6 +343,7 @@ export function CharityCatalogPanel({
   const changeModelType = (modelType: CatalogModelTypeFilter) => updateFilter({ modelType });
   const clearFilters = () =>
     updateFilter({
+      query: '',
       allowedForMe: 'all',
       currentlyAvailable: 'all',
       allowedLevel: 'all',
@@ -334,6 +355,7 @@ export function CharityCatalogPanel({
   };
   const priceCount = pageData?.models.length ?? 0;
   const hasCatalogFilters =
+    Boolean(filter.query) ||
     filter.allowedForMe !== 'all' ||
     filter.allowedLevel !== 'all' ||
     filter.currentlyAvailable !== 'all' ||
@@ -348,7 +370,6 @@ export function CharityCatalogPanel({
       <h2>{t('user.charity.catalog.title')}</h2>
       <p className="nb-sub">{t('user.charity.catalog.pricingHelp')}</p>
       <CatalogFilters
-        key={urlState.filters.query}
         filter={filter}
         onQuerySubmit={submitQuery}
         onAccessChange={changeAccess}
@@ -369,12 +390,22 @@ export function CharityCatalogPanel({
             <EmptyState
               title={t('user.charity.catalog.emptyTitle')}
               body={
-                hasCatalogFilters
-                  ? t('user.charity.presentation.filteredEmpty')
-                  : t('user.charity.catalog.emptyBody')
+                filter.query
+                  ? t('user.charity.presentation.noSearchMatch', { query: filter.query })
+                  : hasCatalogFilters
+                    ? t('user.charity.presentation.filteredEmpty')
+                    : t('user.charity.catalog.emptyBody')
               }
               action={
-                hasCatalogFilters ? (
+                filter.query ? (
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--secondary"
+                    onClick={() => submitQuery('')}
+                  >
+                    {t('user.charity.presentation.clearSearch')}
+                  </button>
+                ) : hasCatalogFilters ? (
                   <button type="button" className="nb-btn nb-btn--secondary" onClick={clearFilters}>
                     {t('user.charity.presentation.showAll')}
                   </button>
@@ -401,7 +432,7 @@ export function CharityCatalogPanel({
                         onClick={() => toggleDescription(model.id)}
                       >
                         <code>{model.fullName}</code>
-                        <span aria-hidden="true">{expanded.has(model.id) ? '−' : '+'}</span>
+                        <Icon name={expanded.has(model.id) ? 'chevron-down' : 'chevron-right'} />
                       </button>
                       <ModelTypesSummary value={model.modelTypes} />
                       {model.publicDescription ? (

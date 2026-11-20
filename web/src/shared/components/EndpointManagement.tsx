@@ -1,3 +1,4 @@
+import { TableCheckbox } from './ui/TableCheckbox';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -252,148 +253,149 @@ export function EndpointManagement({
       >
         <EndpointTagRules role={role} account={account} canTag={canTag} />
       </Fold>
-      <FilterBar
-        query={result}
-        activeCount={Number(Boolean(query)) + Number(Boolean(userId)) + Number(Boolean(tag))}
-        onSubmit={() => {
-          const bytes = new TextEncoder().encode(draft).byteLength;
-          if (bytes > 512) {
-            setQueryError(t('management.endpoints.queryTooLong', { bytes }));
-            return;
-          }
-          setQueryError(null);
-          commitFilter(draft, userDraft.trim());
-        }}
-        onReset={() => {
-          setDraft('');
-          setUserDraft('');
-          setQueryError(null);
-          commitFilter('', '', true);
-        }}
-        search={
-          <>
-            <Field label={t('management.endpoints.searchAria')} error={queryError ?? undefined}>
-              {(field) => (
-                <input
-                  {...field}
-                  type="search"
-                  value={draft}
-                  placeholder={t('management.endpoints.searchPlaceholder')}
-                  onChange={(event) => {
-                    setDraft(event.target.value);
-                    if (new TextEncoder().encode(event.target.value).byteLength <= 512)
-                      setQueryError(null);
-                  }}
-                />
-              )}
-            </Field>
-          </>
-        }
-        secondaryAlwaysVisible
-        secondary={
-          <>
-            <Field label={t('common.userId')}>
-              {(field) => (
-                <input
-                  {...field}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[1-9][0-9]*"
-                  value={userDraft}
-                  placeholder={t('management.endpoints.userPlaceholder')}
-                  onChange={(event) => setUserDraft(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label={t('management.endpoints.tags')}>
-              {(field) => (
-                <select
-                  {...field}
-                  value={tag}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setParams((previous) => {
-                      const next = new URLSearchParams(previous);
-                      if (value) next.set('tag', value);
-                      else next.delete('tag');
-                      next.set('page', '1');
-                      next.delete('expanded_base_url');
-                      next.delete('endpoint_user_page');
-                      return next;
-                    });
-                  }}
+      <Panel>
+        <PanelBody>
+          <FilterBar
+            query={result}
+            activeCount={Number(Boolean(query)) + Number(Boolean(userId)) + Number(Boolean(tag))}
+            onSubmit={() => {
+              const bytes = new TextEncoder().encode(draft).byteLength;
+              if (bytes > 512) {
+                setQueryError(t('management.endpoints.queryTooLong', { bytes }));
+                return;
+              }
+              setQueryError(null);
+              commitFilter(draft, userDraft.trim());
+            }}
+            onReset={() => {
+              setDraft('');
+              setUserDraft('');
+              setQueryError(null);
+              commitFilter('', '', true);
+            }}
+            search={
+              <>
+                <Field label={t('management.endpoints.searchAria')} error={queryError ?? undefined}>
+                  {(field) => (
+                    <input
+                      {...field}
+                      type="search"
+                      value={draft}
+                      placeholder={t('management.endpoints.searchPlaceholder')}
+                      onChange={(event) => {
+                        setDraft(event.target.value);
+                        if (new TextEncoder().encode(event.target.value).byteLength <= 512)
+                          setQueryError(null);
+                      }}
+                    />
+                  )}
+                </Field>
+                <Field label={t('common.userId')} size="short">
+                  {(field) => (
+                    <input
+                      {...field}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[1-9][0-9]*"
+                      value={userDraft}
+                      placeholder={t('management.endpoints.userPlaceholder')}
+                      onChange={(event) => setUserDraft(event.target.value)}
+                    />
+                  )}
+                </Field>
+                <Field label={t('management.endpoints.tags')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={tag}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setParams((previous) => {
+                          const next = new URLSearchParams(previous);
+                          if (value) next.set('tag', value);
+                          else next.delete('tag');
+                          next.set('page', '1');
+                          next.delete('expanded_base_url');
+                          next.delete('endpoint_user_page');
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="">{t('management.endpoints.allTags')}</option>
+                      <option value="untagged">{t('management.endpoints.untagged')}</option>
+                      {ENDPOINT_TAGS.map((value) => (
+                        <option key={value} value={value}>
+                          {t(endpointTagKeys[value])}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+              </>
+            }
+          />
+          <Note>{t('management.endpoints.noProbeNotice')}</Note>
+          {canTag ? (
+            <fieldset className="endpoint-batch-bar" disabled={tags.isPending || result.isFetching}>
+              <span className="endpoint-batch-bar__count">
+                <strong>{t('management.endpoints.selected', { count: selected.length })}</strong>
+                {selected.length === 0 ? (
+                  <span className="nb-small nb-muted">
+                    {t('management.endpoints.selectForBatch')}
+                  </span>
+                ) : null}
+              </span>
+              <div className="endpoint-batch-bar__controls">
+                <Field label={t('management.endpoints.tags')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      value={editTag}
+                      onChange={(event) => setEditTag(event.target.value)}
+                    >
+                      {ENDPOINT_TAGS.map((value) => (
+                        <option key={value} value={value}>
+                          {t(endpointTagKeys[value])}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Button
+                  type="button"
+                  disabled={selected.length === 0}
+                  onClick={() => tags.mutate(true)}
                 >
-                  <option value="">{t('management.endpoints.allTags')}</option>
-                  <option value="untagged">{t('management.endpoints.untagged')}</option>
-                  {ENDPOINT_TAGS.map((value) => (
-                    <option key={value} value={value}>
-                      {t(endpointTagKeys[value])}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-          </>
-        }
-      />
-      <Note>{t('management.endpoints.noProbeNotice')}</Note>
-      {canTag ? (
-        <fieldset className="endpoint-batch" disabled={tags.isPending || result.isFetching}>
-          <legend>{t('management.endpoints.selected', { count: selected.length })}</legend>
-          <div className="nb-toolbar">
-            <p className="nb-muted">{t('management.endpoints.selectForBatch')}</p>
-            <Field label={t('management.endpoints.tags')}>
-              {(field) => (
-                <select
-                  {...field}
-                  value={editTag}
-                  onChange={(event) => setEditTag(event.target.value)}
+                  {t('management.endpoints.addTag')}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={selected.length === 0}
+                  onClick={() => tags.mutate(false)}
                 >
-                  {ENDPOINT_TAGS.map((value) => (
-                    <option key={value} value={value}>
-                      {t(endpointTagKeys[value])}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <Button
-              type="button"
-              disabled={selected.length === 0}
-              onClick={() => tags.mutate(true)}
-            >
-              {t('management.endpoints.addTag')}
-            </Button>
-            <Button
-              type="button"
-              disabled={selected.length === 0}
-              onClick={() => tags.mutate(false)}
-            >
-              {t('management.endpoints.removeTag')}
-            </Button>
-          </div>
-        </fieldset>
-      ) : (
-        <Note>{t('management.endpoints.readOnly')}</Note>
-      )}
-      {isStewardPermissionDenied(tags.error) ? (
-        <StewardPermissionNotice />
-      ) : tags.error ? (
-        <ErrorState error={tags.error} />
-      ) : null}
-      {tags.isSuccess ? <Note tone="ok">{t('management.endpoints.tagsSaved')}</Note> : null}
-      {sessionError ? <ErrorState error={sessionError} /> : null}
-      {result.isPending ? (
-        <LoadingState />
-      ) : isStewardPermissionDenied(result.error) ? (
-        <StewardPermissionNotice />
-      ) : result.error ? (
-        <ErrorState error={result.error} onRetry={() => void result.refetch()} />
-      ) : result.data.data.length === 0 ? (
-        <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
-      ) : (
-        <Panel>
-          <PanelBody>
+                  {t('management.endpoints.removeTag')}
+                </Button>
+              </div>
+            </fieldset>
+          ) : (
+            <Note>{t('management.endpoints.readOnly')}</Note>
+          )}
+          {isStewardPermissionDenied(tags.error) ? (
+            <StewardPermissionNotice />
+          ) : tags.error ? (
+            <ErrorState error={tags.error} />
+          ) : null}
+          {tags.isSuccess ? <Note tone="ok">{t('management.endpoints.tagsSaved')}</Note> : null}
+          {sessionError ? <ErrorState error={sessionError} /> : null}
+          {result.isPending ? (
+            <LoadingState />
+          ) : isStewardPermissionDenied(result.error) ? (
+            <StewardPermissionNotice />
+          ) : result.error ? (
+            <ErrorState error={result.error} onRetry={() => void result.refetch()} />
+          ) : result.data.data.length === 0 ? (
+            <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
+          ) : (
             <DataTable
               caption={t('management.endpoints.title')}
               rows={result.data.data}
@@ -404,8 +406,10 @@ export function EndpointManagement({
                       {
                         key: 'select',
                         header: (
-                          <input
-                            type="checkbox"
+                          <TableCheckbox
+                            indeterminate={
+                              selected.length > 0 && selected.length < selectable.length
+                            }
                             aria-label={t('management.endpoints.selectAll')}
                             checked={
                               selectable.length > 0 &&
@@ -423,10 +427,9 @@ export function EndpointManagement({
                             }
                           />
                         ),
-                        cell: 'meta' as const,
+                        cell: 'select' as const,
                         render: (group: EndpointOverview) => (
-                          <input
-                            type="checkbox"
+                          <TableCheckbox
                             aria-label={t('management.endpoints.selectEndpoint', {
                               url: group.base_url,
                             })}
@@ -561,6 +564,7 @@ export function EndpointManagement({
                   key: 'expand',
                   header: t('common.workflow.actions'),
                   cell: 'action',
+                  align: 'action',
                   render: (group) => (
                     <Button
                       type="button"
@@ -582,20 +586,20 @@ export function EndpointManagement({
                 ) : null
               }
             />
-          </PanelBody>
-        </Panel>
-      )}
-      {!result.error && result.data ? (
-        <PagePagination
-          alwaysShowJump
-          metadata={result.data.pagination}
-          requestedPage={pager.page}
-          busy={result.isFetching}
-          onPageChange={pager.setPage}
-          onPageSizeChange={pager.setPageSize}
-        />
-      ) : null}
-      {userId ? <p className="nb-muted">{t('management.endpoints.userFilterHint')}</p> : null}
+          )}
+          {!result.error && result.data ? (
+            <PagePagination
+              alwaysShowJump
+              metadata={result.data.pagination}
+              requestedPage={pager.page}
+              busy={result.isFetching}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
+            />
+          ) : null}
+          {userId ? <p className="nb-muted">{t('management.endpoints.userFilterHint')}</p> : null}
+        </PanelBody>
+      </Panel>
     </div>
   );
 }

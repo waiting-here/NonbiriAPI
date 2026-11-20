@@ -2,17 +2,20 @@ import './limited-activities.css';
 import { useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import {
   Affix,
   Field,
+  FormActions,
   Note,
   Panel,
   PanelBody,
   PanelHead,
+  StatusBadge,
   Tabs,
   Toggle,
 } from '@shared/components/ui';
+import { formatCount } from '@shared/utils/formatNumber';
 import { usePictureBookText } from '@shared/picturebook/copy';
 import { decoded } from '@shared/operations/api';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -180,19 +183,22 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
               </Field>
             </div>
           </fieldset>
-          <p>
-            {text('common.brushesAlreadyExchanged')}: {detail.module_config.brush_exchanged} ·{' '}
-            {text('common.remaining')}: {detail.module_config.brush_remaining}
+          <p className="nb-small nb-muted">
+            {text('common.brushesAlreadyExchanged')}:{' '}
+            {formatCount(detail.module_config.brush_exchanged).display} ·{' '}
+            {text('common.remaining')}: {formatCount(detail.module_config.brush_remaining).display}
           </p>
-          <p>{text('common.aCapBelowTheExchangedTotalStops')}</p>
+          <p className="nb-small nb-muted">{text('common.aCapBelowTheExchangedTotalStops')}</p>
           {uncertain ? (
-            <p role="status">{text('common.theSaveResultIsUnconfirmedRetryThe')}</p>
+            <Note tone="warn">{text('common.theSaveResultIsUnconfirmedRetryThe')}</Note>
           ) : null}
           {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
-          {saved ? <p role="status">{text('common.settingsSaved')}</p> : null}
-          <button className="nb-btn nb-btn--primary" type="submit" disabled={save.isPending}>
-            {uncertain ? text('common.retrySave') : text('common.saveSettings')}
-          </button>
+          {saved ? <Note tone="ok">{text('common.settingsSaved')}</Note> : null}
+          <FormActions>
+            <button className="nb-btn nb-btn--primary" type="submit" disabled={save.isPending}>
+              {uncertain ? text('common.retrySave') : text('common.saveSettings')}
+            </button>
+          </FormActions>
         </form>
       </PanelBody>
     </Panel>
@@ -232,17 +238,22 @@ export function LimitedActivitiesPage({
     id: `picture-book-tab-${tab.value}`,
     panelId: `picture-book-panel-${tab.value}`,
   }));
-  const status = (value: typeof query | typeof fish) =>
-    value.isPending ? (
-      <LoadingState />
-    ) : value.error ? (
-      <ErrorState error={value.error} onRetry={() => void value.refetch()} />
-    ) : value.data ? (
+  const badgeFor = (value: typeof query | typeof fish) =>
+    value.data ? (
       <StatusBadge
-        active={value.data.status === 'open'}
-        label={statusLabel(value.data.status, text)}
-      />
-    ) : null;
+        tone={
+          value.data.status === 'open'
+            ? 'ok'
+            : value.data.status === 'paused'
+              ? 'warn'
+              : value.data.status === 'scheduled'
+                ? 'info'
+                : 'neutral'
+        }
+      >
+        {statusLabel(value.data.status, text)}
+      </StatusBadge>
+    ) : undefined;
   return (
     <div className="page">
       <PageHeader
@@ -263,7 +274,6 @@ export function LimitedActivitiesPage({
             </Link>
           ) : undefined
         }
-        icon="activities"
       />
       {session.data?.admin && !session.error && !pictureBook ? (
         <div className="limited-activities-grid">
@@ -285,14 +295,23 @@ export function LimitedActivitiesPage({
             },
           ].map((entry) => (
             <Panel key={entry.to}>
-              <PanelHead title={entry.title} />
+              <PanelHead title={entry.title} actions={badgeFor(entry.query)} />
               <PanelBody>
                 <div className="nb-stack">
-                  {status(entry.query)}
+                  {entry.query.isPending ? (
+                    <LoadingState />
+                  ) : entry.query.error ? (
+                    <ErrorState
+                      error={entry.query.error}
+                      onRetry={() => void entry.query.refetch()}
+                    />
+                  ) : null}
                   <p>{entry.description}</p>
-                  <Link className="nb-btn nb-btn--secondary" to={entry.to}>
-                    {copy('设置', 'Settings')}
-                  </Link>
+                  <div className="nb-actions">
+                    <Link className="nb-btn nb-btn--secondary" to={entry.to}>
+                      {copy('设置', 'Settings')}
+                    </Link>
+                  </div>
                 </div>
               </PanelBody>
             </Panel>

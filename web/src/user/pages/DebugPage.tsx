@@ -1,7 +1,7 @@
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { MessageField, MessagesView } from '@shared/components/MessagesView';
-import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
-import { Fold } from '@shared/components/ui';
+import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
+import { Fold, StatusBadge } from '@shared/components/ui';
 import '@shared/operations/operations.css';
 import { isEmbeddingRoute, isDecisionRoute } from '@shared/operations/requestKind';
 import { ApiError } from '@shared/query/http';
@@ -183,22 +183,22 @@ function RequestDetails({ trace }: { trace: DebugTrace }) {
           );
         })}
       </dl>
-      <details>
-        <summary>
-          {t(
-            trace.request.body.truncated
-              ? 'user.debug.request.rawBodyTruncated'
-              : 'user.debug.request.rawBody',
-            { bytes: trace.request.body.byte_count },
-          )}
-        </summary>
+      <Fold
+        plain
+        title={t(
+          trace.request.body.truncated
+            ? 'user.debug.request.rawBodyTruncated'
+            : 'user.debug.request.rawBody',
+          { bytes: trace.request.body.byte_count },
+        )}
+      >
         <pre className="ops-debug-json">
           {trace.request.body.text ??
             t('user.debug.request.base64Body', {
               characters: trace.request.body.base64?.length ?? 0,
             })}
         </pre>
-      </details>
+      </Fold>
     </section>
   );
 }
@@ -209,11 +209,10 @@ function TraceCard({ trace }: { trace: DebugTrace }) {
   const callerTitleId = trace.trace_id + '-caller';
   return (
     <Card className="ops-debug-trace">
-      <details>
-        <summary>
-          {t(ROUTE_LABEL_KEYS[trace.request.route_kind])} · {trace.request.model} ·{' '}
-          {t(TRACE_STATE_LABEL_KEYS[trace.state])}
-        </summary>
+      <Fold
+        plain
+        title={`${t(ROUTE_LABEL_KEYS[trace.request.route_kind])} · ${trace.request.model} · ${t(TRACE_STATE_LABEL_KEYS[trace.state])}`}
+      >
         <div className="ops-debug-sections">
           <RequestDetails trace={trace} />
           <section aria-labelledby={upstreamTitleId}>
@@ -292,7 +291,7 @@ function TraceCard({ trace }: { trace: DebugTrace }) {
             )}
           </section>
         </div>
-      </details>
+      </Fold>
     </Card>
   );
 }
@@ -350,7 +349,7 @@ export function DebugPage() {
 
   if (debug.authority.isPending) {
     return (
-      <div className="page">
+      <div className="page ops-page ops-stack">
         <RecordsHeader description={t('user.debug.descriptionShort')} />
         <LoadingState />
       </div>
@@ -358,7 +357,7 @@ export function DebugPage() {
   }
   if (debug.authority.error && !debug.authority.data) {
     return (
-      <div className="page">
+      <div className="page ops-page ops-stack">
         <RecordsHeader description={t('user.debug.descriptionShort')} />
         <ErrorState error={debug.authority.error} onRetry={() => void debug.authority.refetch()} />
       </div>
@@ -366,7 +365,7 @@ export function DebugPage() {
   }
 
   return (
-    <div className="page ops-page">
+    <div className="page ops-page ops-stack">
       <RecordsHeader
         description={t('user.debug.description')}
         actions={
@@ -387,36 +386,44 @@ export function DebugPage() {
       ) : null}
       <Card>
         <h2>{t('user.debug.connection.title')}</h2>
-        <div className="ops-debug-status">
-          <div>
-            <strong>{t('user.debug.connection.serverSession')}</strong>
-            <p>
-              <StatusBadge
-                active={session.active}
-                label={t(
+        <div className="nb-stats ops-debug-status">
+          <div className="nb-stat">
+            <div className="nb-stat__label">{t('user.debug.connection.serverSession')}</div>
+            <div className="nb-stat__value">
+              <StatusBadge tone={session.active ? 'ok' : 'neutral'}>
+                {t(
                   session.active
                     ? 'user.debug.state.session.active'
                     : 'user.debug.state.session.stopped',
                 )}
-              />
-            </p>
+              </StatusBadge>
+            </div>
           </div>
-          <div>
-            <strong>{t('user.debug.connection.observer')}</strong>
-            <p>
+          <div className="nb-stat">
+            <div className="nb-stat__label">{t('user.debug.connection.observer')}</div>
+            <div className="nb-stat__value">
               <StatusBadge
-                active={debug.observer === 'connected'}
-                label={t(OBSERVER_LABEL_KEYS[debug.observer])}
-              />
-            </p>
+                tone={
+                  debug.observer === 'connected'
+                    ? 'ok'
+                    : debug.observer === 'connecting'
+                      ? 'warn'
+                      : 'neutral'
+                }
+              >
+                {t(OBSERVER_LABEL_KEYS[debug.observer])}
+              </StatusBadge>
+            </div>
           </div>
-          <div>
-            <strong>{t('user.debug.connection.mode')}</strong>
-            <p>{session.active ? t(MODE_LABEL_KEYS[session.mode]) : t('common.none')}</p>
+          <div className="nb-stat">
+            <div className="nb-stat__label">{t('user.debug.connection.mode')}</div>
+            <div className="nb-stat__value">
+              {session.active ? t(MODE_LABEL_KEYS[session.mode]) : t('common.none')}
+            </div>
           </div>
-          <div>
-            <strong>{t('user.debug.connection.inFlight')}</strong>
-            <p>{session.active ? session.inflight_count : 0}</p>
+          <div className="nb-stat">
+            <div className="nb-stat__label">{t('user.debug.connection.inFlight')}</div>
+            <div className="nb-stat__value">{session.active ? session.inflight_count : 0}</div>
           </div>
         </div>
         {session.active ? (
@@ -447,8 +454,9 @@ export function DebugPage() {
       </Card>
 
       {session.active ? (
-        <Card className="ops-danger-zone">
+        <Card>
           <h2>{t('user.debug.operations.title')}</h2>
+          <p className="nb-sub">{t('user.debug.confirm.liveBody')}</p>
           <div className="ops-debug-actions">
             {debug.observer === 'disconnected' ? (
               <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.connect}>
@@ -487,7 +495,7 @@ export function DebugPage() {
               {t('user.debug.operations.stop')}
             </button>
             <button
-              className="nb-btn nb-btn--danger"
+              className="nb-btn nb-btn--secondary"
               type="button"
               disabled={debug.mutating}
               onClick={() => setConfirmation('replace')}
@@ -506,47 +514,49 @@ export function DebugPage() {
 
       <Fold title={t('user.records.debugResults')}>
         <div className="records-debug-results">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('user.records.case')}</th>
-                <th>{t('user.records.clientResult')}</th>
-                <th>{t('user.records.explanation')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(
-                [
-                  [
-                    'user.debug.state.mode.dry',
-                    'debug_dry_run_intercepted',
-                    422,
-                    'user.debug.fixedResults.dryIntercepted',
-                  ],
-                  [
-                    'user.debug.state.mode.live',
-                    'debug_live_result_captured',
-                    422,
-                    'user.debug.fixedResults.liveCaptured',
-                  ],
-                  [
-                    'user.records.cancelled',
-                    'debug_live_cancelled',
-                    409,
-                    'user.debug.fixedResults.liveCancelled',
-                  ],
-                ] as const
-              ).map(([mode, code, status, description]) => (
-                <tr key={code}>
-                  <td>{t(mode)}</td>
-                  <td>
-                    <code>{code}</code> ({status})
-                  </td>
-                  <td>{t(description)}</td>
+          <div className="nb-table-wrap">
+            <table className="nb-table">
+              <thead>
+                <tr>
+                  <th>{t('user.records.case')}</th>
+                  <th>{t('user.records.clientResult')}</th>
+                  <th>{t('user.records.explanation')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    [
+                      'user.debug.state.mode.dry',
+                      'debug_dry_run_intercepted',
+                      422,
+                      'user.debug.fixedResults.dryIntercepted',
+                    ],
+                    [
+                      'user.debug.state.mode.live',
+                      'debug_live_result_captured',
+                      422,
+                      'user.debug.fixedResults.liveCaptured',
+                    ],
+                    [
+                      'user.records.cancelled',
+                      'debug_live_cancelled',
+                      409,
+                      'user.debug.fixedResults.liveCancelled',
+                    ],
+                  ] as const
+                ).map(([mode, code, status, description]) => (
+                  <tr key={code}>
+                    <td>{t(mode)}</td>
+                    <td>
+                      <code>{code}</code> ({status})
+                    </td>
+                    <td>{t(description)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p>
             {t('user.debug.fixedResults.callerKeyPrefix')} <code>&#36;NONBIRI_CALLER_KEY</code>{' '}
             {t('user.debug.fixedResults.callerKeySuffix')}
@@ -554,7 +564,7 @@ export function DebugPage() {
         </div>
       </Fold>
 
-      <section className="ops-debug-traces" aria-labelledby="debug-traces-title">
+      <Card className="ops-debug-traces" aria-labelledby="debug-traces-title">
         <h2 id="debug-traces-title">{t('user.debug.requests.title')}</h2>
         {!session.active ? (
           <EmptyState
@@ -569,7 +579,7 @@ export function DebugPage() {
         ) : (
           debug.view.traces.map((trace) => <TraceCard key={trace.trace_id} trace={trace} />)
         )}
-      </section>
+      </Card>
 
       {confirmation && session.active ? (
         <ConfirmDialog
