@@ -63,10 +63,18 @@ output token counters and reservations. It reconstructs calls, credits and
 outstanding reservations from surviving receipts attributed to the model.
 Migrated model rows carry `historical_costs_partial`. Earlier usage without
 reliable attribution stays at key scope. Whole-key counters and account balances
-retain their recorded values. Account export uses format 37.
+retain their recorded values.
 
-Historic logs retain the evidence collected during each request. Game saves and
-stored decisions follow their recorded rules and facts.
+Schema 55 also adds model-scoped Google quota waits, per-attempt failure and
+backoff records, and Whale Haven settings, balances, homes, visits and receipts.
+Model waits start empty. Conversion derives historical log details only where
+retained evidence supports them. Whale Haven and cash-out both start closed.
+Existing game saves and recorded decisions keep their original rules and facts.
+
+Account export advances from format 36 to 38. It includes the owner's model
+consumption limits and usage plus Whale Haven balances, home when adopted and
+currency movements. This version exports `nonbiriapi-account-export-v38.json`.
+[Account export contract](api-contract.md#9-export-privacy-and-account-deletion)
 [Earlier schema changes](https://github.com/waiting-here/NonbiriAPI/blob/v1.3.12/docs/database-upgrades.md#schema-changes)
 
 ## Content versions and accounting operations

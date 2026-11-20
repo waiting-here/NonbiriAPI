@@ -68,7 +68,7 @@ There are 56 independent boolean permissions.
 | `users.level` | Assign lower user levels | false |
 | `users.balance` | General balance adjustment | false |
 | `users.game_balance` | Game balance adjustment | false |
-| `users.resources` | Adjust drawing supplies, gacha inventory and Lake Notes resources | false |
+| `users.resources` | Adjust drawing supplies, gacha inventory, Lake Notes resources and Whale Haven currencies | false |
 | `users.ban` | Ban lower-level users | true |
 | `users.unban` | Unban or replace an active ban | false |
 | `users.ban_permanent` | Permanent ban | true |
