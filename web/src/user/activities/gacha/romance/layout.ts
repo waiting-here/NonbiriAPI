@@ -13,8 +13,11 @@ export function romanceAppearancePlacement(width: number, height: number, theme:
         : height * 0.86
       : height * (desktop ? 0.75 : 0.74);
   const heroWidth = (heroHeight * source[0]) / source[1];
+  // A tall character plate still leaves room for the flower and hair beside the face.
+  const headMargin = heroWidth * (theme === 'elopement' ? 0.22 : 0.16);
+  const sideMargin = Math.max(72, Math.min(184, (width - 1184) / 4));
   const center = desktop
-    ? width - Math.max(72, Math.min(184, (width - 1184) / 4)) - (theme === 'heart-thief' ? 16 : 0)
+    ? width - Math.max(headMargin, sideMargin + (theme === 'heart-thief' ? 16 : 0))
     : width * (theme === 'elopement' ? 0.6 : 0.63);
   return {
     left: center - heroWidth / 2,

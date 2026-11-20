@@ -8,7 +8,13 @@ export function ArtworkStage({ group, children }: { group: boolean; children: Re
   const { playback } = useBackgroundPlayback();
   useLayoutEffect(() => {
     const stage = node.current!;
+    const header = stage.parentElement?.querySelector(':scope > .nb-user-header');
     const measure = () => {
+      if (header)
+        stage.style.setProperty(
+          '--nb-art-header-height',
+          header.getBoundingClientRect().height + 'px',
+        );
       const rect = stage.getBoundingClientRect();
       const w = rect.width || innerWidth,
         h = rect.height || innerHeight;
@@ -18,6 +24,7 @@ export function ArtworkStage({ group, children }: { group: boolean; children: Re
     const observer =
       typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
     observer?.observe(stage);
+    if (header) observer?.observe(header);
     window.addEventListener('resize', measure);
     return () => {
       observer?.disconnect();

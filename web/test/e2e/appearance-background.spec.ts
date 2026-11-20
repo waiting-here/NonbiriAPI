@@ -3,6 +3,7 @@ import { expect, test } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
 import { loanActivity } from '../fixtures/loans';
+import { appearanceFixtures } from './appearance-fixtures';
 
 for (const design of ['celestial', 'wandering', 'amber'])
   for (const mode of ['light', 'dark'])
@@ -96,3 +97,111 @@ for (const design of ['celestial', 'wandering', 'amber'])
           });
         guard.assertNone();
       });
+
+for (const moment of ['cover:permanent', 'illustration:a']) {
+  test('keeps a single fixed workspace painting for ' + moment, async ({ page }) => {
+    await appearanceFixtures(page, 'heart-moment', moment);
+    await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+    await page.goto(USER_ORIGIN + '/');
+    const painting = page.locator('.nb-moment-backdrop__scene');
+    await expect(page.locator('.nb-moment-backdrop')).toHaveAttribute('data-moment', moment);
+    await expect(page.locator('.nb-art-stage img, .nb-art-stage canvas')).toHaveCount(1);
+    await painting.evaluate((image: HTMLImageElement) => image.decode());
+
+    for (const width of [1600, 1180, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(painting).toHaveCSS('object-fit', 'cover');
+      await expect(page.locator('.nb-art-stage')).toHaveCSS('position', 'fixed');
+      const box = (await painting.boundingBox())!;
+      const header = (await page.locator('.nb-user-header').boundingBox())!;
+      expect(box.y).toBeCloseTo(header.y + header.height, 0);
+      expect(box.width).toBe(width);
+      expect(box.y + box.height).toBe(800);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+      expect(await painting.boundingBox()).toEqual(box);
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: resolve(
+            process.env.NONBIRI_VISUAL_DIR,
+            moment.split(':')[0] + '-' + width + '.png',
+          ),
+        });
+      if (width < 1120) await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+      await page.getByRole('button', { name: 'View background', exact: true }).click();
+      await expect(painting).toHaveCSS('object-fit', 'contain');
+      expect(await painting.boundingBox()).toEqual({ x: 0, y: 0, width, height: 800 });
+      await page.getByRole('button', { name: 'Return to page', exact: true }).click();
+      if (width < 1120) await page.keyboard.press('Escape');
+    }
+  });
+}
+
+for (const mode of ['light', 'dark']) {
+  test('keeps the Hello Tomorrow crown below the actual header in ' + mode, async ({ page }) => {
+    await appearanceFixtures(page, 'tomorrow');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.addInitScript((mode) => {
+      localStorage.setItem('nb.lang', 'en');
+      localStorage.setItem('nb.theme', mode);
+    }, mode);
+    await page.goto(USER_ORIGIN + '/activities');
+    const hero = page.locator('.nb-tomorrow-still img').last();
+    await hero.evaluate((img: HTMLImageElement) => img.decode());
+    // The first opaque crown pixels are at row 8 in both 1024 × 1536 source plates.
+    const header = page.locator('.nb-user-header');
+    for (const [width, height] of [
+      [1600, 900],
+      [2560, 600],
+      [1440, 1400],
+      [390, 844],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await expect
+        .poll(async () => {
+          const rect = (await hero.boundingBox())!;
+          const bar = (await header.boundingBox())!;
+          return rect.y + (rect.height * 8) / 1536 - (bar.y + bar.height);
+        })
+        .toBeGreaterThan(0);
+      if (process.env.NONBIRI_VISUAL_DIR)
+        await page.screenshot({
+          path: resolve(process.env.NONBIRI_VISUAL_DIR, 'tomorrow-' + mode + '-' + width + '.png'),
+        });
+    }
+    await page.setViewportSize({ width: 1440, height: 800 });
+    // Text scaling or wrapped controls can make the bar taller than the minimum 4.25rem.
+    await header.evaluate((el) => {
+      el.style.minHeight = '104px';
+    });
+    const stage = page.locator('.nb-art-stage');
+    await expect.poll(async () => (await stage.boundingBox())?.y).toBe(104);
+    let fail = true;
+    await page.route('**/motion/r-chatgpt/body.webp', (route) =>
+      fail ? route.abort() : route.continue(),
+    );
+    await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'Appearance', exact: true });
+    await sheet.getByText('Full motion', { exact: true }).click();
+    await expect(sheet.getByRole('status')).toContainText('Showing the still artwork');
+    await expect(hero).toBeVisible();
+    const still = (await hero.boundingBox())!;
+    expect(still.y + (still.height * 8) / 1536).toBeGreaterThan(104);
+    fail = false;
+    await sheet.getByRole('button', { name: 'Retry animation' }).click();
+    const canvas = stage.locator('canvas');
+    await expect(canvas).toHaveCount(1);
+    await expect(canvas).toHaveAttribute('data-ready', 'true', { timeout: 25_000 });
+    await expect(hero).toBeHidden();
+    expect(await canvas.boundingBox()).toEqual(await stage.boundingBox());
+    await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect
+      .poll(async () => Number(await canvas.getAttribute('data-time')))
+      .toBeGreaterThan(0);
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({
+        path: resolve(process.env.NONBIRI_VISUAL_DIR, 'tomorrow-' + mode + '-motion.png'),
+      });
+  });
+}

@@ -14,6 +14,7 @@ import {
   PaintCadence,
   portraits,
   waterfalls,
+  wallpaperCrop,
   whaleRect,
   type Rect,
   type WallpaperScene,
@@ -200,9 +201,7 @@ export async function renderWallpaper(
     const box = canvas.getBoundingClientRect();
     const width = box.width || window.innerWidth,
       height = box.height || window.innerHeight;
-    const scale = Math.max(width / 16, height / 9);
-    const cropX = width / (scale * 16),
-      cropY = height / (scale * 9);
+    const { cropX, cropY, x, y } = wallpaperCrop(width, height, portraits[scene][theme]);
     const rect = portraits[scene][theme].rect;
     const native = Math.max(
       layerDensity(images[0], width / cropX, height / cropY),
@@ -223,7 +222,7 @@ export async function renderWallpaper(
     canvas.height = Math.max(1, Math.round(height * density));
     gl!.viewport(0, 0, canvas.width, canvas.height);
     gl!.uniform2f(uniform('crop'), cropX, cropY);
-    gl!.uniform2f(uniform('offset'), (1 - cropX) * (width < 640 ? 1 : 0.65), (1 - cropY) * 0.5);
+    gl!.uniform2f(uniform('offset'), x, y);
     const portraitWidth = Math.max(
       1,
       Math.min(

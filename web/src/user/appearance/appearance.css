@@ -664,21 +664,25 @@ html[data-theme='dark'][data-appearance]:not([data-appearance='default'])
 .nb-art-stage:has(> canvas[data-ready='true']) > :not(canvas) {
   visibility: hidden;
 }
-.nb-art-stage[data-composition='group'] .nb-moment-backdrop__scene {
+html[data-background-view='true']
+  .nb-art-stage[data-composition='group']
+  .nb-moment-backdrop__scene {
   object-fit: contain;
 }
 html[data-background-view='true'] .nb-art-stage {
   visibility: visible;
 }
+/* Compose the workspace wallpaper inside the visible area below the sticky navigation. */
+html:not([data-background-view='true'], [data-appearance='heart-moment'])
+  .nb-user-shell
+  > .nb-art-stage,
 html:not([data-background-view='true']) .nb-user-shell > .nb-art-stage[data-composition='group'] {
-  position: relative;
-  inset: auto;
-  z-index: 0;
-  flex: none;
-  height: clamp(14rem, 36vh, 28rem);
+  top: var(--nb-art-header-height, 0px);
 }
 @media (width < 80rem) {
-  html:not([data-background-view='true']) .nb-user-shell > .nb-art-stage {
+  html:not([data-background-view='true'])
+    .nb-user-shell
+    > .nb-art-stage[data-composition='portrait'] {
     position: relative;
     inset: auto;
     z-index: 0;

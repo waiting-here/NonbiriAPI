@@ -3,6 +3,8 @@ import {
   blinkAt,
   celestialRects,
   PaintCadence,
+  portraits,
+  wallpaperCrop,
   whaleCycleSeconds,
   whaleRect,
 } from './wallpaper-animation';
@@ -115,5 +117,28 @@ it('keeps a gentle whale crossing speed on both screen shapes', () => {
       b = whaleRect(26, w, h);
     expect(a[0] - b[0]).toBeGreaterThan(0);
     expect(a[0] - b[0]).toBeLessThan(0.036);
+  }
+});
+
+it('retains the painted crown and both eyes on ultrawide and tall stages', () => {
+  for (const scene of Object.values(portraits)) {
+    for (const portrait of Object.values(scene)) {
+      const [left, top, width, height] = portrait.rect;
+      for (const [w, h] of [
+        [2560, 532],
+        [1440, 1432],
+      ]) {
+        const crop = wallpaperCrop(w, h, portrait);
+        expect(crop.y).toBeLessThan(top);
+        for (const [x, y] of [
+          [portrait.eyes[0], portrait.eyes[1]],
+          [portrait.eyes[2], portrait.eyes[3]],
+        ]) {
+          expect(left + x * width).toBeGreaterThan(crop.x);
+          expect(left + x * width).toBeLessThan(crop.x + crop.cropX);
+          expect(top + y * height).toBeLessThan(crop.y + crop.cropY);
+        }
+      }
+    }
   }
 });

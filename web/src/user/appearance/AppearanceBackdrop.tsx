@@ -3,7 +3,7 @@ import { MomentBackdrop } from './MomentBackdrop';
 import { SpecialBackdrop } from './SpecialBackdrop';
 import { isSpecialTheme } from '../activities/gacha/special-scenes';
 import { artSourceSet, highResolutionArt } from '../activities/gacha/art-resolution';
-import type { WallpaperTheme } from './wallpaper-motion';
+import { portraits, wallpaperCrop, type WallpaperTheme } from './wallpaper-animation';
 import { useArtworkPolicy } from '@shared/artwork/context';
 import { useBackgroundPlayback } from './playback-context';
 import { ArtworkStage } from './stage';
@@ -76,6 +76,10 @@ function Wallpaper({ selected }: { selected: string }) {
     <>
       <img
         className="nb-appearance-still"
+        style={{
+          objectPosition: wallpaperCrop(size[0], size[1], portraits[selected][theme])
+            .objectPosition,
+        }}
         alt=""
         src={playback.highest ? highResolutionArt(src) : src}
         srcSet={playback.highest ? undefined : artSourceSet(src)}
