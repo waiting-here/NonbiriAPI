@@ -622,6 +622,13 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.games.nav',
   }),
   admin({
+    id: 'admin-whale-haven',
+    path: '/games/whale-haven',
+    access: 'admin',
+    layout: 'wide',
+    registered: true,
+  }),
+  admin({
     id: 'admin-game-ai',
     path: '/games/ai',
     access: 'admin',
