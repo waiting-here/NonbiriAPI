@@ -34,6 +34,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Identify malformed Gemini message history by message, content block or tool
   call and show the failed requirement and a suggested correction in the API
   and role-appropriate logs. Keep message text and custom field names private.
+- Explain resource refusals in the API and request logs, including per-minute
+  and concurrent limits, full queues, wait timeouts, model budgets and
+  accounting or routing capacity. Operators can inspect each recorded binding
+  and decision stage when several connections fail different checks.
 - Translate supported Chat `reasoning_effort` and sampling parameters for the
   resolved Gemini model. Convert a Responses effort-only request to Chat when
   the selected service can represent it.

@@ -456,6 +456,16 @@ These fields describe validated field names, type/format/capability requirements
 
 API error messages include the available safe field, reason and next step, localized for a supported `Accept-Language`. A model with no usable resource for the requested operation returns `503 unbound_model`; a healthy resource for an unrelated operation does not make the request invalid. Temporary shared capacity limits retain `429 rate_limited`. Healthy resources that cannot represent the requested features still return a specific `400 invalid_request`. These refusals do not dispatch an upstream request or charge for one.
 
+The same detail can explain a refusal before an upstream call. For a physical
+connection it distinguishes requests per minute, concurrent requests, reaching
+both limits, a full waiting queue and a deadline reached while waiting. Other
+recorded causes include a model usage budget, cooling down, reservation
+capacity and a busy accounting writer. If examined connections fail different
+checks, the caller sees a combined explanation. Authorized operators can inspect
+the recorded binding, stage and reason for each examined connection. A request
+that already reached an upstream retains its upstream error when a later
+candidate fails admission.
+
 Gemini message-history rejections identify the message and, where relevant, its
 content block or tool call with zero-based JSON indexes. For example,
 `messages[5].role` refers to the sixth message. A system or developer instruction
