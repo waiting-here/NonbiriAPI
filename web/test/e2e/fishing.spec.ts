@@ -400,6 +400,85 @@ test('fishing uses desktop space, fits mobile results, and retains the anonymity
   guard.assertNone();
 });
 
+for (const language of ['en', 'zh'] as const) {
+  test(`fishing keeps large settlement amounts, deductions and the catch caption readable in ${language}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await installUserShell(page, language);
+    const unit = language === 'zh' ? '积分' : 'credits';
+    const received = '1234567890123.588';
+    const deducted = '123456789012.125';
+    const gross = '1358024679135.713';
+    const rake = { platform: deducted, welfare: '0', thursday: '0' };
+    const result = {
+      ...RESULT,
+      payout_total: gross,
+      net_payout_total: received,
+      rake,
+      outcomes: [
+        {
+          ...RESULT.outcomes[0],
+          species_key: 'yellowcheek',
+          reward: gross,
+          net_reward: received,
+          rake,
+        },
+      ],
+    };
+    await installFishingRoutes(
+      page,
+      fixtureWith({ settlement_pending: null, unrevealed: result, has_more_unrevealed: false }),
+    );
+    await page.goto(USER_ORIGIN + '/games/fishing');
+    const settlement = page.locator('.fishing-result');
+    const net = settlement.locator('.fishing-totals > div > dd > .game-money');
+    await expect(net).toHaveText('1,234,567,890,123.588 ' + unit);
+    const deductions = settlement.locator('section > .fishing-rake-details');
+    await deductions.locator('summary').click();
+    const fee = deductions.getByText('123,456,789,012.125 ' + unit, { exact: true });
+    await expect(fee).toBeVisible();
+    const stage = page.locator('.fishing-stage');
+    const caption = stage.locator('figcaption');
+    await expect(caption).toHaveText(language === 'zh' ? '鳡鱼' : 'Yellowcheek');
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const value of [net, fee]) {
+        const geometry = await value.evaluate((el) => {
+          const row = el.closest('dd')!.parentElement!;
+          const label = row.querySelector('dt')!.getBoundingClientRect();
+          const box = row.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const lines = Array.from(range.getClientRects());
+          return {
+            contained: lines.every(
+              (line) => line.left >= box.left - 1 && line.right <= box.right + 1,
+            ),
+            besideLabel: lines[0].left >= label.right && lines[0].top < label.bottom,
+          };
+        });
+        expect(geometry.contained).toBe(true);
+        if (width === 1440) expect(geometry.besideLabel).toBe(true);
+      }
+      const labelBox = await caption.boundingBox();
+      const sceneBox = await stage.boundingBox();
+      expect(labelBox!.x).toBeGreaterThanOrEqual(sceneBox!.x);
+      expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(sceneBox!.x + sceneBox!.width);
+      expect(
+        await caption.evaluate((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getClientRects().length;
+        }),
+      ).toBe(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    }
+  });
+}
+
 const ART_FISH_SPECS: Readonly<Record<string, { readonly tier: string; readonly size: number }>> = {
   whitebait: { tier: 'small', size: 10 },
   gudgeon: { tier: 'small', size: 11 },

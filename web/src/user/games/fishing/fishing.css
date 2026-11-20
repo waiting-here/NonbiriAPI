@@ -104,10 +104,14 @@
   gap: 0.45rem;
   margin: 0;
 }
-.fishing-totals > div {
+.fishing-totals > div,
+.fishing-rake-details dl > div {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--nb-space-1) 1rem;
+}
+.fishing-totals > div {
   padding-top: 0.45rem;
   border-top: 1px solid var(--nb-color-border);
 }
@@ -115,6 +119,11 @@
 .fishing-totals dd {
   min-width: 0;
   margin: 0;
+}
+.fishing-totals dd > .game-money,
+.fishing-rake-details dd > .game-money {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .fishing-totals > div:has(.game-wallets) {
   flex-direction: column;
@@ -334,11 +343,6 @@
   gap: 0.35rem;
   margin-block: 0.5rem;
 }
-.fishing-rake-details dl > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
 .fishing-rake-details dd {
   margin: 0;
   overflow-wrap: anywhere;
@@ -423,6 +427,14 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   isolation: isolate;
+}
+.fishing-catch-celebration .fishing-art {
+  inline-size: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+.fishing-catch-celebration .fishing-art__label {
+  inline-size: max-content;
+  max-inline-size: 200%;
 }
 .fishing-catch-celebration .fishing-artwork {
   width: 100%;

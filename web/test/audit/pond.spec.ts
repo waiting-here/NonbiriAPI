@@ -200,8 +200,8 @@ test('real pond batch return recovers a lost response and keeps single receipts 
     await expect(batchAction).toContainText('Retry this batch to recover');
     await expect(item.getByRole('button', { name: 'Return to pond', exact: true })).toBeEnabled();
     expect(await myCount()).toBe(before + junkCount);
-    for (const width of [1440, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: width < 1440 ? 844 : 1000 });
       for (const theme of ['light', 'dark']) {
         await page.evaluate((value) => {
           document.documentElement.dataset.theme = value;
