@@ -35,7 +35,7 @@ test('user browses current charity snapshots with search, pagination and committ
     const response = await loaded;
     expect(response.ok()).toBe(true);
     expect(response.headers()['cache-control']).toContain('no-store');
-    await page.getByRole('button', { name: 'Reset', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Clear all filters', exact: true }).click();
     const search = page.getByRole('searchbox', {
       name: 'Search model name or public description',
     });

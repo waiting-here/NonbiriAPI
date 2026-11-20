@@ -134,15 +134,29 @@ test('owner pages size the workspace to the task and center their state illustra
         expect(overview!).toBeGreaterThan(models!);
         expect(models!).toBeGreaterThan(detail!);
       } else expect(new Set(contentWidths).size).toBe(1);
-      for (const path of ['/missing-preview-page', '/maintenance', '/access-denied']) {
+      for (const [path, title] of [
+        ['/missing-preview-page', copy.common.notFoundTitle],
+        ['/maintenance', copy.common.maintenanceTitle],
+        ['/access-denied', copy.common.forbiddenTitle],
+      ] as const) {
         await page.goto(state.user_url + path);
-        const host = page.locator('.nb-state__art').first();
-        const svg = host.locator('svg');
-        await expect(svg, path + ' at ' + width).toBeVisible();
-        const art = (await svg.boundingBox())!;
-        const box = (await host.boundingBox())!;
-        expect(Math.abs(art.x + art.width / 2 - box.x - box.width / 2)).toBeLessThanOrEqual(1);
-        expect(art.width).toBeLessThanOrEqual(box.width + 1);
+        const panel = page.locator('.nb-state').filter({
+          has: page.getByRole('heading', { level: 1, name: title, exact: true }),
+        });
+        const art = panel.locator('.nb-state__art svg');
+        await expect(art, path + ' at ' + width).toBeVisible();
+        const geometry = await art.evaluate((svg) => {
+          const drawing = svg.getBoundingClientRect();
+          const host = svg.parentElement!.getBoundingClientRect();
+          return {
+            width: drawing.width,
+            hostWidth: host.width,
+            centerOffset: Math.abs(drawing.x + drawing.width / 2 - host.x - host.width / 2),
+          };
+        });
+        expect(geometry.width).toBeGreaterThan(0);
+        expect(geometry.width).toBeLessThanOrEqual(geometry.hostWidth + 1);
+        expect(geometry.centerOffset).toBeLessThanOrEqual(1);
       }
     }
   } finally {

@@ -304,9 +304,14 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 	if err := os.WriteFile(statePath, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
+	// Allow normal server cleanup before the enclosing Go test deadline.
+	lifetime := 8 * time.Minute
+	if deadline, ok := t.Deadline(); ok {
+		lifetime = time.Until(deadline) - 30*time.Second
+	}
 	select {
 	case <-stop:
-	case <-time.After(8 * time.Minute):
+	case <-time.After(lifetime):
 		t.Fatal("browser fixture was not shut down")
 	}
 }
