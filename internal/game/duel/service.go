@@ -88,6 +88,7 @@ type Service struct {
 	queuePrefix, sessionPrefix  string
 	closed, recovered           atomic.Bool
 	recoveryMu                  sync.Mutex
+	aiDefaultsReady             bool // protected by recoveryMu
 	recoveryAfter               string
 	actionMu                    sync.Mutex
 	actions                     map[int64][]time.Time

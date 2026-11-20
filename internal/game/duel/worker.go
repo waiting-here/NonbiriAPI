@@ -22,7 +22,7 @@ func (s *Service) Available(mode, spec string) bool {
 	return s != nil && !s.closed.Load() && s.recovered.Load() && spec == "" && s.descriptor.ResolveMode(mode) == nil
 }
 func (s *Service) Tick(ctx context.Context) (WorkResult, error) {
-	pending, err := s.workerPending(ctx)
+	pending, err := s.workerPending(ctx, false)
 	if err != nil || !pending {
 		return WorkResult{}, err
 	}
@@ -35,7 +35,7 @@ func (s *Service) Tick(ctx context.Context) (WorkResult, error) {
 
 // This read only skips idle ticks. Matching, expiry, refunds and AI admission
 // retain their authoritative checks inside the existing write transaction.
-func (s *Service) workerPending(ctx context.Context) (bool, error) {
+func (s *Service) workerPending(ctx context.Context, recovery bool) (bool, error) {
 	if s == nil || s.closed.Load() {
 		return false, ErrUnavailable
 	}
@@ -43,11 +43,20 @@ func (s *Service) workerPending(ctx context.Context) (bool, error) {
 	if now < 0 || now > maxDecisionTime {
 		return false, ErrInvariant
 	}
-	query := `SELECT EXISTS(SELECT 1 FROM game_duel_queue WHERE game_key=?) OR EXISTS(SELECT 1 FROM game_duel_sessions WHERE game_key=? AND state='active' AND phase_deadline<=?)`
+	sessionFilter := "phase_deadline<=?"
 	args := []any{s.rules.ID(), s.rules.ID(), now}
+	if recovery {
+		sessionFilter = "id>?"
+		args[2] = s.recoveryAfter
+	}
+	query := `SELECT EXISTS(SELECT 1 FROM game_duel_queue WHERE game_key=?) OR EXISTS(SELECT 1 FROM game_duel_sessions WHERE game_key=? AND state='active' AND ` + sessionFilter + `)`
 	if s.aiAdapter != nil {
-		query += ` OR EXISTS(SELECT 1 FROM game_duel_sessions WHERE game_key=? AND state='active' AND economy='ai_challenge') OR EXISTS(SELECT 1 FROM game_ai_queue WHERE game_key=? AND (state='waiting' OR resolved_at<=?)) OR EXISTS(SELECT 1 FROM game_ai_memories WHERE expires_at<=?)`
-		args = append(args, s.rules.ID(), s.rules.ID(), now-QueueSeconds, now)
+		if !recovery {
+			query += ` OR EXISTS(SELECT 1 FROM game_duel_sessions WHERE game_key=? AND state='active' AND economy='ai_challenge')`
+			args = append(args, s.rules.ID())
+		}
+		query += ` OR EXISTS(SELECT 1 FROM game_ai_queue WHERE game_key=? AND (state='waiting' OR resolved_at<=?)) OR EXISTS(SELECT 1 FROM game_ai_memories WHERE expires_at<=?)`
+		args = append(args, s.rules.ID(), now-QueueSeconds, now)
 	}
 	var pending bool
 	err := s.readDatabase.QueryRowContext(ctx, query, args...).Scan(&pending)
@@ -56,18 +65,8 @@ func (s *Service) workerPending(ctx context.Context) (bool, error) {
 func (s *Service) RecoverBeforeListenAt(ctx context.Context, _ int64, limit int, deadline time.Time) (WorkResult, error) {
 	s.recoveryMu.Lock()
 	defer s.recoveryMu.Unlock()
-	if s.aiAdapter != nil {
-		tx, now, err := s.begin(ctx)
-		if err != nil {
-			return WorkResult{}, err
-		}
-		if err = s.seedAI(ctx, tx, now); err != nil {
-			_ = tx.Rollback()
-			return WorkResult{}, err
-		}
-		if err = tx.Commit(); err != nil {
-			return WorkResult{}, err
-		}
+	if err := s.ensureAIDefaults(ctx); err != nil {
+		return WorkResult{}, err
 	}
 	result, err := s.work(ctx, true, limit, deadline)
 	if err == nil && !result.More {
@@ -80,6 +79,15 @@ func (s *Service) work(ctx context.Context, recovery bool, limit int, deadline t
 		return WorkResult{}, ErrInvalidRequest
 	}
 	result := WorkResult{}
+	if recovery {
+		if !time.Now().Before(deadline) {
+			return result, context.DeadlineExceeded
+		}
+		pending, err := s.workerPending(ctx, true)
+		if err != nil || !pending {
+			return result, err
+		}
+	}
 	for result.Processed < limit && time.Now().Before(deadline) {
 		worked, err := s.workOne(ctx, recovery)
 		if err != nil {
@@ -89,6 +97,12 @@ func (s *Service) work(ctx context.Context, recovery bool, limit int, deadline t
 			return result, nil
 		}
 		result.Processed++
+	}
+	if result.Processed == 0 {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		return result, context.DeadlineExceeded
 	}
 	result.More = true
 	return result, nil

@@ -214,8 +214,13 @@ async function catchTools(page: Page, label: string) {
   await controlContrast(page, close, 'catch-tools-' + label + '-close-hover');
   await close.click();
   await expect(help).not.toBeVisible();
-  await page.getByRole('button', { name: 'Catch again', exact: true }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole('button', { name: 'Catch again', exact: true })).toBeEnabled();
+  const replay = page.getByRole('button', { name: /^Catch again.*credits/i });
+  await replay.scrollIntoViewIfNeeded();
+  await expect(replay).toBeEnabled();
+  await expect(replay.locator('.game-money__unit')).toHaveCSS(
+    'color',
+    await replay.evaluate((button) => getComputedStyle(button).color),
+  );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 

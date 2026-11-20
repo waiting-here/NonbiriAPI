@@ -51,7 +51,7 @@ test('paid Catch survives pause and reload, confirms replacement, and saves a le
         new URL(response.url()).pathname === base + '/sessions' &&
         response.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: 'Start catching', exact: true }).click();
+    await page.getByRole('button', { name: /^Start catching.*credits/i }).click();
     const firstResponse = await starting;
     expect(firstResponse.status()).toBe(200);
     const first = await current(ctx);
@@ -151,7 +151,7 @@ test('paid Catch survives pause and reload, confirms replacement, and saves a le
     );
     await page.goto(fixture().user_url + '/games/steady-catch');
     await expect(page.locator('.end-score')).toContainText(String(terminal.state.score));
-    await expect(page.getByRole('button', { name: 'Catch again', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /^Catch again.*credits/i })).toBeEnabled();
     expect((await current(ctx)).id).toBe(next.id);
   } finally {
     await ctx.close();

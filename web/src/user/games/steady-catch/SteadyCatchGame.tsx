@@ -375,15 +375,25 @@ function Round({
                       disabled={!enabled || busy || asset !== 'ready'}
                       onClick={start}
                     >
-                      {asset === 'loading'
-                        ? t('接物机准备中…', 'Preparing the catcher…')
-                        : asset === 'error'
-                          ? t('角色未能载入', 'Character could not load')
-                          : busy
-                            ? t('正在开局', 'Starting')
-                            : enabled
-                              ? t('开始接住', 'Start catching')
-                              : t('暂未开放', 'Currently closed')}
+                      {asset === 'loading' ? (
+                        t('接物机准备中…', 'Preparing the catcher…')
+                      ) : asset === 'error' ? (
+                        t('角色未能载入', 'Character could not load')
+                      ) : busy ? (
+                        t('正在开局', 'Starting')
+                      ) : enabled ? (
+                        <>
+                          {t('开始接住', 'Start catching')}
+                          {entry && (
+                            <>
+                              {' '}
+                              · <GameMoney value={entry.price} />
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        t('暂未开放', 'Currently closed')
+                      )}
                     </button>
                     <p className="input-hint">
                       {asset === 'error'
@@ -417,6 +427,7 @@ function Round({
                     {terminal ? (
                       <CatchResult
                         result={result!}
+                        nextPrice={entry?.price}
                         previousBest={previousBest}
                         caught={recent}
                         disabled={!enabled || busy || asset !== 'ready'}

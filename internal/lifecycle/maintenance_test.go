@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -334,5 +336,59 @@ FROM admin_alerts WHERE kind='worker_checkpoint_failed' AND ref=?`, lifecycleRec
 	if total != wantTotal || open != wantOpen || resolved != wantResolved {
 		t.Fatalf("worker alerts total/open/resolved=%d/%d/%d, want %d/%d/%d",
 			total, open, resolved, wantTotal, wantOpen, wantResolved)
+	}
+}
+
+func TestMaintenanceBatchDeadline(t *testing.T) {
+	hard := errors.New("storage failure")
+	tests := []struct {
+		name                            string
+		expire, cancelParent, failTwice bool
+		result                          WorkResult
+		err, want                       error
+		calls                           int
+	}{
+		{name: "unused slice", expire: true, result: WorkResult{More: true}, calls: 2},
+		{name: "timed out query", expire: true, err: fmt.Errorf("read: %w", context.DeadlineExceeded), calls: 2},
+		{name: "rolled back transaction", expire: true, err: sql.ErrTxDone, calls: 2},
+		{name: "still overloaded", expire: true, failTwice: true, result: WorkResult{More: true}, want: context.DeadlineExceeded, calls: 2},
+		{name: "empty database confirmed", expire: true, calls: 1},
+		{name: "early query timeout", err: context.DeadlineExceeded, want: context.DeadlineExceeded, calls: 1},
+		{name: "early closed transaction", err: sql.ErrTxDone, want: sql.ErrTxDone, calls: 1},
+		{name: "failed storage", expire: true, err: hard, want: hard, calls: 1},
+		{name: "failed storage and timeout", expire: true, err: errors.Join(context.DeadlineExceeded, hard), want: hard, calls: 1},
+		{name: "stalled in budget", result: WorkResult{More: true}, want: ErrInvariant, calls: 1},
+		{name: "invalid count", expire: true, result: WorkResult{Processed: -1}, want: ErrInvariant, calls: 1},
+		{name: "caller canceled", expire: true, cancelParent: true, err: context.DeadlineExceeded, want: context.Canceled, calls: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				calls := 0
+				var prior time.Time
+				err := drainMaintenanceBatches(ctx, 123, func(batch context.Context, now int64, limit int, deadline time.Time) (WorkResult, error) {
+					calls++
+					if d, ok := batch.Deadline(); !ok || !d.Equal(deadline) || !deadline.After(prior) || now != 123 || limit != WorkerBatchLimit {
+						t.Fatalf("batch %d: now=%d limit=%d deadline=%v previous=%v", calls, now, limit, deadline, prior)
+					}
+					prior = deadline
+					if calls > 1 && !tc.failTwice {
+						return WorkResult{}, nil
+					}
+					if tc.expire {
+						<-batch.Done()
+					}
+					if tc.cancelParent {
+						cancel()
+					}
+					return tc.result, tc.err
+				})
+				if !errors.Is(err, tc.want) || calls != tc.calls {
+					t.Fatalf("err=%v calls=%d, want %v and %d", err, calls, tc.want, tc.calls)
+				}
+			})
+		})
 	}
 }

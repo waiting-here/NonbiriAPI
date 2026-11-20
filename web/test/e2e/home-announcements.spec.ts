@@ -458,9 +458,7 @@ test('Home selects the first three visible announcements across cursor pages and
   await expect(section.locator('a a')).toHaveCount(0);
   expect(state.homeRequests).toEqual([null, CURSOR_ONE]);
   expect(state.detailBatches).toEqual([[first.id, second.id, third.id]]);
-  await expect(
-    page.locator('.home-overview__main > .home-start + .home-announcements'),
-  ).toHaveCount(1);
+  await expect(page.locator('.home-daily + .home-announcements')).toHaveCount(1);
   await expect(page.locator('.core-checkin-grid')).toHaveCount(0);
   const previewSizes = await section
     .locator('.home-announcement-preview')

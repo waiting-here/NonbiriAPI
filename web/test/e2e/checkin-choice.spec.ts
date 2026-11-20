@@ -10,8 +10,8 @@ const viewports = [
   { width: 480, locale: 'en', columns: 1 },
   { width: 512, locale: 'en', columns: 1 },
   { width: 768, locale: 'en', columns: 2 },
-  { width: 1024, locale: 'en', columns: 1 },
-  { width: 1440, locale: 'en', columns: 1 },
+  { width: 1024, locale: 'en', columns: 2 },
+  { width: 1440, locale: 'en', columns: 2 },
   { width: 390, locale: 'zh', columns: 1 },
 ] as const;
 
@@ -114,7 +114,14 @@ for (const { width, locale, columns } of viewports) {
     expect(gameBox).not.toBeNull();
     const checkins = await page.locator('.home-checkins').boundingBox();
     expect(checkins).not.toBeNull();
-    expect(checkins!.width >= 512).toBe(columns === 2);
+    const wallet = await page.locator('.home-wallet').boundingBox();
+    expect(wallet).not.toBeNull();
+    if (width >= 1024) {
+      expect(Math.abs(wallet!.y - checkins!.y)).toBeLessThanOrEqual(1);
+      expect(checkins!.x).toBeGreaterThanOrEqual(wallet!.x + wallet!.width);
+    } else {
+      expect(checkins!.y).toBeGreaterThanOrEqual(wallet!.y + wallet!.height);
+    }
     if (columns === 1) {
       expect(gameBox!.y).toBeGreaterThan(generalBox!.y);
     } else {

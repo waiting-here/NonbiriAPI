@@ -1,9 +1,16 @@
+import type { TFunction } from 'i18next';
 import { useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { DonationPendingBadge } from '@shared/components/DonationPendingBadge';
 import { Icon } from '@shared/components/Icon';
-import { ADMIN_NAV_GROUPS, ADMIN_PRIMARY_NAV } from '../navigation';
+import {
+  ADMIN_NAV_GROUPS,
+  ADMIN_PRIMARY_NAV,
+  ADMIN_SEARCH_NAV,
+  type NavItem,
+  type SearchNavItem,
+} from '../navigation';
 import { activeAdminNavGroup, useCollapsedAdminNavGroups } from '../navigationGroups';
 
 const groupLabels = {
@@ -19,6 +26,23 @@ function searchable(value: string) {
   return value.normalize('NFKC').toLowerCase();
 }
 
+function labelFor(item: NavItem, t: TFunction) {
+  if (!item.labelKey) return t(`admin.${item.key}.nav`);
+  return t(item.labelKey, {
+    defaultValue: item.fallbackLabelKey ? t(item.fallbackLabelKey) : item.labelKey,
+  });
+}
+
+function searchLabels(item: SearchNavItem, t: TFunction) {
+  return [
+    labelFor(item, t),
+    t(groupLabels[item.group]),
+    item.parentLabelKey && t(item.parentLabelKey),
+    item.fallbackLabelKey && t(item.fallbackLabelKey),
+    ...(item.keywordKeys ?? []).map((key) => t(key)),
+  ].join(' ');
+}
+
 export function AdminNavigation({
   accountId,
   onNavigate,
@@ -26,32 +50,31 @@ export function AdminNavigation({
   accountId: string;
   onNavigate: () => void;
 }) {
-  const { t } = useTranslation();
-  const { pathname } = useLocation();
+  const { t, i18n } = useTranslation(undefined, { bindI18n: 'languageChanged loaded' });
+  const { pathname, search } = useLocation();
   const currentGroup = activeAdminNavGroup(pathname);
   const navGroups = useCollapsedAdminNavGroups();
   const input = useRef<HTMLInputElement>(null);
   const nav = useRef<HTMLElement>(null);
   const [query, setQuery] = useState('');
-  const words = searchable(query).trim().split(/\s+/).filter(Boolean);
-  const searching = words.length > 0;
-  const entries = ADMIN_PRIMARY_NAV.map((item) => {
-    const label = item.labelKey
-      ? t(item.labelKey, {
-          defaultValue: item.fallbackLabelKey ? t(item.fallbackLabelKey) : item.labelKey,
-        })
-      : t(`admin.${item.key}.nav`);
-    return { ...item, label };
-  });
-  const matches = entries.filter((item) => {
-    const group = t(groupLabels[item.group]);
-    const text = searchable(
-      [item.label, group, item.to, item.fallbackLabelKey && t(item.fallbackLabelKey)]
-        .filter(Boolean)
-        .join(' '),
-    );
-    return words.every((word) => text.includes(word));
-  });
+  const normalizedQuery = searchable(query).trim();
+  const searching = normalizedQuery.length > 0;
+  const otherLanguage = i18n.resolvedLanguage === 'zh' ? 'en' : 'zh';
+  const hasOtherCatalog = i18n.hasResourceBundle(otherLanguage, 'translation');
+  let matches = ADMIN_PRIMARY_NAV;
+  if (searching) {
+    const exact = ADMIN_SEARCH_NAV.find((item) => searchable(item.to) === normalizedQuery);
+    const words = normalizedQuery.split(/\s+/);
+    const otherT = hasOtherCatalog ? i18n.getFixedT(otherLanguage) : undefined;
+    matches = exact
+      ? [exact]
+      : ADMIN_SEARCH_NAV.filter((item) => {
+          const text = searchable(
+            [item.to, searchLabels(item, t), otherT && searchLabels(item, otherT)].join(' '),
+          );
+          return words.every((word) => text.includes(word));
+        });
+  }
   function clear() {
     setQuery('');
     input.current?.focus();
@@ -76,6 +99,9 @@ export function AdminNavigation({
             maxLength={120}
             value={query}
             placeholder={t('admin.navigation.findHint')}
+            onFocus={() => {
+              if (!hasOtherCatalog) void i18n.loadLanguages(otherLanguage);
+            }}
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing || !query) return;
@@ -142,12 +168,13 @@ export function AdminNavigation({
                     to={item.to}
                     end={item.end}
                     onClick={follow}
+                    aria-current={searching && pathname + search !== item.to ? false : 'page'}
                   >
                     {item.icon && <Icon name={item.icon} />}
-                    <span className="nb-admin-sidebar__label">{item.label}</span>
+                    <span className="nb-admin-sidebar__label">{labelFor(item, t)}</span>
                   </NavLink>
                 );
-                return item.to === '/charity' ? (
+                return item.key === 'admin-charity' ? (
                   <div className="nb-admin-sidebar__row" key={item.key}>
                     {link}
                     <DonationPendingBadge role="admin" accountID={accountId} onNavigate={follow} />

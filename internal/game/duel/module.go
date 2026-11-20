@@ -16,6 +16,7 @@ import (
 func (s *Service) Module() *host.Module {
 	return &host.Module{
 		ValidatePersistedState: s.ValidatePersistedState,
+		PrepareStartupDefaults: s.prepareStartupDefaults,
 		RecoverBeforeListen: func(ctx context.Context, now int64, limit int, deadline time.Time) (host.WorkResult, error) {
 			// The coordinator reuses this capability during periodic recovery.
 			// Only the first startup drain may cancel pre-existing games.

@@ -378,9 +378,10 @@ describe('beta.1 game pages', () => {
     expect(heroes.map(({ width, height }) => [width, height])).toEqual(
       Array.from({ length: 7 }, () => [960, 480]),
     );
-    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual(
-      Array.from({ length: 7 }, () => 'eager'),
-    );
+    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual([
+      'eager',
+      ...Array<string>(6).fill('lazy'),
+    ]);
     expect(heroes.every((hero) => hero.getAttribute('alt') === '')).toBe(true);
     expect(rendered.container.querySelector('.game-center-card__hero svg')).not.toBeInTheDocument();
   });
@@ -678,6 +679,7 @@ describe('beta.1 game pages', () => {
     await rendered.user.click(await screen.findByRole('button', { name: '玩法说明' }));
     const rules = screen.getByRole('dialog', { name: '池塘垂钓怎么玩' });
     expect(rules).toHaveTextContent('先选鱼饵');
+    expect(rules).toHaveTextContent('放生鱼苗');
     await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
     expect(screen.queryByRole('dialog', { name: '池塘垂钓怎么玩' })).not.toBeInTheDocument();
     expect(

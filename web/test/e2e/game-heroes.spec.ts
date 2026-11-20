@@ -113,6 +113,8 @@ for (const fixture of cases) {
       expect(new Set(cardBoxes.map((box) => Math.round(box.x))).size).toBe(3);
     }
 
+    const factionCovers = imageRequests.filter((url) => url.includes('_leader-cg-v1.webp'));
+    expect(factionCovers).toHaveLength(fixture.width < 640 ? 1 : 4);
     for (const rawURL of imageRequests) {
       const imageURL = new URL(rawURL);
       expect(imageURL.origin).toBe(USER_ORIGIN);

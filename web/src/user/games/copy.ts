@@ -210,6 +210,8 @@ const keys = {
   'fishing.rules.batchBody': 'user.games.copy.fishing.rules.batchBody',
   'fishing.rules.resultTitle': 'user.games.copy.fishing.rules.resultTitle',
   'fishing.rules.resultBody': 'user.games.copy.fishing.rules.resultBody',
+  'fishing.rules.pondTitle': 'user.games.copy.fishing.rules.pondTitle',
+  'fishing.rules.pondBody': 'user.games.copy.fishing.rules.pondBody',
   'fishing.rules.recoveryTitle': 'user.games.copy.fishing.rules.recoveryTitle',
   'fishing.rules.recoveryBody': 'user.games.copy.fishing.rules.recoveryBody',
   'fishing.rules.scoresTitle': 'user.games.copy.fishing.rules.scoresTitle',

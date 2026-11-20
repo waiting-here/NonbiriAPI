@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { gameRequest } from './common/request';
+import { useWhaleHavenOpen } from './common/useWhaleHavenOpen';
 import { CreditText } from '@shared/components/CreditText';
 import { Panel, PanelHead, PanelBody, StatusBadge } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
@@ -135,7 +134,7 @@ function GameCard({ card }: { card: CenterCard }) {
       to={card.path}
     >
       <div className="game-center-card__hero">
-        <GameHero kind={card.id} eager />
+        <GameHero kind={card.id} />
       </div>
       <div className="game-center-card__body">
         <div className="game-card-heading">
@@ -162,18 +161,7 @@ function GameCard({ card }: { card: CenterCard }) {
 export function GameCenter() {
   const { text } = useGameCopy();
   const snapshot = useGamesSnapshot();
-  const whale = useQuery({
-    queryKey: ['user', 'games', 'whale-haven', 'availability'],
-    queryFn: async ({ signal }) =>
-      (
-        await gameRequest<{ enabled: boolean; exchange_enabled: boolean }>(
-          '/api/games/whale-haven/availability',
-          { signal },
-        )
-      ).data,
-    enabled: !!snapshot.data?.gamesEnabled,
-    retry: false,
-  });
+  const whaleOpen = useWhaleHavenOpen(snapshot.data?.gamesEnabled === true);
   const maintenance = isMaintenance(snapshot.error);
   if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
   if (snapshot.error && !maintenance)
@@ -208,7 +196,7 @@ export function GameCenter() {
       ...availability,
     };
   });
-  if (snapshot.data?.gamesEnabled && whale.data?.enabled)
+  if (whaleOpen)
     cards.push({
       id: 'whalehaven',
       path: '/games/whale-haven',

@@ -717,6 +717,9 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("validate recurring charity limits: %w", err)
 	}
 	db.RecordStartupStage(startupContext, db.StageBusinessRecovery)
+	if err := gameRuntimes.PrepareStartupDefaults(startupContext); err != nil {
+		return nil, fmt.Errorf("prepare game defaults before listener: %w", err)
+	}
 	if err := recoverRankingsAndLifecycleBeforeListener(startupContext, rankingService, lifecycleCoordinator, gameNow().Unix()); err != nil {
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}

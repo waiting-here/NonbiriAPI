@@ -120,10 +120,12 @@ for (const design of ['celestial', 'wandering', 'heart-moment'])
             await page.goto(USER_ORIGIN + path);
             await expect(page.locator(selector).first()).toBeVisible();
             if (path === '/') {
-              await expect(page.locator('.core-checkin-card').first()).not.toHaveCSS(
-                'background-image',
-                'none',
-              );
+              const checkins = page.locator('.home-checkins');
+              await expect(checkins).toHaveCSS('background-image', /linear-gradient/);
+              // Each option shares the enclosing panel's glass on illustrated themes.
+              for (const option of await checkins.locator('.core-checkin-card').all()) {
+                await expect(option).toHaveCSS('backdrop-filter', 'none');
+              }
             }
             await capture(page, label + '-' + suffix);
           }

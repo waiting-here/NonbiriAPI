@@ -83,6 +83,40 @@ func aiText(v string, min, max int) bool {
 	return !strings.ContainsFunc(v, func(r rune) bool { return unicode.IsControl(r) })
 }
 
+func (s *Service) prepareStartupDefaults(ctx context.Context) error {
+	s.recoveryMu.Lock()
+	defer s.recoveryMu.Unlock()
+	return s.ensureAIDefaults(ctx)
+}
+
+// Caller holds recoveryMu. The initial policies, bots and challenges are one
+// installation transaction. A returning installation needs only a reader.
+func (s *Service) ensureAIDefaults(ctx context.Context) error {
+	if s.aiAdapter == nil || s.aiDefaultsReady {
+		return nil
+	}
+	var exists bool
+	if err := s.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_ai_policies WHERE game_key=?)`, s.rules.ID()).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		tx, now, err := s.begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		// Recheck under the writer lock before creating anything.
+		if err := s.seedAI(ctx, tx, now); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	s.aiDefaultsReady = true
+	return nil
+}
+
 func (s *Service) seedAI(ctx context.Context, tx *sql.Tx, now int64) error {
 	if s.aiAdapter == nil {
 		return nil
@@ -307,8 +341,8 @@ func (s *Service) saveAIBot(ctx context.Context, tx *sql.Tx, in SaveAIBot, now i
 	if err != nil {
 		return AIBot{}, ErrInvalidRequest
 	}
-	var source, schema, raw string
-	err = tx.QueryRowContext(ctx, `SELECT v.source_id,v.schema_id,v.definition_json FROM game_ai_policy_versions v JOIN game_ai_policies p ON p.id=v.policy_id WHERE v.policy_id=? AND v.version=? AND p.game_key=? AND (p.enabled=1 OR ?=0)`, in.PolicyID, in.PolicyVersion, s.rules.ID(), in.Enabled).Scan(&source, &schema, &raw)
+	var source, schema string
+	err = tx.QueryRowContext(ctx, `SELECT v.source_id,v.schema_id FROM game_ai_policy_versions v JOIN game_ai_policies p ON p.id=v.policy_id WHERE v.policy_id=? AND v.version=? AND p.game_key=? AND (p.enabled=1 OR ?=0)`, in.PolicyID, in.PolicyVersion, s.rules.ID(), in.Enabled).Scan(&source, &schema)
 	if err != nil {
 		return AIBot{}, notFound(err)
 	}
@@ -363,8 +397,10 @@ func (s *Service) saveAIBot(ctx context.Context, tx *sql.Tx, in SaveAIBot, now i
 			return AIBot{}, err
 		}
 	}
-	if err := trimAIBotMemory(ctx, tx, id, in.MemoryDays, in.MemoryGames, now); err != nil {
-		return AIBot{}, err
+	if in.ID != "" {
+		if err := trimAIBotMemory(ctx, tx, id, in.MemoryDays, in.MemoryGames, now); err != nil {
+			return AIBot{}, err
+		}
 	}
 	return AIBot{ID: id, Name: in.Name, Description: in.Description, Enabled: in.Enabled, Revision: revision, PolicyID: in.PolicyID, PolicyVersion: in.PolicyVersion, ChallengeID: challenge, Ticket: in.Ticket, FirstReward: in.FirstReward, MemoryDays: in.MemoryDays, MemoryGames: in.MemoryGames}, nil
 }

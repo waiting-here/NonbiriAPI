@@ -23,7 +23,7 @@ const heroSources = {
 
 export type GameHeroKind = keyof typeof heroSources;
 
-export function GameHero({ kind, eager = false }: { kind: GameHeroKind; eager?: boolean }) {
+export function GameHero({ kind }: { kind: GameHeroKind }) {
   if (kind === 'whalehaven')
     return (
       <div className="game-whale-cover" aria-hidden="true">
@@ -40,7 +40,7 @@ export function GameHero({ kind, eager = false }: { kind: GameHeroKind; eager?: 
             key={faction}
             src={`/assets/gwent/cards/${faction}_leader-cg-v1.webp`}
             alt=""
-            loading={eager ? 'eager' : 'lazy'}
+            loading="lazy"
             decoding="async"
           />
         ))}
@@ -56,7 +56,7 @@ export function GameHero({ kind, eager = false }: { kind: GameHeroKind; eager?: 
       alt=""
       aria-hidden="true"
       decoding="async"
-      loading={eager || kind === 'fishing' ? 'eager' : 'lazy'}
+      loading={kind === 'fishing' ? 'eager' : 'lazy'}
       fetchPriority={kind === 'fishing' ? 'high' : 'auto'}
       draggable="false"
     />

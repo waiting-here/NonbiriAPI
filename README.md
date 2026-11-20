@@ -4,7 +4,11 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.4.0** improves service setup, model discovery, charity binding, request
+**v1.4.1** puts unfinished setup first and groups the wallet and daily check-ins
+above announcements. The home page links to Whale Haven when it is open.
+Administrator navigation search also reaches individual management sections.
+
+v1.4.0 improves service setup, model discovery, charity binding, request
 investigation and activity layouts across both stations. Donated keys can set
 total and recurring limits on credits, calls and total, input or output tokens
 for each upstream model. Recognized Google model quota errors put the affected
@@ -18,7 +22,8 @@ shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 
 This version uses database schema 55 and account export format 38. Upgrade
-existing installations offline through the v1.3.12 bridge.
+v1.4.0 directly on the same schema. For older databases, follow the offline
+v1.3.12 bridge procedure.
 [Database upgrades](docs/database-upgrades.md) · [Changelog](CHANGELOG.md)
 
 ## Architecture

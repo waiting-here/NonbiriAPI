@@ -2,7 +2,9 @@
 
 ## Supported databases
 
-| Starting state | How to use v1.4.0 |
+v1.4.1 keeps v1.4.0 storage and export formats. Back up a v1.4.0 instance and replace its binary with the v1.4.1 release. The offline converter is for the earlier schema 54 bridge.
+
+| Starting state | How to use v1.4.x |
 | --- | --- |
 | Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 55. |
 | Exact current schema 55 | Start the service with its matching configuration and master key. |
