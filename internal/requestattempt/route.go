@@ -52,7 +52,7 @@ func (o RouteObservation) valid() bool {
 	if o.Match != "" && o.Match != "native" && o.Match != "conversion" {
 		return false
 	}
-	return o.Field == "" || rejectionFieldsAllowed[o.Field] || validTopLevelPosition(o.Field)
+	return o.Field == "" || validRejectionField(o.Field)
 }
 
 func ObserveRoute(ctx context.Context, bindingID int64, service contract.NativeService, reason, match, field string) {

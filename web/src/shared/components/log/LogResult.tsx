@@ -1,3 +1,4 @@
+import { rejectionFieldLabel } from './rejectionField';
 import { useTranslation } from 'react-i18next';
 import type { RoleLogRow } from './data';
 
@@ -100,7 +101,6 @@ export function LogResultBadge({ row }: { row: RoleLogRow }) {
   const { t } = useTranslation();
   const result = logResult(row);
   const field = row.rejection_detail?.field;
-  const position = field && /^request\.fields\[(\d+)\]$/.exec(field);
   return (
     <span className="log-result">
       <span className={`nb-badge nb-badge--${result.tone}`}>
@@ -109,9 +109,7 @@ export function LogResultBadge({ row }: { row: RoleLogRow }) {
         })}
       </span>
       {field && field !== 'request' && (
-        <small className="log-result__field">
-          {position ? t('logs.rejectionTopLevelField', { position: position[1] }) : field}
-        </small>
+        <small className="log-result__field">{rejectionFieldLabel(field, t)}</small>
       )}
     </span>
   );

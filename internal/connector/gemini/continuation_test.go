@@ -122,6 +122,19 @@ func TestGeminiSignedPartsRemainInOriginalOrderOnJSONAndStreamReplay(t *testing.
 		if len(parts) != 4 || string(parts[0]["text"]) != `"A"` || parts[0]["thoughtSignature"] != nil || string(parts[1]["text"]) != `"B"` || string(parts[1]["thoughtSignature"]) != `"c2ln"` || string(parts[3]["text"]) != `"C"` || string(parts[3]["thoughtSignature"]) != `"ZGVm"` {
 			t.Fatal(string(compiled))
 		}
+		call := message["tool_calls"].([]any)[0].(map[string]any)
+		originalSignature := call["extra_content"]
+		call["extra_content"] = map[string]any{"google": map[string]string{"thought_signature": "YQ=="}}
+		body, _ = json.Marshal(map[string]any{"model": "public", "messages": messages})
+		if _, err := Compile(request(t, string(body)), "gemini", contract.AttemptPolicy{}); err == nil {
+			t.Fatal("contradictory call signature accepted")
+		}
+		delete(call, "extra_content")
+		body, _ = json.Marshal(map[string]any{"model": "public", "messages": messages})
+		if _, err := Compile(request(t, string(body)), "gemini", contract.AttemptPolicy{}); err != nil {
+			t.Fatal("native-only signature lost", err)
+		}
+		call["extra_content"] = originalSignature
 		message["content"] = "tampered"
 		body, _ = json.Marshal(map[string]any{"model": "public", "messages": messages})
 		if _, err := Compile(request(t, string(body)), "gemini", contract.AttemptPolicy{}); err == nil {

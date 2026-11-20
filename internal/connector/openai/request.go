@@ -394,10 +394,10 @@ func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 	if err := json.Unmarshal(raw, &messages); err != nil {
 		return 0, invalidField("messages", "expected an array of message objects")
 	}
-	for _, messageRaw := range messages {
+	for messageIndex, messageRaw := range messages {
 		var message map[string]json.RawMessage
-		if err := json.Unmarshal(messageRaw, &message); err != nil {
-			return 0, invalidField("messages[]", "expected a message object")
+		if err := json.Unmarshal(messageRaw, &message); err != nil || message == nil {
+			return 0, invalidField("messages["+strconv.Itoa(messageIndex)+"]", "expected a message object")
 		}
 		count += charityFunctionArgumentsRunes(message["function_call"])
 		for _, callRaw := range charityJSONArray(message["tool_calls"]) {
@@ -419,13 +419,13 @@ func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 		if err := json.Unmarshal(content, &parts); err != nil {
 			continue
 		}
-		for _, partRaw := range parts {
+		for partIndex, partRaw := range parts {
 			var part struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			}
 			if err := json.Unmarshal(partRaw, &part); err != nil {
-				return 0, invalidField("messages[].content[]", "content block type and text must be strings")
+				return 0, invalidField("messages["+strconv.Itoa(messageIndex)+"].content["+strconv.Itoa(partIndex)+"]", "content block type and text must be strings")
 			}
 			if part.Type == "text" {
 				count += utf8.RuneCountInString(part.Text)

@@ -28,25 +28,36 @@ func replayParts(extra []byte, expected []any) ([]any, error) {
 	if !chatwire.Keys(google, "parts") || json.Unmarshal(google["parts"], &parts) != nil || len(parts) == 0 || len(parts) > 4096 {
 		return nil, chatwire.Rejection("extra_content")
 	}
-	project := func(parts any) (map[string]any, error) {
+	type projection struct {
+		text, reasoning string
+		calls           []any
+	}
+	project := func(parts any) (projection, error) {
 		raw, err := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"role": "model", "parts": parts}, "finishReason": "STOP"}}})
 		if err != nil {
-			return nil, err
+			return projection{}, err
 		}
 		defer clear(raw)
 		d := NewDecoder("continuation", time.Unix(0, 0), false).(*decoder)
 		defer d.Clear()
 		if _, err := d.consume(raw); err != nil {
-			return nil, err
+			return projection{}, err
 		}
-		for _, call := range d.calls {
-			delete(call.(map[string]any), "extra_content")
-		}
-		return map[string]any{"text": d.text.String(), "reasoning": d.thought.String(), "calls": d.calls}, nil
+		return projection{text: d.text.String(), reasoning: d.thought.String(), calls: d.calls}, nil
 	}
 	actual, err := project(parts)
 	wanted, expectedErr := project(expected)
-	if err != nil || expectedErr != nil || !reflect.DeepEqual(actual, wanted) {
+	if err != nil || expectedErr != nil {
+		return nil, chatwire.Rejection("extra_content")
+	}
+	// A client may preserve signatures solely in the native parts. Any
+	// signature it also supplies on a projected call must agree with them.
+	for i, call := range actual.calls {
+		if i < len(wanted.calls) && wanted.calls[i].(map[string]any)["extra_content"] == nil {
+			delete(call.(map[string]any), "extra_content")
+		}
+	}
+	if !reflect.DeepEqual(actual, wanted) {
 		return nil, chatwire.Rejection("extra_content")
 	}
 	out := make([]any, len(parts))
