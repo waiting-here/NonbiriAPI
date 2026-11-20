@@ -50,6 +50,7 @@ function WhaleGame() {
   const lock = useRef(false);
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [tab, setTab] = useState<DeckTabId | null>(null);
+  const [guestFocus, setGuestFocus] = useState<string>();
   const [settings, setSettings] = useState(false);
   const [menu, setMenu] = useState<MenuPresentationMode>(() => {
     try {
@@ -87,9 +88,13 @@ function WhaleGame() {
   });
   const profile = data.data;
   const effectiveMenu = small ? 'sheet' : menu;
-  const viewing = profile?.social.open ? view : null;
+  const viewing =
+    profile?.social.open && view
+      ? (profile.snapshot.neighbors.find((peer) => peer.id === view.id) ?? view)
+      : null;
   function deck(id: DeckTabId) {
     lastTab.current = id;
+    setGuestFocus(undefined);
     setTab(id);
     setSettings(false);
   }
@@ -378,6 +383,7 @@ function WhaleGame() {
         ) : (
           <OceanStage
             snapshot={snap}
+            social={profile.social}
             values={values}
             viewingNeighbor={viewing}
             rigImpulse={impulse}
@@ -430,7 +436,10 @@ function WhaleGame() {
               else deck('feed');
             }}
             onToggleSleep={(forceSleep) => void dispatch({ type: 'toggle_sleep', forceSleep })}
-            onOpenGuestCatch={() => deck('social')}
+            onOpenGuestCatch={(id) => {
+              deck('social');
+              setGuestFocus(id);
+            }}
             onSendWhaleHere={(id, preset) => {
               if (viewing?.id === id) setDeparture({ peer: viewing, preset });
             }}
@@ -458,6 +467,9 @@ function WhaleGame() {
               tab && (
                 <ControlDeck
                   activeTab={tab}
+                  focusTarget={
+                    tab === 'social' && guestFocus ? 'whale-guest-' + guestFocus : undefined
+                  }
                   menuMode={effectiveMenu}
                   hidden={settings}
                   onClose={closeDeck}
@@ -483,6 +495,10 @@ function WhaleGame() {
                       profile={profile}
                       busy={busy}
                       dispatch={dispatch}
+                      onActivity={() => deck('logs')}
+                      onWallet={() => deck('exchange')}
+                      onRefresh={() => data.refetch()}
+                      refreshing={data.isFetching}
                       onPreview={preview}
                       onDepart={(peer) => setDeparture({ peer })}
                     />
@@ -511,7 +527,9 @@ function WhaleGame() {
                   {tab === 'logs' && (
                     <>
                       <ActivityPane snapshot={snap} />
-                      <Link to="/credits">{t('查看积分明细', 'View credit history')}</Link>
+                      <Link to="/credits?category=whale_haven">
+                        {t('查看小筑积分明细', 'View Whale Haven credit history')}
+                      </Link>
                     </>
                   )}
                 </ControlDeck>
@@ -538,6 +556,10 @@ function WhaleGame() {
         <DepartureDialog
           neighbor={departure.peer}
           initialMessage={departure.preset}
+          dailyWageLimitReached={
+            values.guest_wage_bp > 0 &&
+            snap.wallet.dailySocialPearlsGained >= values.daily_social_pearls
+          }
           busy={busy}
           dispatch={dispatch}
           onClose={() => setDeparture(null)}

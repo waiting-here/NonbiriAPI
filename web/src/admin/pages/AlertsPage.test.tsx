@@ -75,7 +75,7 @@ function deferred<T>() {
 }
 
 describe('administrator alerts page', () => {
-  it('shows a returned request as a review notice while keeping its resolution controls', async () => {
+  it('finds returned requests by type and shows them with resolution controls', async () => {
     const returned = alert('4', false, {
       kind: 'forward_error',
       subtype: 'return_detected',
@@ -86,21 +86,35 @@ describe('administrator alerts page', () => {
       {
         method: 'GET',
         path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+        body: page([returned, alert('5')]),
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/alerts?resolved=false&page=1&page_size=20&kind=forward_error',
         body: page([returned]),
       },
     ]);
-    await renderWithProviders(<AlertsPage />, {
+    const view = await renderWithProviders(<AlertsPage />, {
       station: 'admin',
       role: 'admin',
       locale: 'en',
       route: '/alerts?resolved=false&page=1&page_size=20',
     });
-    expect(await screen.findByText('Request returned')).toBeVisible();
+    const row = await screen.findByRole('row', { name: /Request returned/ });
     expect(screen.getByText(/processing continued without an automatic penalty/)).toBeVisible();
     expect(
       screen.queryByText('Upstream call did not complete. Open details for failure information.'),
     ).toBeNull();
-    expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled();
+    expect(within(row).getByRole('button', { name: 'Resolve' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Select alert 5' })).toBeVisible();
+    await view.user.selectOptions(
+      screen.getByRole('combobox', { name: 'Alert type' }),
+      screen.getByRole('option', { name: 'Forwarding errors and returned requests' }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox', { name: 'Select alert 5' })).not.toBeInTheDocument();
+      expect(screen.getByRole('row', { name: /Request returned/ })).toBeVisible();
+    });
   });
 
   it('rejects off-site and ambiguous return destinations', () => {

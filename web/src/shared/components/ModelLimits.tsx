@@ -263,10 +263,14 @@ function ModelLimitEditor({
     changes: Partial<ModelBudgets>;
     original: ModelBudgets;
   } | null>(null);
+  const panel = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    if (active) heading.current?.focus();
-  }, [active]);
+    if (!active) return;
+    const inUserStation = props.role !== 'admin';
+    heading.current?.focus({ preventScroll: inUserStation });
+    if (inUserStation) panel.current?.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+  }, [active, props.role]);
   const root = [
     props.role === 'admin' ? 'admin' : 'user',
     'operations',
@@ -411,7 +415,7 @@ function ModelLimitEditor({
   }
 
   return (
-    <section className="nb-stack model-limits__editor" aria-label={model}>
+    <section ref={panel} className="nb-stack model-limits__editor" aria-label={model}>
       <Button variant="ghost" type="button" onClick={onBack}>
         {t('common.modelLimits.back')}
       </Button>

@@ -3648,6 +3648,7 @@
       "searchPlaceholder": "名称、地址或备注",
       "advancedSetup": "协议与模型目录",
       "serviceAddress": "服务地址",
+      "serviceAddressError": "请输入完整的 HTTP 或 HTTPS 服务地址（最多 4,096 字节），去掉账号、密码、问号参数和井号片段。",
       "customBody": "填写服务地址和密钥。",
       "mainstreamBody": "从站点整理的常用服务中选择，地址和协议已填好。",
       "keyOwnership": "添加即确认你有权使用此密钥。",

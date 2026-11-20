@@ -120,25 +120,22 @@ export function ExchangePane({
           </dd>
         </div>
       </dl>
-      {(pendingCoins > 0 || pendingShards > 0 || wageProgress > 0) && (
+      {(pendingCoins > 0 || pendingShards > 0) && (
         <div>
           <p>
             {t('待结算', 'Pending settlement')} · {t('小鲸币', 'Whale coins')} {pendingCoins} ·{' '}
             {t('海螺碎片', 'Conch shards')} {pendingShards}
-            {wageProgress > 0 && (
-              <>
-                {' '}
-                · {t('下一枚工资进度', 'Progress toward next wage coin')}{' '}
-                {Math.floor(wageProgress * 100)}%
-              </>
-            )}
           </p>
-          {(pendingCoins > 0 || pendingShards > 0) && (
-            <button type="button" disabled={busy} className="nb-btn" onClick={onCollect}>
-              {t('收取并入账', 'Collect earnings')}
-            </button>
-          )}
+          <button type="button" disabled={busy} className="nb-btn" onClick={onCollect}>
+            {t('收取并入账', 'Collect earnings')}
+          </button>
         </div>
+      )}
+      {wageProgress > 0 && (
+        <p>
+          {t('下一枚工资进度', 'Progress toward next wage coin')} {Math.floor(wageProgress * 100)}%
+          · {t('下次帮工接着累计。', 'Carries over to your next shift.')}
+        </p>
       )}
       <p>
         {t('每手小鲸币', 'Whale coins per lot')} {values.lot_pearls} ·{' '}
@@ -258,7 +255,9 @@ export function ExchangePane({
         </>
       )}
       {error && <p role="alert">{error}</p>}
-      <Link to="/credits">{t('查看积分明细', 'View credit history')}</Link>
+      <Link to="/credits?category=whale_haven">
+        {t('查看小筑积分明细', 'View Whale Haven credit history')}
+      </Link>
       <ConfirmDialog
         open={!!quote}
         title={t('确认兑换', 'Confirm exchange')}

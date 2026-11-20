@@ -3648,6 +3648,7 @@
       "searchPlaceholder": "Name, address, or note",
       "advancedSetup": "Protocol and model list",
       "serviceAddress": "Service address",
+      "serviceAddressError": "Enter a full HTTP or HTTPS service address of up to 4,096 bytes, without a username, password, query string, or fragment.",
       "customBody": "Enter a service address and key.",
       "mainstreamBody": "Pick a common service set up by the site, with the address and protocol filled in.",
       "keyOwnership": "By adding this key, you confirm that you are authorized to use it.",

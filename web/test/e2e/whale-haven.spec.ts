@@ -94,6 +94,92 @@ function initial(): Profile {
     },
   };
 }
+
+test('a visiting keeper sees hiring and meal state consistently in both havens', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.social.open = true;
+  profile.snapshot.neighbors = [neighbor];
+  profile.snapshot.whale.location = {
+    kind: 'visiting',
+    neighborId: neighbor.id,
+    startedAt: Date.now(),
+  };
+  profile.social.away = {
+    target: neighbor.id,
+    label: '门牌 bay-b',
+    allow_hire: true,
+    working: false,
+    started_at_ms: Date.now(),
+  };
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) =>
+    route.fulfill({
+      json: route.request().url().includes('neighbors/search') ? { items: [neighbor] } : profile,
+    }),
+  );
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await expect(page.getByText(/已吃 0 克 · 餐食奖励预计 0 枚/)).toBeVisible();
+  await page.getByRole('button', { name: '去邻居家看她' }).click();
+  await expect(page.getByText('小鲸鱼 · 串门用餐')).toBeVisible();
+  profile.social.away.working = true;
+  profile.social.away.work_ends_at_ms = Date.now() + 120000;
+  await page.getByRole('button', { name: '串门', exact: true }).click();
+  await page.getByRole('button', { name: '刷新串门状态' }).click();
+  await expect(page.getByRole('heading', { name: '在外帮工' })).toBeVisible();
+  await expect(page.getByText(/预计收工/)).toBeVisible();
+  await expect(page.getByText('小鲸鱼 · 正在帮工')).toBeAttached();
+  await expect(page.getByText('小鲸鱼 · 串门用餐')).not.toBeAttached();
+  await page.getByRole('button', { name: '首页', exact: true }).click();
+  await expect(page.getByText('在外帮工', { exact: true })).toBeVisible();
+  await expect(page.getByText('工资按帮工产出的 20% 结算')).toBeVisible();
+});
+
+test('selecting the second guest opens its own controls and respects consent', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.social.open = true;
+  const second = { ...neighbor, id: 'bay-c', whaleName: '青空' };
+  profile.snapshot.neighbors = [neighbor, second];
+  profile.snapshot.guestVisits = [neighbor, second].map((n, i) => ({
+    neighborId: n.id,
+    slotIndex: i as 0 | 1,
+    arrivedAt: Date.now(),
+    eatenGrams: 0,
+    stage: 'eating',
+  }));
+  profile.social.guests = [neighbor, second].map((n, i) => ({
+    neighbor_id: n.id,
+    label: n.id,
+    whale_name: n.whaleName,
+    whale_outfit: 'maid_classic',
+    allow_hire: i === 0,
+    working: false,
+    started_at_ms: Date.now(),
+  }));
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) =>
+    route.fulfill({
+      json: route.request().url().includes('neighbors/search') ? { items: [] } : profile,
+    }),
+  );
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await page.getByRole('button', { name: '查看客鲸青空，只来串门' }).press('Enter');
+  await expect(page.getByRole('heading', { name: '青空 · bay-c' })).toBeFocused();
+  const card = page
+    .getByRole('article')
+    .filter({ has: page.getByRole('heading', { name: '青空 · bay-c' }) });
+  await expect(card.getByRole('button', { name: '温和送回' })).toBeVisible();
+  await expect(card.getByRole('button', { name: '雇佣帮工' })).toHaveCount(0);
+});
+
 for (const width of [1440, 390]) {
   for (const theme of ['light', 'dark']) {
     test(
@@ -436,7 +522,9 @@ test('an English keeper can see the blocked exchange and keep the pending wage s
   await expect(page.getByText('Available now', { exact: false })).toContainText('0 lots');
   await expect(page.getByText('Remaining today', { exact: false })).toContainText('75 whale coins');
   await expect(page.getByText('One lot would take', { exact: false })).toBeVisible();
-  await expect(page.getByText('Pending settlement', { exact: false })).toContainText('40%');
+  await expect(page.getByText('Progress toward next wage coin', { exact: false })).toContainText(
+    '40%',
+  );
   await expect(page.getByRole('button', { name: 'Review quote' })).toBeDisabled();
   expect(requests).toEqual(['0']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

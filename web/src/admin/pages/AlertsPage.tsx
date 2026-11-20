@@ -771,7 +771,9 @@ export function AlertsPage() {
                         <optgroup key={group.label} label={group.label}>
                           {group.kinds.map((value) => (
                             <option key={value} value={value}>
-                              {kindLabels[value]}
+                              {value === 'forward_error'
+                                ? t('admin.alerts.filterForwardErrorsAndReturns')
+                                : kindLabels[value]}
                             </option>
                           ))}
                         </optgroup>

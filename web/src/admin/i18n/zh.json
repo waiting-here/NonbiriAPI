@@ -10,7 +10,7 @@
       "individual": "逐次操作",
       "all": "全部",
       "searchHelp": "精确搜索对象名称、原名称、变更字段、操作者或记录编号。",
-      "filterHelp": "时间使用当前浏览器时区，截止时间不包含在范围内。填写目标 ID 时需同时指定目标类型。操作和目标类型标识可在记录详情中查看。",
+      "filterHelp": "截止时间不包含在范围内。填写目标 ID 时需同时指定目标类型。操作和目标类型标识可在记录详情中查看。",
       "invalidRange": "截止时间应晚于开始时间。",
       "action": "操作",
       "actionTitle": "{{action}} · {{domain}}",
@@ -914,6 +914,7 @@
         "accountDeleted": "用户主动删号"
       },
       "filterKind": "告警类型",
+      "filterForwardErrorsAndReturns": "转发错误与请求回流",
       "selectPage": "选择本页未解决告警",
       "selectAlert": "选择告警 {{id}}",
       "resolveSelected": "标记已选 {{count}} 条为已解决",

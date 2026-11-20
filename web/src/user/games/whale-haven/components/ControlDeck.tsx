@@ -65,9 +65,7 @@ export function FloatingDock({
   const snapshot = profile.snapshot;
   const values = profile.settings.values;
   const hasConchGachaBadge = (snapshot.wallet.conchShards ?? 0) >= values.conch_cost_shards;
-  const hasSocialBadge =
-    snapshot.whale.location.kind === 'visiting' ||
-    (snapshot.guestVisit !== null && snapshot.guestVisit.stage === 'eating');
+  const hasSocialBadge = !!profile.social.away || profile.social.guests.length > 0;
   const hasExchangeBadge =
     snapshot.wallet.pearls >= values.lot_pearls &&
     snapshot.wallet.dailyPearlExchanged < values.daily_exchange_pearls &&
@@ -164,6 +162,7 @@ export function MenuPositionButton({
 
 interface ControlDeckProps {
   activeTab: DeckTabId;
+  focusTarget?: string;
   menuMode: MenuPresentationMode;
   hidden: boolean;
   onClose: () => void;
@@ -172,6 +171,7 @@ interface ControlDeckProps {
 }
 export function ControlDeck({
   activeTab,
+  focusTarget,
   menuMode,
   hidden,
   onClose,
@@ -186,8 +186,15 @@ export function ControlDeck({
     if (body.current) body.current.scrollTop = 0;
   }, [activeTab]);
   useLayoutEffect(() => {
-    if (!hidden) heading.current?.focus({ preventScroll: true });
-  }, [activeTab, hidden]);
+    if (hidden) return;
+    const guest = focusTarget && document.getElementById(focusTarget);
+    if (guest && body.current?.contains(guest)) {
+      guest.focus({ preventScroll: true });
+      guest.scrollIntoView({ block: 'nearest' });
+    } else {
+      heading.current?.focus({ preventScroll: true });
+    }
+  }, [activeTab, hidden, focusTarget]);
 
   const active = DECK_TABS_META.find((tab) => tab.id === activeTab) ?? DECK_TABS_META[0];
   const Icon = TAB_ICONS[active.id];

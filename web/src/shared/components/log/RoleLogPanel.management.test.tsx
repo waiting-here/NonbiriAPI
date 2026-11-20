@@ -426,6 +426,11 @@ it('accepts only matching station log return paths', () => {
   expect(logManagementReturnPath({ logReturnTo: '/steward?tab=logs&page=2' }, 'steward')).toBe(
     '/steward?tab=logs&page=2',
   );
+  expect(logManagementReturnPath({ logReturnTo: '/steward' }, 'steward')).toBe('/steward?tab=logs');
+  const defaultLog = `/steward?outcome=actual_backoff&page=2&request_id=${requestID}&attempt_page=3`;
+  expect(logManagementReturnPath({ logReturnTo: defaultLog }, 'steward')).toBe(
+    `${defaultLog}&tab=logs`,
+  );
   for (const value of ['https://evil.test/logs', '/charity', '/logs-other', '/logs?x=\n'])
     expect(logManagementReturnPath({ logReturnTo: value }, 'admin')).toBeUndefined();
   expect(

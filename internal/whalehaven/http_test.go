@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,7 +180,15 @@ func TestStationExchangeSharedWalletAndReplay(t *testing.T) {
 	f.denied = true
 	f.call(t, user, "exchange", body, token, 403)
 	f.denied = false
-	f.call(t, user, "exchange", body, token+"-stale", 409)
+	rejected := f.call(t, user, "exchange", body, token+"-stale", 409)
+	if !strings.Contains(rejected["error"].(map[string]any)["message"].(string), "小筑状态有变化") {
+		t.Fatal(rejected)
+	}
+	outdatedSettings := map[string]any{"quantity": "1", "expected_profile_revision": quote["profile_revision"], "expected_settings_revision": "1"}
+	rejected = f.call(t, user, "exchange", outdatedSettings, token+"-old-rules", 409)
+	if !strings.Contains(rejected["error"].(map[string]any)["message"].(string), "运营设置已有调整") {
+		t.Fatal(rejected)
+	}
 	body["quantity"] = "2"
 	f.call(t, user, "exchange", body, token, 409)
 	var n int

@@ -219,6 +219,38 @@ async function fillCustom(
   return view;
 }
 describe('service setup as one task', () => {
+  it('validates the address before saving and accepts a corrected address with a trailing slash', async () => {
+    const view = await fillCustom();
+    const address = screen.getByLabelText(userEn.user.services.serviceAddress);
+    const submit = screen.getByRole('button', { name: userEn.user.services.addAndFetch });
+    const invalidAddress = 'ftp://old.example/v1';
+    await view.user.clear(address);
+    await view.user.type(address, invalidAddress);
+    await view.user.click(submit);
+
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(address).toHaveValue(invalidAddress);
+    expect(address).toHaveFocus();
+    expect(address).toHaveAccessibleDescription(userEn.user.services.serviceAddressError);
+
+    await view.user.clear(address);
+    await view.user.type(address, 'https://service.example/v1/');
+    expect(screen.queryByText(userEn.user.services.serviceAddressError)).not.toBeInTheDocument();
+    await view.user.click(submit);
+    await screen.findByText(userEn.user.workflows.serviceReady);
+
+    expect(mocks.execute.mock.calls.map(([intent]) => intent.kind)).toEqual([
+      'connection',
+      'endpoint',
+      'credential',
+      'key',
+    ]);
+    expect(mocks.execute.mock.calls[1]![0].input).toMatchObject({
+      base_url: 'https://service.example/v1',
+    });
+    expect(mocks.execute.mock.calls[2]![1]).toBe('synthetic-upstream-secret');
+  });
+
   it('preserves an invalid additional key without creating a partial service', async () => {
     const view = await fillCustom();
     await view.user.click(screen.getByRole('button', { name: userEn.user.services.addAnotherKey }));

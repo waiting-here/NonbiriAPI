@@ -237,8 +237,11 @@ func (s *Service) handle(req *http.Request, id int64, route string) (any, error)
 		if _, err = count(observedSettings, false); err != nil {
 			return nil, err
 		}
-		if observedProfile != key(r.revision) || observedSettings != key(w.configRevision) {
-			return nil, conflict("小屋或经济规则已更新。请核对最新状态后再操作。")
+		if observedSettings != key(w.configRevision) {
+			return nil, conflict("小筑的运营设置已有调整，本次操作未执行。请核对最新规则后重试。")
+		}
+		if observedProfile != key(r.revision) {
+			return nil, conflict("小筑状态有变化，本次操作未执行。请核对最新的来往和余额后重试。")
 		}
 	}
 	if r.exists {

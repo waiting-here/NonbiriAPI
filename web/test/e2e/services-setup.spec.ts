@@ -115,6 +115,7 @@ for (const locale of ['en', 'zh'] as const) {
     await page.addInitScript((language) => localStorage.setItem('nb.lang', language), locale);
     await mockPublicConfig(page, 'user');
     await mockRoleSession(page, 'user', 'user');
+    await mockConnectionResources(page, () => [endpoint]);
     const protectedProjection = {
       ...projection,
       fixed_headers: {
@@ -142,19 +143,19 @@ for (const locale of ['en', 'zh'] as const) {
       }
       return route.fallback();
     });
-    const copy = (en: string, zh: string) => (locale === 'en' ? en : zh);
+    const user = (locale === 'zh' ? zhUser : enUser).user;
+    const { editor, service } = (locale === 'zh' ? zhCommon : enCommon).requestAdaptation;
     await page.goto(`${USER_ORIGIN}/endpoints/11`);
-    const fold = page
-      .locator('summary')
-      .filter({ hasText: copy('Request rewriting (advanced)', '请求改写（高级）') });
-    await fold.focus();
-    await page.keyboard.press('Enter');
-    const protection = page.getByRole('combobox', {
-      name: copy('Response protection: X-Token', '响应防回显: X-Token'),
+    const fold = page.locator('details').filter({
+      has: page.getByText(user.services.adaptation, { exact: true }),
+    });
+    await fold.locator('summary').press('Enter');
+    const protection = fold.getByRole('combobox', {
+      name: `${editor.protection}: X-Token`,
       exact: true,
     });
     await expect(protection).toHaveValue('whole');
-    const paths = page.getByLabel(copy('Protected string paths', '敏感字符串路径'), {
+    const paths = fold.getByLabel(editor.protectedPaths, {
       exact: true,
     });
     await expect(paths).toHaveValue('/token');
@@ -177,9 +178,7 @@ for (const locale of ['en', 'zh'] as const) {
       }
     await protection.selectOption('off');
     await paths.fill('/credentials/0/token\n/token');
-    await page
-      .getByRole('button', { name: copy('Save request rewriting', '保存请求改写'), exact: true })
-      .click();
+    await fold.getByRole('button', { name: service.save, exact: true }).click();
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0].fixed_headers).toEqual({
       mode: 'replace',
@@ -228,7 +227,7 @@ for (const locale of ['en', 'zh'] as const) {
     const manualEntries: (typeof entries)[number][] = [];
     const c = (locale === 'zh' ? zhCommon : enCommon).common.connections;
     const workflow = serviceCopy(locale);
-    const serviceUI = (locale === 'zh' ? zhUser : enUser).user.services;
+    const { core, services: serviceUI } = (locale === 'zh' ? zhUser : enUser).user;
     const chatLabel = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.chat_completions;
     const nativeResponse = (locale === 'zh' ? zhCommon : enCommon).common.modelTypes.responses;
     const source = () => ({
@@ -349,6 +348,7 @@ for (const locale of ['en', 'zh'] as const) {
                 url.searchParams,
               ),
             );
+      if (path === '/api/endpoints/11/keys/21') return fulfill(key);
       if (/\/keys\/\d+\/models\/refresh$/.test(path)) {
         discoveryRefreshes++;
         if (discoveryRefreshes === 2) failedRead = false;
@@ -400,7 +400,9 @@ for (const locale of ['en', 'zh'] as const) {
       if (path === '/api/models')
         return fulfill(
           numberedPage(
-            'demo/model-a'.includes(url.searchParams.get('q') ?? '') ? [model('51', 'model-a')] : [],
+            'demo/model-a'.includes(url.searchParams.get('q') ?? '')
+              ? [model('51', 'model-a')]
+              : [],
             url.searchParams,
           ),
         );
@@ -442,7 +444,6 @@ for (const locale of ['en', 'zh'] as const) {
       }
       return route.fallback();
     });
-    const copy = (en: string, zh: string) => (locale === 'en' ? en : zh);
     const metrics: Record<string, unknown>[] = [];
     async function shot(name: string) {
       const out = process.env.NONBIRI_VISUAL_DIR;
@@ -517,39 +518,31 @@ for (const locale of ['en', 'zh'] as const) {
       ).toBeVisible();
       await shot(`detail-${n}`);
     }
-    await page
-      .getByRole('button', { name: copy('View models', '查看模型'), exact: true })
-      .first()
-      .click();
-    await expect(page.locator('.nb-expandable-panel:not([hidden])')).toBeVisible();
-    await shot('models-panel');
-    await page.locator('summary').filter({ hasText: serviceUI.manualModels }).click();
+    const openPrimaryModels = page
+      .getByRole('row')
+      .filter({ has: page.getByText(key.note, { exact: true }) })
+      .getByRole('button', { name: serviceUI.viewModels, exact: true });
+    await openPrimaryModels.click();
+    await expect(page).toHaveURL(/[?&]focus_key_id=21(?:&|$)/);
     const modelPanel = page.getByRole('region', {
-      name: copy('View models', '查看模型') + ' · Primary key',
+      name: `${serviceUI.viewModels} · ${key.note}`,
       exact: true,
     });
-    const manual = modelPanel.getByLabel(copy('Provider model name', '服务商的模型名'), {
+    await expect(modelPanel).toBeVisible();
+    await shot('models-panel');
+    await modelPanel.locator('summary').filter({ hasText: serviceUI.manualModels }).click();
+    const manual = modelPanel.getByLabel(core['endpoints.manualModel'], {
       exact: true,
     });
+    const closeModels = modelPanel.getByRole('button', { name: core['common.close'], exact: true });
     await manual.fill('draft-model');
-    await page
-      .locator('.nb-expandable-panel:not([hidden])')
-      .getByRole('button', { name: copy('Close', '关闭'), exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: copy('View models', '查看模型'), exact: true })
-      .first()
-      .click();
+    await closeModels.click();
+    await expect(modelPanel).toBeHidden();
+    await openPrimaryModels.click();
     await expect(modelPanel).toBeVisible();
     await expect(manual).toHaveValue('draft-model');
-    await page
-      .locator('.nb-expandable-panel:not([hidden])')
-      .getByRole('button', { name: copy('Close', '关闭'), exact: true })
-      .click();
-    await page
-      .locator('summary')
-      .filter({ hasText: copy('Request rewriting (advanced)', '请求改写（高级）') })
-      .click();
+    await closeModels.click();
+    await page.locator('summary').filter({ hasText: serviceUI.adaptation }).click();
     await shot('adaptation');
     await page.goto(`${USER_ORIGIN}/endpoints?quickstart=1`);
     const entryPanel = servicePanel(page, locale);

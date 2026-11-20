@@ -44,17 +44,18 @@ import { WhalePetActor } from '../pet/WhalePetActor';
 
 import type { FaceCalibrationConfig } from '../rig/calibrator';
 import { WhaleRigActor, type RigImpulseEvent } from '../rig/WhaleRigActor';
-import { formatMilliCredits } from '../api';
+import { formatMilliCredits, type Profile } from '../api';
 import { UiSwitch } from './UiMotifs';
 import { MenuPositionButton, type MenuPresentationMode } from './ControlDeck';
 
-import { useWhaleText } from '../copy';
+import { guestVisitLabel, useWhaleText } from '../copy';
 
 const CABIN_FURNITURE = ['shell_cabinet', 'pearl_clock', 'sea_planter'] as const;
 
 interface OceanStageProps {
   values: Record<string, number>;
   snapshot: GameSnapshot;
+  social: Profile['social'];
   viewingNeighbor: NeighborStation | null;
   rigImpulse: RigImpulseEvent | null;
   faceCalibration: FaceCalibrationConfig;
@@ -109,6 +110,7 @@ const BUBBLES = [
 export function OceanStage({
   values,
   snapshot,
+  social,
   viewingNeighbor,
   rigImpulse,
   faceCalibration,
@@ -261,7 +263,8 @@ export function OceanStage({
     }, 1000);
     return () => window.clearInterval(timer);
   }, []);
-  const resolved = resolveWhaleExpression(snapshot, nowMs, values);
+  const workingAway = !!social.away?.working;
+  const resolved = resolveWhaleExpression(snapshot, nowMs, values, workingAway);
   const stageTalk = resolveStageConversations(
     snapshot,
     resolved.speech,
@@ -390,6 +393,18 @@ export function OceanStage({
     viewingNeighbor !== null &&
     whale.location.kind === 'visiting' &&
     whale.location.neighborId === viewingNeighbor.id;
+  const awayStatus = t(resolved.statusLabel, workingAway ? 'Working away' : 'Visiting a neighbor');
+  const awayDetail =
+    whale.location.kind === 'visiting' &&
+    (workingAway
+      ? t(
+          `工资按帮工产出的 ${values.guest_wage_bp / 100}% 结算`,
+          `Wages are ${values.guest_wage_bp / 100}% of your whale’s production`,
+        )
+      : t(
+          `已吃 ${Math.floor(whale.location.eatenGrams ?? 0)} 克 · 餐食奖励预计 ${whale.location.pendingPearls ?? 0} 枚小鲸币`,
+          `${Math.floor(whale.location.eatenGrams ?? 0)} g eaten · Estimated meal reward: ${whale.location.pendingPearls ?? 0} whale coins`,
+        ));
 
   const satietyColor =
     whale.satiety >= 60 ? '#44d492' : whale.satiety >= 30 ? '#f6b84c' : '#ff6b7a';
@@ -598,11 +613,13 @@ export function OceanStage({
             >
               <div className="whale-speech">
                 <span className="whale-speech__speaker">{viewingNeighbor.whaleName}</span>
-                {isOurWhaleAtThisNeighbor
-                  ? `欢迎「${whale.name}」来我家一起吃${FEED_CATALOG[viewingNeighbor.troughFeedType].name}呀～`
-                  : viewingNeighbor.troughGrams > 0
-                    ? `我是「${viewingNeighbor.whaleName}」，我家饭盆还有 ${Math.round(viewingNeighbor.troughGrams)}g 口粮哦！`
-                    : `呜……我是「${viewingNeighbor.whaleName}」，我家主人也忘记添饭了……`}
+                {isOurWhaleAtThisNeighbor && workingAway
+                  ? t(`「${whale.name}」正在我家帮工！`, `${whale.name} is helping in my haven!`)
+                  : isOurWhaleAtThisNeighbor
+                    ? `欢迎「${whale.name}」来我家一起吃${FEED_CATALOG[viewingNeighbor.troughFeedType].name}呀～`
+                    : viewingNeighbor.troughGrams > 0
+                      ? `我是「${viewingNeighbor.whaleName}」，我家饭盆还有 ${Math.round(viewingNeighbor.troughGrams)}g 口粮哦！`
+                      : `呜……我是「${viewingNeighbor.whaleName}」，我家主人也忘记添饭了……`}
               </div>
               <div
                 className={
@@ -656,10 +673,13 @@ export function OceanStage({
           ) : (
             <div className="away-sign">
               <div style={{ fontSize: '1.06rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-                🪧 「{viewingNeighbor.whaleName}」饿着肚子出门串门了
+                {t(
+                  `「${viewingNeighbor.whaleName}」出门了`,
+                  `${viewingNeighbor.whaleName} is away`,
+                )}
               </div>
               <div style={{ fontSize: '0.82rem', opacity: 0.88 }}>
-                这家主人还没回来添粮，海湾里空荡荡的～
+                {t('屋主鲸暂时不在家。', 'The resident whale is away from home.')}
               </div>
             </div>
           )}
@@ -676,8 +696,7 @@ export function OceanStage({
             >
               <div className="whale-speech whale-speech--guest">
                 <span className="whale-speech__speaker">{whale.name}</span>
-                阿姆阿姆！已蹭吃 {Math.round(whale.location.eatenGrams)}g，攒下{' '}
-                {whale.location.pendingPearls} 枚小鲸币～
+                {awayDetail}
               </div>
               <div
                 className={
@@ -689,6 +708,7 @@ export function OceanStage({
                     alt={whale.name}
                     outfit={whale.outfit}
                     expression="cheerful"
+                    isWorkerUniform={workingAway}
                     activity="eating"
                     alwaysEatingWhenActive
                     lookTrackingEnabled={false}
@@ -709,7 +729,10 @@ export function OceanStage({
                   />
                 )}
               </div>
-              <span className="guest-tag">我家 · {whale.name}（蹭饭中）</span>
+              <span className={`guest-tag${workingAway ? ' guest-tag--worker' : ''}`}>
+                {whale.name} ·{' '}
+                {workingAway ? t('正在帮工', 'Working') : t('串门用餐', 'Visiting for a meal')}
+              </span>
             </div>
           )}
 
@@ -745,11 +768,10 @@ export function OceanStage({
             }}
             title={
               home.unclaimedPearls > 0
-                ? `点击从存钱罐收取 ${home.unclaimedPearls} 枚小鲸币${
-                    (home.accruedWorkerWage ?? 0) >= 0.45 && home.unclaimedPearls >= 2
-                      ? `（含待结打工工资约 ${Math.round(home.accruedWorkerWage ?? 0)} 枚）`
-                      : ''
-                  }！`
+                ? t(
+                    `从存钱罐收取 ${home.unclaimedPearls} 枚小鲸币`,
+                    `Collect ${home.unclaimedPearls} whale coins from the bank`,
+                  )
                 : `小鲸币积攒进度 ${Math.floor(home.pearlProgress)}%${
                     workingGuests.length > 0 ? `（${workingGuests.length} 只打工客鲸加速中）` : ''
                   }（存钱罐上限 ${maxPearls} 枚）`
@@ -946,14 +968,16 @@ export function OceanStage({
                 return (
                   <div className="away-sign" onClick={(e) => e.stopPropagation()}>
                     <div className="nb-badge nb-badge--warm" style={{ marginBottom: '0.45rem' }}>
-                      🌊 外出串门蹭饭中
+                      {awayStatus}
                     </div>
                     <div style={{ fontSize: '0.98rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                      「{whale.name}」游去【{targetName}】家蹭饭啦！
+                      {t(
+                        `「${whale.name}」在${targetName}的小筑`,
+                        `${whale.name} is at ${targetName}’s haven`,
+                      )}
                     </div>
                     <div style={{ fontSize: '0.8rem', opacity: 0.88, marginBottom: '0.75rem' }}>
-                      已蹭吃 {Math.round(whale.location.eatenGrams)}g 口粮 · 揣了{' '}
-                      {whale.location.pendingPearls} 枚小鲸币
+                      {awayDetail}
                     </div>
                     <div
                       style={{
@@ -969,7 +993,7 @@ export function OceanStage({
                           className="nb-btn nb-btn--sm"
                           onClick={() => onViewNeighbor(targetNb.id)}
                         >
-                          <Compass size={14} /> 去邻居家看她
+                          <Compass size={14} /> {t('去邻居家看她', 'View host haven')}
                         </button>
                       )}
                       <button
@@ -977,7 +1001,7 @@ export function OceanStage({
                         className="nb-btn nb-btn--sm nb-btn--primary"
                         onClick={onRecallWhale}
                       >
-                        <BellRing size={14} /> 摇铃喊她回家
+                        <BellRing size={14} /> {t('摇铃喊她回家', 'Call my whale home')}
                       </button>
                     </div>
                   </div>
@@ -988,7 +1012,13 @@ export function OceanStage({
           {activeGuests.map((guest, idx) => {
             const slot = (guest.slotIndex ?? (idx === 0 ? 0 : 1)) as 0 | 1;
             const guestNeighbor = snapshot.neighbors.find((n) => n.id === guest.neighborId);
+            const visitor = social.guests.find((g) => g.neighbor_id === guest.neighborId);
+            const guestName = guestNeighbor?.whaleName ?? t('小鲸', 'Whale');
             const isWorking = guest.stage === 'working';
+            const visitStatus = guestVisitLabel(
+              visitor ?? { working: isWorking, allow_hire: false },
+              t,
+            );
             const isInteractive = guest.stage === 'eating' || isWorking;
             const isLeaving = !isInteractive;
             const isActivelyEating =
@@ -1003,8 +1033,14 @@ export function OceanStage({
                     : 'teary';
 
             return (
-              <div
+              <button
+                type="button"
+                disabled={!isInteractive || pureView}
                 key={guest.neighborId}
+                aria-label={t(
+                  `查看客鲸${guestName}，${visitStatus}`,
+                  `View guest ${guestName}, ${visitStatus}`,
+                )}
                 className={`guest-actor guest-actor--slot-${slot} ${isWorking ? 'is-working' : ''} ${
                   isLeaving ? 'is-leaving' : ''
                 }`}
@@ -1013,11 +1049,7 @@ export function OceanStage({
                   e.stopPropagation();
                   if (isInteractive) onOpenGuestCatch(guest.neighborId);
                 }}
-                title={
-                  isWorking
-                    ? `打工客鲸「${guestNeighbor?.whaleName ?? '小鲸'}」正在帮吃产币（点击查看执勤进度或提前下班）`
-                    : '点击抓包或雇佣这只来蹭饭的邻家鲸鱼娘！'
-                }
+                title={visitStatus}
               >
                 {!pureView && Boolean(stageTalk.guestSpeeches[guest.neighborId]) && (
                   <div
@@ -1073,19 +1105,9 @@ export function OceanStage({
                   )}
                 </div>
                 <span className={`guest-tag ${isWorking ? 'guest-tag--worker' : ''}`}>
-                  {isWorking
-                    ? isPhoneStage
-                      ? `💼 ${guestNeighbor?.whaleName ?? '小鲸'} · ${Math.round(
-                          guest.helpedGrams ?? 0,
-                        )}g`
-                      : `💼 打工 · ${guestNeighbor?.whaleName ?? '小鲸'}（帮吃 ${Math.round(
-                          guest.helpedGrams ?? 0,
-                        )}g）`
-                    : isPhoneStage
-                      ? `🐾 ${guestNeighbor?.whaleName ?? '小鲸'} · 抓包`
-                      : `🐾 客鲸 · ${guestNeighbor?.whaleName ?? '小鲸'}（抓包/雇佣）`}
+                  {guestName} · {visitStatus}
                 </span>
-              </div>
+              </button>
             );
           })}
 
@@ -1234,7 +1256,7 @@ export function OceanStage({
                           </span>
                         </div>
                         <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: 2 }}>
-                          {resolved.statusLabel}
+                          {whale.location.kind === 'visiting' ? awayStatus : resolved.statusLabel}
                         </div>
                         <div
                           style={{
@@ -1778,9 +1800,9 @@ export function OceanStage({
                 >
                   <ShieldAlert size={14} />{' '}
                   {isPhoneStage
-                    ? t(`抓包 ×${sneakingGuests.length}`, `Guests ×${sneakingGuests.length}`)
+                    ? t(`客鲸 ×${sneakingGuests.length}`, `Guests ×${sneakingGuests.length}`)
                     : t(
-                        `抓包/雇佣客鲸 ×${sneakingGuests.length}`,
+                        `来访客鲸 ×${sneakingGuests.length}`,
                         `Manage guests ×${sneakingGuests.length}`,
                       )}
                 </button>

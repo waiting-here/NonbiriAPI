@@ -138,7 +138,7 @@ describe('player exchange limits and consent', () => {
     expect(screen.getByText('Pending settlement', { exact: false })).toHaveTextContent(
       'Whale coins 2 · Conch shards 3',
     );
-    expect(screen.getByText('Pending settlement', { exact: false })).toHaveTextContent('45%');
+    expect(screen.getByText(/Progress toward next wage coin/)).toHaveTextContent('45%');
     const balance = screen.getByText('Whale coin balance').parentElement!;
     expect(within(balance).getByRole('definition')).toHaveTextContent('20');
     await user.click(screen.getByRole('button', { name: 'Collect earnings' }));
@@ -236,6 +236,101 @@ describe('player exchange limits and consent', () => {
       expect.any(Function),
     );
   });
+  it('does not send home a returning guest using a confirmation from its previous visit', async () => {
+    const p = profile();
+    const guest = {
+      neighbor_id: 'door',
+      label: 'The bay',
+      whale_name: 'Fin',
+      whale_outfit: 'maid_classic',
+      allow_hire: true,
+      working: true,
+      started_at_ms: 1000,
+    } as const;
+    const controls = {
+      busy: false,
+      refreshing: false,
+      dispatch: vi.fn(),
+      onPreview: vi.fn(),
+      onDepart: vi.fn(),
+      onRefresh: vi.fn(),
+      onActivity: vi.fn(),
+      onWallet: vi.fn(),
+    };
+    p.social.guests = [guest];
+    const { user, rerender } = await renderWithProviders(<SocialPane profile={p} {...controls} />, {
+      station: 'user',
+      locale: 'en',
+    });
+    await user.click(screen.getByRole('button', { name: 'Pay wages and send home' }));
+    const confirmation = within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Confirm',
+    });
+    expect(confirmation).toBeEnabled();
+    rerender(
+      <SocialPane
+        {...controls}
+        profile={{ ...p, social: { ...p.social, guests: [{ ...guest, started_at_ms: 3000 }] } }}
+      />,
+    );
+    expect(confirmation).toBeDisabled();
+    await user.click(confirmation);
+    expect(controls.dispatch).not.toHaveBeenCalled();
+  });
+  it('keeps visits open when wages are capped and withdraws an outdated offer to hire', async () => {
+    const p = profile();
+    const guest = {
+      neighbor_id: 'door',
+      label: 'The bay',
+      whale_name: 'Fin',
+      whale_outfit: 'maid_classic',
+      allow_hire: true,
+      working: false,
+      started_at_ms: 1000,
+    } as const;
+    p.social.guests = [guest];
+    const controls = {
+      busy: false,
+      refreshing: false,
+      dispatch: vi.fn(),
+      onPreview: vi.fn(),
+      onDepart: vi.fn(),
+      onRefresh: vi.fn(),
+      onActivity: vi.fn(),
+      onWallet: vi.fn(),
+    };
+    const { user, rerender } = await renderWithProviders(<SocialPane profile={p} {...controls} />, {
+      station: 'user',
+      locale: 'en',
+    });
+    await user.click(screen.getByRole('button', { name: 'Hire as a helper' }));
+    rerender(
+      <SocialPane
+        {...controls}
+        profile={{ ...p, social: { ...p.social, guests: [{ ...guest, hire_blocked: 'quota' }] } }}
+      />,
+    );
+    expect(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Confirm' }),
+    ).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: 'Hire as a helper' })).not.toBeInTheDocument();
+    expect(screen.getByText('Daily social coin limit reached')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Offer a meal' })).toBeEnabled();
+
+    const peer = { id: 'door', gameProfilePublic: false, anonymousCode: '11' } as NeighborStation;
+    rerender(
+      <DepartureDialog
+        busy={false}
+        dailyWageLimitReached
+        dispatch={controls.dispatch}
+        neighbor={peer}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/You can still visit/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Depart' })).toBeEnabled();
+  });
   it.each(['en', 'zh'] as const)(
     'discloses the configured wage share and shared daily social limit before hiring in %s',
     async (locale) => {
@@ -259,6 +354,10 @@ describe('player exchange limits and consent', () => {
           dispatch={dispatch}
           onPreview={vi.fn()}
           onDepart={vi.fn()}
+          onRefresh={vi.fn()}
+          refreshing={false}
+          onActivity={vi.fn()}
+          onWallet={vi.fn()}
         />,
         { station: 'user', locale },
       );

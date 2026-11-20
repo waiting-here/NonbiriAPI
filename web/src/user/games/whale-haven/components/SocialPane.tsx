@@ -1,8 +1,9 @@
-import { useWhaleText } from '../copy';
+import { guestVisitLabel, useWhaleText } from '../copy';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { useDateTimeFormatter } from '@shared/utils/datetime';
 import {
   PRESET_MESSAGES,
   displayNeighborName,
@@ -19,6 +20,10 @@ interface Props {
   busy: boolean;
   onPreview: (neighbor: NeighborStation) => void;
   onDepart: (neighbor: NeighborStation) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+  onActivity: () => void;
+  onWallet: () => void;
 }
 const filters: readonly [NeighborFilterKind, string, string][] = [
   ['all', '全部', 'All'],
@@ -32,8 +37,19 @@ const reactions: readonly [CatchActionKind, string, string][] = [
   ['gentle', '温和送回', 'Send home gently'],
   ['flick', '弹脑瓜送回', 'Flick and send home'],
 ];
-export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Props) {
+export function SocialPane({
+  profile,
+  dispatch,
+  busy,
+  onPreview,
+  onDepart,
+  onRefresh,
+  refreshing,
+  onActivity,
+  onWallet,
+}: Props) {
   const t = useWhaleText();
+  const formatTime = useDateTimeFormatter();
   const social = profile.social;
   const values = profile.settings.values;
   const [search, setSearch] = useState('');
@@ -44,6 +60,8 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
     id: string;
     action: CatchActionKind;
     label: string;
+    arrived: number;
+    working: boolean;
   } | null>(null);
   const [message, setMessage] = useState('');
   const neighbors = useQuery({
@@ -54,9 +72,183 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
     staleTime: 0,
     refetchInterval: 20000,
   });
-  const activeGuest = social.guests.find((g) => g.neighbor_id === guestAction?.id);
+  const activeGuest =
+    guestAction &&
+    social.guests.find(
+      (g) =>
+        g.neighbor_id === guestAction.id &&
+        g.started_at_ms === guestAction.arrived &&
+        g.working === guestAction.working &&
+        (guestAction.action !== 'hire' || (g.allow_hire && !g.hire_blocked)),
+    );
+  const latestSettlement = profile.snapshot.logs?.find((entry) => entry.kind === 'settlement');
+  const shiftEnd = (at?: number) =>
+    typeof at === 'number' && (
+      <p>
+        {t('预计收工', 'Scheduled finish')}{' '}
+        <time dateTime={new Date(at).toISOString()}>{formatTime(at)}</time>
+      </p>
+    );
   return (
     <>
+      <div className="wh-social-tools">
+        <button
+          className="nb-btn nb-btn--sm"
+          type="button"
+          disabled={busy || refreshing || (social.open && neighbors.isFetching)}
+          onClick={() => {
+            onRefresh();
+            if (social.open) void neighbors.refetch();
+          }}
+        >
+          {refreshing ? t('刷新中…', 'Refreshing…') : t('刷新串门状态', 'Refresh visits')}
+        </button>
+        <button type="button" className="nb-btn nb-btn--sm" onClick={onActivity}>
+          {t('查看来往与结算记录', 'View visits and settlements')}
+        </button>
+      </div>
+      {social.away && (
+        <section className="voyage-card">
+          <h3>
+            {social.away.working
+              ? t('在外帮工', 'Working away')
+              : t('正在串门', 'Visiting a neighbor')}
+          </h3>
+          <p>
+            {social.away.label} ·{' '}
+            {social.away.allow_hire
+              ? t('本次允许帮工', 'Hiring allowed on this visit')
+              : t('本次只串门', 'Visiting only')}
+          </p>
+          {social.away.working && shiftEnd(social.away.work_ends_at_ms)}
+          <button
+            type="button"
+            disabled={busy}
+            className="nb-btn"
+            onClick={() => void dispatch({ type: 'recall_home' })}
+          >
+            {t('召回并结算', 'Recall and settle visit')}
+          </button>
+        </section>
+      )}
+      {social.guests.length > 0 && (
+        <section aria-label={t('来访客鲸', 'Visiting whales')}>
+          <h3 className="kit-section-title">{t('来访客鲸', 'Visiting whales')}</h3>
+          {social.guests.map((guest) => (
+            <article className="voyage-card" key={guest.neighbor_id}>
+              <h4 id={'whale-guest-' + guest.neighbor_id} tabIndex={-1}>
+                {guest.whale_name} · {guest.label}
+              </h4>
+              <p>{guestVisitLabel(guest, t)}</p>
+              {guest.working && shiftEnd(guest.work_ends_at_ms)}
+              <div className="wh-buttons">
+                {reactions
+                  .filter(([id]) =>
+                    guest.working
+                      ? id === 'gentle'
+                      : id !== 'hire' || (guest.allow_hire && !guest.hire_blocked),
+                  )
+                  .map(([action, title, en]) => (
+                    <button
+                      type="button"
+                      className="nb-btn"
+                      disabled={busy}
+                      key={action}
+                      onClick={() => {
+                        setMessage('');
+                        setDialogError('');
+                        setGuestAction({
+                          id: guest.neighbor_id,
+                          action,
+                          arrived: guest.started_at_ms,
+                          working: guest.working,
+                          label: guest.working
+                            ? t('结薪送回', 'Pay wages and send home')
+                            : t(title, en),
+                        });
+                      }}
+                    >
+                      {guest.working ? t('结薪送回', 'Pay wages and send home') : t(title, en)}
+                    </button>
+                  ))}
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+      {!social.away && social.guests.length === 0 && latestSettlement && (
+        <p className="wh-last-settlement">
+          <strong>{t('最近一次结算', 'Latest settlement')}</strong>
+          <span>
+            {latestSettlement.title}
+            {latestSettlement.detail ? ' · ' + latestSettlement.detail : ''}
+          </span>
+        </p>
+      )}
+      {((profile.snapshot.wallet.pendingSocialPearls ?? 0) > 0 ||
+        (profile.snapshot.wallet.pendingConchShards ?? 0) > 0) && (
+        <button type="button" className="nb-btn" onClick={onWallet}>
+          {t('查看并收取待结算收益', 'Review and collect pending earnings')}
+        </button>
+      )}
+      <ConfirmDialog
+        open={!!guestAction}
+        title={guestAction?.label ?? ''}
+        confirmDisabled={!activeGuest}
+        description={
+          guestAction?.action === 'hire'
+            ? t(
+                `工资为帮工产出的 ${values.guest_wage_bp / 100}%，计入客鲸每日 ${values.daily_social_pearls} 枚社交鲸币额度。双方都可提前结束。`,
+                `Guest wages are ${values.guest_wage_bp / 100}% of production and count toward the guest’s daily social limit of ${values.daily_social_pearls} whale coins. Either keeper can end the shift.`,
+              )
+            : guestAction?.action === 'treat'
+              ? t(
+                  `款待将使用 ${values.treat_cost_grams} 克口粮，并结算本次串门。`,
+                  `Serve ${values.treat_cost_grams} g of feed and settle this visit.`,
+                )
+              : t('送回客鲸并结算本次串门。', 'Send the guest home and settle this visit.')
+        }
+        busy={busy}
+        confirmLabel={t('确认', 'Confirm')}
+        onCancel={() => setGuestAction(null)}
+        onConfirm={async () => {
+          if (
+            guestAction &&
+            activeGuest &&
+            (await dispatch(
+              {
+                type: 'catch_guest',
+                neighborId: guestAction.id,
+                action: guestAction.action,
+                ...(message ? { presetId: message } : {}),
+              },
+              setDialogError,
+            ))
+          )
+            setGuestAction(null);
+        }}
+      >
+        {!busy && (dialogError || !activeGuest) && (
+          <p role="alert">
+            {dialogError ||
+              t(
+                '这次来访已结束或状态已变。请返回查看最新的客鲸。',
+                'This visit has ended or changed. Go back to see the current guests.',
+              )}
+          </p>
+        )}
+        <label>
+          {t('给客鲸的口信', 'Message for the guest')}{' '}
+          <select value={message} onChange={(e) => setMessage(e.target.value)}>
+            <option value="">{t('不留口信', 'No message')}</option>
+            {PRESET_MESSAGES.filter((m) => m.category === guestAction?.action).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.text}
+              </option>
+            ))}
+          </select>
+        </label>
+      </ConfirmDialog>
       <section className="voyage-card">
         <h3 className="kit-section-title">{t('我的小筑', 'My haven')}</h3>
         <p>
@@ -96,12 +288,14 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
             </div>
           </dl>
         </div>
-        <p>
-          {t(
-            `近 ${values.stove_window_seconds / 3600} 小时自家消耗至少 ${values.stove_required_grams} 克口粮可获得社交鲸币。`,
-            `To earn social whale coins, use at least ${values.stove_required_grams} g of feed at home within ${values.stove_window_seconds / 3600} hours.`,
-          )}
-        </p>
+        {values.stove_required_grams > 0 && (
+          <p>
+            {t(
+              `串门互动的鲸币奖励要求近 ${values.stove_window_seconds / 3600} 小时自家消耗至少 ${values.stove_required_grams} 克口粮。帮工工资按产出计算。`,
+              `Visit rewards require at least ${values.stove_required_grams} g of feed used at home in the past ${values.stove_window_seconds / 3600} hours. Wages are based on production.`,
+            )}
+          </p>
+        )}
       </section>
       <ConfirmDialog
         open={close}
@@ -118,128 +312,6 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
         }}
       >
         {dialogError && !busy && <p role="alert">{dialogError}</p>}
-      </ConfirmDialog>
-      {social.away && (
-        <section className="voyage-card">
-          <h3>
-            {social.away.working
-              ? t('在外帮工', 'Working away')
-              : t('正在串门', 'Visiting a neighbor')}
-          </h3>
-          <p>
-            {social.away.label} ·{' '}
-            {social.away.allow_hire
-              ? t('本次允许帮工', 'Hiring allowed on this visit')
-              : t('本次只串门', 'Visiting only')}
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            className="nb-btn"
-            onClick={() => void dispatch({ type: 'recall_home' })}
-          >
-            {t('召回并结算', 'Recall and settle visit')}
-          </button>
-        </section>
-      )}
-      {social.guests.length > 0 && (
-        <section aria-label={t('来访客鲸', 'Visiting whales')}>
-          <h3 className="kit-section-title">{t('来访客鲸', 'Visiting whales')}</h3>
-          {social.guests.map((guest) => (
-            <article className="voyage-card" key={guest.neighbor_id}>
-              <h4>
-                {guest.whale_name} · {guest.label}
-              </h4>
-              <p>
-                {guest.working
-                  ? t('正在帮工', 'Working')
-                  : guest.allow_hire
-                    ? t('愿意帮工', 'Available to hire')
-                    : t('只来串门', 'Visiting only')}
-              </p>
-              <div className="wh-buttons">
-                {reactions
-                  .filter(([id]) =>
-                    guest.working ? id === 'gentle' : id !== 'hire' || guest.allow_hire,
-                  )
-                  .map(([action, title, en]) => (
-                    <button
-                      type="button"
-                      className="nb-btn"
-                      disabled={busy}
-                      key={action}
-                      onClick={() => {
-                        setMessage('');
-                        setDialogError('');
-                        setGuestAction({
-                          id: guest.neighbor_id,
-                          action,
-                          label: guest.working
-                            ? t('结薪送回', 'Pay wages and send home')
-                            : t(title, en),
-                        });
-                      }}
-                    >
-                      {guest.working ? t('结薪送回', 'Pay wages and send home') : t(title, en)}
-                    </button>
-                  ))}
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
-      <ConfirmDialog
-        open={!!guestAction}
-        title={guestAction?.label ?? ''}
-        confirmDisabled={!activeGuest}
-        description={
-          guestAction?.action === 'hire'
-            ? t(
-                `工资为帮工产出的 ${values.guest_wage_bp / 100}%，计入客鲸每日 ${values.daily_social_pearls} 枚社交鲸币额度。双方都可提前结束。`,
-                `Guest wages are ${values.guest_wage_bp / 100}% of production and count toward the guest’s daily social limit of ${values.daily_social_pearls} whale coins. Either keeper can end the shift.`,
-              )
-            : guestAction?.action === 'treat'
-              ? t(
-                  `款待将使用 ${values.treat_cost_grams} 克口粮，并结算本次串门。`,
-                  `Serve ${values.treat_cost_grams} g of feed and settle this visit.`,
-                )
-              : t('送回客鲸并结算本次串门。', 'Send the guest home and settle this visit.')
-        }
-        busy={busy}
-        confirmLabel={t('确认', 'Confirm')}
-        onCancel={() => setGuestAction(null)}
-        onConfirm={async () => {
-          if (
-            guestAction &&
-            (await dispatch(
-              {
-                type: 'catch_guest',
-                neighborId: guestAction.id,
-                action: guestAction.action,
-                ...(message ? { presetId: message } : {}),
-              },
-              setDialogError,
-            ))
-          )
-            setGuestAction(null);
-        }}
-      >
-        {!busy && (dialogError || !activeGuest) && (
-          <p role="alert">
-            {dialogError || t('这只客鲸已经离开了。', 'This guest has already left.')}
-          </p>
-        )}
-        <label>
-          {t('给客鲸的口信', 'Message for the guest')}{' '}
-          <select value={message} onChange={(e) => setMessage(e.target.value)}>
-            <option value="">{t('不留口信', 'No message')}</option>
-            {PRESET_MESSAGES.filter((m) => m.category === guestAction?.action).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.text}
-              </option>
-            ))}
-          </select>
-        </label>
       </ConfirmDialog>
       {social.open ? (
         <section className="voyage-card">
@@ -351,12 +423,14 @@ export function DepartureDialog({
   dispatch,
   onClose,
   initialMessage = '',
+  dailyWageLimitReached = false,
 }: {
   neighbor: NeighborStation;
   busy: boolean;
   dispatch: Dispatch;
   onClose: () => void;
   initialMessage?: string;
+  dailyWageLimitReached?: boolean;
 }) {
   const t = useWhaleText();
   const [hire, setHire] = useState(false);
@@ -397,10 +471,15 @@ export function DepartureDialog({
         {t('本次允许主人雇佣帮工', 'Allow the host to hire my whale on this visit')}
       </label>
       <p>
-        {t(
-          '帮工工资计入当日社交鲸币额度。',
-          'Wages count toward your daily social whale coin limit.',
-        )}
+        {dailyWageLimitReached
+          ? t(
+              '今日社交鲸币已满，仍可串门。若允许帮工，屋主可在你有剩余额度时雇佣。',
+              'Your daily social coin limit is full. You can still visit. If you allow hiring, the host can hire your whale when you have allowance left.',
+            )
+          : t(
+              '帮工工资计入当日社交鲸币额度。',
+              'Wages count toward your daily social whale coin limit.',
+            )}
       </p>
       <label>
         {t('串门口信', 'Message for the host')}{' '}

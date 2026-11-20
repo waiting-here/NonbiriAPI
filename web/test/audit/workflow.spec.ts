@@ -145,7 +145,6 @@ test('charity request and attempt shortcuts preserve the log window for administ
         })),
       ).toEqual(data.shortcut_attempt_targets);
       const search = new URLSearchParams({
-        ...(role === 'admin' ? {} : { tab: 'logs' }),
         charity_model: model.full_name,
         page: '1',
         page_size: '10',
@@ -160,7 +159,8 @@ test('charity request and attempt shortcuts preserve the log window for administ
       await expect(
         panel.getByRole('link', { name: common.common.operations.logs.manageCharityModel }),
       ).toBeVisible();
-      const original = page.url();
+      const original = new URL(page.url());
+      if (role !== 'admin') original.searchParams.set('tab', 'logs');
       await panel
         .getByRole('link', { name: common.common.operations.logs.manageCharityModel })
         .click();
@@ -171,7 +171,7 @@ test('charity request and attempt shortcuts preserve the log window for administ
       await page
         .getByRole('link', { name: common.common.operations.logs.returnToLogs, exact: true })
         .click();
-      await expect(page).toHaveURL(original);
+      await expect(page).toHaveURL(original.href);
       for (let index = 0; index < data.shortcut_attempt_targets.length; index++) {
         const toggle = panel
           .locator('summary')
@@ -221,7 +221,7 @@ test('charity request and attempt shortcuts preserve the log window for administ
         await page
           .getByRole('button', { name: common.common.operations.logs.returnToLogs, exact: true })
           .click();
-        await expect(page).toHaveURL(original);
+        await expect(page).toHaveURL(original.href);
       }
     } finally {
       await context.close();

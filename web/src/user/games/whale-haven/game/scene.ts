@@ -16,8 +16,22 @@ export function resolveWhaleExpression(
   snapshot: GameSnapshot,
   now: number,
   values: Record<string, number>,
+  workingAway: boolean,
 ): { expression: WhaleExpression; statusLabel: string; speech: string } {
   const { whale, home } = snapshot;
+
+  if (whale.location.kind === 'visiting') {
+    const visitingId = whale.location.neighborId;
+    const host = snapshot.neighbors.find((n) => n.id === visitingId);
+    const hostName = host ? displayNeighborName(host) : '邻家小筑';
+    return {
+      expression: 'cheerful',
+      statusLabel: workingAway ? '在外帮工' : '外出串门',
+      speech: workingAway
+        ? `我在【${hostName}】家帮工呢，收工就回小筑～`
+        : `阿姆阿姆……【${hostName}】家的白米饭真香！`,
+    };
+  }
 
   if (whale.tempEmotion && whale.tempEmotion.expiresAt > now) {
     const labelMap: Record<WhaleExpression, string> = {
@@ -31,17 +45,6 @@ export function resolveWhaleExpression(
       expression: whale.tempEmotion.expression,
       statusLabel: labelMap[whale.tempEmotion.expression],
       speech: whale.tempEmotion.line,
-    };
-  }
-
-  if (whale.location.kind === 'visiting') {
-    const visitingId = whale.location.neighborId;
-    const host = snapshot.neighbors.find((n) => n.id === visitingId);
-    const hostName = host ? displayNeighborName(host) : '邻家小筑';
-    return {
-      expression: 'cheerful',
-      statusLabel: `顺网线在 ${hostName} 家蹭饭中`,
-      speech: `阿姆阿姆……【${hostName}】家的白米饭真香，吃饱就给饲养员捎几枚小鲸币回去～`,
     };
   }
 

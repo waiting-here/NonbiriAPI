@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -74,16 +74,24 @@ describe('Sheet', () => {
   it('closes with Escape unless a dialog opened from the sheet handles it', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<Harness onClose={onClose} />);
-    await user.click(screen.getByRole('button', { name: 'Add service' }));
-    await user.click(screen.getByRole('button', { name: 'Remove key' }));
+    render(
+      <StrictMode>
+        <Harness onClose={onClose} />
+      </StrictMode>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Add service' });
+    await user.click(trigger);
+    const remove = screen.getByRole('button', { name: 'Remove key' });
+    await user.click(remove);
     expect(screen.getByRole('alertdialog', { name: 'Remove this key?' })).toBeVisible();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Add service' })).toBeVisible();
+    await waitFor(() => expect(remove).toHaveFocus());
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it('keeps the sheet open while busy', async () => {
@@ -133,7 +141,11 @@ describe('Sheet', () => {
 
   it('mounts a retained task on first open and preserves it while dismissed', async () => {
     const user = userEvent.setup();
-    render(<Harness keepMounted />);
+    render(
+      <StrictMode>
+        <Harness keepMounted />
+      </StrictMode>,
+    );
     expect(screen.queryByLabelText('Address')).not.toBeInTheDocument();
     const trigger = screen.getByRole('button', { name: 'Add service' });
     await user.click(trigger);
@@ -141,8 +153,10 @@ describe('Sheet', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(document.body.style.overflow).not.toBe('hidden');
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
     await user.click(trigger);
     expect(screen.getByLabelText('Address')).toHaveValue('https://draft.example/v1');
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });

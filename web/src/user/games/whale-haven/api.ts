@@ -27,6 +27,7 @@ export interface Profile {
       allow_hire: boolean;
       working: boolean;
       started_at_ms: number;
+      work_ends_at_ms?: number;
     };
     guests: {
       neighbor_id: string;
@@ -34,8 +35,10 @@ export interface Profile {
       whale_name: string;
       whale_outfit: WhaleOutfitId;
       allow_hire: boolean;
+      hire_blocked?: 'quota' | 'wallet_full';
       working: boolean;
       started_at_ms: number;
+      work_ends_at_ms?: number;
     }[];
   };
 }

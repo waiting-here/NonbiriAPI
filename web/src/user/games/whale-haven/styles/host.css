@@ -120,6 +120,27 @@
 .whale-haven .voyage-card select {
   width: min(100%, 16rem);
 }
+.wh-social-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+}
+.wh-last-settlement {
+  display: grid;
+  gap: var(--nb-space-1);
+}
+.whale-haven button.guest-actor {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.whale-haven button.guest-actor:focus-visible {
+  outline: var(--nb-focus-ring);
+  outline-offset: 2px;
+}
 .whale-haven .wh-feedback {
   position: absolute;
   bottom: 5.8rem;

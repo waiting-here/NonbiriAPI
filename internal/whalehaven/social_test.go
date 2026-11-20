@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,6 +118,23 @@ func socialNear(t *testing.T, got, want float64) {
 	}
 }
 
+func TestWhaleTimelineKeepsTheMessageSeparateFromSettlement(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		title := "小鲸出发串门"
+		entry := eventView("17", 2000, "visit_out", title+" · 顺路来看看", 0, 0, pending)
+		if pending {
+			title = "待结算 · " + title
+		}
+		if entry["title"] != title || entry["presetMessage"] != "顺路来看看" {
+			t.Fatal(entry)
+		}
+	}
+	entry := eventView("18", 3000, "feed", "购入口粮 · 热腾腾大碗白米饭", 0, 0, false)
+	if entry["presetMessage"] != nil || entry["title"] != "购入口粮 · 热腾腾大碗白米饭" {
+		t.Fatal(entry)
+	}
+}
+
 func TestWhaleSocialWagesAcrossHarvestAndClose(t *testing.T) {
 	db := newSocialDB(t, 1000)
 	allow, closeDoor := true, false
@@ -145,6 +164,20 @@ func TestWhaleSocialWagesAcrossHarvestAndClose(t *testing.T) {
 			t.Fatal(g.state.Wallet, h.state.Home)
 		}
 		commandSocial(t, w, h, actionRequest{Type: "set_open", Open: &closeDoor})
+		var wages, split, closed int
+		for _, e := range w.events {
+			switch {
+			case e.kind == "wage" && e.user == g.id && e.pearls == 1:
+				wages++
+			case e.kind == "wage" && e.user == h.id && e.pearls == 0 && e.text == "从帮工产出分给客鲸 1 枚小鲸币":
+				split++
+			case e.kind == "settlement" && strings.Contains(e.text, "小筑关闭"):
+				closed++
+			}
+		}
+		if wages != 1 || split != 1 || closed != 2 {
+			t.Fatalf("wrong wage or close receipts: %+v", w.events)
+		}
 		if g.state.Whale.Location.Kind != "home" || h.open {
 			t.Fatal(g, h)
 		}
@@ -248,8 +281,48 @@ func TestWhaleSocialFreezeThenNewDayWageCap(t *testing.T) {
 		if h.state.Home.UnclaimedPearls != 4 {
 			t.Fatal("owner share", h.state.Home)
 		}
+		for _, id := range []int64{g.id, h.id} {
+			if !slices.ContainsFunc(w.events, func(e event) bool {
+				return e.user == id && e.kind == "settlement" && strings.Contains(e.text, "社交鲸币已达上限")
+			}) {
+				t.Fatalf("missing daily-limit settlement for %d: %+v", id, w.events)
+			}
+		}
 	})
 }
+func TestHiringUsesCurrentSocialAllowanceAndWageCapacity(t *testing.T) {
+	db := newSocialDB(t, 1000)
+	db.run(t, 1000, func(w *world) {
+		g := socialActor(t, w, 2)
+		h := socialActor(t, w, 1)
+		agree := true
+		commandSocial(t, w, g, actionRequest{Type: "send_visit", Target: "HOST", AllowHire: &agree})
+		hire := actionRequest{Type: "catch_guest", Action: "hire", NeighborID: "GUEST"}
+		check := func(want string) {
+			t.Helper()
+			got, err := w.hiringLimit(g)
+			if err != nil || got != want {
+				t.Fatalf("hire limit = %q, %v; want %q", got, err, want)
+			}
+		}
+		g.state.Wallet.Pearls = assets.MaxBalance
+		check("wallet_full")
+		g.state.Wallet.Pearls = 0
+		g.state.Wallet.DailySocialPearlsGained = w.config.Value("daily_social_pearls")
+		w.keepDay(g)
+		check("quota")
+		if err := w.socialAction(h, hire); err == nil || w.visits[g.id].working {
+			t.Fatal("capped guest started a paid shift")
+		}
+		w.now += 86_400_000
+		check("")
+		w.now -= 86_400_000
+		w.config.Values["guest_wage_bp"] = 0
+		check("")
+		commandSocial(t, w, h, hire)
+	})
+}
+
 func TestWhaleSocialCycleReturnsAtActualMealEnd(t *testing.T) {
 	db := newSocialDB(t, 1000)
 	db.run(t, 1000, func(w *world) {

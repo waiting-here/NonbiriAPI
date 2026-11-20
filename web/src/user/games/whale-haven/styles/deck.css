@@ -326,6 +326,7 @@
   }
   .deck-timeline__heading {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.35rem;
@@ -338,10 +339,10 @@
     font-weight: 740;
     overflow-wrap: anywhere;
   }
-  .deck-timeline__heading > span {
+  .deck-timeline__heading > time {
     padding-top: 0.2rem;
     color: var(--nb-color-text-muted);
-    font-size: 0.69rem;
+    font-size: var(--nb-font-size-xs);
     white-space: nowrap;
   }
   .deck-timeline__meta {

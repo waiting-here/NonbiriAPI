@@ -132,6 +132,9 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--nb-space-2);
   }
+  .donation-summary-actions {
+    flex-wrap: wrap;
+  }
   .donation-summary-actions > a,
   .donation-summary-actions > span {
     flex: 1;

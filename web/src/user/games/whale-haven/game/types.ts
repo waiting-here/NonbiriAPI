@@ -64,8 +64,8 @@ export type WhaleLocation =
       readonly kind: 'visiting';
       readonly neighborId: string;
       readonly startedAt: number;
-      readonly eatenGrams: number;
-      readonly pendingPearls: number;
+      readonly eatenGrams?: number;
+      readonly pendingPearls?: number;
       readonly pendingConchShards?: number;
     };
 
@@ -113,7 +113,6 @@ export interface HomeSanctuaryState {
   troughFeedType: 'silver_fish' | 'sweet_shrimp';
   unclaimedPearls: number;
   pearlProgress: number; // 0..100
-  accruedWorkerWage?: number; // 打工客鲸帮忙干饭累计待结的工资分成（收币时扣除结算）
   recentFedHistory?: FedBucketEntry[]; // 近 48 小时自家投喂消耗记录（累计满 180g 才解锁社交蹭饭鲸币掉落）
   buffs?: SanctuaryBuffsState; // 海螺扭蛋产出的内循环增益道具
   ownedDecor: DecorItemId[];
@@ -129,7 +128,6 @@ export interface GuestWhaleVisit {
   stage: 'eating' | 'working' | 'panicked' | 'leaving_pout' | 'leaving_teary' | 'treated_happy';
   hiredAt?: number;
   workExpiresAt?: number;
-  helpedGrams?: number;
   stageExpiresAt?: number;
   bubbleLine?: string;
 }
@@ -166,7 +164,17 @@ export interface FootprintRecord {
 export interface ActivityLogItem {
   id: string;
   timestamp: number;
-  kind: 'feed' | 'harvest' | 'visit_out' | 'guest_in' | 'catch' | 'exchange' | 'interact' | 'gacha';
+  kind:
+    | 'feed'
+    | 'harvest'
+    | 'visit_out'
+    | 'guest_in'
+    | 'catch'
+    | 'wage'
+    | 'settlement'
+    | 'exchange'
+    | 'interact'
+    | 'gacha';
   title: string;
   detail: string;
   presetMessage?: string;

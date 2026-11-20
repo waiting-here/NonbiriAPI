@@ -224,7 +224,11 @@ func (w *world) profile(r *resident, operation string) (map[string]any, error) {
 			}
 			peers = append(peers, n)
 			if v := w.visits[r.id]; v != nil && !v.ended && v.host == id {
-				away = map[string]any{"target": n.ID, "label": n.label(), "allow_hire": v.allowHire, "working": v.working, "started_at_ms": v.started}
+				out := map[string]any{"target": n.ID, "label": n.label(), "allow_hire": v.allowHire, "working": v.working, "started_at_ms": v.started}
+				if v.working {
+					out["work_ends_at_ms"] = w.now + v.workLeft
+				}
+				away = out
 			}
 			if v := w.visits[id]; v != nil && !v.ended && v.host == r.id {
 				stage := "eating"
@@ -232,11 +236,25 @@ func (w *world) profile(r *resident, operation string) (map[string]any, error) {
 					stage = "working"
 				}
 				g := map[string]any{"slotIndex": len(guestViews), "neighborId": n.ID, "arrivedAt": v.started, "eatenGrams": v.eaten, "stage": stage}
+				visitor := map[string]any{"neighbor_id": n.ID, "label": n.label(), "whale_name": n.Name, "whale_outfit": n.Outfit, "allow_hire": v.allowHire, "working": v.working, "started_at_ms": v.started}
 				if v.working {
 					g["workExpiresAt"] = w.now + v.workLeft
+					visitor["work_ends_at_ms"] = w.now + v.workLeft
+				} else if v.allowHire {
+					guest, err := w.load(id)
+					if err != nil {
+						return nil, err
+					}
+					limit, err := w.hiringLimit(guest)
+					if err != nil {
+						return nil, err
+					}
+					if limit != "" {
+						visitor["hire_blocked"] = limit
+					}
 				}
 				guestViews = append(guestViews, g)
-				visitors = append(visitors, map[string]any{"neighbor_id": n.ID, "label": n.label(), "whale_name": n.Name, "whale_outfit": n.Outfit, "allow_hire": v.allowHire, "working": v.working, "started_at_ms": v.started})
+				visitors = append(visitors, visitor)
 			}
 		}
 		rows, e := w.tx.QueryContext(w.ctx, "SELECT h.door"+peerFrom+" JOIN whale_haven_pins p ON p.peer_id=h.user_id WHERE h.is_open=1 AND p.owner_id=? AND "+visiblePeer+" ORDER BY h.door LIMIT 64", r.id, w.now/1000)
@@ -299,7 +317,7 @@ func (w *world) timeline(r *resident) ([]map[string]any, map[string]any, error) 
 			rows.Close()
 			return nil, nil, err
 		}
-		logs = append(logs, map[string]any{"id": key(id), "timestamp": at, "kind": kind, "title": note, "detail": movementDetail(pearls, shards)})
+		logs = append(logs, eventView(key(id), at, kind, note, pearls, shards, false))
 	}
 	err = rows.Err()
 	rows.Close()
@@ -313,8 +331,7 @@ func (w *world) timeline(r *resident) ([]map[string]any, map[string]any, error) 
 			if e.user != r.id {
 				continue
 			}
-			label := "待结算 · " + e.text
-			upcoming = append(upcoming, map[string]any{"id": "pending-" + key(e.at) + "-" + key(int64(i)), "timestamp": e.at, "kind": e.kind, "title": label, "detail": movementDetail(e.pearls, e.shards)})
+			upcoming = append(upcoming, eventView("pending-"+key(e.at)+"-"+key(int64(i)), e.at, e.kind, e.text, e.pearls, e.shards, true))
 		}
 		logs = append(upcoming, logs...)
 		logs = logs[:min(len(logs), 40)]
@@ -336,6 +353,21 @@ func (w *world) timeline(r *resident) ([]map[string]any, map[string]any, error) 
 		prints[door] = map[string]any{"neighborId": door, "ourVisitsCount": out, "theirVisitsCount": in, "lastInteractionAt": at, "lastSummary": note}
 	}
 	return logs, prints, rows.Err()
+}
+
+func eventView(id string, at int64, kind, note string, pearls, shards int64, pending bool) map[string]any {
+	entry := map[string]any{"id": id, "timestamp": at, "kind": kind, "detail": movementDetail(pearls, shards)}
+	switch kind {
+	case "visit_out", "guest_in", "catch":
+		if title, message, ok := strings.Cut(note, " · "); ok {
+			note, entry["presetMessage"] = title, message
+		}
+	}
+	if pending {
+		note = "待结算 · " + note
+	}
+	entry["title"] = note
+	return entry
 }
 
 func movementDetail(pearls, shards int64) string {

@@ -8,7 +8,7 @@ import type { NativeService, RerankFormat } from '@shared/nativeServices';
 import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
 import { useQueryClient } from '@tanstack/react-query';
 import { coreKeys, coreSessionMatchesAccount, useEndpointCreateOptions } from '../queries';
-import { validateEndpointSecret } from '../normalizers';
+import { canonicalBaseURLPreview, validateEndpointSecret } from '../normalizers';
 import { CoreErrorPanel, CoreLoading } from '../components';
 import type { ConnectorType, Endpoint, EndpointCreateInput, EndpointKey } from '../types';
 import type { Connection, Credential, DiscoverySource } from './types';
@@ -56,6 +56,8 @@ export function ServiceCreateForm({
   const [channelId, setChannelId] = useState('');
   const [chosenConnector, setConnector] = useState<string>();
   const [address, setAddress] = useState('');
+  const [addressError, setAddressError] = useState(false);
+  const addressInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState<string | null>(null);
   const [format, setFormat] = useState<RerankFormat | null>(null);
   const [rerankPath, setRerankPath] = useState('');
@@ -216,6 +218,17 @@ export function ServiceCreateForm({
   };
   const save = async () => {
     if (locked || !ready) return;
+    const saved = progress.current;
+    let baseURL = address.trim();
+    if (mode === 'custom' && !saved.entries.custom) {
+      try {
+        baseURL = canonicalBaseURLPreview(baseURL);
+      } catch {
+        setAddressError(true);
+        addressInput.current?.focus();
+        return;
+      }
+    }
     try {
       if (credentialMode === 'new' && !progress.current.credential) validateEndpointSecret(secret);
       extraSecrets.forEach((value, index) => {
@@ -231,19 +244,22 @@ export function ServiceCreateForm({
     const requestSecret = secret;
     const requestExtras = extraSecrets.slice();
     activeSecret.current = 0;
-    const saved = progress.current;
     try {
       if (!saved.connection)
         await run('', {
           kind: 'connection',
           input: { name: serviceName.trim(), note: '' },
         });
-      for (const item of inputs) {
-        if (!saved.entries[item.row])
-          await run(item.row, {
-            kind: 'endpoint',
-            input: { ...item.input, connection_id: saved.connection!.id },
-          });
+      for (const { row, input } of inputs) {
+        if (saved.entries[row]) continue;
+        await run(row, {
+          kind: 'endpoint',
+          input: {
+            ...input,
+            ...(input.source === 'custom' ? { base_url: baseURL } : {}),
+            connection_id: saved.connection!.id,
+          },
+        });
       }
       if (!saved.credential) {
         if (credentialMode === 'existing')
@@ -445,17 +461,24 @@ export function ServiceCreateForm({
         ) : null}
         {mode === 'custom' ? (
           <>
-            <Field label={t('user.services.serviceAddress')}>
+            <Field
+              label={t('user.services.serviceAddress')}
+              error={addressError ? t('user.services.serviceAddressError') : undefined}
+            >
               {(props) => (
                 <input
                   {...props}
                   form={formID}
                   type="url"
                   required
+                  ref={addressInput}
                   value={address}
                   disabled={locked || started}
                   placeholder="https://api.example.com/v1"
-                  onChange={(event) => setAddress(event.target.value)}
+                  onChange={(event) => {
+                    setAddress(event.target.value);
+                    setAddressError(false);
+                  }}
                 />
               )}
             </Field>

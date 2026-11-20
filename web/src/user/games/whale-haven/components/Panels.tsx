@@ -9,23 +9,16 @@ import { MessageCircle, Waves } from './Icons';
 import { UiSwitch } from './UiMotifs';
 import { costWithCoupon, type Action, type Profile } from '../api';
 import { useWhaleText } from '../copy';
+import { formatDateTime } from '@shared/utils/datetime';
 const OUTFITS = (Object.keys(OUTFIT_CATALOG) as WhaleOutfitId[]).filter(
   (id) => !OUTFIT_CATALOG[id].hidden,
 );
 const COIN_ART = 'props/whale-coin.webp';
 
-function formatTimeAgo(timestamp: number) {
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 60) return '刚刚';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时前`;
-  return `${Math.floor(seconds / 86400)} 天前`;
-}
-
 function MessageNote({ message }: { message: string }) {
   return (
     <blockquote className="deck-message">
-      <MessageCircle size={15} aria-label="口信" />
+      <MessageCircle size={15} aria-hidden="true" />
       <span>「{message}」</span>
     </blockquote>
   );
@@ -214,23 +207,26 @@ export function DecorPane({
   );
 }
 export function ActivityPane({ snapshot }: { snapshot: GameSnapshot }) {
+  const t = useWhaleText();
   return (
     <>
       <section aria-labelledby="activity-timeline">
         <h3 className="kit-section-title deck-section-title" id="activity-timeline">
-          最近动态
+          {t('最近动态', 'Recent activity')}
         </h3>
         {snapshot.logs.length === 0 ? (
-          <p className="deck-empty">小屋还没有新动态。</p>
+          <p className="deck-empty">{t('小屋还没有新动态。', 'There is no haven activity yet.')}</p>
         ) : (
           <ol className="deck-timeline deck-timeline--activity">
             {snapshot.logs.map((entry) => (
               <li key={entry.id} className="deck-timeline__entry" data-kind={entry.kind}>
                 <div className="deck-timeline__heading">
                   <h4>{entry.title}</h4>
-                  <span>{formatTimeAgo(entry.timestamp)}</span>
+                  <time dateTime={new Date(entry.timestamp).toISOString()}>
+                    {formatDateTime(entry.timestamp, undefined, undefined, 'second')}
+                  </time>
                 </div>
-                <p>{entry.detail}</p>
+                {entry.detail && <p>{entry.detail}</p>}
                 {entry.highlight && (
                   <span className="nb-badge nb-badge--warm">{entry.highlight}</span>
                 )}

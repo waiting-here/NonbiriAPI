@@ -324,6 +324,10 @@ export function DonationResourcePicker({
     searchParams.get(KEY_SEARCH_PARAM) ?? '',
   );
   const [searchError, setSearchError] = useState<string | null>(null);
+  const endpointSearchInput = useRef<HTMLInputElement>(null);
+  const endpointTrigger = useRef<HTMLButtonElement | null>(null);
+  const openingEndpoint = useRef<string | null>(null);
+  const keyHeading = useRef<HTMLHeadingElement>(null);
   const selectedIds = selectedSignature(selected);
   const [selectionScope, dispatchSelectionScope] = useReducer(selectionScopeReducer, {
     accountId,
@@ -345,6 +349,8 @@ export function DonationResourcePicker({
     const previous = previousAccountId.current;
     if (previous === accountId) return;
     previousAccountId.current = accountId;
+    endpointTrigger.current = null;
+    openingEndpoint.current = null;
     queryClient.removeQueries({
       queryKey: [...economyKeys.endpointChoicesRoot, previous],
       exact: false,
@@ -373,6 +379,11 @@ export function DonationResourcePicker({
   const rawActiveEndpointId = accountTransition
     ? undefined
     : (searchParams.get(ACTIVE_ENDPOINT_PARAM) ?? undefined);
+  useEffect(() => {
+    if (!enabled || !rawActiveEndpointId || openingEndpoint.current !== rawActiveEndpointId) return;
+    openingEndpoint.current = null;
+    keyHeading.current?.focus();
+  }, [enabled, rawActiveEndpointId]);
   const endpointSearchValid = validSearch(endpointSearch);
   const keySearchValid = validSearch(keySearch);
   const endpointPager = useUrlPagePager({
@@ -666,8 +677,11 @@ export function DonationResourcePicker({
   );
 
   const selectEndpoint = useCallback(
-    (endpointId: string) => {
+    (endpointId: string, trigger: HTMLButtonElement) => {
       if (!enabled || disabled || endpointBusy || !sessionMatches) return;
+      endpointTrigger.current = trigger;
+      if (rawActiveEndpointId === endpointId) keyHeading.current?.focus();
+      else openingEndpoint.current = endpointId;
       setSearchParams((previous) => {
         const next = new URLSearchParams(previous);
         next.set(ACTIVE_ENDPOINT_PARAM, endpointId);
@@ -676,7 +690,7 @@ export function DonationResourcePicker({
         return next;
       });
     },
-    [disabled, enabled, endpointBusy, sessionMatches, setSearchParams],
+    [disabled, enabled, endpointBusy, rawActiveEndpointId, sessionMatches, setSearchParams],
   );
 
   const closeEndpoint = useCallback(() => {
@@ -689,6 +703,10 @@ export function DonationResourcePicker({
       next.delete(KEY_PAGE_SIZE_PARAM);
       return next;
     });
+    const trigger = endpointTrigger.current;
+    (trigger?.isConnected && !trigger.disabled ? trigger : endpointSearchInput.current)?.focus();
+    endpointTrigger.current = null;
+    openingEndpoint.current = null;
   }, [disabled, enabled, setSearchParams]);
 
   const chooseKey = useCallback(
@@ -732,6 +750,7 @@ export function DonationResourcePicker({
           {(field) => (
             <input
               {...field}
+              ref={endpointSearchInput}
               type="search"
               value={endpointSearchDraft}
               maxLength={MAX_SEARCH_UTF16_LENGTH}
@@ -855,7 +874,7 @@ export function DonationResourcePicker({
                       className="donation-resource-picker__endpoint"
                       disabled={!enabled || disabled || endpointBusy || !sessionMatches}
                       aria-expanded={selectedHere}
-                      onClick={() => selectEndpoint(endpoint.id)}
+                      onClick={(event) => selectEndpoint(endpoint.id, event.currentTarget)}
                     >
                       <span>
                         <strong>
@@ -895,7 +914,7 @@ export function DonationResourcePicker({
         <section className="donation-resource-picker__section">
           <div className="donation-resource-picker__section-heading">
             <div>
-              <h4>
+              <h4 ref={keyHeading} tabIndex={-1}>
                 {t('user.charity.resourcePicker.keyTitle', {
                   endpoint: activeEndpointTitle,
                 })}

@@ -206,7 +206,7 @@ func (w *world) settleInterval(people []*resident, incoming map[int64][]*visit, 
 						}
 						room := wageRoom(guest, cfg)
 						if room == 0 {
-							if err := w.farewell(v, at, cfg, "quota"); err != nil {
+							if err := w.farewell(v, at, cfg, wageLimitReason(guest, cfg)); err != nil {
 								return 0, err
 							}
 							continue
@@ -274,8 +274,10 @@ func (w *world) settleInterval(people []*resident, incoming map[int64][]*visit, 
 				if err := w.payWage(p, g, c.Pearls, end, cfg); err != nil {
 					return 0, err
 				}
-				if v.workLeft == 0 || (cfg.Value("guest_wage_bp") > 0 && wageRoom(g, cfg) == 0) {
+				if v.workLeft == 0 {
 					departures = append(departures, departure{v, "shift_end"})
+				} else if cfg.Value("guest_wage_bp") > 0 && wageRoom(g, cfg) == 0 {
+					departures = append(departures, departure{v, wageLimitReason(g, cfg)})
 				}
 			} else {
 				v.eaten += c.Grams
@@ -304,6 +306,26 @@ func wageRoom(r *resident, cfg config.Settings) int64 {
 	return min(r.state.SocialRoom(cfg), assets.MaxBalance-r.state.Wallet.Pearls)
 }
 
+func wageLimitReason(r *resident, cfg config.Settings) string {
+	if r.state.SocialRoom(cfg) == 0 {
+		return "quota"
+	}
+	return "wallet_full"
+}
+
+func (w *world) hiringLimit(guest *resident) (string, error) {
+	if w.config.Value("guest_wage_bp") == 0 {
+		return "", nil
+	}
+	if err := w.setDay(guest, w.day(w.now)); err != nil {
+		return "", err
+	}
+	if wageRoom(guest, w.config) == 0 {
+		return wageLimitReason(guest, w.config), nil
+	}
+	return "", nil
+}
+
 func (w *world) payWage(h, g *resident, gross float64, end int64, cfg config.Settings) error {
 	bp := cfg.Value("guest_wage_bp")
 	if bp == 0 || gross == 0 {
@@ -322,8 +344,8 @@ func (w *world) payWage(h, g *resident, gross float64, end int64, cfg config.Set
 		g.state.Wallet.DailySocialPearlsGained += paid
 		g.state.Wallet.Pearls += paid
 		w.keepDay(g)
-		w.remember(event{user: g.id, peer: h.id, at: end, kind: "wage", text: "累计打工工资到账", movementReason: "wage", pearls: paid})
-		w.remember(event{user: h.id, peer: g.id, at: end, kind: "wage", text: "客鲸的累计工资已到账"})
+		w.remember(event{user: g.id, peer: h.id, at: end, kind: "wage", text: "客鲸帮工工资", movementReason: "wage", pearls: paid})
+		w.remember(event{user: h.id, peer: g.id, at: end, kind: "wage", text: fmt.Sprintf("从帮工产出分给客鲸 %d 枚小鲸币", paid)})
 	}
 	return nil
 }
@@ -373,13 +395,32 @@ func (w *world) farewell(v *visit, at int64, cfg config.Settings, reason string)
 	g.dirty = true
 	g.state.Whale.Location = rules.Location{Kind: "home"}
 	coins, shards := mealRewards(v.eaten, cfg)
-	if err = w.reward(g, h.id, at, coins, shards, cfg, "settlement", "客鲸已回家"); err != nil {
+	guestNote, hostNote := "小鲸回家，本次串门结束", "客鲸离开，本次串门结束"
+	switch reason {
+	case "recall":
+		guestNote, hostNote = "你已召回小鲸，本次来往结算", "对方召回了客鲸，本次来往结算"
+	case "gentle", "flick", "treat":
+		guestNote, hostNote = "屋主送小鲸回家，本次来往结算", "你已送客鲸回家，本次来往结算"
+	case "closed":
+		guestNote, hostNote = "小筑关闭，小鲸回家结算", "小筑关闭，客鲸离开结算"
+	case "shift_end":
+		guestNote, hostNote = "班次到点，小鲸已收工回家", "班次到点，客鲸已收工回家"
+	case "quota":
+		guestNote, hostNote = "今日社交鲸币已达上限，小鲸收工回家", "客鲸今日社交鲸币已达上限，本次帮工结束"
+	case "wallet_full":
+		guestNote, hostNote = "小鲸币余额已满，小鲸收工回家", "客鲸无法继续收取工资，本次帮工结束"
+	case "empty":
+		guestNote, hostNote = "邻居的饭碗已空，小鲸回家", "饭碗已空，客鲸回家"
+	case "full":
+		guestNote, hostNote = "小鲸吃饱回家，本次串门结算", "客鲸吃饱离开，留下了谢礼"
+	}
+	if err = w.reward(g, h.id, at, coins, shards, cfg, "settlement", guestNote); err != nil {
 		return err
 	}
 	if reason == "full" {
-		return w.reward(h, g.id, at, 1, 1, cfg, "settlement", "客鲸吃饱离开，留下了谢礼")
+		return w.reward(h, g.id, at, 1, 1, cfg, "settlement", hostNote)
 	}
-	w.remember(event{user: h.id, peer: g.id, at: at, kind: "settlement", text: "客鲸已离开小屋"})
+	w.remember(event{user: h.id, peer: g.id, at: at, kind: "settlement", text: hostNote})
 	return nil
 }
 
@@ -521,10 +562,14 @@ func (w *world) catchGuest(h *resident, a actionRequest) error {
 		if !v.allowHire {
 			return conflict("客鲸主人没有同意本次打工。")
 		}
-		if err = w.setDay(g, w.day(w.now)); err != nil {
+		limit, err := w.hiringLimit(g)
+		if err != nil {
 			return err
 		}
-		if cfg.Value("guest_wage_bp") > 0 && wageRoom(g, cfg) == 0 {
+		switch limit {
+		case "wallet_full":
+			return conflict("客鲸暂时无法继续收取工资。")
+		case "quota":
 			return conflict("客鲸主人今日的社交鲸币已达上限。")
 		}
 		v.working = true
