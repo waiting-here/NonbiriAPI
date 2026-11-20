@@ -102,6 +102,11 @@ function CatalogFilters({
 }) {
   const { t } = useTranslation();
   const [queryDraft, setQueryDraft] = useState(filter.query);
+  const [submittedQuery, setSubmittedQuery] = useState(filter.query);
+  if (submittedQuery !== filter.query) {
+    setSubmittedQuery(filter.query);
+    setQueryDraft(filter.query);
+  }
   const clear = () => {
     setQueryDraft('');
     onClear();
@@ -112,7 +117,7 @@ function CatalogFilters({
           {
             key: 'query',
             label: filter.query,
-            removeLabel: t('common.resetFilter'),
+            removeLabel: t('user.charity.presentation.removeSearch', { query: filter.query }),
             onRemove: () => onQuerySubmit(''),
           },
         ]
@@ -187,10 +192,10 @@ function CatalogFilters({
           </>
         }
         onReset={clear}
-        activeCount={chips.length}
+        resetLabel={t('user.charity.presentation.clearFilters')}
+        resetDisabled={!queryDraft && chips.length === 0}
+        activeCount={chips.length - Number(Boolean(filter.query))}
         chips={chips}
-        onClearAll={clear}
-        clearAllLabel={t('common.resetFilter')}
         onSubmit={() => onQuerySubmit(queryDraft)}
         secondary={
           <>
@@ -365,7 +370,6 @@ export function CharityCatalogPanel({
       <h2>{t('user.charity.catalog.title')}</h2>
       <p className="nb-sub">{t('user.charity.catalog.pricingHelp')}</p>
       <CatalogFilters
-        key={urlState.filters.query}
         filter={filter}
         onQuerySubmit={submitQuery}
         onAccessChange={changeAccess}
@@ -386,12 +390,22 @@ export function CharityCatalogPanel({
             <EmptyState
               title={t('user.charity.catalog.emptyTitle')}
               body={
-                hasCatalogFilters
-                  ? t('user.charity.presentation.filteredEmpty')
-                  : t('user.charity.catalog.emptyBody')
+                filter.query
+                  ? t('user.charity.presentation.noSearchMatch', { query: filter.query })
+                  : hasCatalogFilters
+                    ? t('user.charity.presentation.filteredEmpty')
+                    : t('user.charity.catalog.emptyBody')
               }
               action={
-                hasCatalogFilters ? (
+                filter.query ? (
+                  <button
+                    type="button"
+                    className="nb-btn nb-btn--secondary"
+                    onClick={() => submitQuery('')}
+                  >
+                    {t('user.charity.presentation.clearSearch')}
+                  </button>
+                ) : hasCatalogFilters ? (
                   <button type="button" className="nb-btn nb-btn--secondary" onClick={clearFilters}>
                     {t('user.charity.presentation.showAll')}
                   </button>

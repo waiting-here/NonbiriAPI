@@ -87,6 +87,30 @@ beforeEach(() => {
 });
 
 describe('management history workflows', () => {
+  it.each([
+    ['zh', '手动添加捐赠密钥的上游模型', '逐次操作'],
+    ['en', 'Add an upstream model to a donated key', 'Individual operations'],
+  ] as const)(
+    'names nested resource actions in groups and historical rows (%s)',
+    async (locale, title, tab) => {
+      const action = 'keys.models.manual.create';
+      mocks.list.mockImplementation(async (_filter, view) => ({
+        ...history(view),
+        groups: [{ ...group, action }],
+        operations: [{ ...operation, action, summary: '新增捐赠' }],
+      }));
+      const rendered = await renderWithProviders(<ManagementHistory account="synthetic" />, {
+        station: 'admin',
+        role: 'admin',
+        locale,
+      });
+      expect(await screen.findByText(title)).toHaveAttribute('title', 'donations · ' + action);
+      await rendered.user.click(screen.getByRole('tab', { name: tab }));
+      expect(await screen.findByText(title)).toBeVisible();
+      expect(screen.queryByText('新增捐赠')).toBeNull();
+    },
+  );
+
   it('opens a grouped operation with its human authorization without loading every target', async () => {
     mocks.list.mockImplementation(async (_filter, view, page) => ({
       ...history(view),

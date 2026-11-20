@@ -1,6 +1,22 @@
 package managementlog
 
-import "strings"
+import (
+	_ "embed"
+	"encoding/json"
+	"strings"
+)
+
+//go:embed action_titles.json
+var actionTitleJSON []byte
+
+// The history UI uses the same domain and action pair for groups and older records.
+var actionTitles = func() map[string]struct{ Zh, En string } {
+	var titles map[string]struct{ Zh, En string }
+	if err := json.Unmarshal(actionTitleJSON, &titles); err != nil {
+		panic(err)
+	}
+	return titles
+}()
 
 var domainLabels = map[string]string{
 	"site-config": "站点配置", "config": "站点配置", "users": "用户", "donations": "捐赠",
@@ -47,6 +63,10 @@ func routeAction(method string, parts []string) (string, string) {
 		}
 	}
 	components = append(components, verb)
+	action := strings.Join(components, ".")
+	if title, ok := actionTitles[parts[0]+"/"+action]; ok {
+		return action, title.Zh
+	}
 	domain := domainLabels[parts[0]]
 	if len(parts) > 1 {
 		switch parts[0] + "/" + parts[1] {
@@ -61,5 +81,5 @@ func routeAction(method string, parts []string) (string, string) {
 	if domain == "" {
 		domain = parts[0]
 	}
-	return strings.Join(components, "."), operationLabels[verb] + domain
+	return action, operationLabels[verb] + domain
 }
