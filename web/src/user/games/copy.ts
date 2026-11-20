@@ -3,6 +3,8 @@ const keys = {
   'linklink.noRegularReward': 'user.games.copy.linklink.noRegularReward',
   'center.free': 'user.games.copy.center.free',
   'center.rewardExchange': 'user.games.copy.center.rewardExchange',
+  'center.whalehaven.title': 'user.games.copy.center.whalehaven.title',
+  'center.whalehaven.body': 'user.games.copy.center.whalehaven.body',
   'center.lakenotes.title': 'user.games.copy.center.lakenotes.title',
   'center.lakenotes.body': 'user.games.copy.center.lakenotes.body',
   'presentation.activityWallet': 'user.games.presentation.activityWallet',

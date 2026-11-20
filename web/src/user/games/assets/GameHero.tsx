@@ -9,6 +9,7 @@ import likesHero from '@shared/assets/game-heroes/likes.webp';
 import catchHero from '@shared/assets/game-heroes/steadycatch.webp';
 
 const heroSources = {
+  whalehaven: '/assets/whale-haven/backgrounds/cabin-desktop.webp',
   lakenotes: '',
   steadycatch: catchHero,
   fishing: fishingHero,
@@ -23,6 +24,13 @@ const heroSources = {
 export type GameHeroKind = keyof typeof heroSources;
 
 export function GameHero({ kind, eager = false }: { kind: GameHeroKind; eager?: boolean }) {
+  if (kind === 'whalehaven')
+    return (
+      <div className="game-whale-cover" aria-hidden="true">
+        <img alt="" loading="lazy" src={heroSources.whalehaven} />
+        <img alt="" loading="lazy" src="/assets/whale-haven/sprites/whale-cheerful.webp" />
+      </div>
+    );
   if (kind === 'lakenotes') return <LakeCover />;
   if (kind === 'gwent')
     return (

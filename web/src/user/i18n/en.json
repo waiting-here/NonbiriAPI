@@ -1302,6 +1302,10 @@
           },
           "free": "Free play",
           "rewardExchange": "Redeemable credits",
+          "whalehaven": {
+            "title": "Whale Haven",
+            "body": "Adopt a whale maid, visit other cabins and collect whale coins. Original game in Chinese."
+          },
           "lakenotes": {
             "title": "Lake Notes",
             "body": "Collect fish across four waters, upgrade your gear, and fill your fishing journal."

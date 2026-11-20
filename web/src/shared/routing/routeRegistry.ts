@@ -181,6 +181,22 @@ export const USER_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   user({
+    id: 'game-whale-haven',
+    labelKey: 'user.games.copy.center.whalehaven.title',
+    path: '/games/whale-haven',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
+    id: 'whale-haven',
+    labelKey: 'user.games.copy.center.whalehaven.title',
+    path: '/whale-haven',
+    access: 'user',
+    layout: 'game',
+    registered: true,
+  }),
+  user({
     id: 'game-lake-notes',
     labelKey: 'user.games.copy.center.lakenotes.title',
     path: '/games/lake-notes',

@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { gameRequest } from './common/request';
 import { CreditText } from '@shared/components/CreditText';
 import { Panel, PanelHead, PanelBody, StatusBadge } from '@shared/components/ui';
 import { GameWallets } from './common/GameWallets';
@@ -34,7 +36,7 @@ function minimumPrice(prices: readonly string[]): string | undefined {
 
 function cardState(
   snapshot: GamesSnapshot,
-  kind: GameHeroKind,
+  kind: Exclude<GameHeroKind, 'whalehaven'>,
 ): { state: Availability; price?: string } {
   if (kind === 'lakenotes')
     return {
@@ -121,7 +123,7 @@ function GameCard({ card }: { card: CenterCard }) {
       />
     );
   const reward = text(
-    card.id === 'lakenotes'
+    card.id === 'lakenotes' || card.id === 'whalehaven'
       ? 'center.rewardExchange'
       : card.id === 'linklink' || card.id === 'steadycatch'
         ? 'center.firstClearReward'
@@ -160,6 +162,18 @@ function GameCard({ card }: { card: CenterCard }) {
 export function GameCenter() {
   const { text } = useGameCopy();
   const snapshot = useGamesSnapshot();
+  const whale = useQuery({
+    queryKey: ['user', 'games', 'whale-haven', 'availability'],
+    queryFn: async ({ signal }) =>
+      (
+        await gameRequest<{ enabled: boolean; exchange_enabled: boolean }>(
+          '/api/games/whale-haven/availability',
+          { signal },
+        )
+      ).data,
+    enabled: !!snapshot.data?.gamesEnabled,
+    retry: false,
+  });
   const maintenance = isMaintenance(snapshot.error);
   if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
   if (snapshot.error && !maintenance)
@@ -194,6 +208,15 @@ export function GameCenter() {
       ...availability,
     };
   });
+  if (snapshot.data?.gamesEnabled && whale.data?.enabled)
+    cards.push({
+      id: 'whalehaven',
+      path: '/games/whale-haven',
+      title: 'center.whalehaven.title',
+      body: 'center.whalehaven.body',
+      state: 'open',
+      price: '0',
+    });
   return (
     <main className="game-page game-center">
       <PageHeader
