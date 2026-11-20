@@ -23,6 +23,7 @@ export function FilterBar({
   onReset,
   submitLabel,
   submitDisabled,
+  resetLabel,
   resetDisabled,
   role,
 }: {
@@ -59,6 +60,7 @@ export function FilterBar({
   submitLabel?: string;
   /** Disables Search while a request or input check runs. */
   submitDisabled?: boolean;
+  resetLabel?: string;
   /** Disables Reset during an in-flight request, independently of invalid input. */
   resetDisabled?: boolean;
   role?: 'search';
@@ -118,7 +120,7 @@ export function FilterBar({
                   disabled={resetDisabled}
                   onClick={onReset}
                 >
-                  {t('common.resetFilter')}
+                  {resetLabel ?? t('common.resetFilter')}
                 </Button>
               </>
             ) : null}

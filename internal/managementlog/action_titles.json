@@ -1,0 +1,19 @@
+{
+  "donations/keys.models.manual.create": {"zh": "手动添加捐赠密钥的上游模型", "en": "Add an upstream model to a donated key"},
+  "donations/keys.models.manual.update": {"zh": "编辑捐赠密钥的手动模型", "en": "Edit a donated key’s manual model entry"},
+  "donations/keys.models.manual.delete": {"zh": "移除捐赠密钥的手动模型", "en": "Remove a donated key’s manual model entry"},
+  "donations/keys.models.refresh": {"zh": "刷新捐赠密钥的上游模型", "en": "Refresh a donated key’s upstream models"},
+  "donations/keys.update": {"zh": "调整捐赠密钥设置", "en": "Update donated key settings"},
+  "donations/keys.model-limits.update": {"zh": "调整捐赠密钥的上游模型限额", "en": "Update per-model limits on a donated key"},
+  "donations/keys.recurring-limits.update": {"zh": "调整捐赠密钥的循环限额", "en": "Update a donated key’s recurring limits"},
+  "donations/keys.failure-policy.update": {"zh": "调整捐赠密钥的连续失败策略", "en": "Update a donated key’s consecutive failure policy"},
+  "donations/review.approve": {"zh": "批准捐赠", "en": "Approve donation"},
+  "donations/review.reject": {"zh": "拒绝捐赠", "en": "Reject donation"},
+  "donations/review.force_reject": {"zh": "撤销捐赠批准", "en": "Revoke donation approval"},
+  "donations/rate_limit.release": {"zh": "解除捐赠资源的限流", "en": "Release a donated resource’s rate limit"},
+  "donations/rerank_path.update": {"zh": "修改捐赠资源的重排接口", "en": "Update a donated resource’s rerank path"},
+  "charity-models/bindings.batch-receipt.create": {"zh": "批量添加公益模型绑定", "en": "Add charity model bindings in a batch"},
+  "limited-activities/picture-book.models.refresh": {"zh": "刷新绘本的上游模型", "en": "Refresh Picture Book upstream models"},
+  "limited-activities/picture-book.models.update": {"zh": "更新绘本的模型配置", "en": "Update Picture Book model settings"},
+  "limited-activities/picture-book.upstream.update": {"zh": "更新绘本的上游服务", "en": "Update the Picture Book upstream service"}
+}

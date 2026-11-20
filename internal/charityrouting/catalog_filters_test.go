@@ -185,6 +185,15 @@ func TestCatalogFilteredCountAndProjectionFollowResourceChangesWithoutWrites(t *
 	if err := env.store.DB().QueryRow(`SELECT request_user_price FROM charity_models WHERE id=?`, modelID).Scan(&price); err != nil {
 		t.Fatal(err)
 	}
+	exec(`UPDATE charity_models SET request_user_price=0 WHERE id=?`, modelID)
+	exec(`UPDATE donation_keys SET price_limit_mag=?,token_reserve=0 WHERE id=?`, mag(0), key)
+	check(false)
+	exec(`UPDATE donation_keys SET price_limit_mag=?,token_limit_mag=? WHERE id=?`, mag(1), mag(0), key)
+	check(false)
+	exec(`UPDATE donation_keys SET token_limit_mag=? WHERE id=?`, mag(1), key)
+	check(true)
+	exec(`UPDATE donation_keys SET price_limit_mag=NULL,token_limit_mag=NULL,token_reserve=10 WHERE id=?`, key)
+	exec(`UPDATE charity_models SET request_user_price=? WHERE id=?`, price, modelID)
 	exec(`UPDATE charity_models SET discount_percent=100,discount_enabled=1 WHERE id=?`, modelID)
 	exec(`UPDATE donation_keys SET price_limit_mag=? WHERE id=?`, mag(price-1), key)
 	check(false)

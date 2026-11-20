@@ -19,6 +19,7 @@ import {
 } from '@shared/components/ui';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PagePagination } from '@shared/operations/PagePagination';
+import actionTitles from '../../../../../internal/managementlog/action_titles.json';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -201,10 +202,15 @@ function ActionTitle({
   const verb = action.split('.').at(-1) ?? action;
   const domainLabel = t(`admin.managementHistory.domains.${domain}`, { defaultValue: domain });
   const verbLabel = t(`admin.managementHistory.actions.${verb}`, { defaultValue: verb });
-  const title =
-    i18n.resolvedLanguage === 'zh' && summary
-      ? summary
-      : t('admin.managementHistory.actionTitle', { domain: domainLabel, action: verbLabel });
+  const actionKey = domain + '/' + action;
+  const known = Object.hasOwn(actionTitles, actionKey)
+    ? actionTitles[actionKey as keyof typeof actionTitles]
+    : undefined;
+  const chinese = i18n.resolvedLanguage?.startsWith('zh');
+  const title = known
+    ? known[chinese ? 'zh' : 'en']
+    : (chinese && summary) ||
+      t('admin.managementHistory.actionTitle', { domain: domainLabel, action: verbLabel });
   return (
     <span className="nb-stack nb-stack--sm" title={domain + ' · ' + action}>
       {title}
