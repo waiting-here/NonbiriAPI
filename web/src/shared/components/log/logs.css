@@ -240,6 +240,10 @@
   gap: var(--nb-space-4);
   min-width: 0;
 }
+.log-detail-content > .nb-btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .log-lookup {
   display: flex;
   flex-wrap: wrap;

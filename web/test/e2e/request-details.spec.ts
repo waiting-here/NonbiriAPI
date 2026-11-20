@@ -22,8 +22,10 @@ for (const station of ['user', 'admin'] as const) {
     await mockRoleSession(page, station, station === 'admin' ? 'admin' : 'user');
     await mockPublicConfig(page, station);
     const detail = structuredClone(fixtures[station === 'admin' ? 'admin' : 'user_self']);
-    detail.attempts.data[0].endpoint_base_url = `https://example.test/${'very-long-route-'.repeat(20)}/v1`;
-    detail.attempts.data[1].diag = 'A safe diagnostic '.repeat(90);
+    const longEndpoint = `https://example.test/${'very-long-route-'.repeat(20)}/v1`;
+    const longDiagnostic = 'A safe diagnostic '.repeat(90).trimEnd();
+    detail.attempts.data[0].endpoint_base_url = longEndpoint;
+    detail.attempts.data[1].diag = longDiagnostic;
     const prefix = station === 'admin' ? '/admin/api/logs' : '/api/logs';
     let detailReads = 0;
     await page.route(`**${prefix}**`, async (route) => {
@@ -80,6 +82,23 @@ for (const station of ['user', 'admin'] as const) {
       await expect
         .poll(() => drawer.evaluate((node) => node.getBoundingClientRect().left))
         .toBeGreaterThanOrEqual(0);
+      // Switching from the desktop dock to a sheet mounts a fresh disclosure.
+      await expect(page.locator('.nb-sheet:has(.log-detail-content)')).toBeVisible();
+      const endpoint = drawer.getByText(longEndpoint, { exact: true });
+      if (!(await endpoint.isVisible())) {
+        await drawer.locator('summary').filter({ hasText: 'Service call attempts' }).click();
+      }
+      await expect(endpoint).toBeVisible();
+      const secondAttempt = drawer.locator('.log-attempt').nth(1);
+      const diagnostic = secondAttempt.locator('.log-attempt-diagnostic');
+      if (!(await diagnostic.isVisible())) {
+        await secondAttempt
+          .locator('summary')
+          .filter({ hasText: /^Diagnostic$/ })
+          .click();
+      }
+      await expect(diagnostic).toBeVisible();
+      await expect(diagnostic).toHaveText(longDiagnostic);
       await expect(drawer.getByRole('textbox', { name: 'Go to page' })).toHaveCount(0);
       await expect
         .poll(() =>
@@ -105,6 +124,31 @@ for (const station of ['user', 'admin'] as const) {
       await expect(drawer.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
       await page.screenshot({ path: `../tmp/${station}-request-detail-mobile-${width}.png` });
     }
+    // Larger browser text exposes single-line labels that just fit with some platform fonts.
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '125%';
+    });
+    const copySummary = drawer.getByRole('button', { name: 'Copy request summary for this page' });
+    await expect(copySummary).toBeVisible();
+    expect(
+      await copySummary.evaluate((button) => {
+        const range = document.createRange();
+        range.selectNodeContents(button);
+        const lines = Array.from(range.getClientRects());
+        const bounds = button.getBoundingClientRect();
+        return (
+          lines.length > 1 &&
+          lines.every((line) => line.left >= bounds.left && line.right <= bounds.right)
+        );
+      }),
+    ).toBe(true);
+    await expect
+      .poll(() =>
+        drawer
+          .locator('.log-detail-content')
+          .evaluate((node) => node.scrollWidth <= node.clientWidth + 1),
+      )
+      .toBe(true);
     await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(drawer).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
