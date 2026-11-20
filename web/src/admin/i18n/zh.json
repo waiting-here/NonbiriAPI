@@ -1041,7 +1041,8 @@
         "timezoneLocked": "已有每日活动记录，站点时区已锁定，无法修改。"
       },
       "searchHelp": "按名称或用途查找设置",
-      "modified": "已修改",
+      "customValue": "自定义值",
+      "unsaved": "未保存",
       "original": "原来 {{value}}",
       "gatewayGroup": "模型接口能力（Gateway）",
       "legalHoldGroup": "法律保全",

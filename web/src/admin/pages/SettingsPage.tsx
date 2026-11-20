@@ -376,8 +376,10 @@ function SettingField({
         </Field>
       )}
       <div className="nb-setting__metadata">
-        {differsFromDefault ? (
-          <span className="nb-badge nb-badge--warn">{t('admin.settings.modified')}</span>
+        {dirty ? (
+          <span className="nb-badge nb-badge--warn">{t('admin.settings.unsaved')}</span>
+        ) : differsFromDefault ? (
+          <span className="nb-badge">{t('admin.settings.customValue')}</span>
         ) : null}
         <div className="setting-meta-line">
           <p className="nb-setting__meta">
@@ -908,7 +910,7 @@ export function SettingsPage() {
                               <option key={name} value={name}>
                                 {navigationLabel(t, name)}
                                 {editedGroups.includes(name)
-                                  ? ` · ${t('admin.settings.modified')}`
+                                  ? ` · ${t('admin.settings.unsaved')}`
                                   : ''}
                               </option>
                             ))}
@@ -944,7 +946,7 @@ export function SettingsPage() {
                         {editedGroups.includes(name) ? (
                           <span
                             className="settings-dirty-dot"
-                            aria-label={t('admin.settings.modified', { defaultValue: 'Modified' })}
+                            aria-label={t('admin.settings.unsaved')}
                           />
                         ) : null}
                       </button>
