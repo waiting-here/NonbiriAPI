@@ -1244,6 +1244,12 @@
   padding: 0.45rem 0.65rem;
 }
 @media (width <= 48rem) {
+  .nb-table-wrap {
+    container: nb-card-table / inline-size;
+  }
+}
+/* Dense lists also opt into these semantic rows when their own content area narrows. */
+@container nb-card-table (width >= 0rem) {
   .nb-table thead {
     position: absolute;
     width: 1px;
@@ -1264,6 +1270,8 @@
   }
   .nb-table td {
     display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
     padding: 0;
     border: 0;
     background: transparent !important;
@@ -1298,6 +1306,12 @@
     font-size: var(--nb-font-size-sm);
   }
   .nb-table td[data-cell='meta'] :is(.status-badge, .nb-badge) {
+    white-space: normal;
+  }
+  .nb-table td[data-cell='meta'] > * {
+    min-width: 0;
+  }
+  .nb-table .is-nowrap {
     white-space: normal;
   }
   .nb-table td[data-cell='meta'][data-label]:not([data-label=''])::before {
@@ -1970,16 +1984,6 @@ button.nb-row:hover {
 @media (width <= 48rem) {
   .nb-table-wrap {
     overflow-x: visible;
-  }
-  .nb-table td {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .nb-table td[data-cell='meta'] > * {
-    min-width: 0;
-  }
-  .nb-table .is-nowrap {
-    white-space: normal;
   }
 }
 

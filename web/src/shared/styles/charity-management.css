@@ -121,6 +121,14 @@
   grid-template-columns: minmax(24rem, 1fr) minmax(0, 1.2fr);
   align-items: start;
 }
+.charity-donations__list {
+  container: donations-list / inline-size;
+}
+@container donations-list (width < 52rem) {
+  .charity-donations__list .nb-table-wrap {
+    container: nb-card-table / inline-size;
+  }
+}
 /* The review decision stays reachable at the bottom of the screen inside its card. */
 .charity-review-actions {
   position: sticky;

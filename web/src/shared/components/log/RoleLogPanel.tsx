@@ -925,8 +925,12 @@ function ScopedRoleLogPanel({
     const mode =
       charity && (row.requested_streaming == null ? t('logs.modeUnknown') : requestMode(row));
     return (
-      <>
-        {model && <span className="mono">{model}</span>}
+      <span className="log-model">
+        {model && (
+          <span className="mono" title={model}>
+            {model}
+          </span>
+        )}
         <span className={model ? 'nb-sub' : undefined}>
           {kind}
           {mode && (
@@ -936,7 +940,7 @@ function ScopedRoleLogPanel({
             </>
           )}
         </span>
-      </>
+      </span>
     );
   };
   const usageCell = (row: RoleLogRow) => {
