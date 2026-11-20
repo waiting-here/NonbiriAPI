@@ -261,6 +261,15 @@ func (r *ChatRequest) CloneForAttempt() *ChatRequest {
 	return clone
 }
 
+// ValidReasoningEffort is the common Chat and Responses reasoning effort vocabulary.
+func ValidReasoningEffort(value string) bool {
+	switch value {
+	case "none", "minimal", "low", "medium", "high", "xhigh":
+		return true
+	}
+	return false
+}
+
 func projectCapabilities(fields []jsonField, stream bool) CapabilityRequirements {
 	required := connectorcontract.CapabilitySet(connectorcontract.CapabilityText)
 	projection := CapabilityRequirements{topLevel: make([]string, 0, len(fields))}

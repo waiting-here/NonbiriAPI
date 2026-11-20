@@ -32,12 +32,16 @@ func URL(base, model string, stream bool) (string, error) {
 }
 
 func SupportsRequest(request *openai.ChatRequest) bool {
-	body, err := Compile(request, "model", contract.AttemptPolicy{SafetyIdentifier: "nbu_v3_placeholder"})
+	body, err := compile(request, "model", contract.AttemptPolicy{SafetyIdentifier: "nbu_v3_placeholder"}, true)
 	clear(body)
 	return err == nil
 }
 
 func Compile(request *openai.ChatRequest, model string, policy contract.AttemptPolicy) ([]byte, error) {
+	return compile(request, model, policy, false)
+}
+
+func compile(request *openai.ChatRequest, model string, policy contract.AttemptPolicy, protocolOnly bool) ([]byte, error) {
 	if request == nil {
 		return nil, chatwire.Rejection("request")
 	}
@@ -59,7 +63,7 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 	if err != nil {
 		return nil, chatwire.Rejection("request")
 	}
-	if err := request.CheckTopLevelFields("model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "n", "tools", "tool_choice", "parallel_tool_calls", "response_format", "safety_identifier"); err != nil {
+	if err := request.CheckTopLevelFields("model", "messages", "stream", "stream_options", "max_tokens", "max_completion_tokens", "temperature", "top_p", "top_k", "presence_penalty", "frequency_penalty", "seed", "reasoning_effort", "stop", "n", "tools", "tool_choice", "parallel_tool_calls", "response_format", "safety_identifier"); err != nil {
 		return nil, err
 	}
 	if !chatwire.Null(root["n"]) {
@@ -78,6 +82,10 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 		}
 	}
 	config := map[string]any{}
+	support := modelSettings(model)
+	if err := addGenerationSettings(root, config, support, protocolOnly); err != nil {
+		return nil, err
+	}
 	var maxTokens int64
 	for _, key := range []string{"max_tokens", "max_completion_tokens"} {
 		if !chatwire.Null(root[key]) {
@@ -190,7 +198,14 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 		}
 		out["toolConfig"] = map[string]any{"functionCallingConfig": choice}
 	}
-	for path := range policy.NativeExtensions {
+	extensions := policy.NativeExtensions
+	if !chatwire.Null(root["reasoning_effort"]) {
+		extensions, err = effortExtensions(extensions)
+		if err != nil {
+			return nil, err
+		}
+	}
+	for path := range extensions {
 		if path != "/generationConfig/thinkingConfig" && !strings.HasPrefix(path, "/generationConfig/thinkingConfig/") && path != "/safetySettings" && !strings.HasPrefix(path, "/safetySettings/") {
 			return nil, chatwire.Rejection("native_extensions")
 		}
@@ -200,13 +215,13 @@ func Compile(request *openai.ChatRequest, model string, policy contract.AttemptP
 		return nil, err
 	}
 	defer clear(compiled)
-	merged, err := requestadaptation.MergeNative(compiled, policy.NativeExtensions, request.RequestBodyLimit()+(16<<10))
+	merged, err := requestadaptation.MergeNative(compiled, extensions, request.RequestBodyLimit()+(16<<10))
 	if err != nil {
 		return nil, err
 	}
-	if !validNative(merged) {
+	if err := validateNative(merged, support); err != nil {
 		clear(merged)
-		return nil, chatwire.Rejection("native_extensions")
+		return nil, err
 	}
 	return merged, nil
 }
@@ -428,39 +443,45 @@ func messages(raw []byte) ([]any, []any, error) {
 	return contents, system, nil
 }
 
-func validNative(raw []byte) bool {
+func validateNative(raw []byte, support generationSupport) error {
 	root, err := chatwire.Object(raw)
 	if err != nil {
-		return false
+		return chatwire.Rejection("native_extensions")
 	}
 	if value, ok := root["generationConfig"]; ok {
 		config, err := chatwire.Object(value)
 		if err != nil {
-			return false
+			return chatwire.Rejection("native_extensions")
 		}
 		if value, ok := config["thinkingConfig"]; ok {
 			thinking, err := chatwire.Object(value)
 			if err != nil || !chatwire.Keys(thinking, "includeThoughts", "thinkingBudget", "thinkingLevel") {
-				return false
+				return chatwire.Rejection("native_extensions")
 			}
 			if value, ok := thinking["includeThoughts"]; ok && string(value) != "true" && string(value) != "false" {
-				return false
+				return chatwire.Rejection("native_extensions")
 			}
 			if value, ok := thinking["thinkingBudget"]; ok {
 				var n int64
 				if json.Unmarshal(value, &n) != nil || chatwire.Null(value) || n < -1 || n > 2147483647 {
-					return false
+					return chatwire.Rejection("native_extensions")
+				}
+				if !support.acceptsBudget(n) {
+					return chatwire.RejectionReason("native_extensions", "native thinking setting is not supported by this model")
 				}
 			}
 			if value, ok := thinking["thinkingLevel"]; ok {
 				s, ok := chatwire.String(value)
-				if !ok || s != "MINIMAL" && s != "LOW" && s != "MEDIUM" && s != "HIGH" {
-					return false
+				if !ok || s != "MINIMAL" && s != "LOW" && s != "MEDIUM" && s != "HIGH" && s != "XHIGH" {
+					return chatwire.Rejection("native_extensions")
+				}
+				if !support.acceptsLevel(s) {
+					return chatwire.RejectionReason("native_extensions", "native thinking setting is not supported by this model")
 				}
 			}
 			if _, a := thinking["thinkingLevel"]; a {
 				if _, b := thinking["thinkingBudget"]; b {
-					return false
+					return chatwire.Rejection("native_extensions")
 				}
 			}
 		}
@@ -468,33 +489,33 @@ func validNative(raw []byte) bool {
 	if value, ok := root["safetySettings"]; ok {
 		var settings []json.RawMessage
 		if json.Unmarshal(value, &settings) != nil || chatwire.Null(value) || len(settings) > 5 {
-			return false
+			return chatwire.Rejection("native_extensions")
 		}
 		seen := map[string]bool{}
 		for _, raw := range settings {
 			setting, err := chatwire.Object(raw)
 			if err != nil || !chatwire.Keys(setting, "category", "threshold") {
-				return false
+				return chatwire.Rejection("native_extensions")
 			}
 			category, _ := chatwire.String(setting["category"])
 			threshold, _ := chatwire.String(setting["threshold"])
 			switch category {
 			case "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_CIVIC_INTEGRITY":
 			default:
-				return false
+				return chatwire.Rejection("native_extensions")
 			}
 			switch threshold {
 			case "BLOCK_LOW_AND_ABOVE", "BLOCK_MEDIUM_AND_ABOVE", "BLOCK_ONLY_HIGH", "BLOCK_NONE", "OFF":
 			default:
-				return false
+				return chatwire.Rejection("native_extensions")
 			}
 			if seen[category] {
-				return false
+				return chatwire.Rejection("native_extensions")
 			}
 			seen[category] = true
 		}
 	}
-	return true
+	return nil
 }
 
 func content(raw []byte, role string) ([]any, error) {
