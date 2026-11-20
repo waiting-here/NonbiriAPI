@@ -4,10 +4,19 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.4.1 — 2026-11-20
 
 - Put the wallet and daily check-ins together above announcements on the user home page.
   Keep unfinished setup steps first, and add a direct Whale Haven entrance while the game is open.
+
+- Find frequently used management sections, including charity pricing templates,
+  directly from the administrator navigation search.
+- Show the current ticket price on Steady Catch's start and replay buttons.
+  Explain how to return pond junk and release fry in the fishing rules.
+  Load game covers as they approach the viewport and skip hidden card art on mobile.
+- Evaluate charity model availability once for a filtered catalog page and its
+  exact total in the same database snapshot. Existing v1.4.0 deployments
+  keep schema 55 and account export format 38.
 
 ## 1.4.0 — 2026-11-20
 
