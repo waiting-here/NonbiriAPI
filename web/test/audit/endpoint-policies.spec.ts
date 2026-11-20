@@ -332,9 +332,10 @@ test('default level 5 and ordinary users cannot read endpoint policies and route
       }
       const page = await context.newPage();
       await page.goto(origin + '/steward?tab=charity');
-      await expect(page.getByRole('link', { name: copy.title, exact: true })).toHaveCount(
-        role === 5 ? 1 : 0,
-      );
+      await expect(
+        page.getByRole('heading', { name: 'Steward center', exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('link', { name: copy.title, exact: true })).toHaveCount(0);
       await page.goto(origin + '/endpoint-policies');
       await expect(
         page.getByText(common.management.permissions.denied, { exact: true }),

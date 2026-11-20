@@ -42,7 +42,6 @@ interface Fixture {
     automatic_backoff_donation_id: string;
     recurring_discount: { donation_id: string };
     model_quotas: { donation_id: string };
-    denials: Record<'client_rules' | 'charity' | 'manual', { cookie: Cookie }>;
   };
 }
 function fixture(): Fixture {
@@ -127,7 +126,7 @@ test('date filters fit their fields across desktop and narrow containers', async
           for (const date of await dates.all()) {
             await expect(date).toBeVisible();
             const bounds = await date.evaluate((element) => {
-              const field = element.closest('.nb-field')!;
+              const field = element.closest('.time-input-field, .nb-field')!;
               const inputRect = element.getBoundingClientRect();
               const fieldRect = field.getBoundingClientRect();
               return {
@@ -671,12 +670,18 @@ test('level 6 forcibly rejects an automatic donation through one consequence con
 
 test('verified denial grants show current-language automatic labels and preserve manual notes', async ({
   browser,
+  request,
 }) => {
   const state = fixture();
+  const issued = await request.post(state.control_url + '/management-denial-grants', {
+    headers: { Authorization: 'Bearer ' + state.control_token },
+  });
+  expect(issued.ok()).toBe(true);
+  const grants = (await issued.json()) as Record<'client_rules' | 'charity' | 'manual', Cookie>;
   for (const kind of ['client_rules', 'charity', 'manual'] as const) {
     const context = await browser.newContext();
     try {
-      const cookie = state.management.denials[kind].cookie;
+      const cookie = grants[kind];
       await context.addCookies([
         {
           name: cookie.Name,

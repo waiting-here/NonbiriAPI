@@ -243,7 +243,9 @@ test('administrator labels and filters non-commercial aggregation gateways in bo
       await page.goto(state.admin_url + '/endpoints?q=gateway-classification.example.test');
       const endpointTable = page.getByRole('table', { name: words.title, exact: true });
       await expect(endpointTable.locator(':scope > tbody > tr')).toHaveCount(1);
-      const batch = page.locator('fieldset.endpoint-batch');
+      const batch = page
+        .getByRole('group')
+        .filter({ has: page.getByRole('button', { name: words.addTag, exact: true }) });
       await page
         .getByRole('checkbox', {
           name: words.selectEndpoint.replace('{{url}}', baseURL),
@@ -366,7 +368,11 @@ test('administrator submits user, blacklist and announcement list filters', asyn
     ).toMatchObject([{ discord_id: discordID, first_actor_kind: 'admin' }]);
     await page.goto(state.admin_url + '/announcements');
     await page.getByLabel(commonEn.management.announcements.stateLabel).selectOption('draft');
-    await expect(page.locator('.ops-table tbody').getByText(title, { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole('table', { name: commonEn.management.announcements.title, exact: true })
+        .getByText(title, { exact: true }),
+    ).toBeVisible();
     expect(
       (
         await read(
@@ -377,7 +383,11 @@ test('administrator submits user, blacklist and announcement list filters', asyn
       ).data.some((row: { id: string }) => row.id === notice.id),
     ).toBe(true);
     await page.getByLabel(commonEn.management.announcements.stateLabel).selectOption('published');
-    await expect(page.locator('.ops-table tbody').getByText(title, { exact: true })).toHaveCount(0);
+    await expect(
+      page
+        .getByRole('table', { name: commonEn.management.announcements.title, exact: true })
+        .getByText(title, { exact: true }),
+    ).toHaveCount(0);
     expect(
       (await read(admin, state.admin_url, '/admin/api/announcements/' + notice.id)).state,
     ).toBe('draft');
@@ -671,6 +681,7 @@ test('administrator filters retained log origins by exact Discord ID and account
     expect(new URL(page.url()).searchParams.get('discord_id')).toBe(discordID);
     await expect(discord).toHaveValue(discordID);
 
+    await filters.getByText(commonEn.common.moreFilters, { exact: true }).click();
     await account.fill(state.management.old_user_id);
     const historical = await apply({
       discord_id: discordID,
@@ -717,7 +728,7 @@ test('administrator applies log filters, exports them and downloads retained dia
     await page.goto(state.admin_url + '/logs');
     const filters = page.getByTestId('log-filters');
     await filters.locator('.nb-filter__more > summary').click();
-    await filters.getByLabel(commonEn.common.status, { exact: true }).fill('503');
+    await filters.getByLabel(commonEn.logs.httpStatus, { exact: true }).fill('503');
     await filters.getByRole('button', { name: commonEn.common.search, exact: true }).click();
     await expect(page).toHaveURL(/status=503/);
     const logs = await read(
@@ -740,7 +751,7 @@ test('administrator applies log filters, exports them and downloads retained dia
     const csv = await exportDownload;
     expect(readFileSync((await csv.path())!, 'utf8')).toContain('caller_status');
     await filters.getByRole('button', { name: commonEn.common.resetFilter, exact: true }).click();
-    await expect(filters.getByLabel(commonEn.common.status, { exact: true })).toHaveValue('');
+    await expect(filters.getByLabel(commonEn.logs.httpStatus, { exact: true })).toHaveValue('');
     await page.goto(state.admin_url + '/logs?request_id=' + state.request_ids[0]);
     const detail = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();

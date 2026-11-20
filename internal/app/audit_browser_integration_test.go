@@ -222,6 +222,10 @@ VALUES('issue_projection_incomplete','synthetic projection checkpoint',?,?,0)`, 
 		if f.codexUpstream != nil && f.codexUpstream.control(w, r, f) {
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/management-denial-grants" && management != nil {
+			writeManagementDenialGrants(w, r, f)
+			return
+		}
 		if r.Method == http.MethodPost && r.URL.Path == "/mfa/expire" && mfaUser.ID != "" {
 			if _, err := f.store.DB().ExecContext(r.Context(), `DELETE FROM account_mfa_proofs WHERE user_id=?`, mfaUser.ID); err != nil {
 				http.Error(w, "fixture update failed", http.StatusInternalServerError)

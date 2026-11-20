@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
@@ -17,6 +18,12 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/observability"
 )
+
+var managementDenialSubjects = [...]struct{ kind, discord string }{
+	{"client_rules", "100000000000000200"},
+	{"charity", "100000000000000201"},
+	{"manual", "100000000000000202"},
+}
 
 // The opt-in management fixture changes only its private test database. Product
 // routes create resources and donations; account deletion uses the coordinator.
@@ -59,13 +66,11 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 	for i, ip := range []string{"198.51.100.82", "198.51.100.83"} {
 		requests = append(requests, seedAuditBrowserRequest(t, f, current.ID, "openai_chat_completions", "self", now+int64(i), ip))
 	}
-	denials := map[string]any{}
-	for i, kind := range []string{"client_rules", "charity", "manual"} {
-		discord := fmt.Sprintf("1000000000000002%02d", i)
-		user := f.seedUser(12+i, 1, admin, discord)
+	for i, subject := range managementDenialSubjects {
+		user := f.seedUser(12+i, 1, admin, subject.discord)
 		manual := "Synthetic manual reason <em>kept as text</em>"
 		exec(`UPDATE users SET is_banned=1,banned_until=NULL,banned_reason=?,lang='en' WHERE id=?`, manual, user.ID)
-		if kind == "client_rules" {
+		if subject.kind == "client_rules" {
 			tx, err := f.store.DB().BeginTx(ctx, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -82,19 +87,13 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 			if err != nil {
 				t.Fatal(err)
 			}
-		} else if kind == "charity" {
+		} else if subject.kind == "charity" {
 			id, err := db.GenerateOpaqueID("abc_")
 			if err != nil {
 				t.Fatal(err)
 			}
 			exec(`INSERT INTO abuse_cases(id,user_id,kind,reason_code,started_at,state,result) VALUES(?,?,'ban','charity_rpm',?,'active','applied')`, id, user.ID, now)
 		}
-		// Seed the external verification result, retaining the production grant
-		// format, expiry, safe projection and lack of session authority.
-		token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byte(130 + i)}, 32))
-		digest := sha256.Sum256([]byte(token))
-		exec(`INSERT INTO auth_denial_grants(token_hash,discord_id,cursor_domain,created_at,expires_at) VALUES(?,?,?,?,?)`, digest[:], discord, bytes.Repeat([]byte{byte(140 + i)}, 32), now, now+300)
-		denials[kind] = map[string]any{"user_id": user.ID, "cookie": &http.Cookie{Name: auth.DenialCookieName, Value: token, Path: "/api/auth"}}
 	}
 	exec(`UPDATE site_config SET value='1' WHERE key IN ('donation_accept_enabled','charity_enabled')`)
 	channel, err := db.GenerateOpaqueID("mch_")
@@ -162,7 +161,27 @@ func seedManagementBrowser(t *testing.T, f *imageBrowserFixture, now int64) map[
 		"discovery_key_id":   discoveryKey,
 		"disposable_user_id": disposable.ID,
 		"trainee_target_id":  traineeTarget.ID,
-		"denials":            denials, "channel_id": channel, "endpoint_id": endpoint, "automatic_donation_id": automatic["id"], "pending_donation_id": pending["id"], "charity_model_id": model["id"]}
+		"channel_id":         channel, "endpoint_id": endpoint, "automatic_donation_id": automatic["id"], "pending_donation_id": pending["id"], "charity_model_id": model["id"]}
+}
+
+// The external verification result is seeded when the browser needs it, so each
+// denial has its normal five-minute lifetime regardless of suite order.
+func writeManagementDenialGrants(w http.ResponseWriter, r *http.Request, f *imageBrowserFixture) {
+	now := time.Now().Unix()
+	cookies := map[string]*http.Cookie{}
+	for i, subject := range managementDenialSubjects {
+		token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byte(130 + i)}, 32))
+		digest := sha256.Sum256([]byte(token))
+		_, err := f.store.DB().ExecContext(r.Context(), `INSERT INTO auth_denial_grants(token_hash,discord_id,cursor_domain,created_at,expires_at)
+			VALUES(?,?,?,?,?) ON CONFLICT(token_hash) DO UPDATE SET created_at=excluded.created_at,expires_at=excluded.expires_at`,
+			digest[:], subject.discord, bytes.Repeat([]byte{byte(140 + i)}, 32), now, now+300)
+		if err != nil {
+			http.Error(w, "fixture grant failed", http.StatusInternalServerError)
+			return
+		}
+		cookies[subject.kind] = &http.Cookie{Name: auth.DenialCookieName, Value: token, Path: "/api/auth"}
+	}
+	writeImageFixtureJSON(w, cookies)
 }
 
 func seedPolicyHistoryBrowser(t *testing.T, f *imageBrowserFixture, now int64) {
