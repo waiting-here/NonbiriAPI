@@ -1041,7 +1041,8 @@
         "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
       },
       "searchHelp": "Find a setting by name or purpose",
-      "modified": "Modified",
+      "customValue": "Custom value",
+      "unsaved": "Unsaved",
       "original": "Previously {{value}}",
       "gatewayGroup": "Model capabilities (Gateway)",
       "legalHoldGroup": "Legal holds",

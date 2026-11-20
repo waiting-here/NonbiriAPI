@@ -161,10 +161,12 @@ describe('site settings discovery and saving', () => {
     const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
     expect(await screen.findByLabelText('Response wait')).toHaveValue(130);
-    expect(screen.getByText('Modified')).toBeVisible();
+    expect(screen.getByText('Custom value')).toBeVisible();
+    expect(screen.queryByText('Unsaved')).toBeNull();
     await view.user.click(screen.getByRole('button', { name: 'Restore default' }));
     expect(screen.getByLabelText('Response wait')).toHaveValue(120);
-    expect(screen.queryByText('Modified')).toBeNull();
+    expect(screen.queryByText('Custom value')).toBeNull();
+    expect(screen.getByText('Unsaved')).toBeVisible();
     expect(api.patchSiteSettings).not.toHaveBeenCalled();
     await view.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() => expect(api.patchSiteSettings).toHaveBeenCalledTimes(1));
