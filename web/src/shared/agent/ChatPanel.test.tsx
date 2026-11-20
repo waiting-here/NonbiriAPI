@@ -112,8 +112,8 @@ async function mount(role: 'admin' | 'steward' = 'admin') {
       ? { admin: { username: 'synthetic-operator' } }
       : { user: { id: '5', username: 'synthetic-operator', effective_level: 5 } },
   );
-  await screen.findByRole('textbox', { name: 'Message' });
-  return view;
+  const messageInput = await screen.findByRole('textbox', { name: 'Message' });
+  return { ...view, messageInput };
 }
 describe('Agent conversation and plans', () => {
   it('keeps loaded history indexes stable while composing and refreshes them for a delivered message', async () => {
@@ -161,30 +161,32 @@ describe('Agent conversation and plans', () => {
     const calls = vi.spyOn(activityData, 'readToolCalls');
     try {
       const view = await mount();
-      await view.user.click(screen.getByRole('button', { name: 'Load older messages' }));
+      const transcript = within(screen.getByRole('log'));
+      const loadOlder = transcript.getByRole('button', { name: 'Load older messages' });
+      await view.user.click(loadOlder);
       await waitFor(() => expect(mocks.older).toHaveBeenCalledTimes(1));
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: 'Load older messages' })).toBeEnabled(),
-      );
-      await view.user.click(screen.getByRole('button', { name: 'Load older messages' }));
-      await screen.findByText('Question 0');
+      await waitFor(() => expect(loadOlder).toBeEnabled());
+      await view.user.click(loadOlder);
+      const oldestMessage = await transcript.findByText('Question 0');
       expect(indexes.mock.calls.at(-1)![0]).toHaveLength(300);
       const indexCount = indexes.mock.calls.length;
       const callCount = calls.mock.calls.length;
-      await view.user.type(screen.getByRole('textbox', { name: 'Message' }), 'Keep composing now');
+      await view.user.type(view.messageInput, 'Keep composing now');
       expect(indexes).toHaveBeenCalledTimes(indexCount);
       expect(calls).toHaveBeenCalledTimes(callCount);
-      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Keep composing now');
+      expect(view.messageInput).toHaveValue('Keep composing now');
       await act(async () => {
         view.queryClient.setQueryData(['admin', 'ai', 'synthetic-operator', 'chat'], {
           ...current,
           messages: [...current.messages, message('301', 'assistant', 'Live reply arrived')],
         });
       });
-      await screen.findByText('Live reply arrived');
+      await transcript.findByText('Live reply arrived');
       expect(indexes).toHaveBeenCalledTimes(indexCount + 1);
       expect(indexes.mock.calls.at(-1)![0]).toHaveLength(301);
-      expect(screen.getByText('Question 0')).toBeVisible();
+      expect(oldestMessage).toBeVisible();
+      expect(view.messageInput).toBeVisible();
+      expect(view.messageInput).toHaveValue('Keep composing now');
       expect(mocks.send).not.toHaveBeenCalled();
     } finally {
       indexes.mockRestore();
