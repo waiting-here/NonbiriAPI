@@ -645,7 +645,6 @@ for (const scenario of scenarios) {
       nameFragment,
     ]);
     await page.reload();
-    await filters.locator('summary').click();
     await expect(charity).toHaveValue(nameFragment);
     expect(logReads.at(-1)?.searchParams.get('charity_model')).toBe(nameFragment);
     await saveScreenshot(page, `${scenario.name}-charity-log-filter`);

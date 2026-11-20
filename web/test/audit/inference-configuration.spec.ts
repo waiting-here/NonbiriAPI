@@ -198,15 +198,14 @@ test('administrator saves inherited five-limit profiles and batches only the sel
       .getByRole('row')
       .filter({ has: page.locator('.status-badge.is-inactive') })
       .first();
-    const statusBounds = await deletedRow.evaluate((row) => {
+    const statusFitsBeforeBalance = await deletedRow.evaluate((row) => {
       const range = document.createRange();
       range.selectNodeContents(row.querySelector('.status-badge')!);
-      return {
-        textRight: range.getBoundingClientRect().right,
-        balanceLeft: row.querySelector('.user-list-balance')!.getBoundingClientRect().left,
-      };
+      const status = range.getBoundingClientRect();
+      const balance = row.querySelector('.user-list-balance')!.getBoundingClientRect();
+      return status.right <= balance.left || status.bottom <= balance.top;
     });
-    expect(statusBounds.textRight).toBeLessThanOrEqual(statusBounds.balanceLeft);
+    expect(statusFitsBeforeBalance).toBe(true);
     await visuals(
       page,
       info,

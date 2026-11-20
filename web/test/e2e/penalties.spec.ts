@@ -207,7 +207,7 @@ for (const { role, width } of logExportScenarios) {
       return route.fulfill({ json: detail });
     });
     await page.goto(origin + (role === 'steward' ? '/steward?tab=logs' : '/logs'));
-    await page.getByTestId('log-filters').locator('summary').click();
+    await page.getByTestId('log-filters').getByText('More filters', { exact: true }).click();
     await page
       .getByRole('combobox', { name: 'Request stage', exact: true })
       .selectOption('pre_handler');
