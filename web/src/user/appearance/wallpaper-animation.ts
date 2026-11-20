@@ -26,6 +26,23 @@ export const portraits: Record<WallpaperScene, Record<WallpaperTheme, Portrait>>
   },
 };
 
+/** The four registered heads occupy the right side of the original 16:9 painting. */
+export function wallpaperCrop(width: number, height: number, portrait: Portrait) {
+  const scale = Math.max(width / 16, height / 9);
+  const cropX = width / (scale * 16);
+  const cropY = height / (scale * 9);
+  // Keep the rightmost hair (96% of the painting) and the top of the character plate in view.
+  const x = Math.min(1 - cropX, Math.max((1 - cropX) * (width < 640 ? 1 : 0.65), 0.96 - cropX));
+  const y = Math.min((1 - cropY) / 2, portrait.rect[1] - 0.015);
+  return {
+    cropX,
+    cropY,
+    x,
+    y,
+    objectPosition: `${cropX < 1 ? (100 * x) / (1 - cropX) : 50}% ${cropY < 1 ? (100 * y) / (1 - cropY) : 50}%`,
+  };
+}
+
 export { blinkAt, PaintCadence } from '@shared/animation/illustration';
 
 export const whaleCycleSeconds = 112;

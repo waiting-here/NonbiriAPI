@@ -5,7 +5,10 @@ export function amberAppearancePlacement(width: number, height: number) {
   const desktop = width >= 1024;
   const heroHeight = height * (desktop ? 0.72 : 0.75);
   const heroWidth = (heroHeight * 1037) / 1516;
-  const center = desktop ? width - Math.max(64, Math.min(180, (width - 1184) / 4)) : width * 0.62;
+  // The face and headdress extend to 70% of the character plate on tall desktops.
+  const center = desktop
+    ? width - Math.max(64, Math.min(180, (width - 1184) / 4), heroWidth * 0.22)
+    : width * 0.62;
   return {
     left: center - heroWidth / 2,
     top: height * 0.965 - heroHeight,
