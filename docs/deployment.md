@@ -348,7 +348,7 @@ A fresh installation initializes schema 55. Existing installations use v1.3.12
 as the bridge. Stop the service and preserve the matching recovery set before
 running the v1.4.0 [standalone upgrader](../cmd/nonbiri-upgrade-v1/README.md) on
 its exact schema 54 database. Earlier registered databases first use the
-v1.3.12 tool. Account exports use format 37. See [database upgrades](database-upgrades.md)
+v1.3.12 tool. Account exports use format 38. See [database upgrades](database-upgrades.md)
 for the source fingerprint, conversion and recovery procedure.
 
 The service and upgrader expose their compiled identities via
@@ -367,10 +367,12 @@ Preserve the database, master key, encrypted instance matching material,
 configuration and matching binary together. Switching binaries cannot reverse a
 schema upgrade; a server expecting an older or different schema cannot open it.
 Fresh creation requires the database and sidecars to be absent and starts with
-maintenance on and public features closed. Opening features and publishing
-instance legal text remain separate operator actions.
+maintenance on and public features closed. Whale Haven and its separate cash-out
+setting start closed after fresh installation or conversion. Enabling either uses
+the administrator's game settings. Publishing instance legal text remains a
+separate operator action.
 
-## Manual same-generation deployment procedure
+## Manual deployment procedure
 
 1. Pin the target to an exact commit and inspect its descriptor. Reuse valid CI
    and platform evidence; a complete PR run does not need a simultaneous manual

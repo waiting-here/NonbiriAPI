@@ -4,6 +4,42 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.4.0 — 2026-11-20
+
+- Add Whale Haven with account-backed care, decorations, offline progress,
+  visits between open homes, guest employment with owner consent, wages and
+  social rewards. The game and its separately controlled cash-out start closed
+  on fresh and upgraded installations.
+- Add whale coins and conch shards to redemption codes, site-wide rewards,
+  attendance tiers, reward requirements and authorized user-resource management.
+  Balances can be granted before adoption or while the game is closed.
+- Make Whale Haven prices, yields and exchange limits configurable. When
+  enabled, the default cash-out exchanges five whale coins for 5,000 gross
+  general credits and pays 4,550 after three 3% cuts. The default site-day cap
+  is 75 coins per account, with a 300,000-credit balance cap after payment.
+- Improve desktop and mobile workflows on both stations. Streamline service
+  setup, model discovery, donation review and charity binding. Preserve drafts,
+  selections and list positions when opening details or recovering from errors.
+  Refine activity, collection, game and management layouts.
+- Add total and recurring consumption limits for each donated key's exact
+  upstream model across credits, calls and total, input and output tokens.
+  Model and whole-key budgets apply together. RPM, concurrency and queue
+  settings stay at physical-key scope.
+- Pause the affected model when Google returns a recognized model quota error
+  with a valid retry time. Bindings to that model share the wait for the same
+  approved service and credential version. The wait preserves the failure streak.
+- Open permitted log details by exact request ID. Show authorized managers the
+  recorded routing decisions, per-attempt failure-count changes, backoff
+  deadlines and the attempt that triggered an automatic disablement.
+- Move routine charity routing snapshots onto the read pool, reuse prepared
+  read statements and bound blackjack status queries.
+- Update frontend lint tooling to pick up minimatch 11.0.9 and refresh the
+  third-party notices.
+- Require exact database schema 55 or a fresh database. The standalone upgrader
+  converts exact v1.3.12 schema 54 offline. Earlier registered sources use the
+  v1.3.12 tool first. Upgrades are one-way. Account export advances from format
+  36 to 38 and includes model budgets and the owner's Whale Haven data.
+
 ## 1.3.12 — 2026-11-15
 
 - Use existing subject indexes when deduplicating upstream diagnostics, avoiding
