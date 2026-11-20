@@ -21,7 +21,7 @@ export const WHALE_LORE_PROFILE = {
     { tag: '慵懒天然', desc: '工作间隙最爱趴着睡觉摸鱼，偶尔冒出令人哭笑不得的天然呆反应' },
   ],
   credits:
-    '角色溯源：最初原型为画师「上善无形」创作的原创鲸鱼少女「溟月」，后续由创作者「ZipZipPipe」融入 DeepSeek 蓝鲸元素与女仆装设计（CC BY-NC-SA 4.0，非商业公益致敬）。',
+    '角色原型取自上善无形的鲸鱼少女「溟月」。DeepSeek 蓝鲸女仆造型参考了 ZipZipPipe 的衍生设计。',
 } as const;
 
 export interface OutfitGarmentTokens {
