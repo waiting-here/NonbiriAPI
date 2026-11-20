@@ -77,3 +77,10 @@ targetRules = ["discord-client-id"]
 condition = "AND"
 paths = ['''^internal[\\/]adminusers[\\/]trainee_test\.go$''', '''^internal[\\/]logapi[\\/]historical_identity_test\.go$''']
 regexes = ['''^123456789012345678$''']
+
+[[allowlists]]
+description = "Exact browser storage key for Whale Haven face calibration"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^web[\\/]src[\\/]user[\\/]games[\\/]whale-haven[\\/]rig[\\/]calibrator\.ts$''']
+regexes = ['''^nonbiri_whale_face_cal_v4$''']
