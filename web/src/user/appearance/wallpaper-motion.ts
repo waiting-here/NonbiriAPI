@@ -283,7 +283,8 @@ export async function renderWallpaper(
   function frame(now: number) {
     frameID = 0;
     if (stopped || activity.hidden) return;
-    elapsed += Math.max(0, Math.min(now - previous, 100));
+    // This is an absolute scene clock. Visibility and pause changes reset the baseline.
+    elapsed += Math.max(0, now - previous);
     previous = now;
     try {
       if (cadence.due(now)) {

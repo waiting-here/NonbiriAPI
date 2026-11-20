@@ -278,24 +278,15 @@ async function applyViewport(
   await page.setViewportSize({ width: fixture.width, height: fixture.height });
   if (options.switchLanguage !== false) await applyLanguage(page, fixture.language);
   if (options.switchTheme !== false) {
-    const accountTrigger = page.locator('.nb-account-trigger');
-    if (await accountTrigger.isVisible()) {
-      await accountTrigger.click();
-      await page.locator('.nb-account-menu .theme-select').selectOption(fixture.theme);
-      await page.keyboard.press('Escape');
-    } else {
-      const menuButton = page.locator('.nb-menu-button');
-      await expect(menuButton).toBeVisible();
-      await menuButton.click();
-      await page.locator('.nb-user-drawer-actions .theme-select').selectOption(fixture.theme);
-      await page
-        .getByRole('dialog')
-        .getByRole('button', {
-          name: fixture.language === 'zh' ? '关闭导航' : 'Close navigation',
-          exact: true,
-        })
-        .click();
-    }
+    const name = fixture.language === 'zh' ? '账号操作' : 'Account actions';
+    const trigger = page.getByRole('button', { name: new RegExp('^' + name) });
+    await trigger.click();
+    const account = page.getByRole('dialog', { name });
+    await account
+      .getByRole('combobox', { name: fixture.language === 'zh' ? '主题' : 'Theme' })
+      .selectOption(fixture.theme);
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
     await expect(page.locator('html')).toHaveAttribute('data-theme', fixture.theme);
   }
   await page.evaluate(({ density, fontSize }) => {
