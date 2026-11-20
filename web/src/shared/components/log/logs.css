@@ -7,9 +7,39 @@
 .log-table .nb-table th {
   text-transform: none;
 }
+.log-table .nb-table th:lang(en) {
+  white-space: normal;
+}
 .log-table .nb-table td {
   max-width: 18rem;
   overflow-wrap: anywhere;
+}
+.log-model {
+  display: block;
+  min-width: 11rem;
+}
+.log-model > .mono {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.log-table .nb-table :is(time, .log-usage, .log-result .nb-badge, .ops-actions .nb-btn) {
+  white-space: normal;
+  overflow-wrap: normal;
+}
+.log-origin-compact {
+  min-width: 6.5rem;
+}
+@container inspection-list (width < 56rem) {
+  :is(.log-panel--admin, .log-panel--steward) .log-table .nb-table-wrap {
+    container: nb-card-table / inline-size;
+  }
+}
+@container inspection-list (width < 44rem) {
+  .log-panel--user .log-table .nb-table-wrap {
+    container: nb-card-table / inline-size;
+  }
 }
 @media (width > 48rem) {
   .log-table .nb-table td.is-action > .ops-actions {
@@ -21,6 +51,10 @@
   .log-table .nb-table td.is-action > .ops-actions > small {
     text-align: right;
     color: var(--nb-color-text-muted);
+  }
+  .log-table .ops-actions > .nb-btn {
+    width: max-content;
+    max-width: 8rem;
   }
 }
 .log-origin-compact,
@@ -270,9 +304,12 @@
 .log-storage--warn .nb-fold__title > span {
   color: var(--nb-color-warning);
 }
-@media (width <= 48rem) {
+@container nb-card-table (width >= 0rem) {
   .log-table .nb-table td {
     max-width: none;
+  }
+  .log-table :is(.log-model, .log-origin-compact) {
+    min-width: 0;
   }
   .log-table .nb-table td[data-cell='status'] {
     white-space: normal;

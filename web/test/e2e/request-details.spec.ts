@@ -210,7 +210,14 @@ test('switches requests in a wide dock and returns from a narrow sheet to the ac
   await mockPublicConfig(page, 'admin');
   const base = fixtures.admin;
   const ids = [base.request.id, 'req_' + 'B'.repeat(21) + 'Q'];
-  const rows = ids.map((id) => ({ ...base.request, id }));
+  const model = '[公益]moon-archive/quartz-long-context-长上下文预览版-2026-11';
+  const rows = ids.map((id) => ({
+    ...base.request,
+    id,
+    route_kind: 'charity_chat_completions',
+    charity_model: model,
+    charity_model_id: '31',
+  }));
   const reads: string[] = [];
   await page.route('**/admin/api/logs**', async (route) => {
     const url = new URL(route.request().url());
@@ -230,7 +237,7 @@ test('switches requests in a wide dock and returns from a narrow sheet to the ac
       return route.fulfill({
         json: {
           ...base,
-          request: { ...base.request, id },
+          request: rows.find((row) => row.id === id),
           attempt_pagination: { page: '1', page_size: 20, total_items: '2', total_pages: '1' },
         },
       });
@@ -245,6 +252,29 @@ test('switches requests in a wide dock and returns from a narrow sheet to the ac
   expect(reads).toEqual([]);
   await first.click();
   const dock = page.locator('.inspection-dock');
+  await expect(dock.getByRole('heading', { name: 'Log details ' + ids[0] })).toBeFocused();
+  const name = page.locator('.log-table').getByTitle(model).first();
+  const size = await name.evaluate((node) => ({
+    width: node.clientWidth,
+    lines: node.clientHeight / parseFloat(getComputedStyle(node).lineHeight),
+    rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+  }));
+  expect(size.width).toBeGreaterThanOrEqual(11 * size.rem);
+  expect(size.lines).toBeLessThanOrEqual(2.05);
+  // Keep the same viewport and sidebar while narrowing the space allocated to the tool.
+  const workspace = page.locator('.inspection-workspace');
+  await workspace.evaluate((node) => {
+    node.style.maxWidth = '74rem';
+  });
+  await expect(page.getByRole('dialog', { name: 'Log details ' + ids[0] })).toBeVisible();
+  expect(
+    await page
+      .locator('.inspection-list')
+      .evaluate((list) => Math.abs(list.clientWidth - list.parentElement!.clientWidth)),
+  ).toBeLessThanOrEqual(1);
+  await workspace.evaluate((node) => {
+    node.style.removeProperty('max-width');
+  });
   await expect(dock.getByRole('heading', { name: 'Log details ' + ids[0] })).toBeFocused();
   await second.click();
   await expect(dock.getByRole('heading', { name: 'Log details ' + ids[1] })).toBeFocused();
