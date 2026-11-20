@@ -1,6 +1,13 @@
 package duel_test
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game/bidding"
+)
 
 func TestIdleWorkerAndFutureHumanDeadlineDoNotWrite(t *testing.T) {
 	f := newFixture(t, "bidding")
@@ -34,5 +41,24 @@ func TestIdleWorkerAndFutureHumanDeadlineDoNotWrite(t *testing.T) {
 	f.clock.Store(deadline)
 	if result, err := f.s.Tick(f.ctx); err != nil || result.Processed == 0 {
 		t.Fatalf("due deadline was skipped: %+v %v", result, err)
+	}
+}
+
+func TestBiddingRecoveryResumesAfterAnUnusedTimeSlice(t *testing.T) {
+	f := newFixture(t, "bidding")
+	service, err := bidding.New(f.options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	run := func(deadline time.Time) error {
+		_, err := service.RecoverBeforeListenAt(f.ctx, f.clock.Load(), 100, deadline)
+		return err
+	}
+	if err := run(time.Now().Add(-time.Second)); !errors.Is(err, context.DeadlineExceeded) || service.Ready(f.ctx, nil) {
+		t.Fatalf("expired recovery: err=%v ready=%v", err, service.Ready(f.ctx, nil))
+	}
+	if err := run(time.Now().Add(2 * time.Second)); err != nil || !service.Ready(f.ctx, nil) {
+		t.Fatalf("fresh recovery: err=%v ready=%v", err, service.Ready(f.ctx, nil))
 	}
 }

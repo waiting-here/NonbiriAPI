@@ -17,6 +17,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Evaluate charity model availability once for a filtered catalog page and its
   exact total in the same database snapshot. Existing v1.4.0 deployments
   keep schema 55 and account export format 38.
+- Give interrupted startup recovery and retention batches one fresh time
+  budget. Name the affected domain if recovery still fails.
 
 ## 1.4.0 — 2026-11-20
 

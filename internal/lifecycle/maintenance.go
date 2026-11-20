@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -20,7 +21,7 @@ func (stage lifecycleStageError) Error() string {
 	if stage.index < 0 {
 		return fmt.Sprintf("lifecycle: %s: %v", stage.phase, stage.err)
 	}
-	return fmt.Sprintf("lifecycle: %s adapter %d: %v", stage.phase, stage.index, stage.err)
+	return fmt.Sprintf("lifecycle: %s adapter %d (%s): %v", stage.phase, stage.index, stage.domain, stage.err)
 }
 
 func (stage lifecycleStageError) Unwrap() error { return stage.err }
@@ -170,34 +171,13 @@ func (coordinator *Coordinator) runRecovery(ctx context.Context, decisionNow int
 	}
 	for index, stage := range coordinator.recovery.ordered() {
 		done := observability.LifecycleStage(ctx, "recovery", stage.domain)
-		err := drainRecoveryAdapter(ctx, stage.adapter, decisionNow)
+		err := drainMaintenanceBatches(ctx, decisionNow, stage.adapter.RecoverBeforeListener)
 		done(err)
 		if err != nil {
 			failures = append(failures, lifecycleStageError{phase: "recovery", domain: stage.domain, index: index, err: err})
 		}
 	}
 	return errors.Join(failures...)
-}
-
-func drainRecoveryAdapter(ctx context.Context, adapter RecoveryAdapter, decisionNow int64) error {
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		deadline := time.Now().Add(WorkerBudget)
-		batchCtx, cancel := context.WithDeadline(ctx, deadline)
-		result, err := adapter.RecoverBeforeListener(batchCtx, decisionNow, WorkerBatchLimit, deadline)
-		cancel()
-		if err != nil {
-			return err
-		}
-		if result.Processed < 0 || result.Processed > WorkerBatchLimit || result.More && result.Processed == 0 {
-			return ErrInvariant
-		}
-		if !result.More {
-			return nil
-		}
-	}
 }
 
 func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow int64) (resultErr error) {
@@ -207,7 +187,7 @@ func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow in
 	adapters := coordinator.retention.ordered()
 	for index, stage := range adapters {
 		done := observability.LifecycleStage(ctx, "retention", stage.domain)
-		err := drainRetentionAdapter(ctx, stage.adapter, decisionNow)
+		err := drainMaintenanceBatches(ctx, decisionNow, stage.adapter.Retain)
 		done(err)
 		if err != nil {
 			failures = append(failures, lifecycleStageError{phase: "retention", domain: stage.domain, index: index, err: err})
@@ -230,23 +210,55 @@ func (coordinator *Coordinator) runRetention(ctx context.Context, decisionNow in
 	return errors.Join(failures...)
 }
 
-func drainRetentionAdapter(ctx context.Context, adapter RetentionAdapter, decisionNow int64) error {
+// Each batch resumes from committed state at the same decision time. A heavily
+// loaded process can lose its entire time slice before the first record.
+func drainMaintenanceBatches(ctx context.Context, decisionNow int64, run func(context.Context, int64, int, time.Time) (WorkResult, error)) error {
+	retried := false
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		deadline := time.Now().Add(WorkerBudget)
 		batchCtx, cancel := context.WithDeadline(ctx, deadline)
-		result, err := adapter.Retain(batchCtx, decisionNow, WorkerBatchLimit, deadline)
+		result, err := run(batchCtx, decisionNow, WorkerBatchLimit, deadline)
+		childErr := batchCtx.Err()
+		expired := !time.Now().Before(deadline)
 		cancel()
-		if err != nil {
+		if parentErr := ctx.Err(); parentErr != nil {
+			return parentErr
+		}
+		missedBudget := expired && batchMissedDeadline(result, err, childErr)
+		if err != nil && !missedBudget {
 			return err
 		}
-		if result.Processed < 0 || result.Processed > WorkerBatchLimit || result.More && result.Processed == 0 {
+		if result.Processed < 0 || result.Processed > WorkerBatchLimit {
 			return ErrInvariant
+		}
+		if missedBudget {
+			if retried {
+				return fmt.Errorf("two consecutive maintenance batches exhausted their time budget: %w", context.DeadlineExceeded)
+			}
+			retried = true
+			continue
 		}
 		if !result.More {
 			return nil
 		}
+		if result.Processed == 0 {
+			return ErrInvariant
+		}
+		retried = false
 	}
+}
+
+func batchMissedDeadline(result WorkResult, err, childErr error) bool {
+	if err == nil {
+		return result.More && result.Processed == 0
+	}
+	// A joined error may also report a domain or storage failure. Only a
+	// single timeout, or a transaction closed by the expired child, is safe.
+	for errors.Unwrap(err) != nil {
+		err = errors.Unwrap(err)
+	}
+	return err == context.DeadlineExceeded || (err == sql.ErrTxDone && childErr == context.DeadlineExceeded)
 }

@@ -90,6 +90,12 @@ func (s *Service) work(ctx context.Context, recovery bool, limit int, deadline t
 		}
 		result.Processed++
 	}
+	if result.Processed == 0 {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		return result, context.DeadlineExceeded
+	}
 	result.More = true
 	return result, nil
 }
