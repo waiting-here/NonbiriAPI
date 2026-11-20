@@ -7,6 +7,28 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/rolepolicy"
 )
 
+// EmptyMessageOption recognizes only optional Chat fields with no payload or tool association.
+func EmptyMessageOption(field string, raw json.RawMessage) bool {
+	const whitespace = " \t\r\n"
+	raw = bytes.Trim(raw, whitespace)
+	null := len(raw) == 0 || string(raw) == "null"
+	var first, last byte
+	switch field {
+	case "name", "refusal", "tool_call_id", "reasoning_content":
+		return null || string(raw) == `""`
+	case "audio", "function_call":
+		return null
+	case "annotations", "tool_calls":
+		first, last = '[', ']'
+	case "extra_content":
+		first, last = '{', '}'
+	default:
+		return false
+	}
+	return null || len(raw) >= 2 && raw[0] == first && raw[len(raw)-1] == last &&
+		len(bytes.Trim(raw[1:len(raw)-1], whitespace)) == 0
+}
+
 // ApplyRolePolicy changes extra roles once on an independent logical request.
 func (r *ChatRequest) ApplyRolePolicy(policy rolepolicy.Policy) (*ChatRequest, error) {
 	if _, err := policy.Canonical(); err != nil {
@@ -46,8 +68,9 @@ func (r *ChatRequest) ApplyRolePolicy(policy rolepolicy.Policy) (*ChatRequest, e
 				if f.name == "role" {
 					roleIndex = j
 				}
-				if f.name == "tool_calls" || f.name == "tool_call_id" || f.name == "function_call" {
-					associated = true
+				switch f.name {
+				case "tool_calls", "tool_call_id", "function_call":
+					associated = associated || !EmptyMessageOption(f.name, f.value)
 				}
 			}
 			var role string

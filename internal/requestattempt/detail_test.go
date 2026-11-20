@@ -105,3 +105,22 @@ func TestHistoricalUnknownReasonRebuildsSuggestion(t *testing.T) {
 		t.Fatal("historical suggestion was not rebuilt", detail)
 	}
 }
+
+func TestIndexedRejectionFieldsRoundTripOnlyCanonicalProtocolPaths(t *testing.T) {
+	const reason = "invalid Google continuation metadata"
+	if field := TopLevelField("messages[0].role", 2); field != "request.fields[2]" {
+		t.Fatal("caller-controlled top-level key imitated a nested diagnostic", field)
+	}
+	for _, field := range []string{"messages[0]", "messages[4095].role", "messages[0].content[0].image_url.detail", "messages[87].tool_calls[127].function.arguments"} {
+		d := DecodeDetail(EncodeDetail(NewDetail(field, reason)))
+		if d == nil || d.Field != field || !(RouteObservation{Field: field, Reason: "protocol_rejected"}).valid() {
+			t.Fatal(field)
+		}
+	}
+	for _, field := range []string{"messages[-1]", "messages[00]", "messages[+2]", "messages[4096]", "messages[0].PRIVATE", "messages[0].tool_calls[128].id", "messages[0].content[33554432].text", "messages[0].content[1].image_url.PRIVATE", "messages[0].tool_calls[0].function.arguments.PRIVATE", "messages[0].role" + string(rune(10))} {
+		d := DecodeDetail(EncodeDetail(NewDetail(field, reason)))
+		if d == nil || d.Field != "request" || (RouteObservation{Field: field, Reason: "protocol_rejected"}).valid() {
+			t.Fatal(field)
+		}
+	}
+}

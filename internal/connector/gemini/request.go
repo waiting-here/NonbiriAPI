@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -273,8 +274,8 @@ func tools(raw []byte) ([]any, map[string]bool, error) {
 	return out, names, nil
 }
 
-func signature(raw []byte) (string, error) {
-	if chatwire.Null(raw) {
+func signature(raw []byte, allowParts bool) (string, error) {
+	if openai.EmptyMessageOption("extra_content", raw) {
 		return "", nil
 	}
 	outer, err := chatwire.Object(raw)
@@ -282,7 +283,7 @@ func signature(raw []byte) (string, error) {
 		return "", chatwire.Rejection("extra_content")
 	}
 	google, err := chatwire.Object(outer["google"])
-	if err == nil && chatwire.Keys(google, "parts") && len(google["parts"]) > 0 {
+	if allowParts && err == nil && chatwire.Keys(google, "parts") && len(google["parts"]) > 0 {
 		return "", nil
 	}
 	if err != nil || !chatwire.Keys(google, "thought_signature") {
@@ -303,47 +304,68 @@ func signature(raw []byte) (string, error) {
 func messages(raw []byte) ([]any, []any, error) {
 	var input []json.RawMessage
 	if json.Unmarshal(raw, &input) != nil || len(input) == 0 || len(input) > 4096 {
-		return nil, nil, chatwire.Rejection("messages")
+		return nil, nil, chatwire.RejectionReason("messages", "expected 1 to 4096 messages")
 	}
 	var contents, system []any
 	pending := map[string]string{}
 	seen := map[string]bool{}
-	for _, raw := range input {
+	pendingMessage := 0
+	for index, raw := range input {
+		path := fmt.Sprintf("messages[%d]", index)
 		message, err := chatwire.Object(raw)
-		if err != nil || !chatwire.Keys(message, "role", "content", "tool_calls", "tool_call_id", "extra_content", "reasoning_content") {
-			return nil, nil, chatwire.Rejection("messages")
+		if err != nil {
+			return nil, nil, chatwire.RejectionReason(path, "expected a message object")
 		}
-		role, ok := chatwire.String(message["role"])
-		if !ok {
-			return nil, nil, chatwire.Rejection("messages")
+		// Empty optional SDK fields carry neither content nor a tool association.
+		for field, value := range message {
+			if openai.EmptyMessageOption(field, value) {
+				delete(message, field)
+			}
+		}
+		for _, field := range []string{"name", "refusal", "audio", "annotations", "function_call"} {
+			if message[field] != nil {
+				return nil, nil, chatwire.RejectionReason(path+"."+field, "message attribute cannot be preserved by Gemini")
+			}
+		}
+		if !chatwire.Keys(message, "role", "content", "tool_calls", "tool_call_id", "extra_content", "reasoning_content") {
+			return nil, nil, chatwire.RejectionReason(path, "message contains an unsupported attribute")
+		}
+		role, _ := chatwire.String(message["role"])
+		switch role {
+		case "system", "developer", "user", "assistant", "tool":
+		default:
+			return nil, nil, chatwire.RejectionReason(path+".role", "expected a supported message role")
 		}
 		if role != "tool" && len(pending) > 0 {
-			return nil, nil, chatwire.Rejection("tool_call_id")
+			return nil, nil, chatwire.RejectionReason(path+".role", "tool results must follow their assistant call before the next turn")
 		}
-		parts, err := content(message["content"], role)
+		if (role == "system" || role == "developer") && len(contents) > 0 {
+			return nil, nil, chatwire.RejectionReason(path+".role", "Gemini accepts system and developer instructions only before conversation turns")
+		}
+		for _, field := range []string{"tool_calls", "tool_call_id", "extra_content", "reasoning_content"} {
+			allowed := role == "assistant" && field != "tool_call_id" || role == "tool" && field == "tool_call_id"
+			if !allowed && message[field] != nil {
+				return nil, nil, chatwire.RejectionReason(path+"."+field, "message attribute is not valid for this role")
+			}
+		}
+		parts, err := content(message["content"], role, path+".content")
 		if err != nil {
 			return nil, nil, err
 		}
 		if role == "system" || role == "developer" {
-			if len(contents) > 0 || len(message["tool_calls"])+len(message["tool_call_id"])+len(message["extra_content"])+len(message["reasoning_content"]) > 0 {
-				return nil, nil, chatwire.Rejection("messages")
-			}
 			system = append(system, parts...)
 			continue
 		}
 		if role == "tool" {
-			if len(message["tool_calls"])+len(message["extra_content"])+len(message["reasoning_content"]) > 0 {
-				return nil, nil, chatwire.Rejection("messages")
-			}
 			id, ok := chatwire.String(message["tool_call_id"])
 			name := pending[id]
 			if !ok || name == "" {
-				return nil, nil, chatwire.Rejection("tool_call_id")
+				return nil, nil, chatwire.RejectionReason(path+".tool_call_id", "tool result must match an unanswered tool call")
 			}
 			delete(pending, id)
 			text, ok := chatwire.String(message["content"])
 			if !ok {
-				return nil, nil, chatwire.Rejection("content")
+				return nil, nil, chatwire.RejectionReason(path+".content", "tool result content must be a string")
 			}
 			response, err := chatwire.Object([]byte(text))
 			var result any = response
@@ -353,62 +375,64 @@ func messages(raw []byte) ([]any, []any, error) {
 			parts = []any{map[string]any{"functionResponse": map[string]any{"id": id, "name": name, "response": result}}}
 			role = "user"
 		} else if role == "assistant" {
-			if len(message["tool_call_id"]) > 0 {
-				return nil, nil, chatwire.Rejection("tool_call_id")
-			}
 			if !chatwire.Null(message["reasoning_content"]) {
 				text, ok := chatwire.String(message["reasoning_content"])
 				if !ok {
-					return nil, nil, chatwire.Rejection("reasoning_content")
+					return nil, nil, chatwire.RejectionReason(path+".reasoning_content", "assistant reasoning content must be a string")
 				}
 				parts = append([]any{map[string]any{"text": text, "thought": true}}, parts...)
 			}
-			sig, err := signature(message["extra_content"])
+			sig, err := signature(message["extra_content"], true)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, chatwire.RejectionReason(path+".extra_content", "invalid Google continuation metadata")
 			}
 			if sig != "" {
 				if len(parts) == 0 {
-					return nil, nil, chatwire.Rejection("extra_content")
+					return nil, nil, chatwire.RejectionReason(path+".extra_content", "thought signature has no matching message part")
 				}
 				parts[len(parts)-1].(map[string]any)["thoughtSignature"] = sig
 			}
 			if !chatwire.Null(message["tool_calls"]) {
 				var calls []json.RawMessage
 				if json.Unmarshal(message["tool_calls"], &calls) != nil || len(calls) > 128 {
-					return nil, nil, chatwire.Rejection("tool_calls")
+					return nil, nil, chatwire.RejectionReason(path+".tool_calls", "expected an array of up to 128 function calls")
 				}
-				for _, raw := range calls {
+				pendingMessage = index
+				for callIndex, raw := range calls {
+					callPath := fmt.Sprintf("%s.tool_calls[%d]", path, callIndex)
 					call, err := chatwire.Object(raw)
-					if err != nil || !chatwire.Keys(call, "id", "type", "function", "extra_content") || string(call["type"]) != `"function"` {
-						return nil, nil, chatwire.Rejection("tool_calls")
+					if err != nil || !chatwire.Keys(call, "id", "type", "function", "extra_content") {
+						return nil, nil, chatwire.RejectionReason(callPath, "expected a function call with supported attributes")
+					}
+					if string(call["type"]) != `"function"` {
+						return nil, nil, chatwire.RejectionReason(callPath+".type", "expected a function call with supported attributes")
 					}
 					id, ok := chatwire.String(call["id"])
 					if !ok || id == "" || len(id) > 128 || seen[id] {
-						return nil, nil, chatwire.Rejection("tool_calls")
+						return nil, nil, chatwire.RejectionReason(callPath+".id", "expected a unique nonempty tool call ID of at most 128 bytes")
 					}
 					seen[id] = true
 					function, err := chatwire.Object(call["function"])
 					if err != nil || !chatwire.Keys(function, "name", "arguments") {
-						return nil, nil, chatwire.Rejection("tool_calls")
+						return nil, nil, chatwire.RejectionReason(callPath+".function", "expected a function object containing name and arguments")
 					}
 					name, ok := chatwire.String(function["name"])
 					if !ok || !functionPattern.MatchString(name) {
-						return nil, nil, chatwire.Rejection("tool_calls")
+						return nil, nil, chatwire.RejectionReason(callPath+".function.name", "expected a supported function name")
 					}
 					args, ok := chatwire.String(function["arguments"])
 					if !ok {
-						return nil, nil, chatwire.Rejection("tool_calls")
+						return nil, nil, chatwire.RejectionReason(callPath+".function.arguments", "function arguments must be a JSON object encoded as a string")
 					}
 					arguments, err := chatwire.Object([]byte(args))
 					if err != nil {
-						return nil, nil, chatwire.Rejection("tool_calls")
+						return nil, nil, chatwire.RejectionReason(callPath+".function.arguments", "function arguments must be a JSON object encoded as a string")
 					}
 					pending[id] = name
 					part := map[string]any{"functionCall": map[string]any{"id": id, "name": name, "args": arguments}}
-					sig, err := signature(call["extra_content"])
+					sig, err := signature(call["extra_content"], false)
 					if err != nil {
-						return nil, nil, err
+						return nil, nil, chatwire.RejectionReason(callPath+".extra_content", "invalid Google continuation metadata")
 					}
 					if sig != "" {
 						part["thoughtSignature"] = sig
@@ -418,14 +442,12 @@ func messages(raw []byte) ([]any, []any, error) {
 			}
 			parts, err = replayParts(message["extra_content"], parts)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, chatwire.RejectionReason(path+".extra_content", "Google continuation parts do not match the assistant history")
 			}
 			role = "model"
-		} else if role != "user" || len(message["tool_calls"])+len(message["tool_call_id"])+len(message["extra_content"])+len(message["reasoning_content"]) > 0 {
-			return nil, nil, chatwire.Rejection("messages")
 		}
 		if len(parts) == 0 {
-			return nil, nil, chatwire.Rejection("content")
+			return nil, nil, chatwire.RejectionReason(path+".content", "a conversation turn needs content or an assistant tool call")
 		}
 		// Parallel function responses belong to the same user turn.
 		if len(contents) > 0 {
@@ -437,8 +459,11 @@ func messages(raw []byte) ([]any, []any, error) {
 		}
 		contents = append(contents, map[string]any{"role": role, "parts": parts})
 	}
-	if len(pending) > 0 || len(contents) == 0 {
-		return nil, nil, chatwire.Rejection("messages")
+	if len(pending) > 0 {
+		return nil, nil, chatwire.RejectionReason(fmt.Sprintf("messages[%d].tool_calls", pendingMessage), "assistant tool calls are missing one or more results")
+	}
+	if len(contents) == 0 {
+		return nil, nil, chatwire.RejectionReason("messages", "at least one conversation turn must follow the instructions")
 	}
 	return contents, system, nil
 }
@@ -518,70 +543,78 @@ func validateNative(raw []byte, support generationSupport) error {
 	return nil
 }
 
-func content(raw []byte, role string) ([]any, error) {
+func content(raw []byte, role, path string) ([]any, error) {
+	if role == "tool" {
+		// The tool branch consumes the original string as a function response.
+		return nil, nil
+	}
 	if chatwire.Null(raw) {
 		if role == "assistant" {
 			return nil, nil
 		}
-		return nil, chatwire.Rejection("content")
+		return nil, chatwire.RejectionReason(path, "expected text or an array of supported content blocks")
 	}
 	if text, ok := chatwire.String(raw); ok {
 		return []any{map[string]any{"text": text}}, nil
 	}
 	var input []json.RawMessage
 	if json.Unmarshal(raw, &input) != nil {
-		return nil, chatwire.Rejection("content")
+		return nil, chatwire.RejectionReason(path, "expected text or an array of supported content blocks")
 	}
 	out := make([]any, 0, len(input))
-	for _, raw := range input {
+	for index, raw := range input {
+		block := fmt.Sprintf("%s[%d]", path, index)
 		part, err := chatwire.Object(raw)
 		if err != nil {
-			return nil, chatwire.Rejection("content")
+			return nil, chatwire.RejectionReason(block, "expected a content block object")
 		}
 		kind, _ := chatwire.String(part["type"])
 		switch kind {
 		case "text":
 			if !chatwire.Keys(part, "type", "text") {
-				return nil, chatwire.Rejection("content")
+				return nil, chatwire.RejectionReason(block, "content block contains an unsupported attribute")
 			}
 			text, ok := chatwire.String(part["text"])
 			if !ok {
-				return nil, chatwire.Rejection("content")
+				return nil, chatwire.RejectionReason(block+".text", "text block must contain a string")
 			}
 			out = append(out, map[string]any{"text": text})
 		case "image_url":
-			if role != "user" || !chatwire.Keys(part, "type", "image_url") {
-				return nil, chatwire.Rejection("image_url")
+			if role != "user" {
+				return nil, chatwire.RejectionReason(block+".type", "image content requires a user message")
+			}
+			if !chatwire.Keys(part, "type", "image_url") {
+				return nil, chatwire.RejectionReason(block, "content block contains an unsupported attribute")
 			}
 			image, err := chatwire.Object(part["image_url"])
 			if err != nil || !chatwire.Keys(image, "url", "detail") {
-				return nil, chatwire.Rejection("image_url")
+				return nil, chatwire.RejectionReason(block+".image_url", "expected an image URL object containing url and optional detail")
 			}
 			if !chatwire.Null(image["detail"]) && string(image["detail"]) != `"auto"` {
-				return nil, chatwire.Rejection("image_url")
+				return nil, chatwire.RejectionReason(block+".image_url.detail", "Gemini image detail must be auto or omitted")
 			}
 			value, ok := chatwire.String(image["url"])
 			if !ok {
-				return nil, chatwire.Rejection("image_url")
+				return nil, chatwire.RejectionReason(block+".image_url.url", "Gemini requires an inline base64 PNG, JPEG, GIF or WebP image")
 			}
 			comma := strings.IndexByte(value, ',')
 			if comma < 0 {
-				return nil, chatwire.Rejection("image_url")
+				return nil, chatwire.RejectionReason(block+".image_url.url", "Gemini requires an inline base64 PNG, JPEG, GIF or WebP image")
 			}
 			media := strings.TrimSuffix(strings.TrimPrefix(value[:comma], "data:"), ";base64")
 			if value[:comma] != "data:"+media+";base64" || media != "image/png" && media != "image/jpeg" && media != "image/gif" && media != "image/webp" {
-				return nil, chatwire.Rejection("image_url")
+				return nil, chatwire.RejectionReason(block+".image_url.url", "Gemini requires an inline base64 PNG, JPEG, GIF or WebP image")
 			}
 			encoded := value[comma+1:]
 			data, err := base64.StdEncoding.Strict().DecodeString(encoded)
 			if err != nil || len(data) == 0 {
 				clear(data)
-				return nil, chatwire.Rejection("image_url")
+				return nil, chatwire.RejectionReason(block+".image_url.url", "Gemini requires an inline base64 PNG, JPEG, GIF or WebP image")
 			}
 			clear(data)
 			out = append(out, map[string]any{"inlineData": map[string]string{"mimeType": media, "data": encoded}})
 		default:
-			return nil, chatwire.Rejection("content")
+			return nil, chatwire.RejectionReason(block+".type", "unsupported Gemini content block type")
 		}
 	}
 	return out, nil

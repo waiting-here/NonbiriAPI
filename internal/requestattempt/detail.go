@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/requestbody"
 )
 
 // RejectionDetail contains server-authored checks, never caller values.
@@ -110,6 +114,44 @@ var rejectionFieldsAllowed = map[string]bool{
 }
 
 var rejectionReasonsAllowed = map[string]bool{
+	"expected a number from -2 to 2":                                                  true,
+	"expected 1 to 4096 messages":                                                     true,
+	"message attribute cannot be preserved by Gemini":                                 true,
+	"message contains an unsupported attribute":                                       true,
+	"expected a supported message role":                                               true,
+	"tool results must follow their assistant call before the next turn":              true,
+	"Gemini accepts system and developer instructions only before conversation turns": true,
+	"message attribute is not valid for this role":                                    true,
+	"tool result must match an unanswered tool call":                                  true,
+	"tool result content must be a string":                                            true,
+	"assistant reasoning content must be a string":                                    true,
+	"invalid Google continuation metadata":                                            true,
+	"thought signature has no matching message part":                                  true,
+	"expected an array of up to 128 function calls":                                   true,
+	"expected a function call with supported attributes":                              true,
+	"expected a unique nonempty tool call ID of at most 128 bytes":                    true,
+	"expected a function object containing name and arguments":                        true,
+	"expected a supported function name":                                              true,
+	"function arguments must be a JSON object encoded as a string":                    true,
+	"Google continuation parts do not match the assistant history":                    true,
+	"a conversation turn needs content or an assistant tool call":                     true,
+	"assistant tool calls are missing one or more results":                            true,
+	"at least one conversation turn must follow the instructions":                     true,
+	"expected text or an array of supported content blocks":                           true,
+	"expected a content block object":                                                 true,
+	"content block contains an unsupported attribute":                                 true,
+	"text block must contain a string":                                                true,
+	"unsupported Gemini content block type":                                           true,
+	"image content requires a user message":                                           true,
+	"expected an image URL object containing url and optional detail":                 true,
+	"Gemini image detail must be auto or omitted":                                     true,
+	"Gemini requires an inline base64 PNG, JPEG, GIF or WebP image":                   true,
+	"reasoning effort conflicts with native thinking settings":                        true,
+	"sampling parameter is not supported by this model":                               true,
+	"expected a number from -2 inclusive to 2 exclusive":                              true,
+	"expected a signed 32-bit integer":                                                true,
+	"native thinking setting is not supported by this model":                          true,
+
 	"tool thinking requires the original signed content blocks":                                                 true,
 	"expected a supported thinking configuration":                                                               true,
 	"expected summarized, omitted, or updates":                                                                  true,
@@ -288,7 +330,7 @@ func NewDetail(field, reason string) *RejectionDetail {
 	if !rejectionReasonsAllowed[reason] && !validContentLengthReason(reason) {
 		return nil
 	}
-	if !rejectionFieldsAllowed[field] && !validTopLevelPosition(field) {
+	if !validRejectionField(field) {
 		field = "request"
 	}
 	return &RejectionDetail{Field: field, Reason: reason, Suggestion: rejectionSuggestion(field, reason)}
@@ -304,6 +346,49 @@ func TopLevelField(name string, position int) string {
 		return fmt.Sprintf("request.fields[%d]", position)
 	}
 	return "request"
+}
+
+// Indexed message fields consist only of canonical zero-based indices and
+// fixed protocol keys. No caller-supplied object member names are retained.
+func validRejectionField(field string) bool {
+	if rejectionFieldsAllowed[field] || validTopLevelPosition(field) {
+		return true
+	}
+	suffix, ok := indexedFieldSuffix(field, "messages[", 4096)
+	if !ok {
+		return false
+	}
+	switch suffix {
+	case "", ".role", ".content", ".name", ".refusal", ".audio", ".annotations", ".function_call", ".tool_calls", ".tool_call_id", ".reasoning_content", ".extra_content":
+		return true
+	}
+	if sub, ok := indexedFieldSuffix(suffix, ".tool_calls[", 128); ok {
+		switch sub {
+		case "", ".type", ".id", ".function", ".function.name", ".function.arguments", ".extra_content":
+			return true
+		}
+	}
+	// Even the shortest JSON array item and its separator consume two bytes.
+	if sub, ok := indexedFieldSuffix(suffix, ".content[", int(requestbody.MaximumBytes/2)); ok {
+		switch sub {
+		case "", ".type", ".text", ".image_url", ".image_url.url", ".image_url.detail":
+			return true
+		}
+	}
+	return false
+}
+
+func indexedFieldSuffix(field, prefix string, limit int) (string, bool) {
+	raw, ok := strings.CutPrefix(field, prefix)
+	if !ok {
+		return "", false
+	}
+	digits, suffix, ok := strings.Cut(raw, "]")
+	if !ok || len(digits) == 0 || len(digits) > 8 {
+		return "", false
+	}
+	index, err := strconv.Atoi(digits)
+	return suffix, err == nil && index >= 0 && index < limit && digits == strconv.Itoa(index)
 }
 
 func validTopLevelPosition(field string) bool {

@@ -1,3 +1,4 @@
+import { rejectionFieldLabel } from './rejectionField';
 import { LogReadError, logAccessLost } from '@shared/observability/logReadAccess';
 import { useRetainedQueryData } from '@shared/query/useRetainedQueryData';
 import { CreditNumber } from '@shared/components/CreditNumber';
@@ -553,10 +554,6 @@ function ScopedRoleLogPanel({
       : typeof rejectionDescriptionKeys[reason] === 'string'
         ? t(rejectionDescriptionKeys[reason])
         : reason;
-  };
-  const rejectionFieldDescription = (field: string) => {
-    const position = /^request\.fields\[(\d+)\]$/.exec(field);
-    return position ? t('logs.rejectionTopLevelField', { position: position[1] }) : field;
   };
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchState();
@@ -1425,7 +1422,7 @@ function ScopedRoleLogPanel({
                           <strong>{t('logs.rejectionDetail')}</strong>
                           <p>
                             {detailRequest.rejection_detail
-                              ? `${rejectionFieldDescription(detailRequest.rejection_detail.field)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
+                              ? `${rejectionFieldLabel(detailRequest.rejection_detail.field, t)}: ${rejectionDescription(detailRequest.rejection_detail.reason)}`
                               : t('logs.rejectionDetailMissing')}
                           </p>
                         </div>

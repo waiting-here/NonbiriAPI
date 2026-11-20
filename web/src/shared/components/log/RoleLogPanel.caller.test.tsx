@@ -452,7 +452,10 @@ describe('preflight rejection details', () => {
         caller_error_code: 'invalid_request',
         attempt_count: '0',
         usage: { ...usage, output_tokens: '0', total_tokens: '0' },
-        rejection_detail: { field: 'stream', reason: '<img src=x onerror=alert(1)>' },
+        rejection_detail: {
+          field: 'messages[5].content[1].text',
+          reason: '<img src=x onerror=alert(1)>',
+        },
       };
       installFixtures(role, row);
       const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
@@ -462,7 +465,11 @@ describe('preflight rejection details', () => {
       await view.user.click(await screen.findByRole('button', { name: 'Details' }));
       const drawer = await screen.findByRole('dialog', { name: /Log details/ });
       expect(within(drawer).getByText('Rejection details')).toBeInTheDocument();
-      expect(within(drawer).getByText('stream: <img src=x onerror=alert(1)>')).toBeInTheDocument();
+      expect(
+        within(drawer).getByText(
+          'Message 6, content block 2 (messages[5].content[1].text): <img src=x onerror=alert(1)>',
+        ),
+      ).toBeInTheDocument();
       expect(drawer.querySelector('img')).toBeNull();
       view.unmount();
     },
@@ -745,6 +752,14 @@ it.each(['en', 'zh'] as const)(
   async (locale) => {
     for (const detail of [
       {
+        field: 'messages[2].tool_calls[0].function.arguments',
+        reason: 'function arguments must be a JSON object encoded as a string',
+        chinese: '函数 arguments 须为内容是 JSON 对象的字符串',
+        suggestion:
+          'Serialize the function arguments as one JSON object, using {} for no arguments.',
+        chineseSuggestion: '将函数参数序列化为一个 JSON 对象；无参数时使用 {}。',
+      },
+      {
         field: 'thinking.budget_tokens',
         reason: 'manual thinking requires an integer budget of at least 1024',
         chinese: '手动思考预算须为不小于 1024 的整数',
@@ -774,7 +789,9 @@ it.each(['en', 'zh'] as const)(
         rejection_detail: {
           field: detail.field,
           reason: detail.reason,
-          suggestion: 'Correct the field type or value according to the stated requirement.',
+          suggestion:
+            detail.suggestion ??
+            'Correct the field type or value according to the stated requirement.',
         },
       };
       installFixtures('user', row);
@@ -788,9 +805,20 @@ it.each(['en', 'zh'] as const)(
       );
       expect(
         await screen.findByText(
-          detail.field + ': ' + (locale === 'en' ? detail.reason : detail.chinese),
+          (detail.field.startsWith('messages[')
+            ? locale === 'en'
+              ? 'Message 3, tool call 1 (' + detail.field + ')'
+              : '第 3 条消息的第 1 个工具调用（' + detail.field + '）'
+            : detail.field) +
+            ': ' +
+            (locale === 'en' ? detail.reason : detail.chinese),
         ),
       ).toBeInTheDocument();
+      if (detail.suggestion) {
+        expect(
+          screen.getByText(locale === 'en' ? detail.suggestion : detail.chineseSuggestion!),
+        ).toBeVisible();
+      }
       view.unmount();
     }
   },

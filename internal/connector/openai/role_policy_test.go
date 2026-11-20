@@ -106,3 +106,26 @@ func TestRolePolicyNativeShapePassthroughAndReject(t *testing.T) {
 		t.Fatal("rejected role accepted")
 	}
 }
+
+func TestEmptyToolPlaceholdersRespectDeveloperRolePolicy(t *testing.T) {
+	request, err := DecodeChatRequest(strings.NewReader(`{"model":"m","messages":[{"role":"developer","content":"directive","tool_calls":[ ],"tool_call_id":"","function_call":null}]}`), MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	policy := rolepolicy.Default()
+	policy.Rules["developer"] = "reject"
+	if _, err = request.ApplyRolePolicy(policy); err == nil {
+		t.Fatal("empty tool placeholders bypassed role policy")
+	}
+	policy.Rules["developer"] = "user"
+	mapped, err := request.ApplyRolePolicy(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mapped.Clear()
+	messages, _ := mapped.RawField("messages")
+	if !bytes.Contains(messages, []byte(`"role":"user"`)) {
+		t.Fatal("developer role was not mapped")
+	}
+}

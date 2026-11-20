@@ -1,3 +1,4 @@
+import { rejectionFieldLabel } from './rejectionField';
 import { useTranslation } from 'react-i18next';
 import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 import { failureReasonKey, isGoogleModelQuotaReason } from '@shared/observability/failure';
@@ -77,7 +78,10 @@ export function RequestRouteDecision({ decision }: { decision: RouteDecision }) 
                 {field && (
                   <>
                     {' '}
-                    · <code>{field}</code>
+                    ·{' '}
+                    <code>
+                      {field.startsWith('messages[') ? rejectionFieldLabel(field, t) : field}
+                    </code>
                   </>
                 )}
               </p>

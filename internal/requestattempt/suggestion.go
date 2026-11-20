@@ -8,6 +8,50 @@ const unsupportedOptionSuggestion = "Omit this option. To keep it, choose a mode
 // stored suggestion is never trusted or echoed when decoding an older record.
 func rejectionSuggestion(field, reason string) string {
 	switch reason {
+	case "expected a number from -2 to 2":
+		return "Set the penalty to a number from -2 through 2."
+	case "expected 1 to 4096 messages":
+		return "Send a nonempty messages array with at most 4096 entries."
+	case "message attribute cannot be preserved by Gemini", "message contains an unsupported attribute", "content block contains an unsupported attribute":
+		return "Remove the unsupported attribute if it is optional, or choose a protocol that preserves it."
+	case "expected a supported message role":
+		return "Use user, assistant, tool, system or developer under the configured role policy."
+	case "Gemini accepts system and developer instructions only before conversation turns":
+		return "Keep initial instructions at the start. For instructions that must take effect mid-conversation, choose a protocol that supports that position."
+	case "message attribute is not valid for this role":
+		return "Place tool calls and reasoning on assistant messages, and tool_call_id on the matching tool result."
+	case "tool results must follow their assistant call before the next turn", "tool result must match an unanswered tool call", "expected a unique nonempty tool call ID of at most 128 bytes", "assistant tool calls are missing one or more results":
+		return "Return one tool message per call ID, immediately after the assistant call and before the next turn."
+	case "tool result content must be a string":
+		return "Send the tool output as a string, serializing any structured result as JSON."
+	case "assistant reasoning content must be a string":
+		return "Send reasoning_content as text or omit the empty field."
+	case "invalid Google continuation metadata", "thought signature has no matching message part", "Google continuation parts do not match the assistant history":
+		return "Replay the original assistant response with its matching Google parts, tool calls and signatures."
+	case "expected an array of up to 128 function calls", "expected a function call with supported attributes", "expected a function object containing name and arguments":
+		return "Use a tool_calls array of function entries with an ID, function name and arguments."
+	case "expected a supported function name":
+		return "Use 1 to 64 ASCII letters, digits, underscores, dots, colons or hyphens, starting with a letter or underscore."
+	case "function arguments must be a JSON object encoded as a string":
+		return "Serialize the function arguments as one JSON object, using {} for no arguments."
+	case "a conversation turn needs content or an assistant tool call", "at least one conversation turn must follow the instructions":
+		return "Include a conversation turn with text, supported content blocks or an assistant tool call."
+	case "expected text or an array of supported content blocks", "expected a content block object", "text block must contain a string", "unsupported Gemini content block type":
+		return "Send text or an array of text blocks and supported user image_url blocks."
+	case "image content requires a user message":
+		return "Put the image in a user message or choose a protocol that supports images in this role."
+	case "expected an image URL object containing url and optional detail", "Gemini requires an inline base64 PNG, JPEG, GIF or WebP image":
+		return "Use image_url.url with a base64 data URL for a PNG, JPEG, GIF or WebP image."
+	case "Gemini image detail must be auto or omitted":
+		return "Set image_url.detail to auto or omit it, or use a protocol supporting the requested detail."
+	case "reasoning effort conflicts with native thinking settings":
+		return "Keep either reasoning_effort or the native thinking level or budget."
+	case "sampling parameter is not supported by this model", "native thinking setting is not supported by this model":
+		return "Omit the setting or choose a model that supports it."
+	case "expected a number from -2 inclusive to 2 exclusive":
+		return "Set the penalty to a number greater than or equal to -2 and less than 2."
+	case "expected a signed 32-bit integer":
+		return "Use an integer from -2147483648 through 2147483647."
 	case "unsupported top-level field":
 		if field == "request" {
 			return "This entry did not record the unsupported field name. Retry the request to capture its location."
