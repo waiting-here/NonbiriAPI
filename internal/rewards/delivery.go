@@ -146,7 +146,7 @@ func (s *Service) processOne(ctx context.Context) (_ bool, resultErr error) {
 		if _, err = tx.ExecContext(ctx, "SAVEPOINT reward_delivery"); err != nil {
 			return false, err
 		}
-		results, deliveryErr := grant(ctx, tx, user.Int64, actor.Int64, at, c.Title, c.Rewards)
+		results, deliveryErr := grant(ctx, tx, user.Int64, actor.Int64, at, c.Title, c.Rewards, "site_reward", c.ID)
 		if deliveryErr != nil {
 			// Transient storage failures keep the recipient pending for automatic retry.
 			if !errors.Is(deliveryErr, ErrCapacity) {

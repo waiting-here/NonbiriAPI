@@ -1,0 +1,264 @@
+package whalehaven
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/whalehaven/assets"
+	"github.com/waiting-here/NonbiriAPI/internal/whalehaven/config"
+)
+
+type stationFixture struct {
+	store   *db.Store
+	service *Service
+	at      time.Time
+	denied  bool
+	routes  map[string]resources.AuthorizedUserHandler
+}
+
+func (f *stationFixture) AuthorizeUserMutation(context.Context, *sql.Tx, int64) error {
+	if f.denied {
+		return authz.ErrForbidden
+	}
+	return nil
+}
+func (f *stationFixture) AuthorizeAdmin(context.Context, *sql.Tx, int64) error        { return nil }
+func (f *stationFixture) AuthorizeUserActivity(context.Context, *sql.Tx, int64) error { return nil }
+func (f *stationFixture) RegisterUserRoute(method, path string, handler resources.AuthorizedUserHandler) error {
+	f.routes[method+" "+path] = handler
+	return nil
+}
+func newStationFixture(t *testing.T) *stationFixture {
+	t.Helper()
+	v, err := secret.New(make([]byte, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { v.Close() })
+	path := filepath.Join(t.TempDir(), "whale.sqlite")
+	dbfixture.Materialize(t, path, v)
+	store, err := db.Open(path, v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	f := &stationFixture{store: store, at: time.Unix(1794992400, 0), routes: map[string]resources.AuthorizedUserHandler{}}
+	repo, err := activities.NewRepository(activities.RepositoryConfig{Store: store, UserFinalAuth: f, AdminFinalAuth: f, UserGate: f, CursorKeys: v})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pools, err := activities.NewService(activities.ServiceConfig{Repository: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.service = New(store, f, pools, func() time.Time { return f.at })
+	if err = f.service.Register(f); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+func (f *stationFixture) enable(t *testing.T) {
+	t.Helper()
+	if err := f.store.SetSiteTimezoneOffsetMinutes(480); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec("UPDATE site_config SET value='1',updated_at=? WHERE key='games_enabled'", f.at.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Defaults()
+	cfg.Enabled = true
+	cfg.ExchangeEnabled = true
+	raw, _ := json.Marshal(cfg)
+	if _, err := f.store.DB().Exec("INSERT INTO whale_haven_settings(revision,effective_at,document) VALUES(2,?,?)", f.at.UnixMilli(), string(raw)); err != nil {
+		t.Fatal(err)
+	}
+}
+func (f *stationFixture) user(t *testing.T, nick string) (id int64) {
+	t.Helper()
+	ctx := t.Context()
+	tx, err := f.store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	row, err := tx.Exec(`INSERT INTO users(username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at)
+ VALUES(?,zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),zeroblob(16),?,?)`, nick, f.at.Unix(), f.at.Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err = row.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, currency := range []ledger.Asset{ledger.General, ledger.Game} {
+		if _, err = ledger.CreateUserAssetAccount(ctx, tx, id, currency, f.at.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+func (f *stationFixture) call(t *testing.T, id int64, route string, input map[string]any, requestKey string, status int) map[string]any {
+	t.Helper()
+	method := "GET"
+	var raw []byte
+	if input != nil {
+		method = "POST"
+		raw, _ = json.Marshal(input)
+	}
+	req := httptest.NewRequestWithContext(t.Context(), method, "/api/games/whale-haven/"+route, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", requestKey)
+	rec := httptest.NewRecorder()
+	handler := f.routes[method+" "+req.URL.Path]
+	if handler == nil {
+		t.Fatal("missing route", route)
+	}
+	handler(rec, req, resources.UserPrincipal{UserID: id})
+	if rec.Code != status {
+		t.Fatalf("%s: %d want %d: %s", route, rec.Code, status, rec.Body.String())
+	}
+	var value map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &value); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+func (f *stationFixture) adopt(t *testing.T, id int64, name string) map[string]any {
+	return f.call(t, id, "actions", map[string]any{"type": "adopt", "name": name, "open": true, "expected_profile_revision": "1", "expected_settings_revision": "2"}, "adopt-whale-fresh-player-house", 200)
+}
+func TestStationExchangeSharedWalletAndReplay(t *testing.T) {
+	f := newStationFixture(t)
+	user := f.user(t, "player")
+	if v := f.call(t, user, "availability", nil, "", http.StatusOK); v["enabled"] != false {
+		t.Fatal(v)
+	}
+	f.enable(t)
+	tx, err := f.store.DB().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = assets.MoveTx(t.Context(), tx, user, f.at.UnixMilli(), assets.Balance{Pearls: 80, Shards: 2}, "site_reward", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	f.adopt(t, user, "蓝鲸")
+	quote := f.call(t, user, "exchange/quote", map[string]any{"quantity": "1"}, "", 200)
+	if quote["max_lots"] != "15" || quote["net_general_milli"] != "4550000" || quote["platform_milli"] != "150000" || quote["thursday_milli"] != "150000" || quote["welfare_milli"] != "150000" {
+		t.Fatal(quote)
+	}
+	body := map[string]any{"quantity": "1", "expected_profile_revision": quote["profile_revision"], "expected_settings_revision": quote["settings_revision"]}
+	const token = "exchange-whale-once-for-owner"
+	value := f.call(t, user, "exchange", body, token, 200)
+	got := value["snapshot"].(map[string]any)["wallet"].(map[string]any)
+	if got["generalMilli"] != "4550000" || got["pearls"] != float64(75) || got["conchShards"] != float64(2) || got["dailyPearlExchanged"] != float64(5) {
+		t.Fatal(got)
+	}
+	if f.call(t, user, "exchange", body, token, 200)["operation_id"] != value["operation_id"] {
+		t.Fatal("repeat changed operation")
+	}
+	f.denied = true
+	f.call(t, user, "exchange", body, token, 403)
+	f.denied = false
+	f.call(t, user, "exchange", body, token+"-stale", 409)
+	body["quantity"] = "2"
+	f.call(t, user, "exchange", body, token, 409)
+	var n int
+	err = f.store.ReadDB().QueryRow("SELECT count(*) FROM whale_haven_movements WHERE user_id=? AND reason='exchange'", user).Scan(&n)
+	if err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	// The general balance is insufficient evidence for a feed purchase: only the game wallet pays.
+	snapshot := value["snapshot"].(map[string]any)
+	buy := map[string]any{"type": "buy_feed", "feedId": "silver_fish", "expected_settings_revision": "2", "expected_profile_revision": strconv.Itoa(int(snapshot["revision"].(float64)))}
+	f.call(t, user, "actions", buy, "buy-from-empty-game-wallet", 409)
+	profile := f.call(t, user, "profile", nil, "", 200)["snapshot"].(map[string]any)
+	if profile["inventory"].(map[string]any)["silver_fish"] != float64(0) {
+		t.Fatal(profile["inventory"])
+	}
+	// Fund only game credits and buy several portions in a single operation.
+	tx, err = f.store.DB().BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	purse, err := ledger.UserAssetAccount(t.Context(), tx, user, ledger.Game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuing, err := ledger.CodedAssetAccount(t.Context(), tx, "external", ledger.Game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err := db.GenerateOpaqueID("op_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := config.Defaults().Value("feed_silver_fish_price_milli")
+	plan, err := ledger.NewAdminGameAdjustment(ledger.Meta{OperationID: op, ActorUserID: user, CreatedAt: f.at.Unix()}, purse.ID, issuing.ID, ledger.AmountFromMilli(3*price), "fund purchase test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ledger.Apply(t.Context(), tx, plan); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	buy["quantity"] = 0
+	f.call(t, user, "actions", buy, "zero-portion-game-purchase", 400)
+	buy["quantity"] = 3
+	bought := f.call(t, user, "actions", buy, "three-portion-game-purchase", 200)["snapshot"].(map[string]any)
+	if bought["inventory"].(map[string]any)["silver_fish"] != float64(3) || bought["wallet"].(map[string]any)["gameMilli"] != "0" || bought["wallet"].(map[string]any)["generalMilli"] != "4550000" {
+		t.Fatal(bought)
+	}
+
+}
+func TestStationNeighborVisibilityAndGrantBeforeAdoption(t *testing.T) {
+	f := newStationFixture(t)
+	a := f.user(t, "public-captain")
+	b := f.user(t, "never-leak-this-private-name")
+	f.enable(t)
+	f.adopt(t, a, "海")
+	v := f.adopt(t, b, "雾")
+	door := v["social"].(map[string]any)["door"].(string)
+	for _, q := range []struct {
+		search string
+		size   int
+	}{{"never-leak-this-private-name", 0}, {door, 1}, {"雾", 1}} {
+		items := f.call(t, a, "neighbors/search?q="+q.search, nil, "", 200)["items"].([]any)
+		if len(items) != q.size {
+			t.Fatal(q, items)
+		}
+		if len(items) > 0 {
+			p := items[0].(map[string]any)
+			if p["uid"] != nil || p["discordUsername"] != nil || p["discordId"] != nil || p["publicNickname"] != "" {
+				t.Fatal(p)
+			}
+		}
+	}
+	f.call(t, b, "actions", map[string]any{"type": "set_open", "open": false, "expected_profile_revision": "2", "expected_settings_revision": "2"}, "close-neighbor-whale-home", 200)
+	if len(f.call(t, a, "neighbors/search?q="+door, nil, "", 200)["items"].([]any)) != 0 {
+		t.Fatal("closed home listed")
+	}
+	f.call(t, b, "neighbors/search", nil, "", 409)
+}

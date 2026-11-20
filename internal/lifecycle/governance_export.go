@@ -13,6 +13,7 @@ type GovernanceExporter interface {
 // These explicit export fields exclude prompts, execution parameters, upstream
 // identities, source headers and generated images from personal downloads.
 type GovernanceExport struct {
+	WhaleHaven        json.RawMessage       `json:"whale_haven"`
 	LimitedActivities LimitedActivityExport `json:"limited_activities"`
 	ImageTasks        []ImageTaskExport     `json:"image_tasks"`
 	Inactivity        InactivityExport      `json:"inactivity"`

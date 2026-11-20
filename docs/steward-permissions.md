@@ -332,3 +332,5 @@ including the check immediately before dispatch.
 Schema 54 adds `users.resources=false` to every saved schema-53 policy and extends
 management capture of that field. It preserves old grants, policy revisions,
 limits, scopes, timestamps and historical policy audit JSON.
+
+The user resources wallet also includes `whale:pearls` and `whale:conch_shards`. The same read and adjust grants, quantity comparisons and management audit cover these balances before and after adoption.

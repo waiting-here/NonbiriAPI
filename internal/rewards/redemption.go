@@ -142,7 +142,7 @@ func (s *Service) redeemTx(ctx context.Context, tx *sql.Tx, user int64, code str
 	if _, err := tx.ExecContext(ctx, "SAVEPOINT reward_bundle"); err != nil {
 		return redemptionResult{}, err
 	}
-	results, err := grant(ctx, tx, user, actor.Int64, at, c.Title, c.Rewards)
+	results, err := grant(ctx, tx, user, actor.Int64, at, c.Title, c.Rewards, "redemption_code", c.ID)
 	if errors.Is(err, ErrCapacity) {
 		if _, rollbackErr := tx.ExecContext(ctx, "ROLLBACK TO reward_bundle"); rollbackErr != nil {
 			return redemptionResult{}, rollbackErr

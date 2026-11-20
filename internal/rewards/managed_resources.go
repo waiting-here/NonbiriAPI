@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/rewardasset"
+	whaleasset "github.com/waiting-here/NonbiriAPI/internal/whalehaven/assets"
 )
 
 type ManagedResource struct {
@@ -91,7 +92,7 @@ func ManagedResourcesTx(ctx context.Context, tx *sql.Tx, user int64) ([]ManagedR
 		}
 		balances[string(asset)] = quantity.String()
 	}
-	for _, read := range []func(context.Context, *sql.Tx, int64) (map[string]string, error){gacha.RewardBalancesTx, lakenotes.RewardBalancesTx} {
+	for _, read := range []func(context.Context, *sql.Tx, int64) (map[string]string, error){gacha.RewardBalancesTx, lakenotes.RewardBalancesTx, whaleasset.RewardBalancesTx} {
 		values, err := read(ctx, tx, user)
 		if err != nil {
 			return nil, err
@@ -162,6 +163,11 @@ func AdjustResourceTx(ctx context.Context, tx *sql.Tx, user, actor, at int64, in
 	switch {
 	case strings.HasPrefix(input.Asset, "gacha:"):
 		err = gacha.SetManagedResourceTx(ctx, tx, user, at, input.Asset, next.String())
+	case strings.HasPrefix(input.Asset, "whale:"):
+		if !delta.IsInt64() {
+			return result, ErrCapacity
+		}
+		err = whaleasset.ExternalChange(ctx, tx, user, at, input.Asset, delta.Int64(), "management_adjustment", "")
 	case strings.HasPrefix(input.Asset, "lake:"):
 		dependent, err = lakenotes.SetManagedResourceTx(ctx, tx, user, at, input.Asset, next.String())
 	default:
@@ -195,7 +201,7 @@ func AdjustResourceTx(ctx context.Context, tx *sql.Tx, user, actor, at int64, in
 		if errors.Is(err, gacha.ErrInvalid) || errors.Is(err, lakenotes.ErrInvalid) {
 			return result, ErrInvalid
 		}
-		if errors.Is(err, gacha.ErrCapacity) || errors.Is(err, lakenotes.ErrCapacity) || errors.Is(err, ledger.ErrCapacityExhausted) {
+		if errors.Is(err, whaleasset.ErrCapacity) || errors.Is(err, gacha.ErrCapacity) || errors.Is(err, lakenotes.ErrCapacity) || errors.Is(err, ledger.ErrCapacityExhausted) {
 			return result, ErrCapacity
 		}
 		return result, err

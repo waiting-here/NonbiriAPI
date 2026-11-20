@@ -40,6 +40,7 @@ export function UserResources({
     gacha: t('management.resources.groups.gacha'),
     cards: t('management.resources.groups.cards'),
     lake: t('management.resources.groups.lake'),
+    whale: t('management.resources.groups.whale'),
   };
 
   const editor = useRef<HTMLDivElement>(null);
@@ -179,7 +180,13 @@ export function UserResources({
                 />
               )}
             </Field>
-            <Note>{t('management.resources.relatedChanges')}</Note>
+            <Note>
+              {t(
+                selected.group === 'whale'
+                  ? 'management.resources.whaleBalance'
+                  : 'management.resources.relatedChanges',
+              )}
+            </Note>
             <div className="nb-actions">
               <Button
                 variant="primary"

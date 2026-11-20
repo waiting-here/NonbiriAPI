@@ -1070,10 +1070,13 @@ export const DIALOGUES = {
   } as Partial<Record<WhaleOutfitId, readonly ChitchatItem[]>>,
 } as const;
 
-export function displayNeighborName(neighbor: NeighborStation): string {
+export function displayNeighborName(
+  neighbor: NeighborStation,
+  anonymousLabel = '匿名饲养员',
+): string {
   return neighbor.gameProfilePublic
     ? neighbor.publicNickname
-    : `匿名饲养员 #${neighbor.anonymousCode}`;
+    : `${anonymousLabel} #${neighbor.anonymousCode}`;
 }
 
 export function formatNeighborHandles(neighbor: NeighborStation): {

@@ -42,7 +42,8 @@ export interface Profile {
 export type Action =
   | { type: 'adopt'; name: string; open: boolean }
   | { type: 'rename'; name: string }
-  | { type: 'buy_feed' | 'use_feed'; feedId: FeedItemId }
+  | { type: 'buy_feed'; feedId: FeedItemId; quantity?: number }
+  | { type: 'use_feed'; feedId: FeedItemId }
   | { type: 'toggle_decor'; decorId: DecorItemId }
   | { type: 'select_outfit'; outfitId: WhaleOutfitId }
   | { type: 'toggle_sleep'; forceSleep?: boolean }
@@ -102,8 +103,14 @@ export function act(profile: Profile, action: Action) {
     expected_settings_revision: profile.settings_revision,
   });
 }
-export function getQuote(quantity: string) {
-  return post<Quote>('/exchange/quote', { quantity });
+export async function getQuote(quantity: string, signal?: AbortSignal) {
+  return (
+    await gameRequest<Quote>(base + '/exchange/quote', {
+      method: 'POST',
+      json: { quantity },
+      signal,
+    })
+  ).data;
 }
 export function exchange(quote: Quote) {
   return post<Profile>('/exchange', {

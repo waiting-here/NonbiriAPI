@@ -1,3 +1,4 @@
+import { useWhaleText } from '../copy';
 import { useState } from 'react';
 import { Dices, Sparkles } from './Icons';
 import { soundEngine } from '../audio/soundEngine';
@@ -20,6 +21,7 @@ export function WhaleNamingModal({
   onConfirmName,
   busy,
 }: WhaleNamingModalProps) {
+  const t = useWhaleText();
   const [name, setName] = useState(initialName || DEFAULT_WHALE_NAME);
   const [open, setOpen] = useState(true);
   const [diceSpin, setDiceSpin] = useState(0);
@@ -44,18 +46,23 @@ export function WhaleNamingModal({
         onSubmit={handleSubmit}
         style={{ maxWidth: 480, gap: '0.85rem' }}
       >
-        <NoticeHeading id="whale-naming-title" title="为鲸鱼娘取个名字" />
+        <NoticeHeading id="whale-naming-title" title={t('为鲸鱼娘取个名字', 'Name your whale')} />
 
         <div className="modal-hero-box">
-          <img src={getSpriteUrl('cheerful')} alt="鲸鱼娘" className="modal-hero-box__img" />
+          <img
+            src={getSpriteUrl('cheerful')}
+            alt={t('鲸鱼娘', 'Whale character')}
+            className="modal-hero-box__img"
+          />
           <div style={{ fontSize: '0.82rem', lineHeight: 1.5, minWidth: 0 }}>
             <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
               「你好呀人类！以后你就是我的长期饲养员啦～」
             </div>
             <div style={{ color: 'var(--nb-color-text-muted)', fontSize: '0.78rem' }}>
-              💡 喜好：<strong>热腾腾的白米饭</strong>、<strong>Token 口粮</strong>、
-              <strong>趴着摸鱼</strong>
-              （随时可在左上角状态卡片修改名字哦～）
+              {t(
+                '💡 喜好：热腾腾的白米饭、Token 口粮、趴着摸鱼（随时可在左上角状态卡片修改名字哦～）',
+                'She likes hot rice, token treats and lounging. You can rename her from the status card.',
+              )}
             </div>
           </div>
         </div>
@@ -65,7 +72,10 @@ export function WhaleNamingModal({
             htmlFor="whale-init-name"
             style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--nb-color-text)' }}
           >
-            她的专属昵称（最多 10 个字，点右侧骰子可随机可爱名字）：
+            {t(
+              '她的专属昵称（最多 10 个字，点右侧骰子可随机可爱名字）：',
+              'Nickname (up to 10 characters)',
+            )}
           </label>
           <div style={{ display: 'flex', alignItems: 'stretch', gap: '0.45rem' }}>
             <input
@@ -88,7 +98,7 @@ export function WhaleNamingModal({
                 whiteSpace: 'nowrap',
               }}
               onClick={handleRollCuteName}
-              title="随机摇一个软萌可爱的名字"
+              title={t('随机摇一个软萌可爱的名字', 'Choose a random name')}
             >
               <Dices
                 size={16}
@@ -97,7 +107,7 @@ export function WhaleNamingModal({
                   transform: `rotate(${diceSpin * 180}deg)`,
                 }}
               />
-              随机取名
+              {t('随机取名', 'Random name')}
             </button>
           </div>
         </div>
@@ -120,12 +130,21 @@ export function WhaleNamingModal({
             checked={open}
             onChange={(event) => setOpen(event.target.checked)}
           />{' '}
-          开放小筑，允许互相串门
+          {t('开放小筑，允许互相串门', 'Open my haven for mutual visits')}
         </label>
-        <small>仅开放的小筑可以互访。领养后可随时在「串门」更改。</small>
+        <small>
+          {t(
+            '仅开放的小筑可以互访。领养后可随时在「串门」更改。',
+            'Only open havens can visit each other. Change this anytime under Visits.',
+          )}
+        </small>
         <div className="notice-actions">
           <button disabled={busy} type="submit" className="nb-btn nb-btn--primary">
-            <Sparkles size={15} /> 确认叫「{name.trim() || DEFAULT_WHALE_NAME}」，领养回家
+            <Sparkles size={15} />{' '}
+            {t(
+              `确认叫「${name.trim() || DEFAULT_WHALE_NAME}」，领养回家`,
+              `Adopt ${name.trim() || DEFAULT_WHALE_NAME}`,
+            )}
           </button>
         </div>
       </form>

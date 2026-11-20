@@ -19,7 +19,7 @@ personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 37 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Its filename is `nonbiriapi-account-export-v36.json`; SQLite `user_version` remains 2 and the current storage schema is 53. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 38 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Whale Haven includes both personal currencies, the adopted home and sourced movements. Deletion settles outstanding guest wages before removing the account records. Its filename is `nonbiriapi-account-export-v38.json`; SQLite `user_version` remains 2 and the current storage schema is 55. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 Optional rerank paths belong to endpoints and submitted donation-use revisions;
 nullable management overrides belong to the donated use. Account export 36

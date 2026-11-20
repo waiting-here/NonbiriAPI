@@ -10,6 +10,21 @@ import (
 func RestoreSchema54Fixture(t *testing.T, source *sql.DB) {
 	t.Helper()
 	for _, statement := range []string{
+		"DROP TRIGGER whale_master_insert",
+		"DROP TRIGGER whale_master_update",
+		"DROP TRIGGER whale_record_footprint",
+		"DROP TABLE whale_haven_footprints",
+		"DROP TABLE whale_haven_events",
+		"DROP TABLE whale_haven_movements",
+		"DROP TABLE whale_haven_assets",
+		"DROP TABLE whale_haven_receipts",
+		"DROP TABLE whale_haven_pins",
+		"DROP TABLE whale_haven_daily",
+		"DROP TABLE whale_haven_wage_fractions",
+		"DROP TABLE whale_haven_visits",
+		"DROP TABLE whale_haven_profiles",
+		"DROP TABLE whale_haven_master_history",
+		"DROP TABLE whale_haven_settings",
 		"DROP TABLE request_attempt_backoffs",
 		"ALTER TABLE request_attempts DROP COLUMN streak_after",
 		"ALTER TABLE request_attempts DROP COLUMN streak_before",

@@ -66,7 +66,8 @@ func (service *Service) PatchGamesConfig(ctx context.Context, body []byte, idemp
 	if err != nil {
 		return game.WireConfiguration{}, ErrInvalidRequest
 	}
-	now := service.services.Now().UTC().Unix()
+	instant := service.services.Now().UTC()
+	now := instant.Unix()
 	tx, err := service.services.Database.BeginTx(ctx, nil)
 	if err != nil {
 		return game.WireConfiguration{}, classifyDB(err)
@@ -143,6 +144,15 @@ func (service *Service) PatchGamesConfig(ctx context.Context, body []byte, idemp
 			if err = module.ConfigurationChangedTx(ctx, tx, before, after); err != nil {
 				return game.WireConfiguration{}, err
 			}
+		}
+	}
+	// The sanctuary advances in milliseconds. Two changes within a second
+	// must still mark a real paused interval when a player returns later.
+	if compiled.Enabled() != snapshot.Enabled() {
+		_, err = tx.ExecContext(ctx, `INSERT INTO whale_haven_master_history(effective_at,enabled) VALUES(?,?)
+        ON CONFLICT(effective_at) DO UPDATE SET enabled=excluded.enabled`, instant.UnixMilli(), compiled.Enabled())
+		if err != nil {
+			return game.WireConfiguration{}, classifyDB(err)
 		}
 	}
 	raw := compiled.Raw()

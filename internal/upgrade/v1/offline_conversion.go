@@ -171,6 +171,12 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 	}); err != nil {
 		return err
 	}
+	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "whale_haven_profiles", "create Whale Haven wallets and houses", func() error {
+		_, err := tx.ExecContext(ctx, db.WhaleHavenSQL)
+		return err
+	}); err != nil {
+		return err
+	}
 	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "donation_model_quotas", "model quota conversion", func() error {
 		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL); err != nil {
 			return err

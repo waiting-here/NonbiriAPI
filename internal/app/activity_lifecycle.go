@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/limitedactivities"
 	"github.com/waiting-here/NonbiriAPI/internal/rewards"
+	"github.com/waiting-here/NonbiriAPI/internal/whalehaven"
 )
 
 func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r lifecycle.ExportRequest) (lifecycle.GovernanceExport, error) {
@@ -112,6 +113,10 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 	if err != nil {
 		return out, err
 	}
+	out.WhaleHaven, err = whalehaven.Export(ctx, tx, r.UserID, r.DecisionNow, r.Limit)
+	if err != nil {
+		return out, activityExportError(err)
+	}
 	skin, err := a.appearance.ExportUserTx(ctx, tx, r.UserID)
 	if err != nil {
 		return out, err
@@ -121,7 +126,7 @@ func (a *activityRuntime) ExportGovernance(ctx context.Context, tx *sql.Tx, r li
 }
 
 func activityExportError(err error) error {
-	if errors.Is(err, limitedactivities.ErrExportLimit) || errors.Is(err, imageactivity.ErrExportLimit) || errors.Is(err, inactivity.ErrTooLarge) || errors.Is(err, gacha.ErrExportLimit) || errors.Is(err, rewards.ErrExportLimit) || errors.Is(err, attendance.ErrExportLimit) {
+	if errors.Is(err, whalehaven.ErrExportLimit) || errors.Is(err, limitedactivities.ErrExportLimit) || errors.Is(err, imageactivity.ErrExportLimit) || errors.Is(err, inactivity.ErrTooLarge) || errors.Is(err, gacha.ErrExportLimit) || errors.Is(err, rewards.ErrExportLimit) || errors.Is(err, attendance.ErrExportLimit) {
 		return lifecycle.ErrTooLarge
 	}
 	return err
@@ -133,6 +138,10 @@ func (a *activityRuntime) PrepareDelete(ctx context.Context, tx *sql.Tx, r lifec
 		return nil, err
 	}
 	if _, err = a.lake.PrepareDeleteTx(ctx, tx, r.UserID, r.DecisionNow); err != nil {
+		f.Abort()
+		return nil, err
+	}
+	if err = whalehaven.CloseAccountTx(ctx, tx, r.UserID, r.DecisionNow); err != nil {
 		f.Abort()
 		return nil, err
 	}

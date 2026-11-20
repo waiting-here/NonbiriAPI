@@ -72,15 +72,20 @@ func newSocialDB(t *testing.T, at int64) *socialDB {
 
 func (s *socialDB) run(t *testing.T, at int64, f func(*world)) {
 	t.Helper()
+	s.runAs(t, at, "whale_haven", "test", f)
+}
+
+func (s *socialDB) runAs(t *testing.T, at int64, reason, operation string, f func(*world)) {
+	t.Helper()
 	tx, err := s.db.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
 	w := &world{ctx: context.Background(), tx: tx, now: at, location: time.UTC, config: s.cfg, master: true,
-		residents: map[int64]*resident{}, visits: map[int64]*visit{}, days: map[dayKey]counters{}, wages: map[[2]int64]float64{}}
+		residents: map[int64]*resident{}, visits: map[int64]*visit{}, days: map[dayKey]counters{}, wages: map[int64]float64{}}
 	f(w)
-	if err = w.save("whale_haven", "test"); err != nil {
+	if err = w.save(reason, operation); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
@@ -295,4 +300,134 @@ func TestWhaleSocialEmptyBowlAndSiteWalletCap(t *testing.T) {
 		// One second of snacking, then five seconds at home with an empty bowl.
 		socialNear(t, g.state.Whale.Satiety, 76+2.25-5*.045)
 	})
+}
+
+// Two employers contribute 0.6 and 0.4 pearls. Deleting the first employer
+// settles its open shift before the cascade. The guest keeps that claim.
+func TestWhaleSocialWagesFollowGuestAcrossEmployerDeletion(t *testing.T) {
+	game := newSocialDB(t, 1000)
+	game.cfg.Values["daily_social_pearls"] = 1
+	raw, err := json.Marshal(game.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = game.db.Exec("UPDATE whale_haven_settings SET document=? WHERE revision=2", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = game.db.Exec("INSERT INTO site_config(key,value,updated_at) VALUES('site_timezone_offset_minutes','0',0)"); err != nil {
+		t.Fatal(err)
+	}
+	hire := func(w *world, hostID int64, door string) {
+		t.Helper()
+		g := socialActor(t, w, 2)
+		accept := true
+		commandSocial(t, w, g, actionRequest{Type: "send_visit", Target: door, AllowHire: &accept})
+		commandSocial(t, w, socialActor(t, w, hostID), actionRequest{Type: "catch_guest", NeighborID: "GUEST", Action: "hire"})
+	}
+	game.run(t, 1000, func(w *world) {
+		next := socialActor(t, w, 3)
+		next.state.Home.TroughGrams = 180
+		next.state.Whale.IsSleeping = true
+		next.state.Whale.SleepingSince = w.now
+		next.dirty = true
+		hire(w, 1, "HOST")
+	})
+	game.run(t, 4000, func(w *world) {
+		if err := CloseAccountTx(w.ctx, w.tx, 1, w.now/1000); err != nil {
+			t.Fatal(err)
+		}
+		var firstNet float64
+		err := w.tx.QueryRow(`SELECT json_extract(snapshot,'$.home.unclaimedPearls')+json_extract(snapshot,'$.home.pearlProgress')/100.0 FROM whale_haven_profiles WHERE user_id=1`).Scan(&firstNet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		socialNear(t, firstNet, 2.4)
+		if _, err = w.tx.Exec("DELETE FROM users WHERE id=1"); err != nil {
+			t.Fatal(err)
+		}
+		var pending float64
+		if err = w.tx.QueryRow("SELECT microcoins FROM whale_haven_wage_fractions WHERE guest_id=2").Scan(&pending); err != nil {
+			t.Fatal(err)
+		}
+		socialNear(t, pending, 600000)
+	})
+	game.run(t, 4000, func(w *world) { hire(w, 3, "THIRD") })
+	game.run(t, 9000, func(w *world) {
+		g := socialActor(t, w, 2)
+		newHost := w.residents[3]
+		if g.state.Wallet.Pearls != 1 || g.state.Wallet.DailySocialPearlsGained != 1 || !w.visits[g.id].ended {
+			t.Fatalf("guest payout or quota: %+v, visit %+v", g.state.Wallet, w.visits[g.id])
+		}
+		socialNear(t, newHost.state.Home.TroughGrams, 178)
+		socialNear(t, float64(newHost.state.Home.UnclaimedPearls)+newHost.state.Home.PearlProgress/100, 1.6)
+		socialNear(t, w.wages[g.id], 0)
+	})
+	game.run(t, 9000, func(w *world) {
+		b, err := assets.Read(w.ctx, w.tx, 2)
+		if err != nil || b.Pearls != 1 {
+			t.Fatal(b, err)
+		}
+		var count int
+		if err = w.tx.QueryRow("SELECT count(*) FROM whale_haven_movements WHERE user_id=2 AND pearls_delta=1").Scan(&count); err != nil || count != 1 {
+			t.Fatal(count, err)
+		}
+	})
+}
+
+func TestWhaleSocialWageAndPurchaseHaveSeparateMovements(t *testing.T) {
+	game := newSocialDB(t, 1000)
+	game.cfg.Values["guest_shift_seconds"] = 5
+	game.cfg.Values["decor_shell_cabinet_price_pearls"] = 1
+	raw, err := json.Marshal(game.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = game.db.Exec("UPDATE whale_haven_settings SET document=? WHERE revision=2", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	game.run(t, 1000, func(w *world) {
+		g := socialActor(t, w, 2)
+		accept := true
+		commandSocial(t, w, g, actionRequest{Type: "send_visit", Target: "HOST", AllowHire: &accept})
+		commandSocial(t, w, socialActor(t, w, 1), actionRequest{Type: "catch_guest", NeighborID: "GUEST", Action: "hire"})
+	})
+	const op = "wage-and-purchase"
+	game.runAs(t, 7000, "toggle_decor", op, func(w *world) {
+		g := socialActor(t, w, 2)
+		if g.state.Wallet.Pearls != 1 || g.original.Pearls != 0 {
+			t.Fatal(g.state.Wallet, g.original)
+		}
+		if err := new(Service).apply(w, g, actionRequest{Type: "toggle_decor", DecorID: "shell_cabinet"}, op); err != nil {
+			t.Fatal(err)
+		}
+		if g.state.Wallet.Pearls != 0 {
+			t.Fatal("purchase failed to spend the wage", g.state.Wallet)
+		}
+	})
+	rows, err := game.db.Query("SELECT created_at,reason,operation_id,pearls_delta,pearls_after FROM whale_haven_movements WHERE user_id=2 ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	type movement struct {
+		at                int64
+		reason, operation string
+		delta, after      int64
+	}
+	want := []movement{{6000, "wage", op, 1, 1}, {7000, "toggle_decor", op, -1, 0}}
+	for _, expected := range want {
+		var got movement
+		if !rows.Next() {
+			t.Fatalf("missing movement %+v: %v", expected, rows.Err())
+		}
+		if err := rows.Scan(&got.at, &got.reason, &got.operation, &got.delta, &got.after); err != nil {
+			t.Fatal(err)
+		}
+		if got != expected {
+			t.Fatalf("movement %+v, want %+v", got, expected)
+		}
+	}
+	if rows.Next() || rows.Err() != nil {
+		t.Fatal("unexpected movement", rows.Err())
+	}
 }

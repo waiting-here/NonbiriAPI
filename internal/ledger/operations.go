@@ -65,6 +65,8 @@ var operationRules = map[Kind]operationRule{
 	KindFatFishTicket:        {source: sourceOperation, channel: "fat_fish", behavior: "fee"},
 	KindFatFishReward:        {source: sourceOperation, channel: "fat_fish", behavior: "reward"},
 	KindFatFishRefund:        {source: sourceOperation, channel: "fat_fish", behavior: "refund"},
+	KindWhaleFeedPurchase:    {source: sourceOperation, channel: "whale_haven", behavior: "fee"},
+	KindWhaleExchange:        {source: sourceOperation, channel: "whale_haven", behavior: "exchange"},
 	KindLakeEntry:            {source: sourceOperation, channel: "lake_notes", behavior: "fee"},
 	KindLakeExchange:         {source: sourceOperation, channel: "lake_notes", behavior: "exchange"},
 	KindLakeCollectionReward: {source: sourceOperation, channel: "lake_notes", behavior: "reward", donation: true},

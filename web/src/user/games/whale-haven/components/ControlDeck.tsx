@@ -1,3 +1,4 @@
+import { useWhaleText } from '../copy';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { Profile } from '../api';
 import {
@@ -19,14 +20,18 @@ export type DeckTabId = 'feed' | 'wardrobe' | 'social' | 'exchange' | 'logs';
 
 const DECK_TABS_META: readonly {
   id: DeckTabId;
-  label: string;
-  title: string;
+  label: [string, string];
+  title: [string, string];
 }[] = [
-  { id: 'wardrobe', label: '角色', title: '角色与衣橱' },
-  { id: 'social', label: '串门', title: '串门' },
-  { id: 'feed', label: '背包', title: '背包与投喂' },
-  { id: 'exchange', label: '鲸币', title: '鲸币兑换与小屋' },
-  { id: 'logs', label: '动态', title: '小筑动态' },
+  { id: 'wardrobe', label: ['角色', 'Whale'], title: ['角色与衣橱', 'Whale and wardrobe'] },
+  { id: 'social', label: ['串门', 'Visits'], title: ['串门', 'Visits'] },
+  { id: 'feed', label: ['背包', 'Bag'], title: ['背包与投喂', 'Inventory and feeding'] },
+  {
+    id: 'exchange',
+    label: ['鲸币', 'Coins'],
+    title: ['鲸币兑换与小屋', 'Exchange and furnishings'],
+  },
+  { id: 'logs', label: ['动态', 'Activity'], title: ['小筑动态', 'Haven activity'] },
 ];
 
 const TAB_ICONS = {
@@ -56,6 +61,7 @@ export function FloatingDock({
   onToggleSettings,
   onSelectTab,
 }: FloatingDockProps) {
+  const t = useWhaleText();
   const snapshot = profile.snapshot;
   const values = profile.settings.values;
   const hasConchGachaBadge = (snapshot.wallet.conchShards ?? 0) >= values.conch_cost_shards;
@@ -75,7 +81,11 @@ export function FloatingDock({
   };
 
   return (
-    <nav className="floating-dock" aria-label="海湾功能菜单栏" onClick={(e) => e.stopPropagation()}>
+    <nav
+      className="floating-dock"
+      aria-label={t('海湾功能菜单栏', 'Haven navigation')}
+      onClick={(e) => e.stopPropagation()}
+    >
       <button
         type="button"
         className={`dock-item ${isHome && !activeTab && !settingsOpen ? 'is-active' : ''}`}
@@ -85,7 +95,7 @@ export function FloatingDock({
         <span className="dock-item__icon">
           <Home size={20} />
         </span>
-        <span className="dock-item__label">首页</span>
+        <span className="dock-item__label">{t('首页', 'Home')}</span>
       </button>
       {DECK_TABS_META.map((tab) => {
         const isActive =
@@ -104,7 +114,7 @@ export function FloatingDock({
               <Icon size={20} />
               {hasBadge(tab.id) && <i className="dock-item__dot" />}
             </span>
-            <span className="dock-item__label">{tab.label}</span>
+            <span className="dock-item__label">{t(...tab.label)}</span>
           </button>
         );
       })}
@@ -118,7 +128,7 @@ export function FloatingDock({
         <span className="dock-item__icon">
           <Settings size={20} />
         </span>
-        <span className="dock-item__label">设置</span>
+        <span className="dock-item__label">{t('设置', 'Settings')}</span>
       </button>
     </nav>
   );
@@ -138,6 +148,7 @@ export function ControlDeck({
   onToggleMenuMode,
   children,
 }: ControlDeckProps) {
+  const t = useWhaleText();
   const body = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -165,7 +176,7 @@ export function ControlDeck({
               <Icon size={23} />
             </span>
             <h2 className="deck-header__title" id="deck-title">
-              {active.title}
+              {t(...active.title)}
             </h2>
           </div>
           <div className="deck-header__actions">
@@ -173,8 +184,14 @@ export function ControlDeck({
               type="button"
               className="deck-icon-btn hide-on-mobile"
               onClick={onToggleMenuMode}
-              aria-label={menuMode === 'drawer' ? '切换底部模式' : '切换侧栏模式'}
-              title={menuMode === 'drawer' ? '底部模式' : '侧栏模式'}
+              aria-label={
+                menuMode === 'drawer'
+                  ? t('切换底部模式', 'Switch to bottom panel')
+                  : t('切换侧栏模式', 'Switch to sidebar')
+              }
+              title={
+                menuMode === 'drawer' ? t('底部模式', 'Bottom panel') : t('侧栏模式', 'Sidebar')
+              }
             >
               {menuMode === 'drawer' ? <PanelBottom size={17} /> : <PanelRight size={17} />}
             </button>
@@ -182,8 +199,8 @@ export function ControlDeck({
               type="button"
               className="deck-icon-btn"
               onClick={onClose}
-              aria-label="收起菜单面板"
-              title="收起面板 (Esc)"
+              aria-label={t('收起菜单面板', 'Close panel')}
+              title={t('收起面板 (Esc)', 'Close panel (Esc)')}
             >
               <X size={19} />
             </button>
