@@ -670,7 +670,7 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
         ) : channels.error && !pageData ? (
           <ErrorState error={channels.error} onRetry={() => void channels.refetch()} />
         ) : pageData ? (
-          <div aria-busy={busy}>
+          <div className="channel-list nb-wide-table-region" aria-busy={busy}>
             {channels.error ? (
               <ErrorState error={channels.error} onRetry={() => void channels.refetch()} />
             ) : null}
@@ -698,7 +698,6 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.category'),
                       mobileLabel: t('admin.mainstreamChannels.table.category'),
                       cell: 'meta',
-                      align: 'nowrap',
                       render: (channel) => t(CATEGORY_LABEL_KEYS[channel.category]),
                     },
                     {
@@ -706,7 +705,6 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.connector'),
                       mobileLabel: t('admin.mainstreamChannels.table.connector'),
                       cell: 'meta',
-                      align: 'nowrap',
                       render: (channel) =>
                         [
                           ...new Set(
@@ -771,7 +769,6 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
                       header: t('admin.mainstreamChannels.table.updated'),
                       mobileLabel: t('admin.mainstreamChannels.table.updated'),
                       cell: 'meta',
-                      align: 'nowrap',
                       render: (channel) => formatDateTime(channel.updated_at),
                     },
                     {

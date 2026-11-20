@@ -224,6 +224,9 @@
     grid-column: 1;
     grid-row: 2;
   }
+  .user-list-level {
+    white-space: normal;
+  }
   .user-management .nb-table td[data-cell='status'] {
     grid-column: 2;
     grid-row: 2;

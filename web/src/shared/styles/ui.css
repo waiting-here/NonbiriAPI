@@ -377,6 +377,7 @@
   content: '';
   width: 0.45rem;
   height: 0.45rem;
+  flex-shrink: 0;
   border-radius: 50%;
   background: currentColor;
 }
@@ -1130,6 +1131,15 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+.nb-wide-table-region {
+  min-width: 0;
+  container: nb-wide-table / inline-size;
+}
+@container nb-wide-table (width < 64rem) {
+  .nb-table-wrap {
+    container: nb-card-table / inline-size;
+  }
+}
 .nb-table {
   width: 100%;
   min-width: 0;
@@ -1263,7 +1273,7 @@
   }
   .nb-table tbody tr {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) fit-content(40%);
     gap: 0.35rem 0.75rem;
     padding: var(--nb-space-3) var(--nb-space-4);
     border-bottom: 1px solid var(--nb-color-border);
@@ -1289,7 +1299,7 @@
     font-weight: 600;
     font-size: var(--nb-font-size-md);
   }
-  .nb-table tr:has(> td[data-cell='select']) > td[data-cell='title'] {
+  .nb-table :where(tr:has(> td[data-cell='select'])) > td[data-cell='title'] {
     grid-row: 2;
     grid-column: 1/-1;
   }
@@ -1305,11 +1315,15 @@
     gap: 0.5rem;
     font-size: var(--nb-font-size-sm);
   }
-  .nb-table td[data-cell='meta'] :is(.status-badge, .nb-badge) {
+  .nb-table td:is([data-cell='meta'], [data-cell='status']) :is(.status-badge, .nb-badge) {
+    max-width: 100%;
     white-space: normal;
   }
   .nb-table td[data-cell='meta'] > * {
     min-width: 0;
+  }
+  .nb-table td[data-cell='meta']:empty {
+    display: none;
   }
   .nb-table .is-nowrap {
     white-space: normal;
@@ -1335,6 +1349,9 @@
   }
   .nb-table .is-num {
     text-align: left;
+  }
+  .nb-table tr[aria-selected='true'] {
+    background: var(--nb-color-accent-soft);
   }
   .nb-table__detail {
     display: block !important;

@@ -44,7 +44,12 @@ export function DataTable<Row>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key} scope="col" className={columnClassName(column)}>
+              <th
+                key={column.key}
+                scope="col"
+                data-column={column.key}
+                className={columnClassName(column)}
+              >
                 {column.header}
               </th>
             ))}
@@ -63,6 +68,7 @@ export function DataTable<Row>({
                   {columns.map((column) => (
                     <td
                       key={column.key}
+                      data-column={column.key}
                       data-cell={column.cell}
                       data-label={column.mobileLabel}
                       className={columnClassName(column)}

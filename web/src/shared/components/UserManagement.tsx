@@ -1707,6 +1707,7 @@ export function UserManagement({
                     },
                     {
                       key: 'level',
+                      mobileLabel: t('management.users.level'),
                       header: (
                         <span className="user-list-level-heading">
                           {t('management.users.level')}

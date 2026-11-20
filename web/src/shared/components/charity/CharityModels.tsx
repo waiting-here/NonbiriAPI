@@ -1532,7 +1532,7 @@ export function ModelsPanel({
       ) : null}
       {!canRead && !creating ? <StewardPermissionNotice /> : null}
       {canRead && !selectedId && !creating ? (
-        <Card>
+        <Card className="nb-wide-table-region">
           <FilterBar
             query={models}
             activeCount={[query, enabled].filter(Boolean).length}
@@ -1619,12 +1619,14 @@ export function ModelsPanel({
                     key: 'description',
                     header: t('common.operations.charity.publicDescription'),
                     cell: 'meta',
+                    mobileLabel: t('common.operations.charity.publicDescription'),
                     render: (model) => model.public_description,
                   },
                   {
                     key: 'levels',
                     header: t('common.operations.charity.allowedLevels'),
                     cell: 'meta',
+                    mobileLabel: t('common.operations.charity.allowedLevels'),
                     render: (model) =>
                       model.allowed_levels.length
                         ? model.allowed_levels
@@ -1636,12 +1638,14 @@ export function ModelsPanel({
                     key: 'pricing',
                     header: t('common.operations.charity.pricing'),
                     cell: 'meta',
+                    mobileLabel: t('common.operations.charity.pricing'),
                     render: (model) => <PriceConfigBrief config={model} role={role} />,
                   },
                   {
                     key: 'bindings',
                     header: t(charityCopyKey(role, 'bindings')),
                     cell: 'meta',
+                    mobileLabel: t(charityCopyKey(role, 'bindings')),
                     align: 'num',
                     render: (model) => model.binding_count,
                   },
