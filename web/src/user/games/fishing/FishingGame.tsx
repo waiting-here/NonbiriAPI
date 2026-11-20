@@ -164,7 +164,7 @@ function FishingRules({
 }) {
   const { text } = useGameCopy();
   const sections: readonly GameRulesSection[] = (
-    ['choose', 'batch', 'result', 'recovery', 'scores', 'start'] as const
+    ['choose', 'batch', 'result', 'pond', 'recovery', 'scores', 'start'] as const
   ).map((section) => ({
     title: text(`fishing.rules.${section}Title`),
     paragraphs: [

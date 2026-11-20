@@ -135,7 +135,7 @@ async function ready() {
   await act(async () => {
     TestImage.instances.at(-1)!.onload?.();
   });
-  await screen.findByRole('button', { name: '开始接住' });
+  await screen.findByRole('button', { name: /开始接住.*2/ });
 }
 it('keeps entry unpaid until the character loads and explains a failed load', async () => {
   mount();
@@ -164,7 +164,7 @@ it('uses the original touch hints and catalog heading on coarse pointers', async
 it('starts once under StrictMode and waits for the saved pause before closing a menu resumes play', async () => {
   const view = mount();
   await ready();
-  fireEvent.click(screen.getByRole('button', { name: '开始接住' }));
+  fireEvent.click(screen.getByRole('button', { name: /开始接住.*2/ }));
   await waitFor(() => expect(controls).toEqual(['resume']), { timeout: 3500 });
   expect(controls).toEqual(['resume']);
   holdPause = true;
@@ -234,6 +234,7 @@ it('shows the record gain, misses and the golden catch from this round', () => {
   render(
     <CatchResult
       result={result}
+      nextPrice="12"
       previousBest={700}
       caught={[
         { id: 'white', text: '普通句子', points: 30, combo: 12, gold: false },
@@ -245,6 +246,7 @@ it('shows the record gain, misses and the golden catch from this round', () => {
       openCatalog={vi.fn()}
     />,
   );
+  expect(screen.getByRole('button', { name: /再接一局.*12/ })).toBeVisible();
   expect(screen.getByText('新纪录！比之前高 +220')).toBeVisible();
   expect(screen.getByText('漏接')).toHaveTextContent('7');
   expect(screen.getByText('坚持了 90 秒')).toBeVisible();

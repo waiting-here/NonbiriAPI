@@ -1,5 +1,6 @@
 import { CreditNumber } from '@shared/components/CreditNumber';
 import type { CatchFeedback } from './Board';
+import { GameMoney } from '../common/GameMoney';
 import { HZ } from './engine';
 import type { Session } from './session';
 import { useCatchText } from './copy';
@@ -7,6 +8,7 @@ import { formatCredits } from '../common/strict';
 
 export function CatchResult({
   result,
+  nextPrice,
   previousBest,
   caught,
   disabled,
@@ -15,6 +17,7 @@ export function CatchResult({
   openCatalog,
 }: {
   result: Session;
+  nextPrice: string | undefined;
   previousBest: number | null;
   caught: readonly CatchFeedback[];
   disabled: boolean;
@@ -74,7 +77,19 @@ export function CatchResult({
         </blockquote>
       )}
       <button className="primary" disabled={disabled} onClick={start}>
-        {busy ? t('正在开局', 'Starting') : t('再接一局', 'Catch again')}
+        {busy ? (
+          t('正在开局', 'Starting')
+        ) : (
+          <>
+            {t('再接一局', 'Catch again')}
+            {nextPrice !== undefined && (
+              <>
+                {' '}
+                · <GameMoney value={nextPrice} />
+              </>
+            )}
+          </>
+        )}
       </button>
       <button className="secondary" onClick={openCatalog}>
         {t('看本局接住的梗', 'See this round’s catches')}

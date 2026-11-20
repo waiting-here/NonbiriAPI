@@ -214,8 +214,8 @@ async function catchTools(page: Page, label: string) {
   await controlContrast(page, close, 'catch-tools-' + label + '-close-hover');
   await close.click();
   await expect(help).not.toBeVisible();
-  await page.getByRole('button', { name: 'Catch again', exact: true }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole('button', { name: 'Catch again', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: /^Catch again.*credits/i }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: /^Catch again.*credits/i })).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 

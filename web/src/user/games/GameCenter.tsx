@@ -134,7 +134,7 @@ function GameCard({ card }: { card: CenterCard }) {
       to={card.path}
     >
       <div className="game-center-card__hero">
-        <GameHero kind={card.id} eager />
+        <GameHero kind={card.id} />
       </div>
       <div className="game-center-card__body">
         <div className="game-card-heading">
