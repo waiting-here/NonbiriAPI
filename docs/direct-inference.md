@@ -182,7 +182,9 @@ and representable `text.format` values (`text`, `json_object`, `json_schema`).
 Omitted Responses function `strict` uses supported strict-schema normalization;
 schemas outside that subset need an explicit representable strict setting.
 Reasoning/compaction items, audio/files, hosted tools, persistent references and
-other unrepresentable fields are rejected. Tool flattening and Chat transport
+other unrepresentable fields are rejected. A `reasoning` object containing only
+a supported `effort` maps to Chat `reasoning_effort`. A requested reasoning
+summary requires a route that can preserve it. Tool flattening and Chat transport
 overrides do not add capabilities to native direct operations.
 
 Generated `output_text` with empty annotations/logprobs and assistant refusal

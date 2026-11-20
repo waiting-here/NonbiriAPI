@@ -31,6 +31,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Open permitted log details by exact request ID. Show authorized managers the
   recorded routing decisions, per-attempt failure-count changes, backoff
   deadlines and the attempt that triggered an automatic disablement.
+- Identify malformed Gemini message history by message, content block or tool
+  call and show the failed requirement and a suggested correction in the API
+  and role-appropriate logs. Keep message text and custom field names private.
+- Translate supported Chat `reasoning_effort` and sampling parameters for the
+  resolved Gemini model. Convert a Responses effort-only request to Chat when
+  the selected service can represent it.
 - Move routine charity routing snapshots onto the read pool, reuse prepared
   read statements and bound blackjack status queries.
 - Update frontend lint tooling to pick up minimatch 11.0.9 and refresh the

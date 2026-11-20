@@ -39,7 +39,20 @@ Gemini rejects tool-call flattening during candidate preflight because the text 
 
 Configure the complete API mount, for example `https://generativelanguage.googleapis.com/v1beta`. The connector authenticates with `x-goog-api-key`. An explicit operator-configured [Cloudflare route](cloudflare-egress.md) can move this credential into a private outbound query parameter when required by the gateway. Direct requests retain header authentication. Model IDs are one path segment, optionally prefixed once with `models/`.
 
-Supported Chat input includes leading system/developer text, user/assistant text, function definitions and matched tool results, temperature, top-p, stop sequences, one candidate, output-token limits, and streaming. Images must be bounded PNG, JPEG, GIF or WebP base64 data URLs. Arbitrary remote image URLs, audio, files, server-executed tools, `store`, `reasoning_effort`, multiple candidates, strict function schemas and `parallel_tool_calls:false` with tools are incompatible. `response_format` supports `text` and `json_object`; JSON-schema formats are incompatible.
+Supported Chat input includes leading system/developer text, user/assistant text, function definitions and matched tool results, temperature, top-p, stop sequences, one candidate, output-token limits, and streaming. Images must be bounded PNG, JPEG, GIF or WebP base64 data URLs. Arbitrary remote image URLs, audio, files, server-executed tools, `store`, multiple candidates, strict function schemas and `parallel_tool_calls:false` with tools are incompatible. `response_format` supports `text` and `json_object`; JSON-schema formats are incompatible.
+
+The resolved upstream model determines which `reasoning_effort` values the connector can translate.
+
+| Upstream model | Chat input | GenerateContent setting |
+| --- | --- | --- |
+| Gemini 3.8 Flash | `low`, `medium`, `high` | The matching `thinkingLevel` |
+| Gemini 4 Carbon and Argon | `minimal` or `low`, `medium`, `high` | `LOW`, `MEDIUM` or `HIGH` |
+| Gemini 4 Neon and Hydrogen | The same levels plus `xhigh` | The same values plus `XHIGH` |
+| Known Gemini 2.5 Pro, Flash and Flash-Lite targets | `minimal`/`low`, `medium`, `high` | A `thinkingBudget` of 1,024, 8,192 or 24,576 respectively. Flash and Flash-Lite also accept `none` for a zero budget. |
+
+Other recognized Gemini targets use their own supported levels. An unknown target with an explicit caller effort rejects during preflight. A configured native thinking budget or level conflicts with a caller-supplied effort. The independent `includeThoughts` flag can accompany either. These rules use Google's [OpenAI compatibility mapping](https://aistudio.google.com/docs/openai#thinking) and [model-specific thinking capabilities](https://aistudio.google.com/docs/thinking#thinking-levels).
+
+The connector forwards a signed 32-bit `seed`. It also translates `top_k`, `frequency_penalty` and `presence_penalty` on targets that support them. An excluded optional field is removed before these checks. A nonexcluded unsupported field identifies the option in the rejection.
 
 Function arguments must be JSON objects; omitted upstream `args` means `{}`. Tool-call IDs are preserved or generated from a fresh random response identity and call index when absent upstream, including multiple responses within one second. Every tool result must match an unconsumed earlier call; parallel results retain their IDs and function names. JSON-object results remain objects; ordinary string results use `{ "result": "..." }` in the native function response.
 

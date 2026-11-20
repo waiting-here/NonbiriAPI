@@ -456,6 +456,15 @@ These fields describe validated field names, type/format/capability requirements
 
 API error messages include the available safe field, reason and next step, localized for a supported `Accept-Language`. A model with no usable resource for the requested operation returns `503 unbound_model`; a healthy resource for an unrelated operation does not make the request invalid. Temporary shared capacity limits retain `429 rate_limited`. Healthy resources that cannot represent the requested features still return a specific `400 invalid_request`. These refusals do not dispatch an upstream request or charge for one.
 
+Gemini message-history rejections identify the message and, where relevant, its
+content block or tool call with zero-based JSON indexes. For example,
+`messages[5].role` refers to the sixth message. A system or developer instruction
+in that position can follow other leading instructions, but a previous conversation
+turn makes it ineligible for Gemini conversion. Missing tool results, an
+unsupported content-block shape and inconsistent signed assistant history have
+separate explanations. These checks record structure and fixed reasons. Unknown
+custom property names and submitted values are excluded from the diagnostic.
+
 Known protocol fields retain their exact safe name. An unsupported custom
 top-level name is represented as `request.fields[N]`, with a one-based position
 in the parsed object after configured request overrides. Its name and value are
@@ -1923,7 +1932,7 @@ Review and key-management requests include expected revisions and the complete e
 
 Charity model DTOs and authorized model create/PATCH requests include `transport_rule`, with the same enum, POST default, PATCH preservation and invalid/null rejection as personal models in §3.2. Existing role, revision and idempotency rules remain. It changes Chat Completions only.
 
-Administrator/full-steward model configuration adds `is_mainstream` (initially false) and `excluded_request_fields`. The latter is a unique list of at most 32 case-sensitive top-level names, each matching `[A-Za-z_][A-Za-z0-9_]*` with 1–64 characters. Nested paths and wildcards are not supported. The protected names are `model,messages,input,stream,stream_options,tools,tool_choice,functions,function_call,response_format,encoding_format`. A logical charity request snapshots this policy and removes allowed listed fields before optional-parameter validation and protocol conversion; personal calls remain unchanged. The pricing form can fill all donor-reward prices from half the undiscounted user prices, rounding down to 0.001 credit. It changes the form only and leaves subsequent editing available.
+Administrator/full-steward model configuration adds `is_mainstream` (initially false) and `excluded_request_fields`. The latter is a unique list of at most 32 case-sensitive top-level names, each matching `[A-Za-z_][A-Za-z0-9_]*` with 1–64 characters. Nested paths and wildcards are not supported. The protected names are `model,messages,input,stream,stream_options,tools,tool_choice,functions,function_call,response_format,encoding_format`. A logical charity request snapshots this policy and removes allowed listed fields before optional-parameter validation and protocol conversion; personal calls remain unchanged. For example, an exact `presence_penalty` exclusion also applies when native Chat is disabled and the selected binding converts Chat to Responses. A later policy edit applies to subsequent requests. Use the settings in effect at the time when investigating older requests. The pricing form can fill all donor-reward prices from half the undiscounted user prices, rounding down to 0.001 credit. It changes the form only and leaves subsequent editing available.
 
 Administrator and authorized steward model-management DTOs expose the optional `token_reserve_credits` override described in §4.1; it is a decimal credit string or `null`, and blank/inherited values do not appear in ordinary user catalog, OpenAI-compatible model, or owner export projections.
 
