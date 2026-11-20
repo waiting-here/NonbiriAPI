@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { expect, test } from './test';
+import { expect, test, type Page } from './test';
 import { mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
 import { gachaSnapshot } from '../fixtures/gacha';
@@ -47,6 +47,21 @@ const targets = [
       .map((card) => card.id),
   ]),
 ];
+
+async function openAppreciation(page: Page, width: number) {
+  if (width === 390) await page.getByRole('button', { name: '装扮', exact: true }).click();
+  await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '欣赏背景', exact: true })).toBeVisible();
+}
+
+async function closeAppreciation(page: Page, width: number) {
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '欣赏背景', exact: true })).not.toBeVisible();
+  if (width === 390) {
+    const settings = page.getByRole('dialog', { name: '装扮', exact: true });
+    await settings.getByRole('button', { name: '关闭', exact: true }).click();
+  }
+}
 
 for (const theme of ['light', 'dark'])
   for (const width of [1440, 1920, 390])
@@ -262,7 +277,7 @@ for (const theme of ['light', 'dark'])
               'true',
               { timeout: 15_000 },
             );
-            await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
+            await openAppreciation(page, width);
             if (process.env.NONBIRI_VISUAL_DIR)
               await page.screenshot({
                 path: resolve(
@@ -270,7 +285,7 @@ for (const theme of ['light', 'dark'])
                   `appearance-${id}-${theme}-${width}.png`,
                 ),
               });
-            await page.keyboard.press('Escape');
+            await closeAppreciation(page, width);
             await page.emulateMedia({ reducedMotion: 'reduce' });
             await expect(page.locator('.nb-appearance-backdrop')).toHaveAttribute(
               'data-ready',
@@ -296,11 +311,13 @@ for (const theme of ['light', 'dark'])
               await sceneImage.evaluate((image: HTMLImageElement) => image.decode());
               const background = (await sceneImage.boundingBox())!;
               const backdrop = (await backdropImage.boundingBox())!;
-              const viewport = page.viewportSize()!;
-              expect(backdrop.x).toBeLessThanOrEqual(1);
-              expect(backdrop.y).toBeLessThanOrEqual(1);
-              expect(backdrop.x + backdrop.width).toBeGreaterThanOrEqual(viewport.width - 1);
-              expect(backdrop.y + backdrop.height).toBeGreaterThanOrEqual(viewport.height - 1);
+              const stage = (await page.locator('.nb-art-stage').boundingBox())!;
+              expect(backdrop.x).toBeLessThanOrEqual(stage.x + 1);
+              expect(backdrop.y).toBeLessThanOrEqual(stage.y + 1);
+              expect(backdrop.x + backdrop.width).toBeGreaterThanOrEqual(stage.x + stage.width - 1);
+              expect(backdrop.y + backdrop.height).toBeGreaterThanOrEqual(
+                stage.y + stage.height - 1,
+              );
               if (scene.viewport) {
                 await expect(registeredScene).toHaveCount(0);
                 await expect(backdropImage).toHaveCSS('filter', 'none');
@@ -320,16 +337,16 @@ for (const theme of ['light', 'dark'])
                 const [left, top, right, bottom] = placement.bounds;
                 expect(character.x + (left * character.width) / 1024).toBeGreaterThanOrEqual(-1);
                 expect(character.x + (right * character.width) / 1024).toBeLessThanOrEqual(
-                  viewport.width + 1,
+                  stage.x + stage.width + 1,
                 );
                 expect(character.y + (top * character.height) / 1536).toBeGreaterThanOrEqual(67);
                 expect(character.y + (bottom * character.height) / 1536).toBeLessThanOrEqual(
-                  viewport.height + 1,
+                  stage.y + stage.height + 1,
                 );
                 const ground = character.y + (placement.anchor[1] * character.height) / 1536;
-                expect(Math.abs(ground - viewport.height * (placement.floor ?? 0.95))).toBeLessThan(
-                  1,
-                );
+                expect(
+                  Math.abs(ground - stage.y - stage.height * (placement.floor ?? 0.95)),
+                ).toBeLessThan(1);
               } else {
                 const original = scene.originalRegion;
                 expect(
@@ -401,7 +418,13 @@ for (const theme of ['light', 'dark'])
                   'moment-page-' + id + '-' + theme + '-' + width + '.png',
                 ),
               });
-            await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
+            await openAppreciation(page, width);
+            const full = (await page.locator('.nb-art-stage').boundingBox())!;
+            const viewport = page.viewportSize()!;
+            expect(full.x).toBeCloseTo(0, 0);
+            expect(full.y).toBeCloseTo(0, 0);
+            expect(full.width).toBeCloseTo(viewport.width, 0);
+            expect(full.height).toBeCloseTo(viewport.height, 0);
             if (process.env.NONBIRI_VISUAL_DIR)
               await page.screenshot({
                 path: resolve(
@@ -409,7 +432,7 @@ for (const theme of ['light', 'dark'])
                   'moment-' + id + '-' + theme + '-' + width + '.png',
                 ),
               });
-            await page.keyboard.press('Escape');
+            await closeAppreciation(page, width);
             await page.emulateMedia({ reducedMotion: 'reduce' });
             if (animated) await expect(surface).toHaveAttribute('data-ready', 'false');
             await expect(hero).toBeVisible();

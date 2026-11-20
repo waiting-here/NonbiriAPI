@@ -1,4 +1,4 @@
-import { heartThiefGroundPoint } from './heart-thief-stance';
+import { heartThiefGroundPoint, heartThiefStance } from './heart-thief-stance';
 
 export type RomanceTheme = 'elopement' | 'heart-thief';
 
@@ -9,7 +9,13 @@ export function romanceAppearancePlacement(width: number, height: number, theme:
   const heroHeight =
     theme === 'heart-thief'
       ? desktop
-        ? Math.max(height * 0.92, Math.max(width / 1536, height / 1024) * 1.06 * 1448 * 0.58)
+        ? Math.min(
+            Math.max(height * 0.92, Math.max(width / 1536, height / 1024) * 1.06 * 1448 * 0.58),
+            // The room can fill a wide, short stage long before the standing figure fits.
+            // Use its registered supporting foot when limiting the visible height.
+            (height * (0.995 - 0.075) * heartThiefStance.contentHeight) /
+              heartThiefStance.anchor[1],
+          )
         : height * 0.86
       : height * (desktop ? 0.75 : 0.74);
   const heroWidth = (heroHeight * source[0]) / source[1];

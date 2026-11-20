@@ -35,25 +35,40 @@ it.each([
   [390, 844],
   [1024, 900],
   [1920, 900],
-])('keeps the adult and the furniture at a consistent scale at %s × %s', (width, height) => {
-  const hero = romanceAppearancePlacement(width, height, 'heart-thief');
-  const background = romanceBackdropPlacement(width, height, width, 'heart-thief');
-  // The painted console is 404 source px tall. Even on a wide view, the adult
-  // must not shrink toward table height while the room grows with the viewport.
-  if (width >= 1024) expect(hero.height / (404 * background.scale)).toBeGreaterThan(2);
-  for (const [x, y] of [heartThiefStance.anchor, [486, 1382]]) {
-    const point = heartThiefGroundPoint(x, y);
-    const footX =
-      (hero.left + (point[0] * hero.height) / 1448 - background.left) / background.scale;
-    const footY = (hero.top + (point[1] * hero.height) / 1448 - background.top) / background.scale;
-    expect(footY - rearFloorEdge(footX)).toBeGreaterThan(20);
-  }
-  expect(background.top).toBeLessThanOrEqual(0);
-  expect(background.top + 1024 * background.scale).toBeGreaterThanOrEqual(height);
-  const high = romanceBackdropPlacement(width * 2, height * 2, width, 'heart-thief');
-  expect(high.left / 2).toBeCloseTo(background.left);
-  expect(high.top / 2).toBeCloseTo(background.top);
-});
+  [1440, 831],
+  [1920, 532],
+  [2560, 720],
+])(
+  'keeps the supporting shoe in frame and the figure at room scale where space permits at %s × %s',
+  (width, height) => {
+    const hero = romanceAppearancePlacement(width, height, 'heart-thief');
+    const background = romanceBackdropPlacement(width, height, width, 'heart-thief');
+    if (width >= 1024) {
+      const supportedHeight =
+        (hero.height * heartThiefStance.anchor[1]) / heartThiefStance.contentHeight;
+      expect(hero.top + supportedHeight).toBeLessThanOrEqual(height * 0.995 + 0.001);
+      // Keep the figure at least twice the room console's height whenever it fits.
+      // If the wide room makes that impossible, keep the largest fully grounded figure.
+      const maximum = (height * 0.92 * heartThiefStance.contentHeight) / heartThiefStance.anchor[1];
+      expect(hero.height).toBeGreaterThanOrEqual(
+        Math.min(2 * 404 * background.scale, maximum) - 0.001,
+      );
+    }
+    for (const [x, y] of [heartThiefStance.anchor, [486, 1382]]) {
+      const point = heartThiefGroundPoint(x, y);
+      const footX =
+        (hero.left + (point[0] * hero.height) / 1448 - background.left) / background.scale;
+      const footY =
+        (hero.top + (point[1] * hero.height) / 1448 - background.top) / background.scale;
+      expect(footY - rearFloorEdge(footX)).toBeGreaterThan(20);
+    }
+    expect(background.top).toBeLessThanOrEqual(0);
+    expect(background.top + 1024 * background.scale).toBeGreaterThanOrEqual(height);
+    const high = romanceBackdropPlacement(width * 2, height * 2, width, 'heart-thief');
+    expect(high.left / 2).toBeCloseTo(background.left);
+    expect(high.top / 2).toBeCloseTo(background.top);
+  },
+);
 
 it.each([false, true])(
   'keeps both supporting contacts on the floor in the landscape camera (cover=%s)',

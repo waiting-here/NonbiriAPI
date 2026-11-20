@@ -161,6 +161,7 @@
  */
 @media (width >= 80rem) {
   html[data-appearance='heart-moment'] {
+    --nb-portrait-reserve: calc(var(--nb-moment-gutter) + var(--nb-moment-extra-reserve, 0px));
     --nb-moment-gutter: min(
       calc((100dvh - 4.25rem) * 2 / 3 / var(--nb-moment-height-ratio, 1)),
       max(20rem, calc(100vw - 64rem)),

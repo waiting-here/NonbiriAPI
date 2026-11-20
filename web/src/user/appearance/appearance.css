@@ -694,7 +694,7 @@ html:not([data-background-view='true']) .nb-user-shell > .nb-art-stage[data-comp
     > :is(.nb-user-shell__main, .nb-shell-status, .nb-user-shell__footer) {
     margin-inline-start: 0;
     margin-inline-end: auto;
-    max-width: calc(100% - clamp(18rem, 28vw, 34rem));
+    max-width: calc(100% - var(--nb-portrait-reserve, clamp(18rem, 28vw, 34rem)));
   }
   html
     .nb-user-shell:has(> .nb-art-stage[data-composition='group'])
