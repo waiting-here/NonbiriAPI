@@ -59,7 +59,7 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	return result, nil
 }
 
-// The current round and the single open table each have an index; choosing
+// The current round and the single open table each have an index. Choosing
 // between their start times keeps idle polling independent of retained history.
 const homeSessionSQL = `SELECT ` + sessionColumns + ` FROM game_blackjack_sessions WHERE started_at=(
  SELECT MAX(started_at) FROM (
