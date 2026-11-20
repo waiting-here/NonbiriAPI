@@ -3885,7 +3885,7 @@
         "ai_chat": "Use AI chat",
         "ai_review_read": "Read AI review reports",
         "ai_memory_edit": "Edit shared memory",
-        "users_resources": "Adjust additional resources (drawing, cards, Lake Notes)"
+        "users_resources": "Adjust drawing, card, Lake Notes and Whale Haven resources"
       },
       "limits": {
         "users_endpoint_limit_max": "Maximum endpoint limit",
@@ -4039,7 +4039,7 @@
     },
     "resources": {
       "title": "Additional resources",
-      "description": "View and adjust drawing supplies, gacha assets and Lake Notes resources supported by redemption codes and site rewards.",
+      "description": "View and adjust drawing supplies, gacha assets, Lake Notes resources, and Whale Haven coins and conch shards.",
       "readOnly": "Your permissions or the target account allow viewing only.",
       "adjustHelp": "Enter an amount, check the resulting quantity and give a reason.",
       "direction": "Adjustment direction",
@@ -4050,6 +4050,7 @@
       "invalidAmount": "Enter a positive whole number that leaves the quantity within its permitted range.",
       "beforeAfter": "{{before}} → {{after}}",
       "reason": "Reason (required)",
+      "whaleBalance": "Changes apply immediately to this account’s Whale Haven balance. Players can receive rewards while the game is closed or before adopting a whale.",
       "relatedChanges": "Removing experience or gear may clear ineligible skills, equipped items or saved loadouts. Finish any active cast first. A first Lake Notes grant creates a profile with its starter rod. Cards change ownership directly without converting duplicates into shards.",
       "review": "Review adjustment",
       "search": "Search resource names",
@@ -4064,7 +4065,8 @@
         "drawing": "Drawing supplies",
         "gacha": "Tickets and shards",
         "cards": "Cards",
-        "lake": "Lake Notes"
+        "lake": "Lake Notes",
+        "whale": "Whale Haven"
       }
     }
   },

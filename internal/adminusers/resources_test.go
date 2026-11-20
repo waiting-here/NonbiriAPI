@@ -13,6 +13,11 @@ import (
 )
 
 func TestManagedResourcesAuthorityReplayAndAudit(t *testing.T) {
+	for _, asset := range []string{"lake:coins", "whale:pearls", "whale:conch_shards"} {
+		t.Run(asset, func(t *testing.T) { testResourceAuthorityReplayAndAudit(t, asset) })
+	}
+}
+func testResourceAuthorityReplayAndAudit(t *testing.T, asset string) {
 	f, manager := newStewardUsersFixture(t)
 	member := f.seedUser("resource-member", false)
 	trainee := f.seedUser("resource-trainee", false)
@@ -33,10 +38,10 @@ func TestManagedResourcesAuthorityReplayAndAudit(t *testing.T) {
 		}
 	}
 	read := stewardUserRequest(t, f, trainee, member, "GET", routeUserResources, "", "", "")
-	if read.Code != 200 || !strings.Contains(read.Body.String(), `"lake:coins"`) || strings.Contains(read.Body.String(), `"id":"general"`) {
+	if read.Code != 200 || !strings.Contains(read.Body.String(), fmt.Sprintf(`"id":%q`, asset)) || strings.Contains(read.Body.String(), `"id":"general"`) {
 		t.Fatal(read.Code, read.Body)
 	}
-	body := `{"asset":"lake:coins","direction":"increase","quantity":"10","expected_quantity":"0","reason":"Correct missing event grant"}`
+	body := fmt.Sprintf(`{"asset":%q,"direction":"increase","quantity":"10","expected_quantity":"0","reason":"Correct missing event grant"}`, asset)
 	write := func(actor, target int64, body, key string, want int) string {
 		t.Helper()
 		r := stewardUserRequest(t, f, actor, target, "PATCH", routeUserResources, "", body, key)
@@ -63,7 +68,7 @@ func TestManagedResourcesAuthorityReplayAndAudit(t *testing.T) {
 		t.Fatal("replay response changed")
 	}
 	write(trainee, member, body, "resource-adjust-stale-0001", 409)
-	write(trainee, member, strings.Replace(body, "lake:coins", "general", 1), "resource-core-forbidden-0001", 400)
+	write(trainee, member, strings.Replace(body, asset, "general", 1), "resource-core-forbidden-0001", 400)
 	write(trainee, trainee, body, "resource-self-forbidden-0001", 403)
 	write(trainee, manager, body, "resource-peer-forbidden-0001", 403)
 	policy.Permissions["users.resources"] = false
@@ -89,7 +94,7 @@ func TestManagedResourcesAuthorityReplayAndAudit(t *testing.T) {
 	}
 	foundAmount, foundReason := false, false
 	for _, change := range changes {
-		if change.Field == "lake:coins" && change.Before != nil && change.After != nil && *change.Before == "0" && *change.After == "10" {
+		if change.Field == asset && change.Before != nil && change.After != nil && *change.Before == "0" && *change.After == "10" {
 			foundAmount = true
 		}
 		if change.Field == "reason" && change.After != nil && *change.After == "Correct missing event grant" {
@@ -117,7 +122,7 @@ func TestManagedResourcesAuthorityReplayAndAudit(t *testing.T) {
 func TestManagedResourcesReceiptFailureRollsBackInventoryAndLedger(t *testing.T) {
 	f := newAdminUsersFixture(t)
 	user := f.seedUser("atomic-resource-owner", false)
-	for index, asset := range []string{"sketch_paper", "gacha:permanent", "lake:coins"} {
+	for index, asset := range []string{"sketch_paper", "gacha:permanent", "lake:coins", "whale:pearls", "whale:conch_shards"} {
 		body, _ := json.Marshal(rewards.ResourceAdjustment{Asset: asset, Direction: "increase", Quantity: "1", ExpectedQuantity: "0", Reason: "rollback test"})
 		key := fmt.Sprintf("atomic-resource-adjust-%04d", index)
 		if _, err := f.store.DB().Exec(`CREATE TRIGGER fail_resource_receipt BEFORE UPDATE ON idempotency_records WHEN NEW.state='completed' BEGIN SELECT RAISE(ABORT,'injected receipt failure'); END`); err != nil {

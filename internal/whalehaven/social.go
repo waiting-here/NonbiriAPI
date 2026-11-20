@@ -158,17 +158,16 @@ type houseInterval struct {
 	policy []rules.Guest
 }
 
-func (w *world) wageBalance(v *visit) (float64, error) {
-	key := [2]int64{v.host, v.guest}
-	if balance, ok := w.wages[key]; ok {
+func (w *world) wageBalance(guestID int64) (float64, error) {
+	if balance, ok := w.wages[guestID]; ok {
 		return balance, nil
 	}
 	var balance float64
-	err := w.tx.QueryRowContext(w.ctx, `SELECT microcoins FROM whale_haven_wage_fractions WHERE host_id=? AND guest_id=?`, v.host, v.guest).Scan(&balance)
+	err := w.tx.QueryRowContext(w.ctx, `SELECT microcoins FROM whale_haven_wage_fractions WHERE guest_id=?`, guestID).Scan(&balance)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	w.wages[key] = balance
+	w.wages[guestID] = balance
 	return balance, nil
 }
 
@@ -212,7 +211,7 @@ func (w *world) settleInterval(people []*resident, incoming map[int64][]*visit, 
 							}
 							continue
 						}
-						fraction, err := w.wageBalance(v)
+						fraction, err := w.wageBalance(guest.id)
 						if err != nil {
 							return 0, err
 						}
@@ -272,7 +271,7 @@ func (w *world) settleInterval(people []*resident, incoming map[int64][]*visit, 
 			c := flow.Guests[i]
 			if v.working {
 				v.workLeft = max(0, v.workLeft-(end-at))
-				if err := w.payWage(p, g, v, c.Pearls, at, end, cfg); err != nil {
+				if err := w.payWage(p, g, c.Pearls, end, cfg); err != nil {
 					return 0, err
 				}
 				if v.workLeft == 0 || (cfg.Value("guest_wage_bp") > 0 && wageRoom(g, cfg) == 0) {
@@ -305,12 +304,12 @@ func wageRoom(r *resident, cfg config.Settings) int64 {
 	return min(r.state.SocialRoom(cfg), assets.MaxBalance-r.state.Wallet.Pearls)
 }
 
-func (w *world) payWage(h, g *resident, v *visit, gross float64, at, end int64, cfg config.Settings) error {
+func (w *world) payWage(h, g *resident, gross float64, end int64, cfg config.Settings) error {
 	bp := cfg.Value("guest_wage_bp")
 	if bp == 0 || gross == 0 {
 		return nil
 	}
-	old, err := w.wageBalance(v)
+	old, err := w.wageBalance(g.id)
 	if err != nil {
 		return err
 	}
@@ -318,13 +317,13 @@ func (w *world) payWage(h, g *resident, v *visit, gross float64, at, end int64, 
 	h.state.ReserveWage(share)
 	available := old + share*1e6
 	paid := min(wageRoom(g, cfg), int64(math.Floor((available+1e-6)/1e6)))
-	w.wages[[2]int64{h.id, g.id}] = max(0, available-float64(paid)*1e6)
+	w.wages[g.id] = max(0, available-float64(paid)*1e6)
 	if paid > 0 {
 		g.state.Wallet.DailySocialPearlsGained += paid
 		g.state.Wallet.Pearls += paid
 		w.keepDay(g)
-		w.remember(event{user: g.id, peer: h.id, at: end, kind: "wage", text: "收到打工工资", pearls: paid})
-		w.remember(event{user: h.id, peer: g.id, at: end, kind: "wage", text: "已结算客鲸工资", pearls: -paid})
+		w.remember(event{user: g.id, peer: h.id, at: end, kind: "wage", text: "累计打工工资到账", movementReason: "wage", pearls: paid})
+		w.remember(event{user: h.id, peer: g.id, at: end, kind: "wage", text: "客鲸的累计工资已到账"})
 	}
 	return nil
 }
@@ -353,7 +352,7 @@ func (w *world) reward(r *resident, peer, at, coins, shards int64, cfg config.Se
 	}
 	w.keepDay(r)
 	r.dirty = true
-	w.remember(event{user: r.id, peer: peer, at: at, kind: kind, text: text, pearls: p, shards: s})
+	w.remember(event{user: r.id, peer: peer, at: at, kind: kind, text: text, movementReason: "social_reward", pearls: p, shards: s})
 	return nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/gacha"
 	"github.com/waiting-here/NonbiriAPI/internal/lakenotes"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	whaleasset "github.com/waiting-here/NonbiriAPI/internal/whalehaven/assets"
 	"math/big"
 	"strconv"
 )
@@ -116,7 +117,7 @@ func loadFacts(ctx context.Context, tx *sql.Tx, user, at int64, withAssets bool)
 		}
 		f.assets[string(asset)] = new(big.Rat).SetFrac(a.Balance.Big(), big.NewInt(1000))
 	}
-	for _, read := range []func(context.Context, *sql.Tx, int64) (map[string]string, error){gacha.RewardBalancesTx, lakenotes.RewardBalancesTx} {
+	for _, read := range []func(context.Context, *sql.Tx, int64) (map[string]string, error){gacha.RewardBalancesTx, lakenotes.RewardBalancesTx, whaleasset.RewardBalancesTx} {
 		balances, e := read(ctx, tx, user)
 		if e != nil {
 			return f, e

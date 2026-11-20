@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { useAdminSession } from '../../admin/data';
 import { renderWithProviders } from '../../../test/unit/support';
 import en from '../i18n/common/en.json';
+import zh from '../i18n/common/zh.json';
 import { UserResources } from './UserResources';
 import { resourceAdjustmentPreview, type ManagedResource } from '../operations/managedResources';
 
@@ -24,7 +25,7 @@ function Session({ children }: { children: ReactNode }) {
   return useAdminSession().data ? children : null;
 }
 
-function server(loseFirst = false) {
+function server(loseFirst = false, additional: ManagedResource[] = []) {
   const writes: { key: string | null; body: Record<string, unknown> }[] = [];
   let current = { ...resource };
   vi.stubGlobal(
@@ -47,13 +48,43 @@ function server(loseFirst = false) {
           changes: [{ field: 'lake:coins', before: resource.quantity, after: current.quantity }],
         });
       }
-      return reply({ resources: [current] });
+      return reply({ resources: [current, ...additional] });
     }),
   );
   return writes;
 }
 
 describe('managed resources', () => {
+  it.each(['en', 'zh'] as const)('filters both Whale Haven currencies in %s', async (locale) => {
+    const whaleResources = [
+      ['whale:pearls', '小鲸币', 'Whale coins'],
+      ['whale:conch_shards', '海螺碎片', 'Conch shards'],
+    ].map(([id, name, name_en]) => ({
+      ...resource,
+      id,
+      name,
+      name_en,
+      group: 'whale',
+      quantity: '0',
+      capacity: '9000000000000',
+      maximum: '9000000000000',
+    }));
+    server(false, whaleResources);
+    const { user } = await renderWithProviders(
+      <Session>
+        <UserResources role="admin" account="fixture-admin" userId="51" editable />
+      </Session>,
+      { station: 'admin', locale },
+    );
+    const labels = (locale === 'en' ? en : zh).management.resources;
+    const group = await screen.findByRole('combobox', { name: labels.group });
+    expect(within(group).getByRole('option', { name: labels.groups.whale })).toHaveValue('whale');
+    await user.selectOptions(group, 'whale');
+    for (const asset of whaleResources)
+      expect(screen.getByText(locale === 'en' ? asset.name_en : asset.name)).toBeVisible();
+    expect(screen.queryByText(locale === 'en' ? 'Lake coins' : '垂钓金币')).toBeNull();
+  });
+
   it('shows inventory without adjustment controls when read only', async () => {
     const writes = server();
     await renderWithProviders(

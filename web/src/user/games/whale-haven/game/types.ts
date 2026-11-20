@@ -44,6 +44,9 @@ export interface PresetMessage {
 }
 
 export interface WalletState {
+  pendingSocialPearls?: number;
+  pendingConchShards?: number;
+  wageProgress?: number;
   generalMilli: string | number; // 悠哉通用积分 (1.000 = 1000，唯一兑出目标，达 300k 触发熔断)
   gameMilli: string | number; // 游戏积分 (1.000 = 1000，唯一购粮入口，防复利循环)
   pearls: number; // 小鲸币 (1 枚基准面值 = 1,000 通用积分毛额)

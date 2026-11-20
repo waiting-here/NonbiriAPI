@@ -1,3 +1,4 @@
+import { useWhaleText } from '../copy';
 import { useState } from 'react';
 import { Plus, ShoppingBag, Sparkles } from './Icons';
 import {
@@ -22,7 +23,7 @@ const FEED_ART: Record<FeedItemId, string> = {
 interface BackpackProps {
   values: Record<string, number>;
   snapshot: GameSnapshot;
-  onBuyFeed: (id: FeedItemId) => void;
+  onBuyFeed: (id: FeedItemId, quantity: number) => void;
   onUseFeed: (id: FeedItemId) => void;
   onToggleDecor: (id: DecorItemId) => void;
   onToggleAutoRefill: () => void;
@@ -51,6 +52,9 @@ export function Backpack({
   onActivateAroma,
   onSpinConchGacha,
 }: BackpackProps) {
+  const t = useWhaleText();
+  const [quantity, setQuantity] = useState('1');
+  const validQuantity = /^[1-9][0-9]?$/.test(quantity);
   const [selectedId, setSelectedId] = useState<FeedItemId | DecorItemId>('silver_fish');
   const items: ItemSlot[] = FEEDS.map((id) => ({
     kind: 'feed',
@@ -80,9 +84,9 @@ export function Backpack({
       <section className="backpack-card" aria-labelledby="backpack-items">
         <header className="backpack-head">
           <h3 className="kit-section-title" id="backpack-items">
-            背包（仅游戏积分购粮）
+            {t('背包（仅游戏积分购粮）', 'Bag and feed')}
           </h3>
-          <span>口粮 {totalFood} 份</span>
+          <span>{t(`口粮 ${totalFood} 份`, `${totalFood} feed servings`)}</span>
         </header>
         <div className="backpack-grid">
           {items.map((item) => (
@@ -91,7 +95,10 @@ export function Backpack({
               type="button"
               className="backpack-slot"
               aria-pressed={item.id === selected.id}
-              aria-label={`${item.name}，数量 ${item.count}`}
+              aria-label={t(
+                `${item.name}，数量 ${item.count}`,
+                `${item.name}, quantity ${item.count}`,
+              )}
               title={item.name}
               onClick={() => setSelectedId(item.id)}
             >
@@ -111,7 +118,7 @@ export function Backpack({
         </div>
       </section>
 
-      <section className="backpack-selection" aria-label="当前道具">
+      <section className="backpack-selection" aria-label={t('当前道具', 'Selected item')}>
         <div className="backpack-selection__summary">
           <span className="backpack-selection__art">
             <BackpackArt item={selected} />
@@ -120,10 +127,10 @@ export function Backpack({
             <h3>{selected.name}</h3>
             <span className="nb-badge nb-badge--info">
               {selected.kind === 'feed'
-                ? `库存 ×${selected.count}`
+                ? t(`库存 ×${selected.count}`, `In stock ×${selected.count}`)
                 : equipped
-                  ? '已布置'
-                  : '已拥有'}
+                  ? t('已布置', 'Placed')
+                  : t('已拥有', 'Owned')}
             </span>
             <p>
               {selected.kind === 'feed'
@@ -134,13 +141,27 @@ export function Backpack({
         </div>
         {selected.kind === 'feed' ? (
           <div className="backpack-selection__actions">
+            <label>
+              {t('购买份数（1–99）', 'Servings to buy (1–99)')}{' '}
+              <input
+                type="number"
+                min={1}
+                max={99}
+                step={1}
+                className="kit-input"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+            </label>
             <button
               type="button"
               className="nb-btn nb-btn--sm"
-              onClick={() => onBuyFeed(selected.id)}
+              disabled={!validQuantity}
+              onClick={() => onBuyFeed(selected.id, Number(quantity))}
             >
-              <ShoppingBag size={15} /> 购买 ·{' '}
-              {formatMilliCredits(values['feed_' + selected.id + '_price_milli'])} 游戏积分
+              <ShoppingBag size={15} /> {t('购买', 'Buy')} ·{' '}
+              {formatMilliCredits(values['feed_' + selected.id + '_price_milli'])}{' '}
+              {t('游戏积分 / 份', 'game credits per serving')}
             </button>
             <button
               type="button"
@@ -148,7 +169,9 @@ export function Backpack({
               disabled={selected.count <= 0}
               onClick={() => onUseFeed(selected.id)}
             >
-              {selected.id === 'berry_teacake' ? '亲手喂饭团' : '盛入饭盆'}
+              {selected.id === 'berry_teacake'
+                ? t('亲手喂饭团', 'Hand-feed a treat')
+                : t('盛入饭盆', 'Fill the bowl')}
             </button>
           </div>
         ) : (
@@ -158,7 +181,7 @@ export function Backpack({
               className="nb-btn nb-btn--sm nb-btn--primary"
               onClick={() => onToggleDecor(selected.id)}
             >
-              {equipped ? '收起装扮' : '布置小屋'}
+              {equipped ? t('收起装扮', 'Put away') : t('布置小屋', 'Place in haven')}
             </button>
           </div>
         )}
@@ -173,21 +196,27 @@ export function Backpack({
               className="inline-coin-icon"
               style={{ marginRight: 5 }}
             />
-            深海海螺扭蛋 & 保温增益
+            {t('深海海螺扭蛋 & 保温增益', 'Conch draws and boosts')}
           </h3>
           <span className="deck-balance">
-            <img src={getSceneAssetUrl(CONCH_SHARD_ART)} alt="" /> {shards} 片碎片
+            <img src={getSceneAssetUrl(CONCH_SHARD_ART)} alt="" /> {shards}{' '}
+            {t('片碎片', 'conch shards')}
           </span>
         </div>
 
         <div className="conch-gacha-hero">
           <div className="conch-gacha-hero__art">
-            <img src={getSceneAssetUrl(CONCH_GACHA_ART)} alt="深海海螺扭蛋机" />
+            <img
+              src={getSceneAssetUrl(CONCH_GACHA_ART)}
+              alt={t('深海海螺扭蛋机', 'Conch draw machine')}
+            />
           </div>
           <div className="conch-gacha-hero__copy">
             <p>
-              外出蹭饭与招待客鲸达每日社交鲸币上限后掉落虹彩海螺碎片，<strong>{pullCost} 片</strong>
-              可转 1 次纯内循环挂机道具：
+              {t(
+                `外出蹭饭与招待客鲸达每日社交鲸币上限后掉落虹彩海螺碎片，${pullCost} 片可转 1 次道具。`,
+                `Once the daily social coin limit is reached, visits and hosting can earn conch shards. Spend ${pullCost} shards for one item draw.`,
+              )}
             </p>
             <div className="conch-gacha-prizes">
               {CONCH_GACHA_POOL.map((g) => (

@@ -1,3 +1,4 @@
+import { useWhaleText } from '../copy';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -19,19 +20,20 @@ interface Props {
   onPreview: (neighbor: NeighborStation) => void;
   onDepart: (neighbor: NeighborStation) => void;
 }
-const filters: readonly [NeighborFilterKind, string][] = [
-  ['all', '全部'],
-  ['has_food', '有饭'],
-  ['pinned', '已收藏'],
-  ['visited', '来往过'],
+const filters: readonly [NeighborFilterKind, string, string][] = [
+  ['all', '全部', 'All'],
+  ['has_food', '有饭', 'Food available'],
+  ['pinned', '已收藏', 'Pinned'],
+  ['visited', '来往过', 'Visited'],
 ];
-const reactions: readonly [CatchActionKind, string][] = [
-  ['hire', '雇佣帮工'],
-  ['treat', '招待'],
-  ['gentle', '温和送回'],
-  ['flick', '弹脑瓜送回'],
+const reactions: readonly [CatchActionKind, string, string][] = [
+  ['hire', '雇佣帮工', 'Hire as a helper'],
+  ['treat', '招待', 'Offer a meal'],
+  ['gentle', '温和送回', 'Send home gently'],
+  ['flick', '弹脑瓜送回', 'Flick and send home'],
 ];
 export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Props) {
+  const t = useWhaleText();
   const social = profile.social;
   const values = profile.settings.values;
   const [search, setSearch] = useState('');
@@ -55,11 +57,13 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
   return (
     <>
       <section className="voyage-card">
-        <h3 className="kit-section-title">我的小筑</h3>
+        <h3 className="kit-section-title">{t('我的小筑', 'My haven')}</h3>
         <p>
-          门牌 <strong>{social.door}</strong> ·{' '}
-          {profile.snapshot.gameProfilePublic ? '公开身份' : '匿名饲养员'} ·{' '}
-          <Link to="/games#game-privacy">游戏隐私设置</Link>
+          {t('门牌', 'Haven code')} <strong>{social.door}</strong> ·{' '}
+          {profile.snapshot.gameProfilePublic
+            ? t('公开身份', 'Public keeper')
+            : t('匿名饲养员', 'Anonymous keeper')}{' '}
+          · <Link to="/games#game-privacy">{t('游戏隐私设置', 'Game privacy settings')}</Link>
         </p>
         <label className="wh-choice">
           <input
@@ -70,23 +74,29 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
               social.open ? setClose(true) : void dispatch({ type: 'set_open', open: true })
             }
           />{' '}
-          开放小筑，允许互相串门
+          {t('开放小筑，允许互相串门', 'Open my haven for mutual visits')}
         </label>
         <p>
-          今日社交所得 {profile.snapshot.wallet.dailySocialPearlsGained} /{' '}
-          {values.daily_social_pearls} 小鲸币（含工资），海螺碎片{' '}
-          {profile.snapshot.wallet.dailyConchShardsGained} / {values.daily_conch_shards}。
+          {t('今日社交所得（含工资）', 'Social earnings today (including wages)')} ·{' '}
+          {t('小鲸币', 'Whale coins')} {profile.snapshot.wallet.dailySocialPearlsGained} /{' '}
+          {values.daily_social_pearls} · {t('海螺碎片', 'Conch shards')}{' '}
+          {profile.snapshot.wallet.dailyConchShardsGained} / {values.daily_conch_shards}
         </p>
         <p>
-          近 {values.stove_window_seconds / 3600} 小时自家消耗至少 {values.stove_required_grams}{' '}
-          克口粮可获得社交鲸币。
+          {t(
+            `近 ${values.stove_window_seconds / 3600} 小时自家消耗至少 ${values.stove_required_grams} 克口粮可获得社交鲸币。`,
+            `To earn social whale coins, use at least ${values.stove_required_grams} g of feed at home within ${values.stove_window_seconds / 3600} hours.`,
+          )}
         </p>
       </section>
       <ConfirmDialog
         open={close}
-        title="关闭小筑？"
-        description="会召回自己的鲸、送回所有客鲸，并结清本次来往。之后可随时重新开放。"
-        confirmLabel="关闭并结算"
+        title={t('关闭小筑？', 'Close your haven?')}
+        description={t(
+          '会召回自己的鲸、送回所有客鲸，并结清本次来往。之后可随时重新开放。',
+          'Your whale will return, guests will go home, and current visits will be settled. You can reopen at any time.',
+        )}
+        confirmLabel={t('关闭并结算', 'Close and settle')}
         busy={busy}
         onCancel={() => setClose(false)}
         onConfirm={async () => {
@@ -95,9 +105,16 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
       />
       {social.away && (
         <section className="voyage-card">
-          <h3>{social.away.working ? '在外帮工' : '正在串门'}</h3>
+          <h3>
+            {social.away.working
+              ? t('在外帮工', 'Working away')
+              : t('正在串门', 'Visiting a neighbor')}
+          </h3>
           <p>
-            {social.away.label} · {social.away.allow_hire ? '本次允许帮工' : '本次只串门'}
+            {social.away.label} ·{' '}
+            {social.away.allow_hire
+              ? t('本次允许帮工', 'Hiring allowed on this visit')
+              : t('本次只串门', 'Visiting only')}
           </p>
           <button
             type="button"
@@ -105,25 +122,31 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
             className="nb-btn"
             onClick={() => void dispatch({ type: 'recall_home' })}
           >
-            召回并结算
+            {t('召回并结算', 'Recall and settle visit')}
           </button>
         </section>
       )}
       {social.guests.length > 0 && (
-        <section aria-label="来访客鲸">
-          <h3 className="kit-section-title">来访客鲸</h3>
+        <section aria-label={t('来访客鲸', 'Visiting whales')}>
+          <h3 className="kit-section-title">{t('来访客鲸', 'Visiting whales')}</h3>
           {social.guests.map((guest) => (
             <article className="voyage-card" key={guest.neighbor_id}>
               <h4>
                 {guest.whale_name} · {guest.label}
               </h4>
-              <p>{guest.working ? '正在帮工' : guest.allow_hire ? '愿意帮工' : '只来串门'}</p>
+              <p>
+                {guest.working
+                  ? t('正在帮工', 'Working')
+                  : guest.allow_hire
+                    ? t('愿意帮工', 'Available to hire')
+                    : t('只来串门', 'Visiting only')}
+              </p>
               <div className="wh-buttons">
                 {reactions
                   .filter(([id]) =>
                     guest.working ? id === 'gentle' : id !== 'hire' || guest.allow_hire,
                   )
-                  .map(([action, title]) => (
+                  .map(([action, title, en]) => (
                     <button
                       type="button"
                       className="nb-btn"
@@ -131,10 +154,16 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
                       key={action}
                       onClick={() => {
                         setMessage('');
-                        setGuestAction({ id: guest.neighbor_id, action, label: title });
+                        setGuestAction({
+                          id: guest.neighbor_id,
+                          action,
+                          label: guest.working
+                            ? t('结薪送回', 'Pay wages and send home')
+                            : t(title, en),
+                        });
                       }}
                     >
-                      {guest.working ? '结薪送回' : title}
+                      {guest.working ? t('结薪送回', 'Pay wages and send home') : t(title, en)}
                     </button>
                   ))}
               </div>
@@ -147,13 +176,19 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
         title={guestAction?.label ?? ''}
         description={
           guestAction?.action === 'hire'
-            ? '工资计入客鲸当日社交鲸币额度，双方都可提前结束。'
+            ? t(
+                `工资为帮工产出的 ${values.guest_wage_bp / 100}%，计入客鲸每日 ${values.daily_social_pearls} 枚社交鲸币额度。双方都可提前结束。`,
+                `Guest wages are ${values.guest_wage_bp / 100}% of production and count toward the guest’s daily social limit of ${values.daily_social_pearls} whale coins. Either keeper can end the shift.`,
+              )
             : guestAction?.action === 'treat'
-              ? '款待将使用 ' + values.treat_cost_grams + ' 克口粮，并结算本次串门。'
-              : '送回客鲸并结算本次串门。'
+              ? t(
+                  `款待将使用 ${values.treat_cost_grams} 克口粮，并结算本次串门。`,
+                  `Serve ${values.treat_cost_grams} g of feed and settle this visit.`,
+                )
+              : t('送回客鲸并结算本次串门。', 'Send the guest home and settle this visit.')
         }
         busy={busy}
-        confirmLabel="确认"
+        confirmLabel={t('确认', 'Confirm')}
         onCancel={() => setGuestAction(null)}
         onConfirm={async () => {
           if (
@@ -169,9 +204,9 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
         }}
       >
         <label>
-          给客鲸的口信{' '}
+          {t('给客鲸的口信', 'Message for the guest')}{' '}
           <select value={message} onChange={(e) => setMessage(e.target.value)}>
-            <option value="">不留口信</option>
+            <option value="">{t('不留口信', 'No message')}</option>
             {PRESET_MESSAGES.filter((m) => m.category === guestAction?.action).map((m) => (
               <option key={m.id} value={m.id}>
                 {m.text}
@@ -182,38 +217,51 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
       </ConfirmDialog>
       {social.open ? (
         <section className="voyage-card">
-          <h3 className="kit-section-title">邻居海湾</h3>
+          <h3 className="kit-section-title">{t('邻居海湾', 'Neighbor havens')}</h3>
           <label>
-            查找邻居
+            {t('查找邻居', 'Find neighbors')}
             <input
               className="kit-input"
               type="search"
               value={search}
-              placeholder="门牌、鲸名或公开的饲养员"
+              placeholder={t('门牌、鲸名或公开的饲养员', 'Haven code, whale name or public keeper')}
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
           <label>
-            筛选{' '}
+            {t('筛选', 'Filter')}{' '}
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value as NeighborFilterKind)}
             >
-              {filters.map(([value, label]) => (
+              {filters.map(([value, label, en]) => (
                 <option value={value} key={value}>
-                  {label}
+                  {t(label, en)}
                 </option>
               ))}
             </select>
           </label>
+          {filter !== 'has_food' && (
+            <p>
+              {t(
+                '普通列表的余粮取自小筑上次结算。',
+                'Feed amounts in this list reflect the last settlement.',
+              )}
+            </p>
+          )}
           {neighbors.isPending ? (
-            <p role="status">正在查找邻居…</p>
+            <p role="status">{t('正在查找邻居…', 'Finding neighbors…')}</p>
           ) : neighbors.error ? (
             <button className="nb-btn" onClick={() => void neighbors.refetch()}>
-              未能读取邻居，重试
+              {t('未能读取邻居，重试', 'Could not load neighbors. Retry')}
             </button>
           ) : !neighbors.data?.length ? (
-            <p>没有找到开放的小筑。可以更换搜索条件，或把门牌分享给朋友。</p>
+            <p>
+              {t(
+                '没有找到开放的小筑。可以更换搜索条件，或把门牌分享给朋友。',
+                'No open havens found. Try a different search or share your haven code with a friend.',
+              )}
+            </p>
           ) : (
             <ul className="wh-neighbors">
               {neighbors.data.map((n) => (
@@ -226,20 +274,20 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
                     alt=""
                   />
                   <div>
-                    <strong>{displayNeighborName(n)}</strong>
+                    <strong>{displayNeighborName(n, t('匿名饲养员', 'Anonymous keeper'))}</strong>
                     <p>
-                      {n.whaleName} · 口粮 {Math.floor(n.troughGrams)} 克
+                      {n.whaleName} · {t('余粮', 'Feed left')} {Math.floor(n.troughGrams)} g
                     </p>
                     <div className="wh-buttons">
                       <button className="nb-btn" onClick={() => onPreview(n)}>
-                        看看小筑
+                        {t('看看小筑', 'View haven')}
                       </button>
                       <button
                         className="nb-btn"
                         disabled={busy || !!social.away}
                         onClick={() => onDepart(n)}
                       >
-                        去串门
+                        {t('去串门', 'Visit')}
                       </button>
                       <button
                         className="nb-btn"
@@ -250,8 +298,8 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
                         }}
                       >
                         {(profile.snapshot.pinnedNeighborIds ?? []).includes(n.id)
-                          ? '取消收藏'
-                          : '收藏'}
+                          ? t('取消收藏', 'Unpin')
+                          : t('收藏', 'Pin')}
                       </button>
                     </div>
                   </div>
@@ -261,7 +309,12 @@ export function SocialPane({ profile, dispatch, busy, onPreview, onDepart }: Pro
           )}
         </section>
       ) : (
-        <p className="deck-empty">开放自己的小筑后，就能查找同样开放的邻居。</p>
+        <p className="deck-empty">
+          {t(
+            '开放自己的小筑后，就能查找同样开放的邻居。',
+            'Open your haven to find neighbors who also accept visits.',
+          )}
+        </p>
       )}
     </>
   );
@@ -279,14 +332,21 @@ export function DepartureDialog({
   onClose: () => void;
   initialMessage?: string;
 }) {
+  const t = useWhaleText();
   const [hire, setHire] = useState(false);
   const [message, setMessage] = useState(initialMessage);
   return (
     <ConfirmDialog
       open
-      title={'去' + displayNeighborName(neighbor) + '家串门？'}
-      description="可以随时召回自己的鲸，并领取本次已获得的奖励。"
-      confirmLabel="出发"
+      title={t(
+        '去' + displayNeighborName(neighbor) + '家串门？',
+        'Visit ' + displayNeighborName(neighbor, 'Anonymous keeper') + '?',
+      )}
+      description={t(
+        '可以随时召回自己的鲸，并领取本次已获得的奖励。',
+        'Recall your whale at any time to collect rewards earned on this visit.',
+      )}
+      confirmLabel={t('出发', 'Depart')}
       busy={busy}
       onCancel={onClose}
       onConfirm={async () => {
@@ -303,13 +363,18 @@ export function DepartureDialog({
     >
       <label className="wh-choice">
         <input type="checkbox" checked={hire} onChange={(e) => setHire(e.target.checked)} />{' '}
-        本次允许主人雇佣帮工
+        {t('本次允许主人雇佣帮工', 'Allow the host to hire my whale on this visit')}
       </label>
-      <p>帮工工资计入当日社交鲸币额度。</p>
+      <p>
+        {t(
+          '帮工工资计入当日社交鲸币额度。',
+          'Wages count toward your daily social whale coin limit.',
+        )}
+      </p>
       <label>
-        串门口信{' '}
+        {t('串门口信', 'Message for the host')}{' '}
         <select value={message} onChange={(e) => setMessage(e.target.value)}>
-          <option value="">不留口信</option>
+          <option value="">{t('不留口信', 'No message')}</option>
           {PRESET_MESSAGES.filter((m) => m.category === 'visit').map((m) => (
             <option key={m.id} value={m.id}>
               {m.text}

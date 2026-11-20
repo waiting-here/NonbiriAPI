@@ -49,6 +49,7 @@ import { WhaleRigActor, type RigImpulseEvent } from '../rig/WhaleRigActor';
 import { formatMilliCredits } from '../api';
 import { UiSwitch } from './UiMotifs';
 
+import { useWhaleText } from '../copy';
 export type MenuPresentationMode = 'drawer' | 'sheet';
 
 const CABIN_FURNITURE = ['shell_cabinet', 'pearl_clock', 'sea_planter'] as const;
@@ -149,6 +150,7 @@ export function OceanStage({
   onRecallWhale,
   onRenameWhale,
 }: OceanStageProps) {
+  const t = useWhaleText();
   const { whale, home } = snapshot;
   const activeGuests = getActiveGuests(snapshot);
   const sneakingGuests = activeGuests.filter((g) => g.stage === 'eating');
@@ -1323,46 +1325,56 @@ export function OceanStage({
 
           {/* ---------- TOP-RIGHT: WALLETS & COMPACT SYSTEM TOOLS ---------- */}
           <div className="hud-top-right" onClick={(e) => e.stopPropagation()}>
-            <div className="hud-wallets" role="group" aria-label="资源栏">
-              <div className="hud-resource" title="游戏积分">
+            <div
+              className="hud-wallets"
+              role="group"
+              aria-label={t('资源栏', 'Wallet and supplies')}
+            >
+              <div className="hud-resource" title={t('游戏积分', 'Game credits')}>
                 <Gem className="hud-resource__icon" size={20} aria-hidden="true" />
-                <strong aria-label="游戏积分">
+                <strong aria-label={t('游戏积分', 'Game credits')}>
                   {formatMilliCredits(snapshot.wallet.gameMilli)}
                 </strong>
                 <button
                   type="button"
                   className="hud-resource__add"
                   onClick={onOpenFeed}
-                  aria-label="查看背包与购粮"
+                  aria-label={t('查看背包与购粮', 'Open inventory and buy feed')}
                 >
                   <Plus size={14} />
                 </button>
               </div>
-              <div className="hud-resource" title="小鲸币">
+              <div className="hud-resource" title={t('小鲸币', 'Whale coins')}>
                 <img src={whaleCoinIconUrl} alt="" className="hud-coin-img" />
-                <strong aria-label="小鲸币">{snapshot.wallet.pearls}</strong>
+                <strong aria-label={t('小鲸币', 'Whale coins')}>{snapshot.wallet.pearls}</strong>
                 <button
                   type="button"
                   className="hud-resource__add"
                   onClick={onHarvestPearls}
-                  aria-label="从存钱罐收取小鲸币"
-                  disabled={home.unclaimedPearls <= 0}
+                  aria-label={t('从存钱罐收取小鲸币', 'Collect whale coins and settle earnings')}
+                  disabled={
+                    home.unclaimedPearls <= 0 &&
+                    !snapshot.wallet.pendingSocialPearls &&
+                    !snapshot.wallet.pendingConchShards
+                  }
                 >
                   <Plus size={14} />
                 </button>
               </div>
-              <div className="hud-resource" title="自家饭盆余粮">
+              <div className="hud-resource" title={t('自家饭盆余粮', 'Feed remaining at home')}>
                 <Soup
                   className="hud-resource__icon hud-resource__icon--food"
                   size={19}
                   aria-hidden="true"
                 />
-                <strong aria-label="余粮">{Math.round(home.troughGrams)}g</strong>
+                <strong aria-label={t('余粮', 'Feed remaining')}>
+                  {Math.round(home.troughGrams)}g
+                </strong>
                 <button
                   type="button"
                   className="hud-resource__add"
                   onClick={onOpenFeed}
-                  aria-label="打开背包添饭"
+                  aria-label={t('打开背包添饭', 'Open bag to refill the bowl')}
                 >
                   <Plus size={14} />
                 </button>
@@ -1373,7 +1385,7 @@ export function OceanStage({
               className="hud-capsule hud-icon-bar"
               id="stage-settings"
               role="group"
-              aria-label="小屋设置"
+              aria-label={t('小屋设置', 'Haven settings')}
               hidden={!settingsOpen}
             >
               {/* Desktop Menu Presentation Mode Switcher (Drawer vs Bottom Sheet) */}
@@ -1653,9 +1665,12 @@ export function OceanStage({
                       flexWrap: 'wrap',
                     }}
                   >
-                    <span className="nb-badge nb-badge--teal">串门视角</span>
+                    <span className="nb-badge nb-badge--teal">
+                      {t('串门视角', 'Neighbor view')}
+                    </span>
                     <strong>
-                      {viewingNeighbor.oceanTitle} · {displayNeighborName(viewingNeighbor)}
+                      {viewingNeighbor.oceanTitle} ·{' '}
+                      {displayNeighborName(viewingNeighbor, t('匿名饲养员', 'Anonymous keeper'))}
                     </strong>
                     {viewingHandles.uidBadge && (
                       <span
@@ -1684,7 +1699,7 @@ export function OceanStage({
                         className="nb-badge"
                         style={{ background: 'rgba(255,255,255,0.16)', color: '#d9f2ec' }}
                       >
-                        匿名保护
+                        {t('匿名保护', 'Anonymous keeper')}
                       </span>
                     )}
                     <button
@@ -1693,7 +1708,9 @@ export function OceanStage({
                       style={{ padding: '0.18rem 0.48rem', minHeight: 26 }}
                       onClick={() => onTogglePinNeighbor(viewingNeighbor.id)}
                       title={
-                        isViewingPinned ? '已收藏常访（点击取消）' : '收藏这家海湾，下次一键直达'
+                        isViewingPinned
+                          ? t('已收藏常访（点击取消）', 'Unpin this haven')
+                          : t('收藏这家海湾，下次一键直达', 'Pin this haven for your next visit')
                       }
                     >
                       <Star
@@ -1701,7 +1718,7 @@ export function OceanStage({
                         fill={isViewingPinned ? '#fbbf24' : 'none'}
                         color={isViewingPinned ? '#fbbf24' : 'currentColor'}
                       />
-                      {isViewingPinned ? '已收藏' : '收藏'}
+                      {isViewingPinned ? t('已收藏', 'Pinned') : t('收藏', 'Pin')}
                     </button>
                   </div>
 
@@ -1719,19 +1736,20 @@ export function OceanStage({
                         className="nb-btn nb-btn--sm nb-btn--primary"
                         onClick={onRecallWhale}
                       >
-                        <BellRing size={13} /> 喊「{whale.name}」回家
+                        <BellRing size={13} />{' '}
+                        {t(`喊「${whale.name}」回家`, `Recall ${whale.name}`)}
                       </button>
                     ) : (
                       <>
                         <select
                           value={visitPresetId}
-                          aria-label="串门口信"
+                          aria-label={t('串门口信', 'Message for the host')}
                           onChange={(e) => setVisitPresetId(e.target.value)}
                           className="visit-banner-select"
                         >
                           {visitPresets.map((m) => (
                             <option key={m.id} value={m.id}>
-                              口信：{m.text}
+                              {t('口信', 'Message')} · {m.text}
                             </option>
                           ))}
                         </select>
@@ -1741,7 +1759,7 @@ export function OceanStage({
                           disabled={whale.location.kind === 'visiting'}
                           onClick={() => onSendWhaleHere(viewingNeighbor.id, visitPresetId)}
                         >
-                          <Send size={13} /> 留在这蹭饭
+                          <Send size={13} /> {t('留在这蹭饭', 'Send my whale here')}
                         </button>
                       </>
                     )}
@@ -1750,13 +1768,13 @@ export function OceanStage({
                       className="nb-btn nb-btn--sm"
                       onClick={onOpenNeighborSearch}
                     >
-                      🔍 查找邻居
+                      {t('🔍 查找邻居', '🔍 Find neighbors')}
                     </button>
                     <button type="button" className="nb-btn nb-btn--sm" onClick={onRandomVisitView}>
-                      <Compass size={13} /> 换一家
+                      <Compass size={13} /> {t('换一家', 'Switch haven')}
                     </button>
                     <button type="button" className="nb-btn nb-btn--sm" onClick={onReturnHome}>
-                      <Home size={13} /> 回自家
+                      <Home size={13} /> {t('回自家', 'Return home')}
                     </button>
                   </div>
                 </div>
@@ -1774,8 +1792,11 @@ export function OceanStage({
                 >
                   <ShieldAlert size={14} />{' '}
                   {isPhoneStage
-                    ? `抓包 ×${sneakingGuests.length}`
-                    : `抓包/雇佣客鲸 ×${sneakingGuests.length}`}
+                    ? t(`抓包 ×${sneakingGuests.length}`, `Guests ×${sneakingGuests.length}`)
+                    : t(
+                        `抓包/雇佣客鲸 ×${sneakingGuests.length}`,
+                        `Manage guests ×${sneakingGuests.length}`,
+                      )}
                 </button>
               )}
               {workingGuests.length > 0 && (
@@ -1786,8 +1807,11 @@ export function OceanStage({
                 >
                   💼{' '}
                   {isPhoneStage
-                    ? `打工 ×${workingGuests.length}`
-                    : `打工帮吃中 ×${workingGuests.length}`}
+                    ? t(`打工 ×${workingGuests.length}`, `Helpers ×${workingGuests.length}`)
+                    : t(
+                        `打工帮吃中 ×${workingGuests.length}`,
+                        `Working guests ×${workingGuests.length}`,
+                      )}
                 </button>
               )}
               {home.unclaimedPearls > 0 && (
@@ -1798,8 +1822,11 @@ export function OceanStage({
                 >
                   <img src={whaleCoinIconUrl} alt="" className="inline-coin-icon" />{' '}
                   {isPhoneStage
-                    ? `收币 ×${home.unclaimedPearls}`
-                    : `收取小鲸币 ×${home.unclaimedPearls}`}
+                    ? t(`收币 ×${home.unclaimedPearls}`, `Collect ×${home.unclaimedPearls}`)
+                    : t(
+                        `收取小鲸币 ×${home.unclaimedPearls}`,
+                        `Collect whale coins ×${home.unclaimedPearls}`,
+                      )}
                 </button>
               )}
               {whale.location.kind === 'home' && (

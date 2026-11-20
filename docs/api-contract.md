@@ -183,7 +183,7 @@ Startup initializes absent storage or opens the exact current structure. A misma
 
 `maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=55`, `minimum_schema_version=55`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists the single source fingerprint in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
 
-Current account export `schema_version=37` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v37.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=38` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v38.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -2130,7 +2130,7 @@ its own reservation under current limits; settlement and release apply once in
 the existing accounting transaction. The schema 54 upgrade restores outstanding
 model call and credit reservations from receipts for the exact key and model.
 Reservations without a recorded model keep their original key scope.
-Owner export 37 includes `model_limits` with current model counters, recurring
+Owner export includes `model_limits` with current model counters, recurring
 rules and the partial-history flag. Account and key deletion and existing
 terminal retention govern these records.
 
@@ -2675,7 +2675,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v37.json`, with `schema_version:37` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v38.json`, with `schema_version:38` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -3051,6 +3051,16 @@ lasts 30 days; accounting follows ledger retention and the current account expor
 ### Lake Notes API
 
 Lake Notes is a permanent free minigame with four independently configured exchanges. Completing a location’s collection enables a manual, once-per-account claim of 50 cumulative donation credits, with no spendable credit or coin reward. `POST /api/games/lake-notes/collection-claims` accepts `{location}` with the normal session, CSRF and idempotency controls; permanent `profile.collectionClaims` is exported and deleted with the account. Fresh installations start closed; an open legacy activity stays available after upgrade, with all exchanges initially disabled. See [game settings and API](lake-notes.md).
+
+### Whale Haven
+
+The game center opens Whale Haven when both the games master switch and the sanctuary are on. Fresh installations start with the sanctuary and cash-out closed. An administrator can independently enable cash-out and edit the prices, yields, daily allowances, storage, items and three destination cuts at `GET|PATCH /admin/api/games/whale-haven/config`. PATCH requires an idempotency key and a string `expected_revision`. Changes apply from their effective time. Closing the sanctuary or all games pauses care, while closing cash-out still permits play.
+
+Authenticated players read `/api/games/whale-haven/availability`, `/profile` and `/neighbors/search` under the same prefix. `POST /api/games/whale-haven/actions` takes a typed action, string `expected_profile_revision` and `expected_settings_revision`, and an `Idempotency-Key` header. Specify the name and opening choice on adoption. Only open homes can host or visit other open homes. Guest employment requires the owner's consent, and earned wages consume the guest owner's daily social allowance.
+
+`POST /api/games/whale-haven/exchange/quote` takes a decimal string `quantity` in whole lots. Use `"0"` for availability, the maximum lot count and daily room. Positive quotes break out gross credits, platform, welfare and Thursday cuts, and net credits. All credit amounts on this API use integer milli-credit strings. Confirm by sending the quoted lot count and revisions to `POST /api/games/whale-haven/exchange` with an idempotency key. The transaction checks the resulting general-wallet balance as well as the site-day cap. Default terms are five whale coins per lot, 5,000 general credits gross and 4,550 net.
+
+Account export format 38 adds `whale_haven`, with both balances, the player's own adopted home when present, and the account's currency movements. Account closure settles visits and wages before removal. Site rewards, redemption codes, configurable attendance tiers and authorized user-resource management use `whale:pearls` (小鲸币) and `whale:conch_shards` (海螺碎片). Both are whole units and can be granted before adoption or while the game is closed.
 
 ### Account protection and historical records
 

@@ -113,6 +113,8 @@ i18n.json
 !web/public/assets/fatfish/svg/*.svg
 !web/public/assets/fatfish/character/walk.png
 !web/public/assets/fatfish/character/expressions.png
+!web/public/assets/whale-haven/**/*.webp
+!web/public/assets/whale-haven/**/*.svg
 !web/public/assets/lake-notes/*.webp
 !web/public/assets/lake-notes/cover.png
 !web/public/assets/steady-catch/cloud-calm.webp
@@ -209,6 +211,7 @@ nginx/*.local.conf
 !internal/db/generation_two.sql
 !internal/db/agent_operation_diagnostics.sql
 !internal/db/management_service_health.sql
+!internal/db/whale_haven.sql
 !internal/db/migrations/**/*.sql
 !internal/db/testdata/*.sql
 !internal/upgrade/rc7/convert.sql

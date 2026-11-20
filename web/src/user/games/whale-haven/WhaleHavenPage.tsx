@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
+import { useWhaleText } from './copy';
 import { Link } from 'react-router';
 import { Amount } from '@shared/components/Amount';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -38,7 +38,7 @@ function useSmallViewport() {
   return small;
 }
 function WhaleGame() {
-  const { i18n } = useTranslation();
+  const t = useWhaleText();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -113,7 +113,16 @@ function WhaleGame() {
       return true;
     } catch (err) {
       setFeedback({
-        message: err instanceof Error ? err.message : '操作未完成，请刷新重试。',
+        message:
+          err instanceof Error
+            ? t(
+                err.message,
+                'The action could not be completed. Check the updated balance, settings and visit status, then retry.',
+              )
+            : t(
+                '操作未完成，请刷新重试。',
+                'The action could not be completed. Refresh and retry.',
+              ),
         error: true,
       });
       void data.refetch();
@@ -130,18 +139,21 @@ function WhaleGame() {
       () => act(prev, command),
       (
         {
-          adopt: '鲸鱼娘到家啦！',
-          buy_feed: '已购入口粮。',
-          use_feed: '已投喂。',
-          harvest_pearls: '小鲸币已收取。',
-          set_open: '小筑开放设置已保存。',
-          send_visit: '鲸鱼娘已出发。',
-          recall_home: '鲸鱼娘已回家，本次来往已结算。',
-          catch_guest: '客鲸状态已更新。',
-          spin_conch_gacha: '扭蛋已开启，奖励已放入背包。',
-          rename: '新名字已保存。',
+          adopt: t('鲸鱼娘到家啦！', 'Your whale is home!'),
+          buy_feed: t('已购入口粮。', 'Feed purchased.'),
+          use_feed: t('已投喂。', 'Feed served.'),
+          harvest_pearls: t('小鲸币已收取。', 'Earnings collected.'),
+          set_open: t('小筑开放设置已保存。', 'Visit preferences saved.'),
+          send_visit: t('鲸鱼娘已出发。', 'Your whale has departed.'),
+          recall_home: t(
+            '鲸鱼娘已回家，本次来往已结算。',
+            'Your whale is home and the visit has been settled.',
+          ),
+          catch_guest: t('客鲸状态已更新。', 'Guest status updated.'),
+          spin_conch_gacha: t('扭蛋已开启，奖励已放入背包。', 'Your conch reward is in your bag.'),
+          rename: t('新名字已保存。', 'Name saved.'),
         } as Partial<Record<Action['type'], string>>
-      )[command.type] ?? '已更新。',
+      )[command.type] ?? t('已更新。', 'Updated.'),
     );
     if (success) {
       const anim =
@@ -182,28 +194,29 @@ function WhaleGame() {
     } = profile;
     let title: string,
       price: number,
-      unit = '小鲸币';
+      unit = t('小鲸币', 'whale coins');
     if (command.type === 'buy_feed') {
-      title = '购入' + FEED_CATALOG[command.feedId].name;
+      title =
+        t('购入', 'Buy ') + FEED_CATALOG[command.feedId].name + ' ×' + (command.quantity ?? 1);
       price = values['feed_' + command.feedId + '_price_milli'];
-      unit = '游戏积分';
+      unit = t('游戏积分', 'game credits');
     } else if (
       command.type === 'select_outfit' &&
       command.outfitId !== 'maid_classic' &&
       !snapshot.home.ownedOutfits?.includes(command.outfitId)
     ) {
-      title = '解锁' + OUTFIT_CATALOG[command.outfitId].name;
+      title = t('解锁', 'Unlock ') + OUTFIT_CATALOG[command.outfitId].name;
       price = costWithCoupon(profile, values['outfit_' + command.outfitId + '_price_pearls']);
     } else if (
       command.type === 'toggle_decor' &&
       !snapshot.home.ownedDecor.includes(command.decorId)
     ) {
-      title = '解锁' + DECOR_CATALOG[command.decorId].name;
+      title = t('解锁', 'Unlock ') + DECOR_CATALOG[command.decorId].name;
       price = costWithCoupon(profile, values['decor_' + command.decorId + '_price_pearls']);
     } else if (command.type === 'spin_conch_gacha') {
-      title = '转动海螺扭蛋';
+      title = t('转动海螺扭蛋', 'Draw a conch reward');
       price = values.conch_cost_shards;
-      unit = '海螺碎片';
+      unit = t('海螺碎片', 'conch shards');
     } else {
       void dispatch(command);
       return;
@@ -211,7 +224,9 @@ function WhaleGame() {
     setPurchase({
       command,
       title,
-      price: String(price),
+      price: String(
+        BigInt(price) * BigInt(command.type === 'buy_feed' ? (command.quantity ?? 1) : 1),
+      ),
       unit,
       revision: profile.settings_revision,
       profileRevision: snapshot.revision,
@@ -239,23 +254,25 @@ function WhaleGame() {
     };
   }, [adopted]);
   const snap = profile?.snapshot;
-  const showIntro = i18n.language.startsWith('en');
+
   const header = (
     <PageHeader
       back={<GameBackLink />}
-      title={showIntro ? 'Whale Haven' : '鲸鱼湾小筑'}
-      description={showIntro ? 'Original game in Chinese.' : undefined}
+      title={t('鲸鱼湾小筑', 'Whale Haven')}
+      description={
+        t('', 'The original character dialogue and artwork are in Chinese.') || undefined
+      }
       actions={
         snap ? (
           <dl className="game-wallets">
             <div>
-              <dt>游戏积分</dt>
+              <dt>{t('游戏积分', 'Game credits')}</dt>
               <dd>
                 <Amount value={String(snap.wallet.gameMilli)} unit="" />
               </dd>
             </div>
             <div>
-              <dt>通用积分</dt>
+              <dt>{t('通用积分', 'General credits')}</dt>
               <dd>
                 <Amount value={String(snap.wallet.generalMilli)} unit="" />
               </dd>
@@ -280,7 +297,7 @@ function WhaleGame() {
     return (
       <main className="game-page">
         {header}
-        <p>鲸鱼湾暂未开放。</p>
+        <p>{t('鲸鱼湾暂未开放。', 'Whale Haven is closed.')}</p>
       </main>
     );
   const values = profile.settings.values;
@@ -393,7 +410,9 @@ function WhaleGame() {
                     <Backpack
                       snapshot={snap}
                       values={values}
-                      onBuyFeed={(feedId) => choose({ type: 'buy_feed', feedId })}
+                      onBuyFeed={(feedId, quantity) =>
+                        choose({ type: 'buy_feed', feedId, quantity })
+                      }
                       onUseFeed={(feedId) => choose({ type: 'use_feed', feedId })}
                       onToggleDecor={(decorId) => choose({ type: 'toggle_decor', decorId })}
                       onToggleAutoRefill={() => choose({ type: 'toggle_auto_refill' })}
@@ -416,7 +435,17 @@ function WhaleGame() {
                       <ExchangePane
                         profile={profile}
                         busy={busy}
-                        onExchange={(q) => commit(() => exchange(q), '兑换成功，通用积分已到账。')}
+                        onRefresh={() => void data.refetch()}
+                        onCollect={() => void dispatch({ type: 'harvest_pearls' })}
+                        onExchange={(q) =>
+                          commit(
+                            () => exchange(q),
+                            t(
+                              '兑换成功，通用积分已到账。',
+                              'Exchange complete. General credits added.',
+                            ),
+                          )
+                        }
                       />
                       <DecorPane profile={profile} dispatch={choose} />
                     </>
@@ -424,7 +453,7 @@ function WhaleGame() {
                   {tab === 'logs' && (
                     <>
                       <ActivityPane snapshot={snap} />
-                      <Link to="/credits">查看积分明细</Link>
+                      <Link to="/credits">{t('查看积分明细', 'View credit history')}</Link>
                     </>
                   )}
                 </ControlDeck>
@@ -438,7 +467,7 @@ function WhaleGame() {
             role={feedback.error ? 'alert' : 'status'}
           >
             <span>{feedback.message}</span>
-            <button onClick={() => setFeedback(null)} aria-label="关闭提示">
+            <button onClick={() => setFeedback(null)} aria-label={t('关闭提示', 'Dismiss message')}>
               ×
             </button>
           </div>
@@ -459,16 +488,15 @@ function WhaleGame() {
           title={purchase.title}
           description={
             <>
-              本次花费{' '}
-              {purchase.unit === '游戏积分' ? (
-                <Amount value={purchase.price} unit="游戏积分" />
+              {t('本次花费', 'Cost')}{' '}
+              {purchase.command.type === 'buy_feed' ? (
+                <Amount value={purchase.price} unit={purchase.unit} />
               ) : (
                 purchase.price + ' ' + purchase.unit
               )}
-              。
             </>
           }
-          confirmLabel="确认"
+          confirmLabel={t('确认', 'Confirm')}
           busy={busy}
           confirmDisabled={
             purchase.revision !== profile.settings_revision ||
@@ -482,7 +510,12 @@ function WhaleGame() {
         >
           {(purchase.revision !== profile.settings_revision ||
             purchase.profileRevision !== snap.revision) && (
-            <p>价格或存档已变动，请取消后重新选择。</p>
+            <p>
+              {t(
+                '价格或存档已变动，请取消后重新选择。',
+                'The price or your saved game changed. Cancel and choose again.',
+              )}
+            </p>
           )}
         </ConfirmDialog>
       )}

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	builtinconfig "github.com/waiting-here/NonbiriAPI/internal/game/builtin/config"
@@ -215,4 +216,47 @@ func TestConfigIdempotencyDatabaseFailuresRemainRetryable(t *testing.T) {
 		}
 	})
 
+}
+
+func TestMasterSwitchRecordsDistinctPausesWithinASecond(t *testing.T) {
+	f := newGameFixture(t, nil)
+	if _, err := f.database.Exec("UPDATE site_config SET value='0' WHERE key IN ('games_enabled','game_fishing_enabled')"); err != nil {
+		t.Fatal(err)
+	}
+	instant := time.Unix(fixtureNow, 150_000_000)
+	f.service.services.Now = func() time.Time { return instant }
+	for i, enabled := range []bool{true, false, true} {
+		current, err := f.service.ReadGamesConfig(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := json.Marshal(map[string]any{"master_enabled": enabled, "expected_revision": current.Revision})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = f.service.PatchGamesConfig(t.Context(), body, validTestKey(800+i)); err != nil {
+			t.Fatal(err)
+		}
+		instant = instant.Add(200 * time.Millisecond)
+	}
+	rows, err := f.database.Query("SELECT effective_at,enabled FROM whale_haven_master_history WHERE effective_at>=? ORDER BY effective_at", fixtureNow*1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var at int64
+		var enabled bool
+		if err = rows.Scan(&at, &enabled); err != nil {
+			t.Fatal(err)
+		}
+		if at != fixtureNow*1000+150+int64(200*count) || enabled != (count != 1) {
+			t.Fatal(at, enabled)
+		}
+		count++
+	}
+	if count != 3 || rows.Err() != nil {
+		t.Fatal(count, rows.Err())
+	}
 }

@@ -370,7 +370,7 @@ func (s *Service) SignIn(ctx context.Context, user int64, id, key string, in Sig
 			if t.Awarded || t.Days > p.EligibleDays {
 				continue
 			}
-			results, err := rewards.GrantTx(ctx, tx, user, p.actor.Int64, at, p.Title, t.Rewards)
+			results, err := rewards.GrantAttendanceTierTx(ctx, tx, user, p.actor.Int64, at, p.Title, t.Rewards, p.ID+":"+strconv.Itoa(t.Days))
 			if err != nil {
 				return out, err
 			}

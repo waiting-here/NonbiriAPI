@@ -10,6 +10,7 @@ const MIME = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.svg', 'image/svg+xml'],
+  ['.webp', 'image/webp'],
 ]);
 
 const DEBUG_LIMITS = Object.freeze({
