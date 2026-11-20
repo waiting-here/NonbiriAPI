@@ -14,6 +14,7 @@ export function amberAppearancePlacement(width: number, height: number) {
     top: height * 0.965 - heroHeight,
     width: heroWidth,
     height: heroHeight,
+    groundAligned: width >= 640,
   };
 }
 
@@ -39,11 +40,13 @@ export function amberLayout(
 
   // A full-page backdrop keeps the face in the side margin independently of the hall crop.
   const box = amberAppearancePlacement(width, height);
+  // The wide band crops the hall above the floor on which the character stands.
+  view[1] = box.groundAligned ? 1 - vh : 0;
   return {
     view,
     heroBox: [
       view[0] + (box.left / width) * vw,
-      (box.top / height) * vh,
+      view[1] + (box.top / height) * vh,
       (box.width / width) * vw,
       (box.height / height) * vh,
     ],

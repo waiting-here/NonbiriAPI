@@ -47,12 +47,13 @@ export function romanceBackdropPlacement(
     // The rear edge of the marble floor runs from (430,760) to (1400,925).
     const floorY = 760 + ((heelX - 430) * 165) / 970;
     const heelY = hero.top * density + heel[1] * characterScale;
-    const top = desktop
-      ? Math.max(
-          height - 1024 * scale,
-          Math.min((height - 1024 * scale) * 0.43, heelY - (floorY + 52) * scale),
-        )
-      : 0;
+    const top =
+      viewportWidth >= 640
+        ? Math.max(
+            height - 1024 * scale,
+            Math.min((height - 1024 * scale) * 0.43, heelY - (floorY + 52) * scale),
+          )
+        : 0;
     return {
       left: desktop ? 0 : (width - 1536 * scale) * 0.48,
       top,
@@ -60,7 +61,11 @@ export function romanceBackdropPlacement(
     };
   }
   const scale = Math.max(width / 1536, height / 864);
-  return { left: (width - 1536 * scale) * (viewportWidth < 768 ? 0.48 : 0.78), top: 0, scale };
+  return {
+    left: (width - 1536 * scale) * (viewportWidth < 768 ? 0.48 : 0.78),
+    top: viewportWidth >= 640 ? height - 864 * scale : 0,
+    scale,
+  };
 }
 
 // Both landscape cameras retain the floor below the window and the entire supporting shoe.

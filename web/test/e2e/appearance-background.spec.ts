@@ -155,9 +155,19 @@ for (const mode of ['light', 'dark']) {
       [1600, 900],
       [2560, 600],
       [1440, 1400],
+      [1280, 720],
+      [1265, 720],
+      [768, 720],
       [390, 844],
     ]) {
       await page.setViewportSize({ width, height });
+      if (width >= 768 && width <= 1280) {
+        const shell = (await page.locator('.nb-user-shell').boundingBox())!;
+        const band = (await page.locator('.nb-art-stage').boundingBox())!;
+        expect(band.x).toBe(shell.x);
+        expect(band.width).toBe(shell.width);
+        expect(band.height).toBeLessThanOrEqual(height * 0.36 + 1);
+      }
       await expect
         .poll(async () => {
           const rect = (await hero.boundingBox())!;

@@ -142,6 +142,8 @@ export async function appearanceFixtures(page: Page, design: string, moment = 'c
       });
     if (path === '/api/steward/maintenance')
       return route.fulfill({ json: { enabled: false, revision: '1' } });
+    if (path === '/api/issues')
+      return route.fulfill({ json: { ...pageOf([]), projection_incomplete: false } });
     if (path === '/api/logs')
       return route.fulfill({
         json: pageOf([

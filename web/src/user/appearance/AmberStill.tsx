@@ -13,6 +13,7 @@ export function AmberStill({ dark }: { dark: boolean }) {
       <img
         className="nb-appearance-still"
         data-scene="amber"
+        style={{ objectPosition: box.groundAligned ? '82% bottom' : '82% top' }}
         src={src}
         srcSet={artSourceSet(src)}
         sizes="(max-aspect-ratio: 16/9) 177.78vh, 100vw"
