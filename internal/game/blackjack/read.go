@@ -58,6 +58,16 @@ func (s *Service) Read(ctx context.Context, identity Identity) (Home, error) {
 	s.publish(ctx, facts)
 	return result, nil
 }
+
+// The current round and the single open table each have an index; choosing
+// between their start times keeps idle polling independent of retained history.
+const homeSessionSQL = `SELECT ` + sessionColumns + ` FROM game_blackjack_sessions WHERE started_at=(
+ SELECT MAX(started_at) FROM (
+  SELECT started_at FROM game_blackjack_sessions WHERE started_at=?
+  UNION ALL
+  SELECT started_at FROM game_blackjack_sessions WHERE phase IN ('seating','decision')
+ ))`
+
 func (s *Service) homeTx(ctx context.Context, tx *sql.Tx, identity Identity, now int64) (Home, error) {
 	cfg, err := s.config(ctx, tx)
 	if err != nil {
@@ -78,7 +88,7 @@ func (s *Service) homeTx(ctx context.Context, tx *sql.Tx, identity Identity, now
 		return result, err
 	}
 	result.QueueCount = strconv.FormatInt(count, 10)
-	v, err := scanSession(tx.QueryRowContext(ctx, `SELECT `+sessionColumns+` FROM game_blackjack_sessions WHERE started_at=? OR phase IN ('seating','decision') ORDER BY started_at DESC LIMIT 1`, start))
+	v, err := scanSession(tx.QueryRowContext(ctx, homeSessionSQL, start))
 	if err != nil && !noRows(err) {
 		return result, err
 	}
