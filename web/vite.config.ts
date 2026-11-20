@@ -1,3 +1,5 @@
+import { cp, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type ConfigEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
@@ -33,7 +35,28 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
   return {
     root: station.root,
     publicDir: fileURLToPath(new URL('./public/', import.meta.url)),
-    plugins: [react()],
+    plugins: [
+      react(),
+      ...(mode === 'admin'
+        ? [
+            {
+              name: 'admin-public-assets',
+              apply: 'build' as const,
+              async writeBundle() {
+                const publicDir = fileURLToPath(new URL('./public/', import.meta.url));
+                const userArt = join(publicDir, 'assets', 'whale-haven');
+                const out = fileURLToPath(new URL('./dist/admin/', import.meta.url));
+                for (const entry of await readdir(publicDir)) {
+                  await cp(join(publicDir, entry), join(out, entry), {
+                    recursive: true,
+                    filter: (path) => path !== userArt,
+                  });
+                }
+              },
+            },
+          ]
+        : []),
+    ],
     resolve: {
       alias: {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
@@ -48,6 +71,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
       strictPort: true,
     },
     build: {
+      copyPublicDir: mode === 'user',
       // Absolute path so the output lands in web/dist/<station> regardless of
       // the per-station root. Both station builds share web/dist/.
       outDir: fileURLToPath(new URL(`./dist/${station.distDir}`, import.meta.url)),

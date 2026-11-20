@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "lookSpritesheetPath": "spritesheet-hd.webp",
+  "columns": 11,
+  "rows": 12,
+  "cellWidth": 348,
+  "cellHeight": 340,
+  "canvasBox": {
+    "offsetX": -0.045887,
+    "offsetY": -0.037108,
+    "scaleX": 1.150802,
+    "scaleY": 1.037605
+  },
+  "states": {
+    "idle": {
+      "sheet": "i2v/idle.webp",
+      "columns": 11,
+      "rows": 12,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 123,
+      "frameMs": 42
+    },
+    "running-right": {
+      "sheet": "i2v/running-right.webp",
+      "columns": 11,
+      "rows": 10,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 106,
+      "frameMs": 42
+    },
+    "running-left": {
+      "sheet": "i2v/running-left.webp",
+      "columns": 11,
+      "rows": 10,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 106,
+      "frameMs": 42
+    },
+    "waving": {
+      "sheet": "i2v/waving.webp",
+      "columns": 11,
+      "rows": 10,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 106,
+      "frameMs": 42
+    },
+    "jumping": {
+      "sheet": "i2v/jumping.webp",
+      "columns": 11,
+      "rows": 10,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 106,
+      "frameMs": 42
+    },
+    "failed": {
+      "sheet": "i2v/failed.webp",
+      "columns": 11,
+      "rows": 10,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 106,
+      "frameMs": 42
+    },
+    "waiting": {
+      "sheet": "i2v/waiting.webp",
+      "columns": 11,
+      "rows": 12,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 123,
+      "frameMs": 42
+    },
+    "running": {
+      "sheet": "i2v/running.webp",
+      "columns": 11,
+      "rows": 12,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 123,
+      "frameMs": 42
+    },
+    "review": {
+      "sheet": "i2v/review.webp",
+      "columns": 11,
+      "rows": 12,
+      "cellWidth": 348,
+      "cellHeight": 340,
+      "startSlot": 0,
+      "frames": 123,
+      "frameMs": 42
+    }
+  },
+  "feast": {
+    "sheet": "i2v/feast.webp",
+    "columns": 11,
+    "rows": 12,
+    "cellWidth": 348,
+    "cellHeight": 340,
+    "startSlot": 0,
+    "frames": 123,
+    "frameMs": 42
+  },
+  "sleeping": {
+    "sheet": "i2v/sleeping.webp",
+    "columns": 10,
+    "rows": 13,
+    "cellWidth": 384,
+    "cellHeight": 296,
+    "startSlot": 0,
+    "frames": 123,
+    "frameMs": 42
+  },
+  "workerFeast": {
+    "sheet": "i2v/worker-feast.webp",
+    "columns": 11,
+    "rows": 12,
+    "cellWidth": 348,
+    "cellHeight": 340,
+    "startSlot": 0,
+    "frames": 123,
+    "frameMs": 42
+  },
+  "workerIdle": {
+    "sheet": "i2v/worker-idle.webp",
+    "columns": 11,
+    "rows": 12,
+    "cellWidth": 348,
+    "cellHeight": 340,
+    "startSlot": 0,
+    "frames": 123,
+    "frameMs": 42
+  }
+}

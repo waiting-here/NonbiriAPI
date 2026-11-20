@@ -140,6 +140,12 @@ export const router = createBrowserRouter([
           Component: (await import('./pages/PictureBookActivityPage')).PictureBookActivityPage,
         }),
       },
+      ...['game-whale-haven', 'whale-haven'].map((id) => ({
+        path: pathFor(id),
+        lazy: async () => ({
+          Component: (await import('./games/whale-haven/WhaleHavenPage')).WhaleHavenPage,
+        }),
+      })),
       {
         path: pathFor('game-lake-notes'),
         lazy: async () => ({

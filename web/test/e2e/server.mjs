@@ -299,6 +299,10 @@ async function serveStation(request, response, station) {
   }
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (isAPIPath(url.pathname)) {
+    if (request.method === 'GET' && url.pathname === '/api/games/whale-haven/availability') {
+      send(response, 200, 'application/json', JSON.stringify({enabled:false,exchange_enabled:false}));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/api/gacha/entry') {
       send(response, 200, 'application/json', JSON.stringify({ enabled: false, entered: false }));
       return;
