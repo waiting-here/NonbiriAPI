@@ -4,7 +4,7 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.4.2 — Unreleased
+## 1.4.2 — 2026-11-21
 
 - Feature selected sign-in rewards and choose an activity cover from pool
   banners, collection illustrations or an external HTTPS image. Covers can
@@ -17,6 +17,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   player looks inside a neighboring haven.
 - Preserve the full outbound request when a model or authentication endpoint
   responds before the upload finishes.
+- Deliver complete stream events in order before reporting a later upstream
+  read failure, preserving usage that was received before a disconnection.
 - Keep account names, levels and selection controls readable in the user list
   when opening a detail panel or browsing on a phone.
 - Fit channel protocols, addresses and actions to the available list width.
