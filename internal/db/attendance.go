@@ -60,3 +60,13 @@ CREATE TABLE attendance_awards (
 CREATE INDEX idx_attendance_awards_day ON attendance_awards(period_id,user_id,site_date,days);
 CREATE INDEX idx_attendance_awards_user ON attendance_awards(user_id,period_id,days);
 `
+
+// AttendancePresentationSQL adds optional presentation without changing reward rows or receipts.
+const AttendancePresentationSQL = `
+ALTER TABLE attendance_periods ADD COLUMN cover TEXT CHECK(cover IS NULL OR
+ (length(CAST(cover AS BLOB))<=16384 AND json_valid(cover) AND json_type(cover)='object'
+  AND COALESCE(json_extract(cover,'$.kind'),'') IN ('pool','collection','external')
+  AND COALESCE(json_type(cover,'$.value'),'')='text' AND length(CAST(json_extract(cover,'$.value') AS BLOB)) BETWEEN 1 AND 2048
+  AND COALESCE(json_extract(cover,'$.fit'),'') IN ('cover','contain')));
+ALTER TABLE attendance_tiers ADD COLUMN featured INTEGER NOT NULL DEFAULT 0 CHECK(featured IN (0,1));
+`

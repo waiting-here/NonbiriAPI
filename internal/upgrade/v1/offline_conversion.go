@@ -54,13 +54,18 @@ func inspectVersion(ctx context.Context, q queryer) (int, error) {
 	if err := q.QueryRowContext(ctx, "SELECT version FROM schema_state WHERE id=1").Scan(&version); err != nil {
 		return 0, err
 	}
-	want := db.Schema54ManifestHash
-	switch version {
-	case SourceSchemaVersion:
-	case db.CurrentSchemaVersion:
-		want = db.PinnedGenerationTwoManifestHash
-	default:
-		return 0, &db.StartupError{Kind: db.StartupSchemaMismatch, ExpectedSchemaVersion: db.CurrentSchemaVersion, ActualSchemaVersion: &version}
+	want := db.PinnedGenerationTwoManifestHash
+	if version != db.CurrentSchemaVersion {
+		want = ""
+		for _, source := range supportedSources {
+			if source.SourceSchemaVersion == version {
+				want = source.SourceManifestHash
+				break
+			}
+		}
+		if want == "" {
+			return 0, &db.StartupError{Kind: db.StartupSchemaMismatch, ExpectedSchemaVersion: db.CurrentSchemaVersion, ActualSchemaVersion: &version}
+		}
 	}
 	hash, err := db.SchemaManifestHash(ctx, q)
 	if err != nil {
@@ -128,7 +133,7 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 		}
 		database.SetMaxOpenConns(1)
 		defer database.Close()
-		return applyUpgrade(ctx, database, codec)
+		return applyUpgrade(ctx, database, codec, source)
 	})
 	if err != nil {
 		return 0, operationFailure(ctx, "database access", err)
@@ -136,7 +141,7 @@ func convertOffline(ctx context.Context, path string, codec secret.GenerationTwo
 	return source, nil
 }
 
-func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.GenerationTwoContextCodec) (result error) {
+func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.GenerationTwoContextCodec, source int) (result error) {
 	// Roll back synchronously before releasing the ownership lease on cancellation.
 	tx, err := database.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
@@ -164,40 +169,26 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		if err != nil {
 			return err
 		}
-		if version != SourceSchemaVersion {
+		if version != source {
 			return errors.New("conversion source changed before exclusive access")
 		}
 		return db.ValidateStorageControls(ctx, tx, codec)
 	}); err != nil {
 		return err
 	}
-	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "whale_haven_profiles", "create Whale Haven wallets and houses", func() error {
-		_, err := tx.ExecContext(ctx, db.WhaleHavenSQL)
-		return err
-	}); err != nil {
-		return err
+	if source == SourceSchemaVersion {
+		if err := migrateSchema54(ctx, tx); err != nil {
+			return err
+		}
 	}
-	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "donation_model_quotas", "model quota conversion", func() error {
-		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL); err != nil {
-			return err
-		}
-		return backfillModelConsumption(ctx, tx)
-	}); err != nil {
+	if err := offlineStep(ctx, "migration", 56, "attendance_periods", "attendance presentation", func() error {
+		_, err := tx.ExecContext(ctx, db.AttendancePresentationSQL)
 		return err
-	}
-	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "request_attempts", "attempt health conversion", func() error {
-		if _, err := tx.ExecContext(ctx, db.AttemptHealthSQL); err != nil {
-			return err
-		}
-		if err := backfillAttemptStreaks(ctx, tx); err != nil {
-			return err
-		}
-		return backfillAttemptBackoffs(ctx, tx)
 	}); err != nil {
 		return err
 	}
 	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "schema_state", "schema version update", func() error {
-		updated, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", db.CurrentSchemaVersion, SourceSchemaVersion)
+		updated, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", db.CurrentSchemaVersion, source)
 		if err != nil {
 			return err
 		}
@@ -216,6 +207,35 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		committed = err == nil
 		return err
 	})
+}
+
+func migrateSchema54(ctx context.Context, tx *sql.Tx) error {
+	if err := offlineStep(ctx, "migration", 55, "whale_haven_profiles", "create Whale Haven wallets and houses", func() error {
+		_, err := tx.ExecContext(ctx, db.WhaleHavenSQL)
+		return err
+	}); err != nil {
+		return err
+	}
+	if err := offlineStep(ctx, "migration", 55, "donation_model_quotas", "model quota conversion", func() error {
+		if _, err := tx.ExecContext(ctx, db.ModelConsumptionSQL+db.DonationExpiryIndexSQL+db.GoogleModelCooldownSQL); err != nil {
+			return err
+		}
+		return backfillModelConsumption(ctx, tx)
+	}); err != nil {
+		return err
+	}
+	if err := offlineStep(ctx, "migration", 55, "request_attempts", "attempt health conversion", func() error {
+		if _, err := tx.ExecContext(ctx, db.AttemptHealthSQL); err != nil {
+			return err
+		}
+		if err := backfillAttemptStreaks(ctx, tx); err != nil {
+			return err
+		}
+		return backfillAttemptBackoffs(ctx, tx)
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func checkIntegrity(ctx context.Context, q queryer) error {

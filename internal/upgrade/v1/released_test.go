@@ -42,7 +42,7 @@ func TestConvertReleasedDatabase(t *testing.T) {
 		mode    string
 		status  string
 		version int
-	}{{"--check", "ready", 54}, {"--apply", "converted", 54}, {"--check", "current", 55}, {"--apply", "current", 55}} {
+	}{{"--check", "ready", 54}, {"--apply", "converted", 54}, {"--check", "current", db.CurrentSchemaVersion}, {"--apply", "current", db.CurrentSchemaVersion}} {
 		command := exec.CommandContext(ctx, cli, tc.mode, "--database", path)
 		var progress bytes.Buffer
 		command.Stderr = &progress
@@ -101,7 +101,7 @@ func TestUnsupportedUpgradeSourcesRemainUnchanged(t *testing.T) {
 	for _, tc := range []struct {
 		marker  int
 		message string
-	}{{53, "v1.3.12"}, {28, "v1.3.12"}, {56, "newer"}, {54, "differs from the released schema"}} {
+	}{{53, "v1.3.12"}, {28, "v1.3.12"}, {db.CurrentSchemaVersion + 1, "newer"}, {54, "differs from the released schema"}, {55, "differs from the released schema"}} {
 		database, err := sql.Open("sqlite", path)
 		if err != nil {
 			t.Fatal(err)
