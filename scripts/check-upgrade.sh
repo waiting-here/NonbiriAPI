@@ -5,7 +5,9 @@ cd "$root"
 go_command=${GO:-go}
 python_command=${PYTHON:-python3}
 released_commit=03456c51d7537e806fc1b4576fc7e9660dc3f696
+attendance_commit=b1700f25d7a73535af76cdd15c356d92eff0d8fd
 bash "$root/scripts/ensure-upgrade-source.sh" "$released_commit"
+bash "$root/scripts/ensure-upgrade-source.sh" "$attendance_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
 cleanup() {
@@ -17,7 +19,8 @@ cleanup() {
     esac
 }
 trap cleanup EXIT
-mkdir "$temporary/released" "$temporary/data"
+mkdir "$temporary/released" "$temporary/attendance"
+mkdir -m 700 "$temporary/data"
 git archive "$released_commit" -- go.mod go.sum internal | tar -x -C "$temporary/released"
 "$python_command" - "$root" "$temporary" <<'PY'
 import json, pathlib, sys
@@ -46,5 +49,17 @@ export NONBIRI_UPGRADE_CLI="$temporary/upgrade.exe"
 "$go_command" test -count=1 -v -timeout=10m -run '^TestConvertReleasedDatabase$' ./internal/upgrade/v1
 NONBIRI_STABLE_UPGRADED_FIXTURE="$NONBIRI_RELEASED_FIXTURE" "$temporary/released-wallet.test" -test.run '^TestReleasedRejectsStableSchema$' -test.v -test.timeout 2m
 "$go_command" test -count=1 -v -timeout=2m -run '^TestEconomyAuditCatchUpFromReleasedBinary$' ./internal/economyaudit
-printf 'Released source: %s\n' "$released_commit"
+git archive "$attendance_commit" -- go.mod go.sum internal | tar -x -C "$temporary/attendance"
+cp "$root/internal/attendance/released_test.go" "$temporary/attendance/internal/attendance/"
+export NONBIRI_RELEASED_ATTENDANCE_FIXTURE="$temporary/data/attendance.db"
+(
+    unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
+    cd "$temporary/attendance"
+    "$go_command" test -c -o "$temporary/released-attendance.test" ./internal/attendance
+    "$temporary/released-attendance.test" -test.run '^TestWriteReleasedAttendanceFixture$' -test.v -test.timeout 2m
+)
+"$go_command" test -count=1 -v -timeout=5m -run '^TestConvertReleasedAttendanceDatabase$' ./internal/upgrade/v1
+"$go_command" test -count=1 -v -timeout=2m -run '^TestReplayReleasedAttendance$' ./internal/attendance
+"$temporary/released-attendance.test" -test.run '^TestReleasedAttendanceRejectsUpgradedSchema$' -test.v -test.timeout 2m
+printf 'Released sources: %s %s\n' "$released_commit" "$attendance_commit"
 "$go_command" version

@@ -20,48 +20,10 @@ import (
 // The source program creates this populated database. Its own executable
 // also checks rejection of the upgraded database after this test returns.
 func TestConvertReleasedDatabase(t *testing.T) {
-	path := os.Getenv("NONBIRI_UPGRADE_FIXTURE")
-	if path == "" {
-		t.Skip("the pinned release gate supplies the source")
-	}
-	cli := os.Getenv("NONBIRI_UPGRADE_CLI")
-	if cli == "" {
-		t.Fatal("missing upgrade executable")
-	}
-	t.Setenv("NONBIRI_MASTER_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x42}, 32)))
-	t.Setenv("NONBIRI_MASTER_KEY_FILE", "")
-	vault := testVault(t, 0x42)
+	store := convertReleasedFixture(t, "NONBIRI_UPGRADE_FIXTURE", 0x42, 54, db.Schema54ManifestHash)
 	ctx := t.Context()
-	if err := db.InspectContext(ctx, path, vault, func(ctx context.Context, source *sql.DB) error {
-		assertRetainedManifest(t, source, db.Schema54ManifestHash)
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		mode    string
-		status  string
-		version int
-	}{{"--check", "ready", 54}, {"--apply", "converted", 54}, {"--check", "current", db.CurrentSchemaVersion}, {"--apply", "current", db.CurrentSchemaVersion}} {
-		command := exec.CommandContext(ctx, cli, tc.mode, "--database", path)
-		var progress bytes.Buffer
-		command.Stderr = &progress
-		out, err := command.Output()
-		if err != nil {
-			t.Fatalf("%s: %v (%s)", tc.mode, err, progress.Bytes())
-		}
-		var got Result
-		if err = json.Unmarshal(out, &got); err != nil || got.Status != tc.status || got.SourceSchemaVersion != tc.version || got.TargetManifestHash != db.PinnedGenerationTwoManifestHash {
-			t.Fatal(got, err)
-		}
-	}
-	store, err := db.Open(path, vault)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
 	var valid bool
-	err = store.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM legal_holds h JOIN donations d ON CAST(d.id AS TEXT)=h.object_ref WHERE h.state='active' AND h.object_kind='donation' AND h.basis='Synthetic preservation requirement') AND EXISTS(SELECT 1 FROM site_config WHERE key='legal_privacy_override_en' AND value=?) AND EXISTS(SELECT 1 FROM caller_keys WHERE generation=7) AND EXISTS(SELECT 1 FROM credential_versions) AND EXISTS(SELECT 1 FROM credit_accounts WHERE balance_sign=-1)`, "Synthetic privacy.\nPreserve punctuation, spaces, and tabs.\t").Scan(&valid)
+	err := store.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM legal_holds h JOIN donations d ON CAST(d.id AS TEXT)=h.object_ref WHERE h.state='active' AND h.object_kind='donation' AND h.basis='Synthetic preservation requirement') AND EXISTS(SELECT 1 FROM site_config WHERE key='legal_privacy_override_en' AND value=?) AND EXISTS(SELECT 1 FROM caller_keys WHERE generation=7) AND EXISTS(SELECT 1 FROM credential_versions) AND EXISTS(SELECT 1 FROM credit_accounts WHERE balance_sign=-1)`, "Synthetic privacy.\nPreserve punctuation, spaces, and tabs.\t").Scan(&valid)
 	if err != nil || !valid {
 		t.Fatal("preserved governance, credential and wallet state", valid, err)
 	}
@@ -86,6 +48,55 @@ func TestConvertReleasedDatabase(t *testing.T) {
 	if model.UpstreamModelID != "source-model" || !model.HistoricalCostsPartial || model.Used.Calls != "1" || model.Used.Credits != "1.125" || model.Used.Tokens != "19" || *model.Remaining.Tokens != "23" {
 		t.Fatal(model)
 	}
+}
+
+func TestConvertReleasedAttendanceDatabase(t *testing.T) {
+	convertReleasedFixture(t, "NONBIRI_RELEASED_ATTENDANCE_FIXTURE", 0, 55, db.Schema55ManifestHash)
+}
+
+func convertReleasedFixture(t *testing.T, fixtureEnv string, keyByte byte, version int, manifest string) *db.Store {
+	t.Helper()
+	path := os.Getenv(fixtureEnv)
+	if path == "" {
+		t.Skip("the pinned release gate supplies the source")
+	}
+	cli := os.Getenv("NONBIRI_UPGRADE_CLI")
+	if cli == "" {
+		t.Fatal("missing upgrade executable")
+	}
+	t.Setenv("NONBIRI_MASTER_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{keyByte}, 32)))
+	t.Setenv("NONBIRI_MASTER_KEY_FILE", "")
+	vault := testVault(t, keyByte)
+	ctx := t.Context()
+	if err := db.InspectContext(ctx, path, vault, func(ctx context.Context, source *sql.DB) error {
+		assertRetainedManifest(t, source, manifest)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		mode    string
+		status  string
+		version int
+	}{{"--check", "ready", version}, {"--apply", "converted", version}, {"--check", "current", db.CurrentSchemaVersion}, {"--apply", "current", db.CurrentSchemaVersion}} {
+		command := exec.CommandContext(ctx, cli, tc.mode, "--database", path)
+		var progress bytes.Buffer
+		command.Stderr = &progress
+		out, err := command.Output()
+		if err != nil {
+			t.Fatalf("%s: %v (%s)", tc.mode, err, progress.Bytes())
+		}
+		var got Result
+		if err = json.Unmarshal(out, &got); err != nil || got.Status != tc.status || got.SourceSchemaVersion != tc.version || got.TargetSchemaVersion != db.CurrentSchemaVersion || got.TargetManifestHash != db.PinnedGenerationTwoManifestHash {
+			t.Fatal(got, err)
+		}
+	}
+	store, err := db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	return store
 }
 
 func TestUnsupportedUpgradeSourcesRemainUnchanged(t *testing.T) {
