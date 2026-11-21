@@ -9,7 +9,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
-// unchangedCallerParameters is called before clearing the wire body, only for
+// unchangedCallerParameters is called before releasing the wire body, only for
 // native codecs whose fields retain the decoder's original JSON values.
 // Configured adaptations and protocol conversions cannot supply this proof.
 // Comparing raw values also refuses otherwise equivalent codec normalization.
@@ -33,7 +33,7 @@ func unchangedCallerParameters(ctx context.Context, response *http.Response, fie
 	}
 	// A dotted error parameter names a member, not a literal top-level key.
 	// Prove the whole parent unchanged and the member present exactly once.
-	// Keep only booleans: the wire body is cleared before this callback runs.
+	// Keep only booleans: the callback outlives our ownership of the wire body.
 	for _, path := range [][2]string{{"thinking", "type"}, {"thinking", "budget_tokens"}, {"reasoning", "effort"}} {
 		name := path[0] + "." + path[1]
 		matched[name] = false

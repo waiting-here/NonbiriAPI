@@ -31,7 +31,8 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 	if err != nil {
 		return result
 	}
-	defer clear(body)
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
 		return contract.NormalizeOutcome(AttemptResult{Failure: FailureUpstream, Diagnostic: "upstream endpoint was refused"})
@@ -47,7 +48,7 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 			return result
 		}
 	}
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
 	}
@@ -102,13 +103,14 @@ func (a *Adapter) AttemptInference(ctx context.Context, writer http.ResponseWrit
 		lineLimit, eventLimit = int(limit), int(limit)
 	}
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: limit, StreamBytes: streamLimit, LineBytes: lineLimit, EventBytes: eventLimit})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	if err == nil && (kind == contract.TypeOpenAICompatible || kind == contract.TypeOpenAIResponses) &&
 		request.operation != contract.OperationRerank && len(request.parts) == 0 {
 		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
 	}
 	httpRequest.Header.Del("Authorization")
-	clear(body)
+	upload.Release()
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 		if response.Request != nil {

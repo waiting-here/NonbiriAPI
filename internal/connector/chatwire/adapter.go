@@ -3,7 +3,6 @@
 package chatwire
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -79,7 +78,8 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	if err != nil {
 		return result
 	}
-	defer clear(body)
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 	if int64(len(body)) > request.RequestBodyLimit()+(16<<10) {
 		return result
 	}
@@ -91,7 +91,7 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	if err != nil {
 		return result
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
 		return result
 	}
@@ -163,9 +163,10 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	clear(key)
 	clear(ciphertext)
 	req = egress.WithResponseLimits(req, egress.ResponseLimits{JSONBytes: MaxJSONBytes, StreamBytes: MaxStreamBytes, LineBytes: MaxLineBytes, EventBytes: MaxEventBytes})
+	upload.Attach(req)
 	response, err := client.Do(req)
 	req.Header.Del(a.protocol.Header)
-	clear(body)
+	upload.Release()
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 		if response.Request != nil {

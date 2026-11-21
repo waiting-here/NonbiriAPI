@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"strings"
@@ -34,8 +33,9 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	if err != nil {
 		return result
 	}
-	defer clear(body)
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, imagesURL(client.BaseURL()), bytes.NewReader(body))
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, imagesURL(client.BaseURL()), nil)
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
 	}
@@ -72,6 +72,7 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxImageResponseBytes, StreamBytes: a.maxImageResponseBytes, LineBytes: int(a.maxImageResponseBytes), EventBytes: int(a.maxImageResponseBytes)})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	if err == nil {
 		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
@@ -80,7 +81,7 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
 	httpRequest.Header.Del("Authorization")
-	clear(body)
+	upload.Release()
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
