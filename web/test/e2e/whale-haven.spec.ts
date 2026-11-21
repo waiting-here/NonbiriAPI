@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { expect, test } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
-import type { Action, Profile, Neighbor } from '../../src/user/games/whale-haven/api';
+import type {
+  Action,
+  Profile,
+  Neighbor,
+  NeighborHouse,
+} from '../../src/user/games/whale-haven/api';
 
 const neighbor: Neighbor = {
   id: 'bay-b',
@@ -119,15 +124,32 @@ test('a visiting keeper sees hiring and meal state consistently in both havens',
     working: false,
     started_at_ms: Date.now(),
   };
-  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) =>
-    route.fulfill({
-      json: route.request().url().includes('neighbors/search') ? { items: [neighbor] } : profile,
-    }),
-  );
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/neighbors/house'))
+      return route.fulfill({
+        json: {
+          house: neighbor,
+          guests: [
+            {
+              whaleName: '小鲸鱼',
+              whaleOutfit: 'maid_classic',
+              stage: profile.social.away?.working ? 'working' : 'eating',
+              mine: true,
+            },
+            { whaleName: '小满', whaleOutfit: 'winter_snow', stage: 'working', mine: false },
+          ],
+        },
+      });
+    return route.fulfill({
+      json: path.endsWith('/neighbors/search') ? { items: [neighbor] } : profile,
+    });
+  });
   await page.goto(USER_ORIGIN + '/games/whale-haven');
   await expect(page.getByText(/已吃 0 克 · 餐食奖励预计 0 枚/)).toBeVisible();
   await page.getByRole('button', { name: '去邻居家看她' }).click();
   await expect(page.getByText('小鲸鱼 · 串门用餐')).toBeVisible();
+  await expect(page.getByText('小满 · 正在帮工')).toBeVisible();
   profile.social.away.working = true;
   profile.social.away.work_ends_at_ms = Date.now() + 120000;
   await page.getByRole('button', { name: '串门', exact: true }).click();
@@ -139,6 +161,65 @@ test('a visiting keeper sees hiring and meal state consistently in both havens',
   await page.getByRole('button', { name: '首页', exact: true }).click();
   await expect(page.getByText('在外帮工', { exact: true })).toBeVisible();
   await expect(page.getByText('工资按帮工产出的 20% 结算')).toBeVisible();
+});
+
+test('an observer sees guests, an empty room and a closed door on the same visit', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.social.open = true;
+  const house: NeighborHouse = {
+    house: { ...neighbor, whaleAtHome: false },
+    guests: [
+      { whaleName: '海星', whaleOutfit: 'maid_classic', stage: 'eating', mine: false },
+      { whaleName: '月牙', whaleOutfit: 'winter_snow', stage: 'working', mine: false },
+    ],
+  };
+  let closed = false;
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/neighbors/search'))
+      return route.fulfill({ json: { items: [neighbor] } });
+    if (url.pathname.endsWith('/neighbors/house')) {
+      expect(url.searchParams.get('door')).toBe(neighbor.id);
+      return closed
+        ? route.fulfill({
+            status: 404,
+            json: { error: { code: 'not_found', message: '小屋未开放或已无法访问。' } },
+          })
+        : route.fulfill({ json: house });
+    }
+    return route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  const button = (name: string) => page.getByRole('button', { name, exact: true });
+  await button('串门').click();
+  await button('看看小筑').click();
+  const guests = page.getByRole('group', { name: '来访客鲸' });
+  await expect(guests.getByText('海星 · 串门用餐')).toBeInViewport();
+  await expect(guests.getByText('月牙 · 正在帮工')).toBeInViewport();
+  await expect(guests.getByRole('button')).toHaveCount(0);
+  await expect(page.getByText('客位已满')).toBeVisible();
+  const frontTag = await guests.getByText('海星 · 串门用餐').boundingBox();
+  const bowlBadge = await page.locator('.diegetic-prop--right .diegetic-prop__badge').boundingBox();
+  expect(frontTag!.y + frontTag!.height).toBeLessThanOrEqual(bowlBadge!.y);
+  await expect(page.getByText('屋主鲸暂时不在家。')).toBeVisible();
+  house.guests = [];
+  await button('串门').click();
+  await button('刷新串门状态').click();
+  await expect(page.getByText('暂无客鲸来访')).toBeAttached();
+  await expect(guests.locator('figure')).toHaveCount(0);
+  closed = true;
+  await button('刷新串门状态').click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(guests).toHaveCount(0);
+  await button('回到我的小筑').click();
+  await expect(button('唠嗑')).toBeVisible();
 });
 
 test('selecting the second guest opens its own controls and respects consent', async ({ page }) => {

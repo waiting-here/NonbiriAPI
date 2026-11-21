@@ -38,13 +38,13 @@ import {
   pickRandomCuteWhaleName,
 } from '../game/catalog';
 import { getActiveGuests, resolveStageConversations, resolveWhaleExpression } from '../game/scene';
-import type { GameSnapshot, NeighborStation, WhaleExpression } from '../game/types';
+import type { GameSnapshot, WhaleExpression } from '../game/types';
 import { SleepingBedCanvas } from '../pet/SleepingBedCanvas';
 import { WhalePetActor } from '../pet/WhalePetActor';
 
 import type { FaceCalibrationConfig } from '../rig/calibrator';
 import { WhaleRigActor, type RigImpulseEvent } from '../rig/WhaleRigActor';
-import { formatMilliCredits, type Profile } from '../api';
+import { formatMilliCredits, type NeighborHouse, type Profile } from '../api';
 import { UiSwitch } from './UiMotifs';
 import { MenuPositionButton, type MenuPresentationMode } from './ControlDeck';
 
@@ -56,7 +56,7 @@ interface OceanStageProps {
   values: Record<string, number>;
   snapshot: GameSnapshot;
   social: Profile['social'];
-  viewingNeighbor: NeighborStation | null;
+  neighborHouse?: NeighborHouse;
   rigImpulse: RigImpulseEvent | null;
   faceCalibration: FaceCalibrationConfig;
   showBonesDebug: boolean;
@@ -111,7 +111,7 @@ export function OceanStage({
   values,
   snapshot,
   social,
-  viewingNeighbor,
+  neighborHouse,
   rigImpulse,
   faceCalibration,
   showBonesDebug,
@@ -153,6 +153,8 @@ export function OceanStage({
   const t = useWhaleText();
   const { whale, home } = snapshot;
   const activeGuests = getActiveGuests(snapshot);
+  const viewingNeighbor = neighborHouse?.house;
+  const visitingGuests = neighborHouse?.guests ?? [];
   const sneakingGuests = activeGuests.filter((g) => g.stage === 'eating');
   const workingGuests = activeGuests.filter((g) => g.stage === 'working');
   const [animClass, setAnimClass] = useState<'is-headpat' | 'is-poked' | ''>('');
@@ -389,10 +391,7 @@ export function OceanStage({
     if (helpOpen) setHelpOpen(false);
   };
 
-  const isOurWhaleAtThisNeighbor =
-    viewingNeighbor !== null &&
-    whale.location.kind === 'visiting' &&
-    whale.location.neighborId === viewingNeighbor.id;
+  const ourVisitingWhale = visitingGuests.find((guest) => guest.mine);
   const awayStatus = t(resolved.statusLabel, workingAway ? 'Working away' : 'Visiting a neighbor');
   const awayDetail =
     whale.location.kind === 'visiting' &&
@@ -608,14 +607,14 @@ export function OceanStage({
           {/* Neighbor's Whale */}
           {viewingNeighbor.whaleAtHome ? (
             <div
-              className={`whale-actor ${isOurWhaleAtThisNeighbor ? 'whale-actor--shifted' : ''}`}
+              className={`whale-actor ${visitingGuests.length === 2 ? 'whale-actor--shifted-two' : visitingGuests.length ? 'whale-actor--shifted' : ''}`}
               style={{ width: mainWhaleWidth, height: Math.round(mainWhaleWidth * 1.08) }}
             >
               <div className="whale-speech">
                 <span className="whale-speech__speaker">{viewingNeighbor.whaleName}</span>
-                {isOurWhaleAtThisNeighbor && workingAway
+                {ourVisitingWhale?.stage === 'working'
                   ? t(`「${whale.name}」正在我家帮工！`, `${whale.name} is helping in my haven!`)
-                  : isOurWhaleAtThisNeighbor
+                  : ourVisitingWhale
                     ? `欢迎「${whale.name}」来我家一起吃${FEED_CATALOG[viewingNeighbor.troughFeedType].name}呀～`
                     : viewingNeighbor.troughGrams > 0
                       ? `我是「${viewingNeighbor.whaleName}」，我家饭盆还有 ${Math.round(viewingNeighbor.troughGrams)}g 口粮哦！`
@@ -684,57 +683,70 @@ export function OceanStage({
             </div>
           )}
 
-          {/* Our Whale eating at this Neighbor's sanctuary */}
-          {isOurWhaleAtThisNeighbor && whale.location.kind === 'visiting' && (
-            <div
-              className="guest-actor"
-              style={{
-                cursor: 'default',
-                width: guestWhaleWidth,
-                height: Math.round(guestWhaleWidth * 1.08),
-              }}
-            >
-              <div className="whale-speech whale-speech--guest">
-                <span className="whale-speech__speaker">{whale.name}</span>
-                {awayDetail}
-              </div>
-              <div
-                className={
-                  renderMode === 'sprite' ? 'whale-sprite-wrap is-eating' : 'whale-rig-stage-wrap'
-                }
-              >
-                {renderMode === 'pet' ? (
-                  <WhalePetActor
-                    alt={whale.name}
-                    outfit={whale.outfit}
-                    expression="cheerful"
-                    isWorkerUniform={workingAway}
-                    activity="eating"
-                    alwaysEatingWhenActive
-                    lookTrackingEnabled={false}
-                    reloadToken={rigReloadToken}
-                    displayWidth={guestWhaleWidth - 8}
-                  />
-                ) : (
-                  <WhaleRigActor
-                    alt={whale.name}
-                    outfit={whale.outfit ?? 'maid_classic'}
-                    expression="cheerful"
-                    renderMode={renderMode}
-                    activity="eating"
-                    heldProp="silver_fish"
-                    showBonesDebug={showBonesDebug}
-                    reloadToken={rigReloadToken}
-                    displayWidth={guestWhaleWidth - 8}
-                  />
-                )}
-              </div>
-              <span className={`guest-tag${workingAway ? ' guest-tag--worker' : ''}`}>
-                {whale.name} ·{' '}
-                {workingAway ? t('正在帮工', 'Working') : t('串门用餐', 'Visiting for a meal')}
-              </span>
-            </div>
-          )}
+          <div
+            className="observed-guests"
+            role="group"
+            aria-label={t('来访客鲸', 'Visiting whales')}
+          >
+            {visitingGuests.map((guest, slot) => {
+              const working = guest.stage === 'working';
+              return (
+                <figure
+                  key={`${slot}-${guest.whaleName}`}
+                  className={`guest-actor guest-actor--slot-${slot} guest-actor--observed`}
+                  style={{ width: guestWhaleWidth, height: Math.round(guestWhaleWidth * 1.08) }}
+                >
+                  {guest.mine && (
+                    <div className="whale-speech whale-speech--guest">
+                      <span className="whale-speech__speaker">{t('我的小鲸', 'My whale')}</span>
+                      {whale.location.kind === 'visiting' &&
+                      whale.location.neighborId === viewingNeighbor.id &&
+                      working === workingAway
+                        ? awayDetail
+                        : guest.whaleName}
+                    </div>
+                  )}
+                  <div
+                    className={
+                      renderMode === 'sprite'
+                        ? 'whale-sprite-wrap is-eating'
+                        : 'whale-rig-stage-wrap'
+                    }
+                  >
+                    {renderMode === 'pet' ? (
+                      <WhalePetActor
+                        alt={guest.whaleName}
+                        outfit={guest.whaleOutfit}
+                        expression="cheerful"
+                        isWorkerUniform={working}
+                        activity="eating"
+                        alwaysEatingWhenActive
+                        lookTrackingEnabled={false}
+                        reloadToken={rigReloadToken}
+                        displayWidth={guestWhaleWidth - 8}
+                      />
+                    ) : (
+                      <WhaleRigActor
+                        alt={guest.whaleName}
+                        outfit={guest.whaleOutfit}
+                        expression="cheerful"
+                        renderMode={renderMode}
+                        activity="eating"
+                        heldProp="silver_fish"
+                        showBonesDebug={showBonesDebug}
+                        reloadToken={rigReloadToken}
+                        displayWidth={guestWhaleWidth - 8}
+                      />
+                    )}
+                  </div>
+                  <figcaption className={`guest-tag${working ? ' guest-tag--worker' : ''}`}>
+                    {guest.whaleName} ·{' '}
+                    {working ? t('正在帮工', 'Working') : t('串门用餐', 'Visiting for a meal')}
+                  </figcaption>
+                </figure>
+              );
+            })}
+          </div>
 
           {/* Diegetic Neighbor Porcelain Whale Rice Basin */}
           <div className="diegetic-prop diegetic-prop--right" aria-label="邻家青花鲸鱼饭碗">
@@ -1696,8 +1708,10 @@ export function OceanStage({
                       {t('串门视角', 'Neighbor view')}
                     </span>
                     <strong>
-                      {viewingNeighbor.oceanTitle} ·{' '}
-                      {displayNeighborName(viewingNeighbor, t('匿名饲养员', 'Anonymous keeper'))}
+                      {viewingNeighbor.oceanTitle && `${viewingNeighbor.oceanTitle} · `}
+                      {viewingNeighbor.gameProfilePublic
+                        ? viewingNeighbor.publicNickname
+                        : t('匿名饲养员', 'Anonymous keeper')}
                     </strong>
                     {viewingHandles.uidBadge && (
                       <span
@@ -1757,7 +1771,10 @@ export function OceanStage({
                       flexWrap: 'wrap',
                     }}
                   >
-                    {isOurWhaleAtThisNeighbor ? (
+                    {!visitingGuests.length && (
+                      <span>{t('暂无客鲸来访', 'No guest whales here')}</span>
+                    )}
+                    {ourVisitingWhale ? (
                       <button
                         type="button"
                         className="nb-btn nb-btn--sm nb-btn--primary"
@@ -1766,6 +1783,8 @@ export function OceanStage({
                         <BellRing size={13} />{' '}
                         {t(`喊「${whale.name}」回家`, `Recall ${whale.name}`)}
                       </button>
+                    ) : visitingGuests.length >= 2 ? (
+                      <span>{t('客位已满', 'Both guest spots are taken')}</span>
                     ) : (
                       <>
                         <select

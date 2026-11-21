@@ -17,7 +17,8 @@ can open details by exact request ID, and authorized management views show
 the recorded failure counts, waits and disablement triggers.
 
 Whale Haven lets players adopt and care for a whale, visit other open homes,
-hire consenting guest whales and earn social rewards. Whale coins and conch
+and see which guests are eating or working. Players can hire consenting guests
+and earn social rewards. Whale coins and conch
 shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 

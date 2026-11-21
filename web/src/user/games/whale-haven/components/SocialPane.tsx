@@ -444,8 +444,8 @@ export function DepartureDialog({
         'Visit ' + displayNeighborName(neighbor, 'Anonymous keeper') + '?',
       )}
       description={t(
-        '可以随时召回自己的鲸，并领取本次已获得的奖励。',
-        'Recall your whale at any time to collect rewards earned on this visit.',
+        '来这间小筑的玩家能看见你的小鲸在用餐或帮工。你可以随时召回她，领取这次的奖励。',
+        'Visitors to this haven can see your whale eating or working. Recall her at any time to collect the rewards she has earned.',
       )}
       confirmLabel={t('出发', 'Depart')}
       busy={busy}
