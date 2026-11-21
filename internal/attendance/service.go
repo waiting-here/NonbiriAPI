@@ -71,6 +71,11 @@ func normalize(in Input) (Input, error) {
 	if len(in.Tiers) < 1 || len(in.Tiers) > MaxTiers {
 		return in, fmt.Errorf("%w: configure between 1 and 366 reward tiers", ErrInvalid)
 	}
+	cover, err := normalizeCover(in.Cover)
+	if err != nil {
+		return in, err
+	}
+	in.Cover = cover
 	in.Tiers = slices.Clone(in.Tiers)
 	slices.SortFunc(in.Tiers, func(a, b TierInput) int { return a.Days - b.Days })
 	count, last := 0, 0
@@ -107,15 +112,19 @@ func window(in Input, offset int) (int64, int64, error) {
 	return start.Unix(), end.Unix(), nil
 }
 
-const periodColumns = "id,title,description,start_date,end_date,mode,published,revision,timezone_offset_minutes,created_at,starts_at,ends_at,actor_user_id"
+const periodColumns = "id,title,description,start_date,end_date,mode,published,revision,timezone_offset_minutes,created_at,starts_at,ends_at,actor_user_id,cover"
 
 type scanner interface{ Scan(...any) error }
 
 func scanPeriod(row scanner) (Period, error) {
 	var p Period
-	err := row.Scan(&p.ID, &p.Title, &p.Description, &p.StartDate, &p.EndDate, &p.Mode, &p.Published, &p.Revision, &p.TimezoneOffsetMinutes, &p.CreatedAt, &p.startsAt, &p.endsAt, &p.actor)
+	var cover sql.NullString
+	err := row.Scan(&p.ID, &p.Title, &p.Description, &p.StartDate, &p.EndDate, &p.Mode, &p.Published, &p.Revision, &p.TimezoneOffsetMinutes, &p.CreatedAt, &p.startsAt, &p.endsAt, &p.actor, &cover)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
+	}
+	if err == nil && cover.Valid {
+		err = json.Unmarshal([]byte(cover.String), &p.Cover)
 	}
 	return p, err
 }
@@ -152,7 +161,7 @@ func viewTx(ctx context.Context, tx *sql.Tx, p Period, user, at int64, available
 	}
 	p.CanSignIn = user > 0 && available && p.Published && p.Status == "active" && !p.SignedToday
 	p.Tiers = []Tier{}
-	rows, err := tx.QueryContext(ctx, `SELECT t.days,t.rewards,a.results,a.awarded_at FROM attendance_tiers t
+	rows, err := tx.QueryContext(ctx, `SELECT t.days,t.rewards,t.featured,a.results,a.awarded_at FROM attendance_tiers t
  LEFT JOIN attendance_awards a ON a.period_id=t.period_id AND a.days=t.days AND a.user_id=?
  WHERE t.period_id=? ORDER BY t.days LIMIT ?`, user, p.ID, MaxTiers+1)
 	if err != nil {
@@ -163,7 +172,7 @@ func viewTx(ctx context.Context, tx *sql.Tx, p Period, user, at int64, available
 		var t Tier
 		var raw string
 		var result sql.NullString
-		if err = rows.Scan(&t.Days, &raw, &result, &t.AwardedAt); err != nil {
+		if err = rows.Scan(&t.Days, &raw, &t.Featured, &result, &t.AwardedAt); err != nil {
 			return p, err
 		}
 		if err = json.Unmarshal([]byte(raw), &t.Rewards); err != nil {
@@ -261,7 +270,13 @@ func (s *Service) List(ctx context.Context, actor int64, admin bool, page, size 
 	if err != nil {
 		return out, err
 	}
+	var policy coverPolicy
 	for _, p := range periods {
+		if !admin {
+			if err = policy.project(ctx, tx, &p); err != nil {
+				return out, err
+			}
+		}
 		p, err = viewTx(ctx, tx, p, user, at, out.Available)
 		if err != nil {
 			return out, err

@@ -4,6 +4,31 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.4.2 — 2026-11-21
+
+- Feature selected sign-in rewards and choose an activity cover from pool
+  banners, collection illustrations or an external HTTPS image. Covers can
+  fill the frame or show the entire image. Existing activities keep their default.
+- Advance storage to schema 56. The standalone converter accepts exact schema
+  54 and 55 databases and preserves sign-ins, progress and issued awards.
+- Award Bond XP for the first three free Whale Haven interactions per player
+  and site day. Players can continue interacting after earning all three awards.
+- Show visiting whales and whether each one is eating or working when a
+  player looks inside a neighboring haven.
+- Preserve the full outbound request when a model or authentication endpoint
+  responds before the upload finishes.
+- Deliver complete stream events in order before reporting a later upstream
+  read failure, preserving usage that was received before a disconnection.
+- Keep account names, levels and selection controls readable in the user list
+  when opening a detail panel or browsing on a phone.
+- Fit channel protocols, addresses and actions to the available list width.
+  The charity model management list also switches to labeled cards in narrow panes.
+- Keep keyboard focus on the selected log or alert when its details move
+  between a side panel and a drawer.
+- Report upstream network timeouts, including TLS handshake timeouts, as 504
+  on personal and charity requests. Callers receive HTTP 504 when the response
+  headers are still pending.
+
 ## 1.4.1 — 2026-11-20
 
 - Put the wallet and daily check-ins together above announcements on the user home page.

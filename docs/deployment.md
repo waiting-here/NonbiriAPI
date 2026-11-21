@@ -344,17 +344,17 @@ own status in the details and do not acquire the site's login/session semantics.
 
 ## Database compatibility and version changes
 
-A fresh installation initializes schema 55. Existing installations use v1.3.12
-as the bridge. Stop the service and preserve the matching recovery set before
-running the v1.4.0 [standalone upgrader](../cmd/nonbiri-upgrade-v1/README.md) on
-its exact schema 54 database. Earlier registered databases first use the
+A fresh installation initializes schema 56. Stop an existing service and
+preserve the matching recovery set before running the v1.4.2
+[standalone upgrader](../cmd/nonbiri-upgrade-v1/README.md) on its exact
+schema 54 or 55 database. Earlier registered databases first use the
 v1.3.12 tool. Account exports use format 38. See [database upgrades](database-upgrades.md)
 for the source fingerprint, conversion and recovery procedure.
 
 The service and upgrader expose their compiled identities via
 `maintenance schema-info --json` and `--schema-info --json`, respectively.
-The service requires exact schema 55 and declares no conversions. The tool
-lists one source. Deployment hooks stop on mismatches so the operator can
+The service requires exact schema 56 and declares no conversions. The tool
+lists both sources. Deployment hooks stop on mismatches so the operator can
 preserve the source and deliberately invoke conversion.
 
 Current-schema validation and unfinished-work recovery remain part of startup.
@@ -367,8 +367,9 @@ Preserve the database, master key, encrypted instance matching material,
 configuration and matching binary together. Switching binaries cannot reverse a
 schema upgrade; a server expecting an older or different schema cannot open it.
 Fresh creation requires the database and sidecars to be absent and starts with
-maintenance on and public features closed. Whale Haven and its separate cash-out
-setting start closed after fresh installation or conversion. Enabling either uses
+maintenance on and public features closed. Fresh installs and schema 54 sources
+start Whale Haven and its separate cash-out setting closed. Converting schema
+55 preserves the configured values. Enabling either uses
 the administrator's game settings. Publishing instance legal text remains a
 separate operator action.
 

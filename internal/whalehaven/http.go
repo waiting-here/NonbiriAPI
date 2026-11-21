@@ -111,7 +111,7 @@ func writeFailure(w http.ResponseWriter, err error) {
 
 func (s *Service) Register(reg resources.UserRouteRegistrar) error {
 	const prefix = "/api/games/whale-haven/"
-	for _, route := range []struct{ method, path string }{{"GET", "availability"}, {"GET", "profile"}, {"GET", "neighbors/search"}, {"POST", "exchange/quote"}, {"POST", "exchange"}, {"POST", "actions"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "availability"}, {"GET", "profile"}, {"GET", "neighbors/search"}, {"GET", "neighbors/house"}, {"POST", "exchange/quote"}, {"POST", "exchange"}, {"POST", "actions"}} {
 		if err := reg.RegisterUserRoute(route.method, prefix+route.path, func(out http.ResponseWriter, req *http.Request, user resources.UserPrincipal) {
 			value, err := s.handle(req, user.UserID, route.path)
 			if err != nil {
@@ -219,11 +219,15 @@ func (s *Service) handle(req *http.Request, id int64, route string) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	if route == "neighbors/search" {
+	if route == "neighbors/search" || route == "neighbors/house" {
 		if !r.exists || !r.open {
 			return nil, conflict("开放自己的小屋后才能查看邻居。")
 		}
-		items, e := w.neighbors(r, req.URL.Query().Get("q"), req.URL.Query().Get("filter"))
+		query := req.URL.Query()
+		if route == "neighbors/house" {
+			return w.neighborHouse(r.id, query.Get("door"))
+		}
+		items, e := w.neighbors(r, query.Get("q"), query.Get("filter"))
 		return map[string]any{"items": items}, e
 	}
 	if isWrite {

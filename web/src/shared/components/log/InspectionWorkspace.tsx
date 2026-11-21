@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Sheet } from '@shared/components/ui';
 import './inspection.css';
 
@@ -41,7 +41,8 @@ export function InspectionWorkspace({
       setDocked(null);
     };
   }, []);
-  useLayoutEffect(() => {
+  // The sheet releases inertness in passive cleanup before the list or dock can take focus.
+  useEffect(() => {
     const old = previous.current;
     previous.current = selected;
     if (!selected && old) {
@@ -52,7 +53,7 @@ export function InspectionWorkspace({
       return () => cancelAnimationFrame(frame);
     }
   }, [selected]);
-  useLayoutEffect(() => {
+  useEffect(() => {
     const target = heading.current;
     if (selected && docked && target) {
       if (target?.parentElement?.parentElement) target.parentElement.parentElement.scrollTop = 0;

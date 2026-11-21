@@ -32,8 +32,9 @@ type Config struct {
 	Now          func() time.Time
 }
 type TierInput struct {
-	Days    int                `json:"days"`
-	Rewards []rewardasset.Item `json:"rewards"`
+	Days     int                `json:"days"`
+	Rewards  []rewardasset.Item `json:"rewards"`
+	Featured bool               `json:"featured,omitempty"`
 }
 type Input struct {
 	Title       string      `json:"title"`
@@ -43,6 +44,7 @@ type Input struct {
 	Mode        string      `json:"mode"`
 	Published   bool        `json:"published"`
 	Tiers       []TierInput `json:"tiers"`
+	Cover       *Cover      `json:"cover,omitempty"`
 }
 type Edit struct {
 	Input
@@ -76,6 +78,7 @@ type Period struct {
 	BestStreak            int    `json:"best_streak"`
 	EligibleDays          int    `json:"eligible_days"`
 	Tiers                 []Tier `json:"tiers"`
+	Cover                 *Cover `json:"cover,omitempty"`
 	startsAt, endsAt      int64
 	actor                 sql.NullInt64
 }

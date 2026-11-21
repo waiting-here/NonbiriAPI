@@ -121,8 +121,8 @@ func (a *Adapter) responsesChatStream(ctx context.Context, writer http.ResponseW
 		return a.streamProtocolFailure(writer, controller, committed, state.usage, message)
 	}
 	for {
-		event, ok, err := nextSSEEvent(streamCtx, events, errs)
-		if err != nil || !ok {
+		event, err := egress.NextSSEEvent(streamCtx, events, errs)
+		if err != nil {
 			if ctx.Err() != nil {
 				result := contract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed

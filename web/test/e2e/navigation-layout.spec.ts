@@ -72,6 +72,13 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   await identity.getByRole('button', { name: 'fixture-user', exact: true }).click();
   await page.getByRole('button', { name: 'Copy Discord ID', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(user.discord_id);
+  const expectReadableUserCard = async () => {
+    const name = (await identity.boundingBox())!;
+    const level = (await table.getByText('Lv1', { exact: true }).boundingBox())!;
+    expect(level.y).toBeGreaterThanOrEqual(name.y + name.height);
+  };
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expectReadableUserCard();
   for (const width of [320, 390, 1440, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
     await expect
@@ -88,6 +95,8 @@ test('user management separates identifiers and copies Discord IDs exactly at de
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
   }
   await page.setViewportSize({ width: 390, height: 900 });
+  await page.getByRole('button', { name: 'Back to list', exact: true }).click();
+  await expectReadableUserCard();
   const sidebar = page.locator('.nb-admin-sidebar');
   const toggle = page.locator('.nb-menu-button');
   await expect(sidebar).toBeHidden();

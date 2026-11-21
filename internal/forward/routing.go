@@ -98,6 +98,9 @@ func validAttemptResult(result connectorcontract.AttemptResult) bool {
 }
 
 func isTimeoutResult(result connectorcontract.AttemptResult) bool {
+	if result.FailureOrigin == connectorcontract.OriginTimeout {
+		return true
+	}
 	switch result.Diagnostic {
 	case "upstream request timed out", "upstream response timed out", "forward request timed out":
 		return true

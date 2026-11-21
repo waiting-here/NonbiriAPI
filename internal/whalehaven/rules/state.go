@@ -30,10 +30,18 @@ type State struct {
 	Whale      Whale            `json:"whale"`
 	Home       Home             `json:"home"`
 
-	LastInteractionAt int64 `json:"lastInteractionAt,omitempty"`
-	BodyStreak        int   `json:"bodyStreak,omitempty"`
-	ChatIndex         int   `json:"chatIndex,omitempty"`
+	LastInteractionAt    int64                `json:"lastInteractionAt,omitempty"`
+	BodyStreak           int                  `json:"bodyStreak,omitempty"`
+	ChatIndex            int                  `json:"chatIndex,omitempty"`
+	InteractionAffection interactionAffection `json:"interactionAffection,omitzero"`
 }
+
+type interactionAffection struct {
+	Day    string `json:"day"`
+	Awards int    `json:"awards"`
+}
+
+const interactionAwardsPerDay = 3
 
 type Wallet struct {
 	Pearls                  int64  `json:"pearls"`
@@ -199,7 +207,26 @@ func addBounded(current, bonus int64) int64 {
 	return current + min(bonus, math.MaxInt64-current)
 }
 
-func (s *State) feel(mood float64, affection int64) {
+func (s *State) Feel(mood float64, affection int64) {
 	s.Whale.Mood = max(0, min(100, s.Whale.Mood+mood))
 	s.Whale.Affection = addBounded(s.Whale.Affection, affection)
+}
+
+func (s *State) InteractionAffectionRemaining() int {
+	if s.InteractionAffection.Day == s.Wallet.SiteDayKey {
+		return interactionAwardsPerDay - s.InteractionAffection.Awards
+	}
+	return interactionAwardsPerDay
+}
+
+// Free interactions are awarded on the action's site day. Historical wage and
+// visit settlements can select earlier wallet days without changing this count.
+func (s *State) FreeInteraction(mood float64, affection int64) {
+	remaining := s.InteractionAffectionRemaining()
+	if affection > 0 && s.Whale.Affection < math.MaxInt64 && remaining > 0 {
+		s.InteractionAffection = interactionAffection{Day: s.Wallet.SiteDayKey, Awards: interactionAwardsPerDay - remaining + 1}
+	} else {
+		affection = 0
+	}
+	s.Feel(mood, affection)
 }

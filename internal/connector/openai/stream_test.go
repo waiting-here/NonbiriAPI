@@ -177,25 +177,15 @@ func TestAdapterStreamMalformedUsagePoisonsWholeRequestUsage(t *testing.T) {
 // reached protocol termination ([DONE]) and therefore fails.
 func TestAdapterStreamTruncationAfterUsageChunkKeepsUsage(t *testing.T) {
 	usageChunk := `{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1700000000,"model":"upstream/model","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":11,"total_tokens":18}}`
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		hijacker, ok := writer.(http.Hijacker)
-		if !ok {
-			t.Error("hijacking unsupported")
-			return
+	payload := "data: " + compactTestJSON(validChunk) + "\n\ndata: " + usageChunk + "\n\n"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		// Both events are complete before the HTTP body ends one byte early.
+		writer.Header().Set("Content-Length", strconv.Itoa(len(payload)+1))
+		if _, err := io.WriteString(writer, payload); err != nil {
+			t.Error(err)
 		}
-		conn, buffer, err := hijacker.Hijack()
-		if err != nil {
-			t.Errorf("hijack: %v", err)
-			return
-		}
-		defer conn.Close()
-		// Raw response with no content-length and an abrupt close after two
-		// events: the stream truncates before [DONE].
-		_, _ = fmt.Fprintf(buffer, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
-		_, _ = fmt.Fprintf(buffer, "data: %s\n\ndata: %s\n\n", compactTestJSON(validChunk), compactTestJSON(usageChunk))
-		_ = buffer.Flush()
 	}))
-	server.Start()
 	defer server.Close()
 	adapter := adapterForServer(t, server.URL, nil, nil)
 	recorder := httptest.NewRecorder()

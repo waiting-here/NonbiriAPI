@@ -132,31 +132,21 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		}
 		return map[string]any{"tool_calls": []any{call}}
 	}
-	for events != nil || errs != nil {
-		var event egress.SSEEvent
-		select {
-		case <-ctx.Done():
+	for {
+		event, readErr := egress.NextSSEEvent(streamCtx, events, errs)
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			if ctx.Err() == nil {
+				return contract.ReadFailed(failure("upstream stream was interrupted", upstreamerror.Detail{}), readErr, ctx)
+			}
 			result := contract.ReadFailed(canceled(), ctx.Err(), ctx)
 			result.Committed, result.Usage = committed, usage
 			if committed {
 				result.ClientStatus = 200
 			}
 			return result
-		case err, ok := <-errs:
-			if !ok {
-				errs = nil
-				continue
-			}
-			if err != nil {
-				return contract.ReadFailed(failure("upstream stream was interrupted", upstreamerror.Detail{}), err, ctx)
-			}
-			continue
-		case value, ok := <-events:
-			if !ok {
-				events = nil
-				continue
-			}
-			event = value
 		}
 		currentEvent = event.Data
 		if event.Event != "" && event.Event != "message" || len(event.Data) == 0 {

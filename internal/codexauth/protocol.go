@@ -86,6 +86,8 @@ func (c *client) request(ctx context.Context, path, contentType string, body []b
 			operation = "token_refresh"
 		}
 	}
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 	private := [][]byte{body}
 	var fields map[string]string
 	if contentType == "application/json" {
@@ -100,13 +102,11 @@ func (c *client) request(ctx context.Context, path, contentType string, body []b
 		}
 	}
 	for _, value := range fields {
-		private = append(private, []byte(value))
+		field := []byte(value)
+		defer clear(field)
+		private = append(private, field)
 	}
 	defer func() {
-		defer clear(body)
-		for _, value := range private {
-			defer clear(value)
-		}
 		if resultErr == nil {
 			return
 		}
@@ -124,12 +124,13 @@ func (c *client) request(ctx context.Context, path, contentType string, body []b
 		diagnostic.RecordKnownError(ctx, "policy", "configuration", "endpoint_invalid", "The authentication endpoint could not pass outbound policy", err)
 		return 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.issuer+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.issuer+path, nil)
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
+	upload.Attach(req)
 	resp, err := client.Do(req)
 	if resp != nil && resp.Body != nil {
 		defer resp.Body.Close()

@@ -11,14 +11,48 @@
 .channel-base-url {
   display: block;
   min-width: 0;
-  max-width: clamp(14rem, 26vw, 26rem);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--nb-font-mono);
 }
-@media (width < 48rem) {
-  .channel-base-url {
-    max-width: min(16rem, 100%);
+.channel-list td[data-cell='title'] {
+  font-weight: var(--nb-font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.channel-list td[data-cell='status'] .nb-badge {
+  max-width: 100%;
+  white-space: normal;
+}
+@container nb-wide-table (width >= 64rem) {
+  .channel-list .nb-table {
+    table-layout: fixed;
+  }
+  .channel-list th[data-column='category'] {
+    width: 7rem;
+  }
+  .channel-list th[data-column='base-url'] {
+    width: 24%;
+  }
+  .channel-list th[data-column='status'] {
+    width: 9rem;
+  }
+  .channel-list th[data-column='updated'] {
+    width: 8rem;
+  }
+  .channel-list th[data-column='actions'] {
+    width: 6rem;
+  }
+}
+@container nb-card-table (width >= 40rem) {
+  .channel-list td[data-column='category'],
+  .channel-list td[data-column='updated'] {
+    grid-column: 1;
+  }
+  .channel-list td[data-column='actions'] {
+    grid-column: 2;
+    align-self: end;
+    padding: 0;
   }
 }

@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SectionHead, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
@@ -20,6 +21,8 @@ import {
   type AttendancePeriod,
 } from '@shared/attendance/api';
 import { useAttendancePage } from '@shared/attendance/queries';
+import { CampaignCover } from '@shared/attendance/CampaignCover';
+import { MilestoneHeading } from '@shared/attendance/MilestoneHeading';
 import '@shared/rewards/rewards.css';
 import './attendance.css';
 
@@ -45,14 +48,16 @@ function AttendanceCard({
   period,
   account,
   assets,
-  featured = false,
+  single = false,
 }: {
   period: AttendancePeriod;
   account: string;
   assets: Asset[];
-  featured?: boolean;
+  single?: boolean;
 }) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const rewardsId = useId();
   const client = useQueryClient();
   const root = attendanceKeys.root(false, account);
   const operation = useRetainedOperation(
@@ -93,6 +98,18 @@ function AttendanceCard({
   const allAwarded = period.tiers.length > 0 && awardedCount === period.tiers.length;
   const nextTierDays =
     period.status === 'active' ? period.tiers.find((tier) => !tier.awarded)?.days : undefined;
+  const milestones = period.tiers;
+  const hasFeatured = milestones.some((tier) => tier.featured);
+  const preview =
+    !single && milestones.length > 4
+      ? milestones.filter(
+          (tier, index) =>
+            tier.featured ||
+            tier.days === nextTierDays ||
+            (!hasFeatured && (index === 0 || index === milestones.length - 1)),
+        )
+      : milestones;
+  const visibleTiers = expanded ? milestones : preview;
   const action = unknown
     ? 'retry'
     : period.signed_today
@@ -106,21 +123,12 @@ function AttendanceCard({
             : 'signIn';
   return (
     <Panel
-      className={featured ? 'attendance-card attendance-card--featured' : 'attendance-card'}
+      className={single ? 'attendance-card attendance-card--single' : 'attendance-card'}
       aria-label={period.title}
     >
       <div className="attendance-card__layout">
         <div className="attendance-card__hero">
-          <div className="attendance-card__media">
-            <img
-              className="attendance-card__art"
-              src="/assets/gacha/groups/a.webp"
-              alt=""
-              width={1672}
-              height={941}
-              loading="lazy"
-            />
-          </div>
+          <CampaignCover cover={period.cover} className="attendance-card__media" />
           <div className="attendance-card__intro">
             <div className="attendance-card__title-row">
               <h3>{period.title}</h3>
@@ -233,9 +241,10 @@ function AttendanceCard({
                 <div className="reward-stack">
                   {operation.data.awards.map((award) => (
                     <div key={award.days}>
-                      <strong>
-                        {t('user.attendance.tierDays', { amount: formatCount(award.days).display })}
-                      </strong>
+                      <MilestoneHeading
+                        days={award.days}
+                        featured={milestones.find((tier) => tier.days === award.days)?.featured}
+                      />
                       <RewardSummary items={award.results} assets={assets} results />
                     </div>
                   ))}
@@ -259,17 +268,15 @@ function AttendanceCard({
               ) : null}
             </div>
             <ol
-              className={
-                featured && period.tiers.length >= 2
-                  ? 'attendance-tiers attendance-tiers--grid'
-                  : 'attendance-tiers'
-              }
+              id={rewardsId}
+              className="attendance-tiers"
               aria-label={t('user.attendance.rewards')}
             >
-              {period.tiers.map((tier) => {
+              {visibleTiers.map((tier) => {
                 const isNext = tier.days === nextTierDays;
                 const tierClass = [
                   'attendance-tier',
+                  tier.featured ? 'attendance-milestone--featured' : '',
                   tier.awarded ? 'is-awarded' : '',
                   isNext ? 'is-next' : '',
                 ]
@@ -278,9 +285,7 @@ function AttendanceCard({
                 return (
                   <li key={tier.days} className={tierClass}>
                     <div className="attendance-tier__head">
-                      <strong>
-                        {t('user.attendance.tierDays', { amount: formatCount(tier.days).display })}
-                      </strong>
+                      <MilestoneHeading days={tier.days} featured={tier.featured} />
                       <StatusBadge tone={tier.awarded ? 'ok' : isNext ? 'accent' : 'neutral'}>
                         {t(tier.awarded ? 'user.attendance.awarded' : 'user.attendance.notReached')}
                       </StatusBadge>
@@ -294,6 +299,20 @@ function AttendanceCard({
                 );
               })}
             </ol>
+            {preview.length < milestones.length && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="attendance-tiers-toggle"
+                aria-controls={rewardsId}
+                aria-expanded={expanded}
+                onClick={() => setExpanded(!expanded)}
+              >
+                {t(expanded ? 'attendanceDisplay.collapse' : 'attendanceDisplay.showAll', {
+                  count: milestones.length,
+                })}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -344,7 +363,7 @@ export function AttendanceSection({ account }: { account: string }) {
               period={period}
               account={account}
               assets={assets.data ?? []}
-              featured={items.length === 1}
+              single={items.length === 1}
             />
           ))}
         </div>

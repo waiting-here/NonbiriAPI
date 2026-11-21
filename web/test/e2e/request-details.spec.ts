@@ -310,7 +310,8 @@ test('switches requests in a wide dock and returns from a narrow sheet to the ac
   await workspace.evaluate((node) => {
     node.style.maxWidth = '74rem';
   });
-  await expect(page.getByRole('dialog', { name: 'Log details ' + ids[0] })).toBeVisible();
+  const narrowDetails = page.getByRole('dialog', { name: 'Log details ' + ids[0] });
+  await expect(narrowDetails.getByRole('heading', { name: 'Log details ' + ids[0] })).toBeFocused();
   expect(
     await page
       .locator('.inspection-list')

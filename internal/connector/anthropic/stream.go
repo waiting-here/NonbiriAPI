@@ -137,8 +137,8 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	hasThinking := false
 
 	for {
-		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
-		if nextErr != nil || !ok {
+		event, nextErr := egress.NextSSEEvent(streamCtx, events, errs)
+		if nextErr != nil {
 			if ctx.Err() != nil {
 				result := connectorcontract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed
@@ -692,30 +692,6 @@ func (a *Adapter) writeStreamFrameUnchecked(writer http.ResponseWriter, controll
 		return committed, err
 	}
 	return committed, nil
-}
-
-func nextSSEEvent(ctx context.Context, events <-chan egress.SSEEvent, errs <-chan error) (egress.SSEEvent, bool, error) {
-	for events != nil || errs != nil {
-		select {
-		case <-ctx.Done():
-			return egress.SSEEvent{}, false, ctx.Err()
-		case event, ok := <-events:
-			if !ok {
-				events = nil
-				continue
-			}
-			return event, true, nil
-		case err, ok := <-errs:
-			if !ok {
-				errs = nil
-				continue
-			}
-			if err != nil {
-				return egress.SSEEvent{}, false, err
-			}
-		}
-	}
-	return egress.SSEEvent{}, false, io.EOF
 }
 
 func parseIndex(raw []byte) (int64, bool) {

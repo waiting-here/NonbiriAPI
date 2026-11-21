@@ -242,6 +242,54 @@ func TestStationExchangeSharedWalletAndReplay(t *testing.T) {
 	}
 
 }
+func TestStationInteractionAwardsPersistAndRenewAtSiteMidnight(t *testing.T) {
+	f := newStationFixture(t)
+	// The fixture's site day changes at 16:00 UTC.
+	f.at = time.Date(2026, 11, 20, 15, 59, 55, 0, time.UTC)
+	f.enable(t)
+	user := f.user(t, "keeper")
+	other := f.user(t, "neighbor")
+	read := func(v map[string]any) map[string]any { return v["snapshot"].(map[string]any) }
+	value := read(f.adopt(t, user, "小鲸"))
+	f.adopt(t, other, "鲸鲸")
+	var body map[string]any
+	for i := 1; i <= 4; i++ {
+		body = map[string]any{"type": "chat", "expected_profile_revision": strconv.Itoa(int(value["revision"].(float64))), "expected_settings_revision": "2"}
+		value = read(f.call(t, user, "actions", body, "award-on-chat-number-"+strconv.Itoa(i), 200))
+		if value["interactionAffectionRemaining"] != float64(max(0, 3-i)) || value["whale"].(map[string]any)["affection"] != float64(120+2*min(i, 3)) {
+			t.Fatalf("chat %d: %+v", i, value["whale"])
+		}
+	}
+	if v := read(f.call(t, other, "profile", nil, "", 200)); v["interactionAffectionRemaining"] != float64(3) {
+		t.Fatal("another player lost an award")
+	}
+	tx, err := f.store.ReadDB().BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, err := Export(t.Context(), tx, user, f.at.Unix(), 100)
+	_ = tx.Rollback()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Profile map[string]any `json:"profile"`
+	}
+	if err := json.Unmarshal(exported, &saved); err != nil || saved.Profile["daily_interaction_affection_remaining"] != float64(0) {
+		t.Fatalf("exported interaction allowance = %v, error = %v", saved.Profile["daily_interaction_affection_remaining"], err)
+	}
+	f.at = f.at.Add(6 * time.Second)
+	value = read(f.call(t, user, "actions", body, "award-on-chat-number-4", 200))
+	if value["interactionAffectionRemaining"] != float64(3) || value["whale"].(map[string]any)["affection"] != float64(126) {
+		t.Fatal("replayed chat at site midnight consumed an award")
+	}
+	body["expected_profile_revision"] = strconv.Itoa(int(value["revision"].(float64)))
+	value = read(f.call(t, user, "actions", body, "new-day-interaction-award", 200))
+	if value["interactionAffectionRemaining"] != float64(2) || value["whale"].(map[string]any)["affection"] != float64(128) {
+		t.Fatal("first chat on the new site day missing")
+	}
+}
+
 func TestStationNeighborVisibilityAndGrantBeforeAdoption(t *testing.T) {
 	f := newStationFixture(t)
 	a := f.user(t, "public-captain")

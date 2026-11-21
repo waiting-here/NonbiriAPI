@@ -3,8 +3,15 @@ import { idempotentOptions, queryPath } from '@shared/operations/api';
 import type { PageSize, PageMetadata } from '@shared/operations/pageNumbers';
 import type { Item, Result } from '@shared/rewards/api';
 
+export interface AttendanceCover {
+  kind: 'pool' | 'collection' | 'external';
+  value: string;
+  fit: 'cover' | 'contain';
+}
+
 export interface AttendanceTier {
   days: number;
+  featured?: boolean;
   rewards: Item[];
   awarded: boolean;
   results?: Result[];
@@ -17,7 +24,8 @@ export interface AttendanceInput {
   end_date: string;
   mode: 'cumulative' | 'consecutive';
   published: boolean;
-  tiers: Pick<AttendanceTier, 'days' | 'rewards'>[];
+  cover?: AttendanceCover;
+  tiers: Pick<AttendanceTier, 'days' | 'rewards' | 'featured'>[];
 }
 export interface AttendancePeriod extends AttendanceInput {
   id: string;

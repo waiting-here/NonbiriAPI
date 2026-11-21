@@ -183,6 +183,7 @@ export interface ActivityLogItem {
 
 export interface GameSnapshot {
   revision: number;
+  interactionAffectionRemaining: number;
   lastTickAt: number;
   playerUid?: number; // 玩家自身的 NonbiriAPI 站内 UID
   playerDiscordUsername?: string; // 玩家绑定的 Discord 用户名

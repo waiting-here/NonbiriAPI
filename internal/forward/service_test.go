@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -268,6 +269,27 @@ func TestCapabilityFilterPrecedesAcceptanceAndKeepsOnlySupportedCandidates(t *te
 		fixture.openAI.calls != 1 || fixture.anthropic.calls != 0 {
 		t.Fatalf("capability rail accept=%+v claims=%+v openai=%d anthropic=%d",
 			fixture.claims.accepts, fixture.claims.claims, fixture.openAI.calls, fixture.anthropic.calls)
+	}
+}
+
+func TestNetworkTimeoutReturnsGatewayTimeoutAcrossRoutes(t *testing.T) {
+	for _, model := range []string{"provider/model", "[公益]care/model"} {
+		t.Run(model, func(t *testing.T) {
+			f := newServiceFixture(t, nil)
+			candidate := f.personal.snapshot.Candidates[0]
+			if model == "[公益]care/model" {
+				candidate = f.charity.snapshot.Candidates[0]
+			}
+			f.addDispatch(candidate)
+			result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "upstream request failed"}
+			f.openAI.results = []connectorcontract.AttemptResult{connectorcontract.TransportFailed(result, os.ErrDeadlineExceeded, t.Context())}
+			request := decodeChatForTest(t, fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hello"}],"stream":true}`, model))
+			recorder := httptest.NewRecorder()
+			f.service.Chat(t.Context(), recorder, 1, request, []byte(`{}`), "application/json", "en")
+			if recorder.Code != http.StatusGatewayTimeout || len(f.claims.requestResults) != 1 || f.claims.requestResults[0].Caller.Status != http.StatusGatewayTimeout {
+				t.Fatalf("caller HTTP %d, recorded results %+v", recorder.Code, f.claims.requestResults)
+			}
+		})
 	}
 }
 

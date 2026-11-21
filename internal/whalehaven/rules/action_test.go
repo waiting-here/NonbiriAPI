@@ -219,3 +219,44 @@ func TestInteractionsUseServerTimeAndActualStreak(t *testing.T) {
 		t.Fatal(s.Whale)
 	}
 }
+
+func TestFreeInteractionAffectionSharedAcrossActions(t *testing.T) {
+	s := NewState(10000, "today")
+	p := basic()
+	p["interaction_cooldown_seconds"] = 3
+	p["pet_head_affection"], p["pet_head_mood"] = 3, 2
+	p["sleep_start_affection"], p["chat_sleep_affection"], p["chat_affection"] = 2, 1, 2
+	for _, action := range []Action{
+		{Type: "interact", Zone: "head"}, {Type: "interact", Zone: "head"},
+		{Type: "toggle_sleep"}, {Type: "chat"}, {Type: "toggle_sleep"}, {Type: "chat"},
+	} {
+		if _, err := s.Apply(action, 10000, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s.Whale.Affection != 126 || s.InteractionAffectionRemaining() != 0 || s.ChatIndex != 1 {
+		t.Fatal(s.Whale, s.InteractionAffection, s.ChatIndex)
+	}
+	s.Inventory["berry_teacake"] = 1
+	p["feed_berry_teacake_affection"] = 12
+	mustApply(t, s, p, Action{Type: "use_feed", FeedID: "berry_teacake"})
+	if s.Whale.Affection != 138 {
+		t.Fatalf("paid feed after the daily awards: %d", s.Whale.Affection)
+	}
+	s.ResetDay("yesterday")
+	s.ResetDay("today")
+	if s.InteractionAffectionRemaining() != 0 {
+		t.Fatal("historical settlement reset today's awards")
+	}
+	s.ResetDay("tomorrow")
+	p["chat_affection"] = 0
+	mustApply(t, s, p, Action{Type: "chat"})
+	if s.InteractionAffectionRemaining() != 3 {
+		t.Fatalf("zero affection used an award: %+v", s.InteractionAffection)
+	}
+	s.Whale.Affection = math.MaxInt64
+	s.FreeInteraction(1, 10)
+	if s.InteractionAffectionRemaining() != 3 {
+		t.Fatal("saturation consumed an award")
+	}
+}

@@ -532,12 +532,12 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 55.
-The v1.4.0 tool converts the precise v1.3.12 schema 54 database after the
+Normal startup initializes absent storage or opens only exact current schema 56.
+The v1.4.2 tool converts registered schema 54 or 55 databases after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
-catalog reads do not grant inference access. Current export format is 37.
+catalog reads do not grant inference access. Current export format is 38.
 Upgrades are one-way;
 there is no old-server startup on an upgraded database or reverse migration.
 Fresh creation requires the main database and sidecars to be absent. Conversion

@@ -289,6 +289,57 @@ function endpointKeySummary(id: string, endpointID: string, displayHead = `key-$
   };
 }
 
+test('long channel names, protocols and actions fit the available list width', async ({
+  context,
+  page,
+}) => {
+  const guard = await prepare(context, page, 'admin', 'admin');
+  const address = 'https://gateway.example.test/regional/subscription/compatible-mode/v1';
+  const name = '国际订阅渠道（Token Plan）';
+  const entries = createOptions.native_service_options.slice(0, 4).map((option, i) => ({
+    id: String(i + 1),
+    name: option.connector_type,
+    connector_type: option.connector_type,
+    native_services: option.default_native_services,
+    base_url: address,
+    rerank_format: '',
+    enabled: true,
+  }));
+  const channel = {
+    id: MAINSTREAM_CHANNEL_ID,
+    name,
+    category: 'subscription',
+    enabled: true,
+    ...mainstreamProjection({ entries }),
+    entries,
+    state: 'active',
+    revision: '1',
+    created_at: 1_800_000_000,
+    updated_at: 1_800_000_000,
+    retired_at: null,
+  };
+  await page.route(`${ADMIN_ORIGIN}/admin/api/mainstream-channels?**`, (route) =>
+    route.fulfill({ json: numberedResponse([channel], '1', 20) }),
+  );
+  await page.goto(`${ADMIN_ORIGIN}/mainstream-channels`);
+  const table = page.getByRole('table', { name: 'Mainstream channels' });
+  const title = table.getByRole('cell', { name, exact: true });
+  const category = table.getByRole('cell', { name: /Mainstream subscription/ });
+  for (const width of [1600, 1180, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(title).toBeVisible();
+    const bounds = (await title.boundingBox())!;
+    expect(bounds.width).toBeGreaterThan(110);
+    const wrap = table.locator('..');
+    expect(await wrap.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    expect(await category.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    const action = (await table.getByRole('button', { name: 'View', exact: true }).boundingBox())!;
+    expect(action.x + action.width).toBeLessThanOrEqual(width);
+    await expect(table.getByTitle(address)).toHaveText(new RegExp('gateway\\.example'));
+  }
+  guard.assertNone();
+});
+
 test('administrator mainstream channel CRUD keeps channel details and archive consequences visible', async ({
   context,
   page,

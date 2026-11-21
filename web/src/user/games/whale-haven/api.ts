@@ -66,6 +66,15 @@ export type Action =
         | 'chat';
     };
 export type Neighbor = NeighborStation & { pinned: boolean };
+export interface NeighborHouse {
+  house: Neighbor;
+  guests: {
+    whaleName: string;
+    whaleOutfit: WhaleOutfitId;
+    stage: 'eating' | 'working';
+    mine: boolean;
+  }[];
+}
 export interface Quote {
   quantity: string;
   max_lots: string;
@@ -89,6 +98,10 @@ export async function searchNeighbors(q: string, filter: NeighborFilterKind, sig
   return (
     await gameRequest<{ items: Neighbor[] }>(base + '/neighbors/search?' + params, { signal })
   ).data.items;
+}
+export async function fetchNeighborHouse(door: string, signal: AbortSignal) {
+  const params = new URLSearchParams({ door });
+  return (await gameRequest<NeighborHouse>(base + '/neighbors/house?' + params, { signal })).data;
 }
 async function post<T>(path: string, json: unknown): Promise<T> {
   const options = { method: 'POST' as const, json, idempotencyKey: createIdempotencyKey() };

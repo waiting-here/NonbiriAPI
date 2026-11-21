@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWhaleText } from './copy';
 import { Link } from 'react-router';
 import { Amount } from '@shared/components/Amount';
@@ -7,7 +7,15 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { GameBackLink } from '../common/GameBackLink';
 import { UserPageGate } from '../../components/UserPageGate';
-import { act, exchange, fetchProfile, costWithCoupon, type Action, type Profile } from './api';
+import {
+  act,
+  exchange,
+  fetchProfile,
+  fetchNeighborHouse,
+  costWithCoupon,
+  type Action,
+  type Profile,
+} from './api';
 import { soundEngine } from './audio/soundEngine';
 import { WhaleNamingModal } from './components/WhaleNamingModal';
 import {
@@ -64,7 +72,7 @@ function WhaleGame() {
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark');
   const [pure, setPure] = useState(false);
   const [bg, setBg] = useState<string | null>(null);
-  const [view, setView] = useState<NeighborStation | null>(null);
+  const [view, setView] = useState<string | null>(null);
   const [departure, setDeparture] = useState<{ peer: NeighborStation; preset?: string } | null>(
     null,
   );
@@ -88,10 +96,15 @@ function WhaleGame() {
   });
   const profile = data.data;
   const effectiveMenu = small ? 'sheet' : menu;
-  const viewing =
-    profile?.social.open && view
-      ? (profile.snapshot.neighbors.find((peer) => peer.id === view.id) ?? view)
-      : null;
+  const door = profile?.social.open ? view : null;
+  const visit = useQuery({
+    queryKey: ['user', 'games', 'whale-haven', 'house', door],
+    queryFn: door ? ({ signal }) => fetchNeighborHouse(door, signal) : skipToken,
+    refetchInterval: busy ? false : 15000,
+    gcTime: 0,
+    retry: false,
+  });
+  const viewing = visit.data?.house;
   function deck(id: DeckTabId) {
     lastTab.current = id;
     setGuestFocus(undefined);
@@ -137,6 +150,7 @@ function WhaleGame() {
       const updated = await perform();
       client.setQueryData(profileKey, updated);
       void client.invalidateQueries({ queryKey: ['user', 'games', 'whale-haven', 'neighbors'] });
+      if (door) void visit.refetch();
       void client.invalidateQueries({ queryKey: ['user', 'games', 'snapshot'] });
       if (message) setFeedback({ message, error: false });
       return updated;
@@ -207,8 +221,19 @@ function WhaleGame() {
   async function dispatch(command: Action, onError?: (reason: string) => void) {
     if (!profile) return false;
     const prev = profile;
-    const updated = await commit(() => act(prev, command), receipt(command, prev), onError);
+    const message = receipt(command, prev);
+    const updated = await commit(() => act(prev, command), message, onError);
     if (updated) {
+      if (
+        prev.snapshot.interactionAffectionRemaining > 0 &&
+        updated.snapshot.interactionAffectionRemaining === 0
+      ) {
+        const limit = t(
+          '今天的三次互动羁绊奖励已领完，仍可继续互动。',
+          'You earned all three interaction Bond XP awards today. You can keep playing.',
+        );
+        setFeedback({ message: message ? `${message} ${limit}` : limit, error: false });
+      }
       if (command.type === 'chat' || command.type === 'interact')
         setSpokenReply(updated.snapshot.whale.tempEmotion?.line ?? '');
       const anim =
@@ -367,7 +392,7 @@ function WhaleGame() {
     deck(tab ?? lastTab.current);
   }
   function preview(peer: NeighborStation) {
-    setView(peer);
+    setView(peer.id);
     setTab(null);
   }
   return (
@@ -380,12 +405,30 @@ function WhaleGame() {
             busy={busy}
             onConfirmName={(name, open) => void dispatch({ type: 'adopt', name, open })}
           />
+        ) : door && (visit.isError || !visit.data) ? (
+          <section className="card">
+            {visit.isError ? (
+              <ErrorState error={visit.error} onRetry={() => void visit.refetch()} />
+            ) : (
+              <LoadingState />
+            )}
+            <button
+              type="button"
+              className="nb-btn"
+              onClick={() => {
+                setView(null);
+                setTab(null);
+              }}
+            >
+              {t('回到我的小筑', 'Return to my haven')}
+            </button>
+          </section>
         ) : (
           <OceanStage
             snapshot={snap}
             social={profile.social}
             values={values}
-            viewingNeighbor={viewing}
+            neighborHouse={door ? visit.data : undefined}
             rigImpulse={impulse}
             faceCalibration={DEFAULT_FACE_CALIBRATION}
             showBonesDebug={false}
@@ -497,8 +540,11 @@ function WhaleGame() {
                       dispatch={dispatch}
                       onActivity={() => deck('logs')}
                       onWallet={() => deck('exchange')}
-                      onRefresh={() => data.refetch()}
-                      refreshing={data.isFetching}
+                      onRefresh={() => {
+                        void data.refetch();
+                        if (door) void visit.refetch();
+                      }}
+                      refreshing={data.isFetching || visit.isFetching}
                       onPreview={preview}
                       onDepart={(peer) => setDeparture({ peer })}
                     />

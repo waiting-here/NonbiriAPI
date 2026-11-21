@@ -60,7 +60,8 @@ func Export(ctx context.Context, tx *sql.Tx, user, now int64, limit int) (json.R
 		whale := r.state.Whale
 		whale.Location.NeighborID = ""
 		house = map[string]any{"pending_social_whale_coins": r.state.Wallet.Pearls - balance.Pearls, "pending_conch_shards": r.state.Wallet.ConchShards - balance.Shards, "wage_progress": wage / 1e6, "door": r.door, "open": r.open, "revision": r.revision, "whale": whale, "home": r.state.Home, "inventory": r.state.Inventory, "progress_at_ms": r.state.LastTickAt, "site_day": r.state.Wallet.SiteDayKey,
-			"daily_social_whale_coins": r.state.Wallet.DailySocialPearlsGained, "daily_social_conch_shards": r.state.Wallet.DailyConchShardsGained, "daily_exchanged_whale_coins": r.state.Wallet.DailyPearlExchanged}
+			"daily_social_whale_coins": r.state.Wallet.DailySocialPearlsGained, "daily_social_conch_shards": r.state.Wallet.DailyConchShardsGained, "daily_exchanged_whale_coins": r.state.Wallet.DailyPearlExchanged,
+			"daily_interaction_affection_remaining": r.state.InteractionAffectionRemaining()}
 	}
 	rows, err := tx.QueryContext(ctx, "SELECT created_at,reason,operation_id,pearls_delta,shards_delta,pearls_after,shards_after FROM whale_haven_movements WHERE user_id=? ORDER BY id LIMIT ?", user, limit+1)
 	if err != nil {

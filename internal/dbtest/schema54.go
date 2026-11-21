@@ -9,6 +9,7 @@ import (
 // in-flight work, so upgrade and settlement tests exercise the same source.
 func RestoreSchema54Fixture(t *testing.T, source *sql.DB) {
 	t.Helper()
+	RestoreSchema55Fixture(t, source)
 	for _, statement := range []string{
 		"DROP TRIGGER whale_master_insert",
 		"DROP TRIGGER whale_master_update",
@@ -46,6 +47,16 @@ func RestoreSchema54Fixture(t *testing.T, source *sql.DB) {
 		}
 	}
 	if _, err := source.ExecContext(t.Context(), "UPDATE schema_state SET version=54"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// RestoreSchema55Fixture removes only the optional attendance presentation.
+func RestoreSchema55Fixture(t *testing.T, source *sql.DB) {
+	t.Helper()
+	if _, err := source.ExecContext(t.Context(), `ALTER TABLE attendance_periods DROP COLUMN cover;
+ALTER TABLE attendance_tiers DROP COLUMN featured;
+UPDATE schema_state SET version=55`); err != nil {
 		t.Fatal(err)
 	}
 }

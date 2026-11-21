@@ -243,9 +243,10 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	if err != nil {
 		return result
 	}
-	defer clear(body)
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(client.BaseURL()), bytes.NewReader(body))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(client.BaseURL()), nil)
 	if err != nil {
 		return result
 	}
@@ -298,6 +299,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	target.credential.clear()
 
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes, StreamBytes: a.maxStreamBytes, LineBytes: a.maxSSELineBytes, EventBytes: a.maxSSEEventBytes})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	if err == nil {
 		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
@@ -306,7 +308,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
 	httpRequest.Header.Del("Authorization")
-	clear(body)
+	upload.Release()
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
@@ -469,8 +471,8 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	defer func() { clear(leadingUsageFrame) }()
 
 	for {
-		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
-		if nextErr != nil || !ok {
+		event, nextErr := egress.NextSSEEvent(streamCtx, events, errs)
+		if nextErr != nil {
 			if ctx.Err() != nil {
 				result := connectorcontract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed
@@ -603,8 +605,8 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		return wrote, writeErr
 	}
 	for {
-		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
-		if nextErr != nil || !ok {
+		event, nextErr := egress.NextSSEEvent(streamCtx, events, errs)
+		if nextErr != nil {
 			if ctx.Err() != nil {
 				result := connectorcontract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed
@@ -906,30 +908,6 @@ func (a *Adapter) writeStreamFrame(writer http.ResponseWriter, controller *http.
 		return committed, err
 	}
 	return committed, nil
-}
-
-func nextSSEEvent(ctx context.Context, events <-chan egress.SSEEvent, errs <-chan error) (egress.SSEEvent, bool, error) {
-	for events != nil || errs != nil {
-		select {
-		case <-ctx.Done():
-			return egress.SSEEvent{}, false, ctx.Err()
-		case event, ok := <-events:
-			if !ok {
-				events = nil
-				continue
-			}
-			return event, true, nil
-		case err, ok := <-errs:
-			if !ok {
-				errs = nil
-				continue
-			}
-			if err != nil {
-				return egress.SSEEvent{}, false, err
-			}
-		}
-	}
-	return egress.SSEEvent{}, false, io.EOF
 }
 
 func readResponseBody(reader io.Reader, limit int64) ([]byte, error) {

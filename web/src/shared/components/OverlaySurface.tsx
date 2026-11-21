@@ -66,13 +66,17 @@ export function ModalSurface({
   );
   useLayoutEffect(() => {
     if (!open) return;
+    const focused = document.activeElement;
+    if (!focusRestore.current.target && focused instanceof HTMLElement)
+      focusRestore.current.target = focused;
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
     const restore = focusRestore.current;
     const version = ++restore.version;
-    const focused = document.activeElement;
-    if (!restore.target && focused instanceof HTMLElement) restore.target = focused;
     return () => {
       queueMicrotask(() => {
-        // A replay or a later opening supersedes this restoration.
+        // The modal has released inertness. A replay or a later opening supersedes restoration.
         if (restore.version !== version) return;
         const target = restore.target;
         restore.target = null;

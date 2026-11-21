@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"strings"
@@ -35,8 +34,9 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	if err != nil {
 		return result
 	}
-	defer clear(body)
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, embeddingsURL(client.BaseURL()), bytes.NewReader(body))
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, embeddingsURL(client.BaseURL()), nil)
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
 	}
@@ -70,6 +70,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxEmbeddingResponseBytes})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	if err == nil {
 		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
@@ -78,7 +79,7 @@ func (a *Adapter) AttemptEmbedding(ctx context.Context, writer http.ResponseWrit
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
 	httpRequest.Header.Del("Authorization")
-	clear(body)
+	upload.Release()
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}

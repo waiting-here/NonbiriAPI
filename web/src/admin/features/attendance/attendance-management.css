@@ -11,6 +11,53 @@
   gap: var(--nb-space-4);
   min-width: 0;
 }
+.attendance-management__card {
+  container-type: inline-size;
+}
+.attendance-management__body,
+.attendance-editor__cover-layout {
+  display: grid;
+  align-items: start;
+  gap: var(--nb-space-4);
+  min-width: 0;
+}
+.attendance-management__body {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (width >= 40rem) {
+  .attendance-management__body {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr);
+  }
+}
+.attendance-management__cover,
+.attendance-editor__cover-image {
+  border-radius: var(--nb-radius-md);
+}
+.attendance-editor__cover-layout {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+.attendance-editor__cover-preview {
+  display: grid;
+  gap: var(--nb-space-2);
+  min-width: 0;
+  margin: 0;
+}
+.attendance-editor__cover-preview figcaption {
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-semibold);
+}
+.attendance-editor__cover-preview p {
+  margin: 0;
+}
+.attendance-editor__featured {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: var(--nb-space-2);
+}
+.attendance-editor__featured-item {
+  display: block;
+  font-size: var(--nb-font-size-sm);
+}
 .attendance-management__summary,
 .attendance-editor__tiers {
   display: grid;
@@ -30,6 +77,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
   gap: var(--nb-space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .attendance-management__tier {
   display: grid;
