@@ -4375,5 +4375,13 @@
   },
   "artwork": {
     "unavailable": "站点已停用这张图片。"
+  },
+  "attendanceDisplay": {
+    "day": "第 {{amount}} 天",
+    "featured": "重点奖励",
+    "showAll": "查看全部 {{count}} 档奖励",
+    "collapse": "收起奖励",
+    "showRated": "显示 R-18 封面",
+    "hideRated": "隐藏 R-18 封面"
   }
 }

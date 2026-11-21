@@ -44,6 +44,66 @@ function result(patch: Partial<SignInResult> = {}): SignInResult {
   };
 }
 
+it('keeps selected milestones and the next reward visible across campaigns and expands in day order', async () => {
+  const tiers = Array.from({ length: 7 }, (_, index) => ({
+    days: index + 1,
+    featured: index === 2 || index === 6,
+    awarded: index < 1,
+    rewards: [{ asset: 'game', quantity: '10' }],
+  }));
+  page = attendancePage([
+    attendancePeriod({ tiers, cover: { kind: 'collection', value: 'r', fit: 'contain' } }),
+    attendancePeriod({ id: 'winter', title: 'Winter days' }),
+  ]);
+  const view = await renderWithProviders(<AttendanceSection account="7" />, { station: 'user' });
+  const first = await screen.findByRole('region', { name: 'Autumn days' });
+  const list = first.querySelector('ol')!;
+  expect(first.querySelector('.attendance-cover img')).toHaveAttribute(
+    'src',
+    '/assets/gacha/groups/r.webp',
+  );
+  expect(first.querySelector('.attendance-cover')).toHaveAttribute('data-fit', 'contain');
+  expect(within(list).getAllByText('Featured reward')).toHaveLength(2);
+  expect(within(list).getByText('Day 2')).toBeVisible();
+  expect(within(list).queryByText('Day 4')).not.toBeInTheDocument();
+  await view.user.click(within(first).getByRole('button', { name: 'View all 7 milestones' }));
+  expect(Array.from(list.children, (li) => li.querySelector('strong')?.textContent)).toEqual(
+    tiers.map((tier) => 'Day ' + tier.days),
+  );
+  await view.user.click(within(first).getByRole('button', { name: 'Show fewer milestones' }));
+  expect(list.children).toHaveLength(3);
+});
+
+it('shows every milestone for one campaign and restores the default artwork if an external cover fails', async () => {
+  const tiers = Array.from({ length: 7 }, (_, index) => ({
+    days: index + 1,
+    featured: index === 6,
+    awarded: false,
+    rewards: [{ asset: 'game', quantity: '10' }],
+  }));
+  page = attendancePage([
+    attendancePeriod({
+      tiers,
+      cover: {
+        kind: 'external',
+        value: 'https://images.example.test/portrait.jpg',
+        fit: 'contain',
+      },
+    }),
+  ]);
+  await renderWithProviders(<AttendanceSection account="7" />, { station: 'user' });
+  const first = await screen.findByRole('region', { name: 'Autumn days' });
+  expect(first.querySelector('ol')?.children).toHaveLength(7);
+  expect(within(first).getByText('Featured reward').closest('li')).toHaveTextContent('Day 7');
+  const image = first.querySelector<HTMLImageElement>('.attendance-cover img')!;
+  expect(image).toHaveAttribute('crossorigin', 'anonymous');
+  expect(image).toHaveAttribute('referrerpolicy', 'no-referrer');
+  fireEvent.error(image);
+  expect(image).toHaveAttribute('src', '/assets/gacha/groups/a.webp');
+  expect(image).not.toHaveAttribute('crossorigin');
+  expect(within(first).getByRole('button', { name: 'Sign in today' })).toBeEnabled();
+});
+
 it('signs in to one period independently and shows automatic milestone rewards', async () => {
   page = attendancePage([
     attendancePeriod(),

@@ -4375,5 +4375,13 @@
   },
   "artwork": {
     "unavailable": "Artwork is disabled by this site."
+  },
+  "attendanceDisplay": {
+    "day": "Day {{amount}}",
+    "featured": "Featured reward",
+    "showAll": "View all {{count}} milestones",
+    "collapse": "Show fewer milestones",
+    "showRated": "Show R-18 cover",
+    "hideRated": "Hide R-18 cover"
   }
 }
