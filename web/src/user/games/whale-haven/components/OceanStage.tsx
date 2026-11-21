@@ -1313,7 +1313,7 @@ export function OceanStage({
                   </div>
                   <div>
                     <div className="hud-meter-label">
-                      <span>💖 羁绊经验</span>
+                      <span>💖 {t('羁绊经验', 'Bond XP')}</span>
                       <strong>
                         {affectionInfo.currentExp} / {affectionInfo.nextExp}
                       </strong>
@@ -1321,9 +1321,23 @@ export function OceanStage({
                     <div className="stat-meter__bar">
                       <div
                         className="stat-meter__fill"
-                        style={{ width: `${affectionInfo.currentExp}%`, background: '#f472b6' }}
+                        style={{
+                          width: `${(100 * affectionInfo.currentExp) / affectionInfo.nextExp}%`,
+                          background: '#f472b6',
+                        }}
                       />
                     </div>
+                    <small className="hud-bond-allowance">
+                      {snapshot.interactionAffectionRemaining > 0
+                        ? t(
+                            `今日免费互动还可获得 ${snapshot.interactionAffectionRemaining} 次羁绊经验。`,
+                            `${snapshot.interactionAffectionRemaining} of 3 free interaction Bond XP awards left today.`,
+                          )
+                        : t(
+                            '今日免费互动的羁绊经验已领完，明天恢复。仍可继续互动。',
+                            'Free interactions earn Bond XP again tomorrow. You can keep playing.',
+                          )}
+                    </small>
                   </div>
                 </div>
 
@@ -1647,6 +1661,11 @@ export function OceanStage({
                   ：待机时瞳孔会平滑跟随鼠标，鲸鱼娘也会在木屋贝壳地毯上自由散步。
                   <br />• <strong>摸头与戳肚子</strong>
                   ：点击头顶顺毛挥手加心情；连戳肚子会触发受惊鼓腮抗议！
+                  <br />
+                  {t(
+                    '摸戳、聊天、哄睡及免费待客共享每日前三次羁绊奖励。',
+                    'Petting, chatting, bedtime and free guest interactions share three Bond XP awards per site day.',
+                  )}
                   <br />• <strong>场景家具</strong>
                   ：点击左下【蓝鲸存钱罐】收小鲸币，点击右下【青花鲸鱼碗】添白米饭，点击后方【蓝鲸软窝】互动。
                   <br />• <strong>双端自适应</strong>：桌面端宽屏横版小屋 +

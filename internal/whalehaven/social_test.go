@@ -200,6 +200,44 @@ func TestWhaleSocialWagesAcrossHarvestAndClose(t *testing.T) {
 	})
 }
 
+func TestHostInteractionsShareAwardsWithHomeCare(t *testing.T) {
+	game := newSocialDB(t, 1000)
+	game.run(t, 1000, func(w *world) {
+		h := socialActor(t, w, 1)
+		g := socialActor(t, w, 2)
+		h.state.FreeInteraction(0, 1)
+		h.dirty = true
+		allow := true
+		catch := func(action string) {
+			commandSocial(t, w, h, actionRequest{Type: "catch_guest", NeighborID: g.door, Action: action})
+		}
+		visit := func() {
+			commandSocial(t, w, g, actionRequest{Type: "send_visit", Target: h.door, AllowHire: &allow})
+		}
+		visit()
+		catch("hire")
+		catch("gentle") // Ending a shift has no affection reward.
+		visit()
+		catch("gentle")
+		earned := int64(121) + w.config.Value("hire_affection") + w.config.Value("gentle_affection")
+		if h.state.InteractionAffectionRemaining() != 0 || h.state.Whale.Affection != earned {
+			t.Fatalf("host awards: %+v, affection %d", h.state.InteractionAffection, h.state.Whale.Affection)
+		}
+		w.config.Values["treat_cost_grams"] = 0
+		visit()
+		catch("treat")
+		if h.state.Whale.Affection != earned {
+			t.Fatal("zero-cost treats bypassed the daily limit")
+		}
+		w.config.Values["treat_cost_grams"] = 20
+		visit()
+		catch("treat")
+		if h.state.Whale.Affection != earned+w.config.Value("treat_affection") || g.state.InteractionAffectionRemaining() != 3 {
+			t.Fatal("paid meal or guest allowance changed")
+		}
+	})
+}
+
 func TestWhaleSocialSlotsConsentRewardsAndPins(t *testing.T) {
 	db := newSocialDB(t, 1000)
 	db.run(t, 1000, func(w *world) {

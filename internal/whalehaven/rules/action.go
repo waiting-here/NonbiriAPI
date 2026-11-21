@@ -70,7 +70,7 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 		s.Rounding.Wage = 0
 		s.Wallet.Pearls += earned
 		if earned > 0 && s.Whale.Location.Kind == "home" {
-			s.feel(0, min(p.Value("harvest_affection_cap"), earned))
+			s.Feel(0, min(p.Value("harvest_affection_cap"), earned))
 			s.say("cheerful", "叮当！存钱罐里的小鲸币都收好啦～", now+8000)
 		}
 		return Result{Harvested: earned}, nil
@@ -92,10 +92,10 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 			s.Whale.IsSleeping = true
 			s.Whale.SleepingSince = now
 			s.Whale.TempEmotion = nil
-			s.feel(float64(p.Value("sleep_start_mood")), p.Value("sleep_start_affection"))
+			s.FreeInteraction(float64(p.Value("sleep_start_mood")), p.Value("sleep_start_affection"))
 		} else {
 			s.wake(now, p)
-			s.feel(float64(p.Value("wake_mood")), 0)
+			s.Feel(float64(p.Value("wake_mood")), 0)
 			s.say("cheerful", "呼啊～我醒啦，饭好了没呀？", now+8000)
 		}
 	case "toggle_decor", "select_outfit":
@@ -113,7 +113,7 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 		}
 		b.AromaCharges--
 		b.AromaActiveGrams += float64(p.Value("aroma_grams"))
-		s.feel(float64(p.Value("aroma_mood")), 0)
+		s.Feel(float64(p.Value("aroma_mood")), 0)
 		s.say("cheerful", "好香！今天的白米饭要趁热吃～", now+8500)
 	case "spin_conch_gacha":
 		return s.spin(now, p)
@@ -206,7 +206,7 @@ func (s *State) feed(id string, now int64, p Parameters) (Result, error) {
 	}
 	s.Inventory[id]--
 	if atHome {
-		s.feel(float64(p.Value(key+"mood")), p.Value(key+"affection"))
+		s.Feel(float64(p.Value(key+"mood")), p.Value(key+"affection"))
 	}
 	return Result{AddedGrams: grams}, nil
 }
@@ -254,7 +254,7 @@ func (s *State) dress(a Action, now int64, p Parameters) (Result, error) {
 	if isDecor {
 		s.Home.OwnedDecor = append(s.Home.OwnedDecor, id)
 		s.Home.EquippedDecor = append(s.Home.EquippedDecor, id)
-		s.feel(float64(p.Value("decor_buy_mood")), p.Value("decor_buy_affection"))
+		s.Feel(float64(p.Value("decor_buy_mood")), p.Value("decor_buy_affection"))
 		s.say("cheerful", "小筑里添了新家具！有家的感觉了～", now+10000)
 	} else {
 		s.Home.OwnedOutfits = append(s.Home.OwnedOutfits, id)
@@ -300,7 +300,7 @@ func (s *State) spin(now int64, p Parameters) (Result, error) {
 			b.WardrobeDiscountCoupons++
 		case "affection_candy":
 			s.Whale.Mood = float64(p.Value("candy_mood"))
-			s.feel(0, p.Value("candy_affection"))
+			s.Feel(0, p.Value("candy_affection"))
 		}
 		s.say("cheerful", "叮铃铃～虹彩海螺转出奖品啦！", now+9000)
 		return Result{Reward: id}, nil
@@ -327,28 +327,28 @@ func (s *State) interact(zone string, now int64, p Parameters) {
 	s.LastInteractionAt = now
 	switch {
 	case s.Whale.Satiety < float64(p.Value("pet_hungry_satiety")) && s.Home.TroughGrams == 0:
-		s.feel(0, p.Value("pet_hungry_affection"))
+		s.FreeInteraction(0, p.Value("pet_hungry_affection"))
 		s.say("teary", "呜……肚子咕噜了，给我一碗白米饭吧！", now+6500)
 	case zone == "head":
-		s.feel(float64(p.Value("pet_head_mood")), p.Value("pet_head_affection"))
+		s.FreeInteraction(float64(p.Value("pet_head_mood")), p.Value("pet_head_affection"))
 		s.say("cheerful", "唔……再摸一下也可以。", now+6000)
 	case s.BodyStreak >= 3:
 		s.Whale.Mood = max(20, s.Whale.Mood-float64(p.Value("pet_streak_mood_loss")))
 		s.say("pout", "喂！再戳我要用尾巴反击啦！", now+7000)
 	default:
-		s.feel(0, p.Value("pet_body_affection"))
+		s.FreeInteraction(0, p.Value("pet_body_affection"))
 		s.say("panicked", "哇啊！你碰到我的鲸鱼肚皮啦！", now+5500)
 	}
 }
 
 func (s *State) chat(now int64, p Parameters) {
 	if s.Whale.IsSleeping {
-		s.feel(0, p.Value("chat_sleep_affection"))
+		s.FreeInteraction(0, p.Value("chat_sleep_affection"))
 		s.say("calm", "呼……那碗热腾腾的白米饭……留给我……", now+9500)
 		return
 	}
 	lines := [...]string{"鲸鱼睡觉时会留一半大脑醒着。我的另一半当然在想吃饭啦！", "饲养员，今天的难题交给我吧。解完题能不能加碗饭？", "嘘，这颗小饭团是留给你的。", "要不要在海底走走？我知道贝壳最多的那片沙地。"}
-	s.feel(float64(p.Value("chat_mood")), p.Value("chat_affection"))
+	s.FreeInteraction(float64(p.Value("chat_mood")), p.Value("chat_affection"))
 	s.say("cheerful", lines[s.ChatIndex%len(lines)], now+11000)
 	s.ChatIndex = (s.ChatIndex + 1) % len(lines)
 }

@@ -52,6 +52,7 @@ function initial(): Profile {
     social: { open: false, door: 'bay-a', accept_work: false, away: null, guests: [] },
     snapshot: {
       revision: 1,
+      interactionAffectionRemaining: 3,
       lastTickAt: Date.now(),
       playerNickname: 'A',
       playerAnonymousCode: 'bay-a',
@@ -360,6 +361,8 @@ test('menu position takes effect in place and routine interactions reply in the 
   const profile = initial();
   profile.snapshot.whale.hasCompletedNaming = true;
   let failChat = false;
+  profile.settings.values.affection_per_level = 250;
+  profile.snapshot.whale.affection = 120;
   await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ json: profile });
     const { type } = route.request().postDataJSON();
@@ -374,6 +377,13 @@ test('menu position takes effect in place and routine interactions reply in the 
         json: { error: { code: 'conflict', message: '小鲸正在串门，先召回她吧。' } },
       });
     profile.snapshot.revision++;
+    if (
+      (type === 'chat' || type === 'interact') &&
+      profile.snapshot.interactionAffectionRemaining > 0
+    ) {
+      profile.snapshot.interactionAffectionRemaining--;
+      profile.snapshot.whale.affection += type === 'chat' ? 2 : 3;
+    }
     profile.snapshot.whale.tempEmotion = {
       expression: 'cheerful',
       line: type === 'chat' ? '听我讲个海湾冷笑话！' : '摸摸头，好开心！',
@@ -421,8 +431,21 @@ test('menu position takes effect in place and routine interactions reply in the 
   failChat = false;
   await chat.click();
   await expect(page.getByRole('button', { name: /听我讲个海湾冷笑话/ })).toBeVisible();
+  await expect(page.getByText('今天的三次互动羁绊奖励已领完，仍可继续互动。')).toBeVisible();
+  await button('关闭提示').click();
+  await page.getByRole('button', { name: /摸摸头（/ }).click();
+  await expect(page.getByRole('button', { name: /摸摸头，好开心/ })).toBeVisible();
   await expect(button('关闭提示')).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
+  const status = page.getByTitle('点击展开鲸鱼娘详细状态、改名与试衣间快捷入口');
+  await status.click();
+  await expect(
+    page.getByText('今日免费互动的羁绊经验已领完，明天恢复。仍可继续互动。'),
+  ).toBeVisible();
+  await expect(page.getByText('127 / 250')).toBeVisible();
+  const meter = page.locator('.stat-meter__bar').filter({ has: page.locator('[style*="50.8%"]') });
+  await expect(meter).toBeVisible();
+  await status.click();
   await button('设置').click();
   await expect(page.getByRole('group', { name: '小屋设置' })).toBeVisible();
   await expect(page.getByRole('button', { name: /将菜单移/ })).toHaveCount(0);

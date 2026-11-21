@@ -574,11 +574,11 @@ func (w *world) catchGuest(h *resident, a actionRequest) error {
 		}
 		v.working = true
 		v.workLeft = cfg.Value("guest_shift_seconds") * 1000
-		boost(h, "hire", cfg)
+		h.state.FreeInteraction(float64(cfg.Value("hire_mood")), cfg.Value("hire_affection"))
 		text = "客鲸开始了打工班次"
 	case "gentle":
 		if !v.working {
-			boost(h, "gentle", cfg)
+			h.state.FreeInteraction(0, cfg.Value("gentle_affection"))
 		}
 		text = "已送客鲸回家"
 	case "flick":
@@ -600,7 +600,12 @@ func (w *world) catchGuest(h *resident, a actionRequest) error {
 		h.state.Home.TroughGrams -= meal
 		v.eaten += meal
 		g.state.Whale.Satiety = min(100, g.state.Whale.Satiety+2.25*meal)
-		boost(h, "treat", cfg)
+		mood, affection := float64(cfg.Value("treat_mood")), cfg.Value("treat_affection")
+		if meal > 0 {
+			h.state.Feel(mood, affection)
+		} else {
+			h.state.FreeInteraction(mood, affection)
+		}
 		coins, shards = cfg.Value("treat_pearls"), cfg.Value("treat_shards")
 		if slices.Contains(h.state.Home.EquippedDecor, "coral_tea") {
 			shards += cfg.Value("tea_bonus_shards")
@@ -622,11 +627,6 @@ func (w *world) catchGuest(h *resident, a actionRequest) error {
 		return w.farewell(v, w.now, cfg, a.Action)
 	}
 	return nil
-}
-
-func boost(r *resident, prefix string, cfg config.Settings) {
-	r.state.Whale.Mood = min(100, r.state.Whale.Mood+float64(cfg.Value(prefix+"_mood")))
-	r.state.Whale.Affection += min(cfg.Value(prefix+"_affection"), math.MaxInt64-r.state.Whale.Affection)
 }
 
 func visitMessage(action, id string) (string, error) {

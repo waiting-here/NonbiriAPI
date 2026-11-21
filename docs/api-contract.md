@@ -3081,6 +3081,8 @@ Authenticated players read `/api/games/whale-haven/availability`, `/profile` and
 
 Account export format 38 adds `whale_haven`, with both balances, the player's own adopted home when present, and the account's currency movements. Account closure settles visits and wages before removal. Site rewards, redemption codes, configurable attendance tiers and authorized user-resource management use `whale:pearls` (小鲸币) and `whale:conch_shards` (海螺碎片). Both are whole units and can be granted before adoption or while the game is closed.
 
+Free Whale Haven interactions share three affection awards per player per site day. Petting, chatting, going to sleep, hiring a guest and giving a guest a free farewell or treat use the same allowance. A touch on cooldown or an action that grants zero affection uses no award. Further interactions still give their usual dialogue and mood effects. Feeding, collecting produced coins, buying a new decoration, drawing candy and sharing a meal that costs food keep their usual affection rewards. The owner's profile snapshot includes `interactionAffectionRemaining` for the current site day.
+
 ### Account protection and historical records
 
 `GET /admin/api/alerts` accepts optional `kind` alongside `resolved` and either cursor or numbered pagination. Kind is a closed alert-kind value, including `account_deleted`; cursors are bound to both filters. `POST /admin/api/alerts/resolve` accepts `{"ids":["1","2"]}` with 1–100 distinct positive decimal ID strings. It atomically marks those alerts resolved, preserves previously resolved timestamps, and returns `{"resolved_count":2}`. A missing ID returns 404 without partial writes. All alert routes require an administrator session; writes retain same-origin/CSRF checks.

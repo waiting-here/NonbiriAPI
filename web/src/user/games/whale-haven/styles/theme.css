@@ -1516,6 +1516,13 @@
     margin-bottom: 3px;
   }
 
+  .hud-bond-allowance {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--nb-color-text-muted);
+    font-size: 0.75rem;
+  }
+
   .hud-popover__actions {
     display: flex;
     gap: 0.45rem;

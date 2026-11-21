@@ -207,8 +207,19 @@ function WhaleGame() {
   async function dispatch(command: Action, onError?: (reason: string) => void) {
     if (!profile) return false;
     const prev = profile;
-    const updated = await commit(() => act(prev, command), receipt(command, prev), onError);
+    const message = receipt(command, prev);
+    const updated = await commit(() => act(prev, command), message, onError);
     if (updated) {
+      if (
+        prev.snapshot.interactionAffectionRemaining > 0 &&
+        updated.snapshot.interactionAffectionRemaining === 0
+      ) {
+        const limit = t(
+          '今天的三次互动羁绊奖励已领完，仍可继续互动。',
+          'You earned all three interaction Bond XP awards today. You can keep playing.',
+        );
+        setFeedback({ message: message ? `${message} ${limit}` : limit, error: false });
+      }
       if (command.type === 'chat' || command.type === 'interact')
         setSpokenReply(updated.snapshot.whale.tempEmotion?.line ?? '');
       const anim =

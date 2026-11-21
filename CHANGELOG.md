@@ -6,6 +6,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.4.2 — Unreleased
 
+- Award Bond XP for the first three free Whale Haven interactions per player
+  and site day. Players can continue interacting after earning all three awards.
 - Keep account names, levels and selection controls readable in the user list
   when opening a detail panel or browsing on a phone.
 - Fit channel protocols, addresses and actions to the available list width.

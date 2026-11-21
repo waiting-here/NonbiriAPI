@@ -188,7 +188,8 @@ func (w *world) profile(r *resident, operation string) (map[string]any, error) {
 	snap := map[string]any{"revision": r.revision, "lastTickAt": r.state.LastTickAt, "playerUid": r.id, "playerNickname": nickname, "playerAnonymousCode": r.door, "gameProfilePublic": public,
 		"wallet": map[string]any{"pearls": r.original.Pearls, "conchShards": r.original.Shards, "pendingSocialPearls": wallet.Pearls - r.original.Pearls, "pendingConchShards": wallet.ConchShards - r.original.Shards, "wageProgress": wage / 1e6, "siteDayKey": wallet.SiteDayKey, "dailyPearlExchanged": wallet.DailyPearlExchanged,
 			"dailySocialPearlsGained": wallet.DailySocialPearlsGained, "dailyConchShardsGained": wallet.DailyConchShardsGained, "generalMilli": general.Balance.Decimal(), "gameMilli": game.Balance.Decimal()},
-		"inventory": r.state.Inventory, "whale": r.state.Whale, "home": r.state.Home}
+		"interactionAffectionRemaining": r.state.InteractionAffectionRemaining(),
+		"inventory":                     r.state.Inventory, "whale": r.state.Whale, "home": r.state.Home}
 	peers := []neighbor{}
 	pins := []string{}
 	guestViews := []map[string]any{}
