@@ -27,10 +27,26 @@ after the end date. The range cannot include the site date of creation or a
 rules edit, and must contain at least as many days as its largest milestone.
 Creating a period freezes the existing site time-zone configuration.
 
-Before its original start, a period's configuration can be changed with its
-current revision. Once started, only its title and description are editable;
-dates, mode, publication state and rewards remain fixed. This also preserves
-earned rights after the end date. Deletion of launched periods is not exposed.
+Before the start date an administrator can edit the full period using its
+current revision. After that date the title, description, cover and featured
+milestones remain editable. Dates, sign-in mode, publication state and reward
+definitions are locked. Editing presentation preserves sign-ins and awards.
+
+## Covers and featured rewards
+
+Select any number of reward days to feature. Players see the full schedule
+for a single activity. When several activities share the page, long schedules
+show featured rewards and the next milestone first. Each card can expand to
+show every reward in day order.
+
+Each tier accepts an optional `featured` boolean. An optional period `cover`
+has a `kind` of `pool`, `collection` or `external`, a `value` (pool-cover ID,
+collection theme ID or external HTTPS image URL), and a `fit` of `cover`
+(fill and crop) or `contain` (show the entire image). Omitting the cover uses
+the original illustration. The editor previews the selected fit. The browser
+loads external covers anonymously, without a referrer, and shows the default
+illustration if the host cannot supply a cross-origin image. Built-in artwork
+uses the site's existing content rating controls.
 
 Limits are 80 title characters, 2,000 description characters, 3,660 calendar
 days, 366 distinct milestones, 32 reward items per milestone and 1,024 items

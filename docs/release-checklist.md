@@ -20,8 +20,8 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 55 startup and the explicit v1.3.12 schema 54
-  offline conversion. Check fresh/converted target equality,
+- Validate fresh/exact-current schema 56 startup and both registered offline
+  conversions from schemas 54 and 55. Check fresh/converted target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and

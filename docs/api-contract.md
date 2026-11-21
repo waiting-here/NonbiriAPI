@@ -178,10 +178,10 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 55.
-Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.0 offline tool converts one exact v1.3.12 schema 54 source. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
+The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 56.
+Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.2 offline tool converts the registered schema 54 and 55 sources. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
 
-`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=55`, `minimum_schema_version=55`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists the single source fingerprint in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
+`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=56`, `minimum_schema_version=56`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists both source fingerprints in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
 
 Current account export `schema_version=38` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v38.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 

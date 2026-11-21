@@ -6,6 +6,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.4.2 — Unreleased
 
+- Feature selected sign-in rewards and choose an activity cover from pool
+  banners, collection illustrations or an external HTTPS image. Covers can
+  fill the frame or show the entire image. Existing activities keep their default.
+- Advance storage to schema 56. The standalone converter accepts exact schema
+  54 and 55 databases and preserves sign-ins, progress and issued awards.
 - Award Bond XP for the first three free Whale Haven interactions per player
   and site day. Players can continue interacting after earning all three awards.
 - Show visiting whales and whether each one is eating or working when a

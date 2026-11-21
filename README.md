@@ -4,7 +4,11 @@
 
 NonbiriAPI is a self-hosted AI endpoint manager and OpenAI-compatible gateway. Users manage services, endpoints and service-scoped API keys, maintain model lists per endpoint/key pair, and configure personal or shared charity routing. Revocable CallerKeys authenticate gateway calls. Optional activities and games share server-authoritative accounting and lifecycle rules.
 
-**v1.4.1** puts unfinished setup first and groups the wallet and daily check-ins
+**v1.4.2** lets administrators feature sign-in milestones and preview a
+custom activity cover. Players can find the featured rewards across overlapping
+campaigns and expand the full schedule. [Attendance activities](docs/attendance.md)
+
+v1.4.1 puts unfinished setup first and groups the wallet and daily check-ins
 above announcements. The home page links to Whale Haven when it is open.
 Administrator navigation search also reaches individual management sections.
 
@@ -22,9 +26,9 @@ and earn social rewards. Whale coins and conch
 shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 
-This version uses database schema 55 and account export format 38. Upgrade
-v1.4.0 directly on the same schema. For older databases, follow the offline
-v1.3.12 bridge procedure.
+This version uses database schema 56 and account export format 38. Use the
+standalone offline upgrader for v1.4.0 or v1.4.1 databases and the schema 54
+bridge. Earlier supported sources first use the v1.3.12 upgrader.
 [Database upgrades](docs/database-upgrades.md) · [Changelog](CHANGELOG.md)
 
 ## Architecture
@@ -321,11 +325,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 55.
-This version accepts existing storage through the v1.3.12 bridge. Stop the old
-service, preserve its complete recovery set, and use the matching standalone
-[upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert the exact schema 54
-database to schema 55. Earlier registered sources first use the v1.3.12
+Fresh databases start in maintenance with public features closed and use schema 56.
+Stop the old service, preserve its complete recovery set, and use the matching
+standalone [upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert an exact
+schema 54 or 55 database to schema 56. Earlier registered sources first use the v1.3.12
 upgrader. The service and deployment hooks leave conversion to the operator.
 Account export uses format 38.
 Upgrades are one-way: a server expecting an older or different schema cannot

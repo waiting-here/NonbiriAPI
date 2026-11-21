@@ -2,20 +2,23 @@
 
 ## Supported databases
 
-v1.4.1 keeps v1.4.0 storage and export formats. Back up a v1.4.0 instance and replace its binary with the v1.4.1 release. The offline converter is for the earlier schema 54 bridge.
+v1.4.2 uses schema 56. Stop a v1.4.0 or v1.4.1 instance and preserve its
+complete recovery set before running the explicit offline conversion.
 
-| Starting state | How to use v1.4.x |
+| Starting state | How to use v1.4.2 |
 | --- | --- |
-| Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 55. |
-| Exact current schema 55 | Start the service with its matching configuration and master key. |
-| Exact v1.3.12 schema 54 | Stop the service, preserve a matching recovery set and run the v1.4.0 offline upgrader. |
-| Earlier supported database | Use the v1.3.12 upgrader first, then use the resulting schema 54 database as the source for v1.4.0. |
+| Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 56. |
+| Exact current schema 56 | Start the service with its matching configuration and master key. |
+| Exact v1.4.0 / v1.4.1 schema 55 | Stop the service, preserve a matching recovery set and run the v1.4.2 offline upgrader. |
+| Exact v1.3.12 schema 54 | Use the same v1.4.2 converter. It also applies the model-usage conversion. |
+| Earlier supported database | Use the v1.3.12 upgrader first, then convert its schema 54 database using v1.4.2. |
 
-The release bridge is v1.3.12 (`03456c51d7537e806fc1b4576fc7e9660dc3f696`).
-The v1.4.0 upgrader checks the schema 54 manifest
-`ca682daf10a780b8ab38d4095301324a1f007af3fb2ac159fbbbf0daef0107b5`.
-v1.3.10 through v1.3.12 share this structure. The manifest identifies the
-storage format. It cannot establish which patch last opened the database.
+The converter identifies both source layouts by their schema manifests.
+
+| Source reference | Schema | Manifest SHA-256 |
+| --- | --- | --- |
+| v1.3.12 (`03456c51`), shared by v1.3.10–v1.3.12 | 54 | `ca682daf10a780b8ab38d4095301324a1f007af3fb2ac159fbbbf0daef0107b5` |
+| v1.4.1 (`b1700f25`), shared by v1.4.0 and v1.4.1 | 55 | `a4c97524571580d8b513789c2a4d1b1ec80c1bdedec8d1eace14bcdcbc291ee4` |
 
 The v1.3.12 tool accepts its registered schema 16–26 and 33–53 sources.
 Consult that tool's source matrix before attempting the first leg.
@@ -49,8 +52,8 @@ go forward only. Preserve any new data accepted after reopening. Service startup
 and deployment hooks never invoke `--apply`.
 
 The following commands print their compiled identities without loading
-configuration or opening storage. The service declares exact startup at 55.
-The upgrader declares one conversion with its source version, commit and manifest.
+configuration or opening storage. The service declares exact startup at 56.
+The upgrader lists the accepted source versions and their release identities.
 
 ```sh
 ./nonbiriapi maintenance schema-info --json
@@ -58,6 +61,10 @@ The upgrader declares one conversion with its source version, commit and manifes
 ```
 
 ## Schema changes
+
+Schema 56 adds optional campaign covers and featured sign-in milestones.
+Existing campaigns keep the original illustration and have no featured days.
+The conversion preserves reward amounts, progress, sign-ins and awards.
 
 Schema 55 adds cumulative call and credit limits and usage for each donation
 key and exact upstream-model pair. The conversion preserves total, input and
