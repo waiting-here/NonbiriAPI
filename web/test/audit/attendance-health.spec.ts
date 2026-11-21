@@ -173,12 +173,18 @@ test('admin configures sparse periods and the seventh independent sign-in automa
     await dialog.getByRole('spinbutton', { name: 'Required days' }).fill('1');
     await dialog.getByRole('button', { name: 'Add milestone' }).click();
     await dialog.getByRole('spinbutton', { name: 'Required days' }).nth(1).fill('7');
+    await dialog.getByRole('checkbox', { name: 'Day 7', exact: true }).check();
+    await dialog.getByLabel('Image source').selectOption('collection');
+    await dialog.getByLabel('Image', { exact: true }).selectOption('r');
+    await dialog.getByLabel('Image fit').selectOption('contain');
     await screenshots(admin.page, dialog, 'attendance-editor');
     const created = admin.page.waitForResponse(
       (r) => r.url().endsWith('/admin/api/attendance') && r.request().method() === 'POST' && r.ok(),
     );
     await dialog.getByRole('button', { name: 'Save activity' }).click();
     const period = (await (await created).json()) as AttendancePeriod;
+    expect(period.cover).toEqual({ kind: 'collection', value: 'r', fit: 'contain' });
+    expect(period.tiers.filter((tier) => tier.featured).map((tier) => tier.days)).toEqual([7]);
     await expect(dialog).not.toBeVisible();
     const second = await admin.page.request.post(admin.origin + '/admin/api/attendance', {
       headers: { Origin: admin.origin, 'Idempotency-Key': randomUUID() },
@@ -199,6 +205,11 @@ test('admin configures sparse periods and the seventh independent sign-in automa
     await user.page.goto(user.origin + '/activities');
     let first = user.page.getByRole('region', { name: title, exact: true });
     await expect(first.getByRole('button', { name: 'Not started' })).toBeDisabled();
+    await expect(first.locator('.attendance-cover img')).toHaveAttribute(
+      'src',
+      '/assets/gacha/groups/r.webp',
+    );
+    await expect(first.locator('.attendance-milestone--featured')).toContainText('Day 7');
     await control(user.page, 'advance', { seconds: 86400 });
     let firstDate = '';
     let firstKey = '';
@@ -262,6 +273,43 @@ test('admin configures sparse periods and the seventh independent sign-in automa
       .click();
     await expect(dialog.getByLabel('Start date')).toBeDisabled();
     await expect(dialog.getByRole('textbox', { name: 'Activity title' })).toBeEnabled();
+    await dialog.getByRole('checkbox', { name: 'Day 1', exact: true }).check();
+    const portrait = 'https://images.example.test/sign-in/portrait.webp';
+    const portraitBody = readFileSync(resolve('public/assets/gacha/cards/a-chatgpt.webp'));
+    for (const station of [admin.page, user.page]) {
+      await station.route(portrait, (route) =>
+        route.fulfill({
+          contentType: 'image/webp',
+          headers: { 'Access-Control-Allow-Origin': '*' },
+          body: portraitBody,
+        }),
+      );
+    }
+    await dialog.getByLabel('Image source').selectOption('external');
+    await dialog.getByLabel('HTTPS image address').fill(portrait);
+    await dialog.getByLabel('Image fit').selectOption('contain');
+    const preview = dialog.locator('.attendance-cover img');
+    await preview.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => preview.evaluate((element: HTMLImageElement) => element.naturalHeight))
+      .toBeGreaterThan(0);
+    expect(
+      await preview.evaluate(
+        (element: HTMLImageElement) =>
+          element.naturalHeight > element.naturalWidth &&
+          getComputedStyle(element).objectFit === 'contain',
+      ),
+    ).toBe(true);
+    const edited = admin.page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/admin/api/attendance/' + period.id) &&
+        response.request().method() === 'PUT',
+    );
+    await dialog.getByRole('button', { name: 'Save activity' }).click();
+    expect((await edited).ok()).toBe(true);
+    await user.page.reload();
+    await expect(first.locator('.attendance-milestone--featured.is-awarded')).toHaveCount(2);
+    await expect(first.locator('.attendance-cover img')).toHaveAttribute('src', portrait);
     const listing = await user.page.request.get(
       user.origin + '/api/attendance?page=1&page_size=20',
     );

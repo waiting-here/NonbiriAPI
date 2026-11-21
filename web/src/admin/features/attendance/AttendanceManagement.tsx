@@ -20,6 +20,8 @@ import {
 } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
+import { assetName } from '@shared/rewards/copy';
+import { ExactCredits } from '../../../user/features/core/components';
 import { RewardEditor } from '@shared/rewards/RewardEditor';
 import { RewardSummary } from '@shared/rewards/RewardSummary';
 import { getAssets, rewardKeys, type Asset } from '@shared/rewards/api';
@@ -95,7 +97,7 @@ function AttendanceEditor({
   assets: Asset[];
   assetsReady: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [override, setOverride] = useState<AttendanceInput | null>(null);
@@ -199,6 +201,50 @@ function AttendanceEditor({
             </Field>
           </Fields>
           {!editable && <Note>{t('admin.attendance.locked')}</Note>}
+          <fieldset className="attendance-editor__rules" disabled={busy || unknown}>
+            <legend>{t('admin.attendance.featuredRewards')}</legend>
+            <div className="attendance-editor__featured">
+              {draft.tiers.map((tier, index) => (
+                <ChoiceRow
+                  key={index}
+                  label={
+                    tier.days > 0
+                      ? t('admin.attendance.tierDays', { amount: formatCount(tier.days).display })
+                      : t('admin.attendance.untimedMilestone', {
+                          amount: formatCount(index + 1).display,
+                        })
+                  }
+                  description={tier.rewards.map((reward, rewardIndex) => (
+                    <span key={rewardIndex} className="attendance-editor__featured-item">
+                      {assetName(assets, reward.asset, i18n.language.startsWith('en'))}
+                      {reward.quantity && (
+                        <>
+                          {' '}
+                          × <ExactCredits value={reward.quantity} />
+                        </>
+                      )}
+                    </span>
+                  ))}
+                  checked={Boolean(tier.featured)}
+                  disabled={busy || unknown}
+                  onChange={(featured) =>
+                    change({
+                      ...draft,
+                      tiers: draft.tiers.map((entry, i) =>
+                        i === index ? { ...entry, featured } : entry,
+                      ),
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </fieldset>
+          <AttendanceCoverEditor
+            cover={draft.cover}
+            savedCover={period?.cover}
+            disabled={busy || unknown}
+            onChange={(cover) => change({ ...draft, cover })}
+          />
           <fieldset className="attendance-editor__rules" disabled={busy || unknown || !editable}>
             <legend>{t('admin.attendance.schedule')}</legend>
             <p className="nb-small nb-muted">{t('admin.attendance.dateHelp')}</p>
@@ -254,122 +300,91 @@ function AttendanceEditor({
               onChange={(published) => change({ ...draft, published })}
             />
           </fieldset>
-          <fieldset
-            className="attendance-editor__rules"
-            disabled={busy || unknown || !editable || !assetsReady}
-          >
-            <legend>{t('admin.attendance.rewards')}</legend>
-            <p className="nb-small nb-muted">{t('admin.attendance.rewardHelp')}</p>
-            <div className="attendance-editor__tiers">
-              {draft.tiers.map((tier, index) => (
-                <div className="attendance-editor__tier" key={index}>
-                  <div className="attendance-editor__tier-head">
-                    <Field size="short" label={t('admin.attendance.days')}>
-                      {(props) => (
-                        <input
-                          {...props}
-                          required
-                          type="number"
-                          min={1}
-                          max={3660}
-                          step={1}
-                          value={tier.days || ''}
-                          onChange={(event) =>
-                            change({
-                              ...draft,
-                              tiers: draft.tiers.map((entry, i) =>
-                                i === index
-                                  ? { ...entry, days: Number(event.target.value) }
-                                  : entry,
-                              ),
-                            })
-                          }
-                        />
-                      )}
-                    </Field>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={busy || unknown || !editable || draft.tiers.length === 1}
-                      onClick={() =>
-                        change({ ...draft, tiers: draft.tiers.filter((_, i) => i !== index) })
+          {editable && (
+            <fieldset
+              className="attendance-editor__rules"
+              disabled={busy || unknown || !assetsReady}
+            >
+              <legend>{t('admin.attendance.rewards')}</legend>
+              <p className="nb-small nb-muted">{t('admin.attendance.rewardHelp')}</p>
+              <div className="attendance-editor__tiers">
+                {draft.tiers.map((tier, index) => (
+                  <div className="attendance-editor__tier" key={index}>
+                    <div className="attendance-editor__tier-head">
+                      <Field size="short" label={t('admin.attendance.days')}>
+                        {(props) => (
+                          <input
+                            {...props}
+                            required
+                            type="number"
+                            min={1}
+                            max={3660}
+                            step={1}
+                            value={tier.days || ''}
+                            onChange={(event) =>
+                              change({
+                                ...draft,
+                                tiers: draft.tiers.map((entry, i) =>
+                                  i === index
+                                    ? { ...entry, days: Number(event.target.value) }
+                                    : entry,
+                                ),
+                              })
+                            }
+                          />
+                        )}
+                      </Field>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy || unknown || !editable || draft.tiers.length === 1}
+                        onClick={() =>
+                          change({ ...draft, tiers: draft.tiers.filter((_, i) => i !== index) })
+                        }
+                      >
+                        {t('admin.attendance.removeTier')}
+                      </Button>
+                    </div>
+                    <RewardEditor
+                      assets={assets}
+                      value={tier.rewards}
+                      disabled={busy || unknown || !assetsReady}
+                      onChange={(rewards) =>
+                        change({
+                          ...draft,
+                          tiers: draft.tiers.map((entry, i) =>
+                            i === index ? { ...entry, rewards } : entry,
+                          ),
+                        })
                       }
-                    >
-                      {t('admin.attendance.removeTier')}
-                    </Button>
+                    />
                   </div>
-                  <RewardEditor
-                    assets={assets}
-                    value={tier.rewards}
-                    disabled={busy || unknown || !editable || !assetsReady}
-                    onChange={(rewards) =>
+                ))}
+                <div>
+                  <Button
+                    type="button"
+                    disabled={
+                      busy || unknown || !editable || !assetsReady || draft.tiers.length >= 366
+                    }
+                    onClick={() =>
                       change({
                         ...draft,
-                        tiers: draft.tiers.map((entry, i) =>
-                          i === index ? { ...entry, rewards } : entry,
-                        ),
+                        tiers: [
+                          ...draft.tiers,
+                          {
+                            days: (draft.tiers.at(-1)?.days ?? 0) + 7,
+                            rewards: [{ asset: 'general', quantity: '100' }],
+                          },
+                        ],
                       })
                     }
-                  />
+                  >
+                    {t('admin.attendance.addTier')}
+                  </Button>
                 </div>
-              ))}
-              <div>
-                <Button
-                  type="button"
-                  disabled={
-                    busy || unknown || !editable || !assetsReady || draft.tiers.length >= 366
-                  }
-                  onClick={() =>
-                    change({
-                      ...draft,
-                      tiers: [
-                        ...draft.tiers,
-                        {
-                          days: (draft.tiers.at(-1)?.days ?? 0) + 7,
-                          rewards: [{ asset: 'general', quantity: '100' }],
-                        },
-                      ],
-                    })
-                  }
-                >
-                  {t('admin.attendance.addTier')}
-                </Button>
               </div>
-            </div>
-          </fieldset>
-          <fieldset className="attendance-editor__rules" disabled={busy || unknown}>
-            <legend>{t('admin.attendance.featuredRewards')}</legend>
-            <div className="attendance-editor__featured">
-              {draft.tiers.map((tier, index) => (
-                <ChoiceRow
-                  key={index}
-                  label={
-                    tier.days > 0
-                      ? t('admin.attendance.tierDays', { amount: formatCount(tier.days).display })
-                      : t('admin.attendance.untimedMilestone', {
-                          amount: formatCount(index + 1).display,
-                        })
-                  }
-                  checked={Boolean(tier.featured)}
-                  disabled={busy || unknown}
-                  onChange={(featured) =>
-                    change({
-                      ...draft,
-                      tiers: draft.tiers.map((entry, i) =>
-                        i === index ? { ...entry, featured } : entry,
-                      ),
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </fieldset>
-          <AttendanceCoverEditor
-            cover={draft.cover}
-            savedCover={period?.cover}
-            disabled={busy || unknown}
-            onChange={(cover) => change({ ...draft, cover })}
-          />
+            </fieldset>
+          )}
           <FormActions>
             <Button
               type="submit"

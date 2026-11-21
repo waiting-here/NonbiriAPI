@@ -86,10 +86,11 @@ it('lets started activities change featured milestones and the cover while prese
   await view.user.click(await screen.findByRole('button', { name: 'Edit activity' }));
   const dialog = await screen.findByRole('dialog');
   expect(within(dialog).getByLabelText('Start date')).toBeDisabled();
-  expect(within(dialog).getByRole('button', { name: 'Add milestone' })).toBeDisabled();
+  expect(within(dialog).queryByRole('button', { name: 'Add milestone' })).not.toBeInTheDocument();
   const featured = within(dialog).getByRole('group', { name: 'Featured rewards' });
   const first = within(featured).getByRole('checkbox', { name: 'Day 7' });
   const second = within(featured).getByRole('checkbox', { name: 'Day 14' });
+  expect(first).toHaveAccessibleDescription(/General credits.*100/);
   expect(first).not.toBeChecked();
   expect(second).not.toBeChecked();
   await view.user.click(first);
