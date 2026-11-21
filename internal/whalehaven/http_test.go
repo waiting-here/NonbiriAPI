@@ -263,6 +263,21 @@ func TestStationInteractionAwardsPersistAndRenewAtSiteMidnight(t *testing.T) {
 	if v := read(f.call(t, other, "profile", nil, "", 200)); v["interactionAffectionRemaining"] != float64(3) {
 		t.Fatal("another player lost an award")
 	}
+	tx, err := f.store.ReadDB().BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, err := Export(t.Context(), tx, user, f.at.Unix(), 100)
+	_ = tx.Rollback()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Profile map[string]any `json:"profile"`
+	}
+	if err := json.Unmarshal(exported, &saved); err != nil || saved.Profile["daily_interaction_affection_remaining"] != float64(0) {
+		t.Fatalf("exported interaction allowance = %v, error = %v", saved.Profile["daily_interaction_affection_remaining"], err)
+	}
 	f.at = f.at.Add(6 * time.Second)
 	value = read(f.call(t, user, "actions", body, "award-on-chat-number-4", 200))
 	if value["interactionAffectionRemaining"] != float64(3) || value["whale"].(map[string]any)["affection"] != float64(126) {
