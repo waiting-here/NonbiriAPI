@@ -9,6 +9,7 @@ attendance_commit=b1700f25d7a73535af76cdd15c356d92eff0d8fd
 bash "$root/scripts/ensure-upgrade-source.sh" "$released_commit"
 bash "$root/scripts/ensure-upgrade-source.sh" "$attendance_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
+umask 077
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
 cleanup() {
     local resolved
@@ -19,8 +20,7 @@ cleanup() {
     esac
 }
 trap cleanup EXIT
-mkdir "$temporary/released" "$temporary/attendance"
-mkdir -m 700 "$temporary/data"
+mkdir "$temporary/released" "$temporary/attendance" "$temporary/data"
 git archive "$released_commit" -- go.mod go.sum internal | tar -x -C "$temporary/released"
 "$python_command" - "$root" "$temporary" <<'PY'
 import json, pathlib, sys
