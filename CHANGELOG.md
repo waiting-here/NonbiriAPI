@@ -23,6 +23,8 @@ Each version entry describes its source and compatibility boundary; a release ta
   when opening a detail panel or browsing on a phone.
 - Fit channel protocols, addresses and actions to the available list width.
   The charity model management list also switches to labeled cards in narrow panes.
+- Keep keyboard focus on the selected log or alert when its details move
+  between a side panel and a drawer.
 - Report upstream network timeouts, including TLS handshake timeouts, as 504
   on personal and charity requests. Callers receive HTTP 504 when the response
   headers are still pending.
