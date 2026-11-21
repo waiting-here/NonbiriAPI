@@ -9,7 +9,26 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
+
+func TestNextSSEEventPreservesFramesBeforeReadFailure(t *testing.T) {
+	for _, terminal := range []error{io.ErrUnexpectedEOF, context.DeadlineExceeded} {
+		t.Run(terminal.Error(), func(t *testing.T) {
+			body := io.MultiReader(strings.NewReader("data: first\n\ndata: second\n\n"), iotest.ErrReader(terminal))
+			events, errs := StreamSSE(t.Context(), io.NopCloser(body), SSEOptions{EventBuffer: 2})
+			for _, want := range []string{"first", "second"} {
+				event, err := NextSSEEvent(t.Context(), events, errs)
+				if err != nil || event.Data != want {
+					t.Fatalf("event = %q, error = %v, want %q", event.Data, err, want)
+				}
+			}
+			if _, err := NextSSEEvent(t.Context(), events, errs); !errors.Is(err, terminal) {
+				t.Fatalf("terminal error = %v, want %v", err, terminal)
+			}
+		})
+	}
+}
 
 func TestSSELineBufferBoundaries(t *testing.T) {
 	for _, tc := range []struct {

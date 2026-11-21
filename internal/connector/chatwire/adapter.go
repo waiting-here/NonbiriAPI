@@ -372,60 +372,50 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		}
 		return sinkFailure(committed, decoder.Usage())
 	}
-	for events != nil || errs != nil {
-		select {
-		case <-ctx.Done():
-			return fail(ctx.Err())
-		case err, ok := <-errs:
-			if !ok {
-				errs = nil
-				continue
-			}
-			if err != nil && !errors.Is(err, io.EOF) {
-				return fail(err)
-			}
-		case event, ok := <-events:
-			if !ok {
-				events = nil
-				continue
-			}
-			if event.Data == "" {
-				continue
-			}
-			data := []byte(event.Data)
-			if wireGuard.ContainsJSON(data, data) {
-				upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
-				clear(data)
-				return fail(errOutput)
-			}
-			errorBody, errorEvent := data, upstreamerror.IsEvent(data)
-			if !errorEvent && a.protocol.ErrorEvent != nil {
-				errorBody, errorEvent = a.protocol.ErrorEvent(data)
-			}
-			if errorEvent {
-				if observer, ok := decoder.(interface{ ObserveFailure([]byte) }); ok {
-					observer.ObserveFailure(data)
-				}
-				upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
-				failed := fail(errors.New("upstream error event"))
-				failed.ErrorDetail = errorContext.Parse(errorBody)
-				clear(data)
-				return contract.UpstreamFailed(failed, contract.OriginUpstreamResponse)
-			}
-			frames, err := decoder.Event(event.Event, data)
-			if err != nil {
-				upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
-			}
+	for {
+		event, readErr := egress.NextSSEEvent(streamCtx, events, errs)
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return fail(readErr)
+		}
+		if event.Data == "" {
+			continue
+		}
+		data := []byte(event.Data)
+		if wireGuard.ContainsJSON(data, data) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
 			clear(data)
-			if err != nil {
-				for _, frame := range frames {
-					clear(frame)
-				}
-				return fail(err)
+			return fail(errOutput)
+		}
+		errorBody, errorEvent := data, upstreamerror.IsEvent(data)
+		if !errorEvent && a.protocol.ErrorEvent != nil {
+			errorBody, errorEvent = a.protocol.ErrorEvent(data)
+		}
+		if errorEvent {
+			if observer, ok := decoder.(interface{ ObserveFailure([]byte) }); ok {
+				observer.ObserveFailure(data)
 			}
-			if err := emit(frames); err != nil {
-				return writeFailure(err)
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
+			failed := fail(errors.New("upstream error event"))
+			failed.ErrorDetail = errorContext.Parse(errorBody)
+			clear(data)
+			return contract.UpstreamFailed(failed, contract.OriginUpstreamResponse)
+		}
+		frames, err := decoder.Event(event.Event, data)
+		if err != nil {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), data)
+		}
+		clear(data)
+		if err != nil {
+			for _, frame := range frames {
+				clear(frame)
 			}
+			return fail(err)
+		}
+		if err := emit(frames); err != nil {
+			return writeFailure(err)
 		}
 	}
 	frames, err := decoder.Finish()

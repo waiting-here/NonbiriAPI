@@ -32,8 +32,8 @@ func (a *Adapter) inferenceStream(ctx context.Context, writer http.ResponseWrite
 		return a.streamProtocolFailure(writer, controller, committed, usage, message)
 	}
 	for {
-		event, ok, err := nextSSEEvent(streamCtx, events, errs)
-		if err != nil || !ok {
+		event, err := egress.NextSSEEvent(streamCtx, events, errs)
+		if err != nil {
 			if ctx.Err() != nil {
 				result := contract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed

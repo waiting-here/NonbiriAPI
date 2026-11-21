@@ -23,8 +23,8 @@ func (a *Adapter) imageStream(ctx context.Context, writer http.ResponseWriter, r
 	combinedUsage := emptyImageUsage()
 	completedImages := 0
 	for {
-		event, ok, err := nextSSEEvent(streamCtx, events, errs)
-		if err != nil || !ok {
+		event, err := egress.NextSSEEvent(streamCtx, events, errs)
+		if err != nil {
 			if ctx.Err() != nil {
 				result := contract.ReadFailed(canceledFailure(), ctx.Err(), ctx)
 				result.Committed = committed

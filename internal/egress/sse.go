@@ -152,15 +152,36 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, options SSEOptions) (<-c
 		observeReadLimit(ctx, parseErr)
 		close(done)
 		closeBody()
-		if parseErr != nil && !errors.Is(parseErr, context.Canceled) && !errors.Is(parseErr, context.DeadlineExceeded) {
-			select {
-			case errs <- parseErr:
-			case <-ctx.Done():
-			}
+		if parseErr != nil && ctx.Err() == nil {
+			errs <- parseErr
 		}
 	}()
 
 	return events, errs
+}
+
+// NextSSEEvent drains complete events from StreamSSE in wire order before
+// reporting its terminal read error. Caller cancellation stops delivery.
+func NextSSEEvent(ctx context.Context, events <-chan SSEEvent, errs <-chan error) (SSEEvent, error) {
+	if err := ctx.Err(); err != nil {
+		return SSEEvent{}, err
+	}
+	select {
+	case <-ctx.Done():
+		return SSEEvent{}, ctx.Err()
+	case event, ok := <-events:
+		if ok {
+			return event, nil
+		}
+	}
+	// StreamSSE publishes its buffered result before it closes events.
+	if err := ctx.Err(); err != nil {
+		return SSEEvent{}, err
+	}
+	if err := <-errs; err != nil {
+		return SSEEvent{}, err
+	}
+	return SSEEvent{}, io.EOF
 }
 
 // ParseSSE parses an SSE stream synchronously and sends complete events to
