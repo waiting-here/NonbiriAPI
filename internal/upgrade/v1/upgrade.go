@@ -1,9 +1,10 @@
-// Package v1 upgrades stopped databases that match the v1.3.12 storage schema.
+// Package v1 upgrades stopped databases that match a supported released schema.
 package v1
 
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -12,6 +13,7 @@ import (
 
 const SourceCommit = "03456c51d7537e806fc1b4576fc7e9660dc3f696"
 const SourceSchemaVersion = 54
+const schema55Commit = "b1700f25d7a73535af76cdd15c356d92eff0d8fd"
 const toolName = "nonbiri-upgrade-v1"
 
 type Options struct {
@@ -28,12 +30,14 @@ type Result struct {
 	TargetSchemaVersion           int    `json:"target_schema_version"`
 }
 
+var supportedSources = []db.OfflineConversionDescriptor{
+	{Tool: toolName, SourceCommit: SourceCommit, SourceSchemaVersion: SourceSchemaVersion, SourceManifestHash: db.Schema54ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
+	{Tool: toolName, SourceCommit: schema55Commit, SourceSchemaVersion: 55, SourceManifestHash: db.Schema55ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
+}
+
 func SchemaDescriptor() db.StorageSchemaDescriptor {
 	descriptor := db.SchemaDescriptor()
-	descriptor.OfflineConversions = []db.OfflineConversionDescriptor{{
-		Tool: toolName, SourceCommit: SourceCommit, SourceSchemaVersion: SourceSchemaVersion,
-		SourceManifestHash: db.Schema54ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion,
-	}}
+	descriptor.OfflineConversions = slices.Clone(supportedSources)
 	return descriptor
 }
 
@@ -48,13 +52,17 @@ func Run(ctx context.Context, path string, vault *secret.Vault, options Options)
 		return Result{}, err
 	}
 	status := "current"
-	if version == SourceSchemaVersion {
+	if version != db.CurrentSchemaVersion {
 		status = "ready"
 		if options.Apply {
 			status = "converted"
 		}
 	}
+	versions := make([]int, len(supportedSources))
+	for i, source := range supportedSources {
+		versions[i] = source.SourceSchemaVersion
+	}
 	return Result{Tool: toolName, TargetManifestHash: db.PinnedGenerationTwoManifestHash,
-		SupportedSourceSchemaVersions: []int{SourceSchemaVersion}, Status: status,
+		SupportedSourceSchemaVersions: versions, Status: status,
 		SourceSchemaVersion: version, TargetSchemaVersion: db.CurrentSchemaVersion}, nil
 }

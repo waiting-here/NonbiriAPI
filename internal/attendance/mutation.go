@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
+	"slices"
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -59,7 +59,7 @@ func complete(ctx context.Context, tx *sql.Tx, d idempotency.Decision, value any
 	return idempotency.Complete(ctx, tx, d, http.StatusOK, body)
 }
 func writeTiers(ctx context.Context, tx *sql.Tx, id string, tiers []TierInput) error {
-	statement, err := tx.PrepareContext(ctx, "INSERT INTO attendance_tiers(period_id,days,rewards) VALUES(?,?,?)")
+	statement, err := tx.PrepareContext(ctx, "INSERT INTO attendance_tiers(period_id,days,rewards,featured) VALUES(?,?,?,?)")
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func writeTiers(ctx context.Context, tx *sql.Tx, id string, tiers []TierInput) e
 		if err != nil {
 			return err
 		}
-		if _, err = statement.ExecContext(ctx, id, t.Days, string(raw)); err != nil {
+		if _, err = statement.ExecContext(ctx, id, t.Days, string(raw), t.Featured); err != nil {
 			return err
 		}
 	}
@@ -116,6 +116,9 @@ func (s *Service) Create(ctx context.Context, actor int64, key string, input Inp
 		}
 		return out, managementlog.Commit(ctx, tx)
 	}
+	if err = checkCoverChange(ctx, tx, in.Cover, nil); err != nil {
+		return out, err
+	}
 	offset, err := db.ResolveSiteTimezoneTx(ctx, tx)
 	if err != nil {
 		return out, err
@@ -131,7 +134,7 @@ func (s *Service) Create(ctx context.Context, actor int64, key string, input Inp
 	if err != nil {
 		return out, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO attendance_periods(id,title,description,start_date,end_date,timezone_offset_minutes,starts_at,ends_at,mode,published,actor_user_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, in.Title, in.Description, in.StartDate, in.EndDate, offset, start, end, in.Mode, in.Published, actor, at, at)
+	_, err = tx.ExecContext(ctx, `INSERT INTO attendance_periods(id,title,description,start_date,end_date,timezone_offset_minutes,starts_at,ends_at,mode,published,actor_user_id,created_at,updated_at,cover) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, id, in.Title, in.Description, in.StartDate, in.EndDate, offset, start, end, in.Mode, in.Published, actor, at, at, in.Cover.stored())
 	if err != nil {
 		return out, err
 	}
@@ -199,22 +202,24 @@ func (s *Service) Update(ctx context.Context, actor int64, id, key string, input
 	if out.Revision != input.ExpectedRevision {
 		return out, ErrConflict
 	}
+	if err = checkCoverChange(ctx, tx, in.Cover, out.Cover); err != nil {
+		return out, err
+	}
 	start, end, err := window(in, out.TimezoneOffsetMinutes)
 	if err != nil {
 		return out, err
 	}
 	if !out.ConfigEditable {
-		tiers := make([]TierInput, len(out.Tiers))
-		for i, t := range out.Tiers {
-			tiers[i] = t.TierInput
-		}
-		if in.StartDate != out.StartDate || in.EndDate != out.EndDate || in.Mode != out.Mode || in.Published != out.Published || !reflect.DeepEqual(in.Tiers, tiers) {
-			return out, fmt.Errorf("%w: after the start date only the title and description can change", ErrConflict)
+		sameRewards := slices.EqualFunc(in.Tiers, out.Tiers, func(a TierInput, b Tier) bool {
+			return a.Days == b.Days && slices.Equal(a.Rewards, b.Rewards)
+		})
+		if in.StartDate != out.StartDate || in.EndDate != out.EndDate || in.Mode != out.Mode || in.Published != out.Published || !sameRewards {
+			return out, fmt.Errorf("%w: after the start date only the title, description, cover and featured rewards can change", ErrConflict)
 		}
 	} else if in.StartDate <= out.SiteDate {
 		return out, fmt.Errorf("%w: the start date must be after today in site time", ErrInvalid)
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE attendance_periods SET title=?,description=?,start_date=?,end_date=?,starts_at=?,ends_at=?,mode=?,published=?,revision=revision+1,updated_at=? WHERE id=?`, in.Title, in.Description, in.StartDate, in.EndDate, start, end, in.Mode, in.Published, at, id)
+	_, err = tx.ExecContext(ctx, `UPDATE attendance_periods SET title=?,description=?,start_date=?,end_date=?,starts_at=?,ends_at=?,mode=?,published=?,cover=?,revision=revision+1,updated_at=? WHERE id=?`, in.Title, in.Description, in.StartDate, in.EndDate, start, end, in.Mode, in.Published, in.Cover.stored(), at, id)
 	if err != nil {
 		return out, err
 	}
@@ -224,6 +229,14 @@ func (s *Service) Update(ctx context.Context, actor int64, id, key string, input
 		}
 		if err = writeTiers(ctx, tx, id, in.Tiers); err != nil {
 			return out, err
+		}
+	} else {
+		for i, tier := range in.Tiers {
+			if tier.Featured != out.Tiers[i].Featured {
+				if _, err = tx.ExecContext(ctx, "UPDATE attendance_tiers SET featured=? WHERE period_id=? AND days=?", tier.Featured, id, tier.Days); err != nil {
+					return out, err
+				}
+			}
 		}
 	}
 	if err = complete(ctx, tx, d, struct {
@@ -308,6 +321,10 @@ func (s *Service) SignIn(ctx context.Context, user int64, id, key string, in Sig
 	}
 	if !p.Published {
 		return out, ErrNotFound
+	}
+	var policy coverPolicy
+	if err = policy.project(ctx, tx, &p); err != nil {
+		return out, err
 	}
 	if d.Kind == idempotency.Replay {
 		if err = json.Unmarshal(d.ResponseBody, &out.SignInReceipt); err != nil {

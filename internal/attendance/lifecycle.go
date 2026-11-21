@@ -56,9 +56,13 @@ func (s *Service) ExportUserTx(ctx context.Context, tx *sql.Tx, user, at int64, 
 		return out, err
 	}
 	bytes := len(encoded)
+	var policy coverPolicy
 	for _, id := range ids {
 		p, e := readPeriod(ctx, tx, id)
 		if e != nil {
+			return out, e
+		}
+		if e = policy.project(ctx, tx, &p); e != nil {
 			return out, e
 		}
 		p, e = viewTx(ctx, tx, p, user, at, false)
