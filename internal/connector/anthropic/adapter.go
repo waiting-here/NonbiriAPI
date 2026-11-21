@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -201,15 +200,16 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 		result.Diagnostic = "request translation failed"
 		return result
 	}
-	defer func() { clear(body) }()
 	if len(policy.NativeExtensions) != 0 {
 		merged, mergeErr := requestadaptation.MergeNative(body, policy.NativeExtensions, MaxTranslatedRequestBytes)
+		clear(body)
 		if mergeErr != nil {
 			return result
 		}
-		clear(body)
 		body = merged
 	}
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 	if err := validateThinkingConfiguration(body, policy.AdditionalHeaders); err != nil {
 		result.Diagnostic = err.Error()
 		return result
@@ -218,7 +218,7 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if err != nil {
 		return connectorcontract.NormalizeOutcome(connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, MessagesURL(client.BaseURL()), bytes.NewReader(body))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, MessagesURL(client.BaseURL()), nil)
 	if err != nil {
 		return result
 	}
@@ -291,12 +291,13 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	target.credential.clear()
 
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes, StreamBytes: a.maxStreamBytes, LineBytes: a.maxSSELineBytes, EventBytes: a.maxSSEEventBytes})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
 	httpRequest.Header.Del("X-Api-Key")
-	clear(body)
+	upload.Release()
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("X-Api-Key")
 	}

@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"strings"
@@ -29,12 +28,13 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	if err != nil {
 		return result
 	}
-	defer clear(body)
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
 		return contract.NormalizeOutcome(AttemptResult{Failure: FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+"/decisions", bytes.NewReader(body))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+"/decisions", nil)
 	if err != nil || len(target.credential.bearer) == 0 {
 		return result
 	}
@@ -65,9 +65,10 @@ func (a *Adapter) AttemptDecision(ctx context.Context, writer http.ResponseWrite
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	target.credential.clear()
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	httpRequest.Header.Del("Authorization")
-	clear(body)
+	upload.Release()
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 		if response.Request != nil {

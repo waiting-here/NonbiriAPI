@@ -342,3 +342,33 @@ func TestCallerParameterAfterAcceptedHTTPRemainsUpstreamFailure(t *testing.T) {
 		t.Fatalf("result=%+v", result)
 	}
 }
+
+func TestEarlyChatRejectionPreservesUploadAndCallerFault(t *testing.T) {
+	const address = "https://upstream.example"
+	request := decodeAdapterRequest(t, `{"model":"public/model","messages":[],"temperature":0.25}`)
+	want, err := request.marshalUpstreamWithPolicy("upstream/model", "caller", contract.AttemptPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire io.ReadCloser
+	client := &discoveryEndpointClient{baseURL: address, do: func(req *http.Request) (*http.Response, error) {
+		wire = req.Body
+		return openAIDiscoveryResponse(http.StatusBadRequest, `{"error":{"message":"Unsupported generation parameter.","type":"invalid_request_error","param":"temperature","code":"unsupported_parameter"}}`), nil
+	}}
+	adapter, err := NewAdapter(AdapterConfig{Backend: discoveryBackend{client: client}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := adapter.Attempt(smartbackoff.WithCharityCall(t.Context(), true), httptest.NewRecorder(), testTarget(address, []byte("fixture-key"), nil), request, "caller")
+	if wire == nil {
+		t.Fatal("request was not dispatched")
+	}
+	defer wire.Close()
+	got, err := io.ReadAll(wire)
+	if err != nil || string(got) != string(want) {
+		t.Fatal("early rejection corrupted the remaining upload", err)
+	}
+	if result.StreakDisposition != contract.StreakNeutral || !result.ErrorDetail.CallerFault().Matches(400, "unsupported_parameter") {
+		t.Fatalf("early rejection lost the caller parameter proof: %+v", result)
+	}
+}

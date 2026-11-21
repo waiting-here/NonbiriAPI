@@ -295,3 +295,26 @@ func TestTranslatingStreamsEnforceCumulativeBudgetWithoutSuccessTerminal(t *test
 		})
 	}
 }
+
+func TestUnsentRequestClearsCompiledBytes(t *testing.T) {
+	const address = "https://upstream.example"
+	data := []byte(`{"input":"fixture"}`)
+	proto := protocol(contract.TypeOpenAIResponses)
+	proto.Compile = func(*openai.ChatRequest, string, contract.AttemptPolicy) ([]byte, error) {
+		return data, nil
+	}
+	proto.URL = func(string, string, bool) (string, error) { return "", fmt.Errorf("invalid fixture URL") }
+	adapter, err := chatwire.New(outbound(t, address), proto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := adapter.Attempt(t.Context(), httptest.NewRecorder(), contract.NewTarget(proto.Type, address, "model"), contract.NewShortLivedSecret([]byte("fixture-key"), nil), chat(t, false), contract.AttemptPolicy{})
+	if result.Success {
+		t.Fatal("invalid URL should prevent dispatch")
+	}
+	for _, b := range data {
+		if b != 0 {
+			t.Fatal("rejected request retained its compiled bytes")
+		}
+	}
+}

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -120,12 +119,13 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 		}
 		return result
 	}
-	defer func() { clear(body) }()
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 	client, err := a.backend.Open(target.BaseURL())
 	if err != nil {
 		return contract.NormalizeOutcome(contract.AttemptResult{Failure: contract.FailureUpstream, Diagnostic: "upstream endpoint was refused"})
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+"/"+service+"-model", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(client.BaseURL(), "/")+"/"+service+"-model", nil)
 	if err != nil {
 		return result
 	}
@@ -199,6 +199,7 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	clear(cipher)
 	sent = attribution != ""
 	request = egress.WithResponseLimits(request, egress.ResponseLimits{JSONBytes: responseLimit, StreamBytes: maxStreamBytes, LineBytes: maxLineBytes, EventBytes: maxEventBytes})
+	upload.Attach(request)
 	response, err := client.Do(request)
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
@@ -210,7 +211,7 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	if err == nil && response != nil && response.StatusCode == http.StatusBadRequest && errorContext.CharityCall {
 		errorContext.GatewayCallerInput = callerInput(chat, body, policy)
 	}
-	clear(body)
+	upload.Release()
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()
 	}

@@ -243,9 +243,10 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	if err != nil {
 		return result
 	}
-	defer clear(body)
+	upload := egress.NewUploadBody(body)
+	defer upload.Release()
 
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(client.BaseURL()), bytes.NewReader(body))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, chatCompletionsURL(client.BaseURL()), nil)
 	if err != nil {
 		return result
 	}
@@ -298,6 +299,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	target.credential.clear()
 
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes, StreamBytes: a.maxStreamBytes, LineBytes: a.maxSSELineBytes, EventBytes: a.maxSSEEventBytes})
+	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
 	if err == nil {
 		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
@@ -306,7 +308,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
 	httpRequest.Header.Del("Authorization")
-	clear(body)
+	upload.Release()
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}

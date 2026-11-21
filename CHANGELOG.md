@@ -8,6 +8,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 - Award Bond XP for the first three free Whale Haven interactions per player
   and site day. Players can continue interacting after earning all three awards.
+- Preserve the full outbound request when a model or authentication endpoint
+  responds before the upload finishes.
 - Keep account names, levels and selection controls readable in the user list
   when opening a detail panel or browsing on a phone.
 - Fit channel protocols, addresses and actions to the available list width.

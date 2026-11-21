@@ -479,6 +479,12 @@ func (c *Client) Do(req *http.Request) (response *http.Response, resultErr error
 		secrets.cleanHeaders(resp.Header)
 		secrets.cleanHeaders(resp.Trailer)
 		resp.Status = fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	} else if resp != nil && resp.Request != nil {
+		// Consumers remove credential headers after Do. Transport may still
+		// be sending its request when an early response arrives.
+		metadata := resp.Request.WithContext(resp.Request.Context())
+		metadata.Header = resp.Request.Header.Clone()
+		resp.Request = metadata
 	}
 	if resp != nil {
 		removeWorkerHeaders(resp.Header)
