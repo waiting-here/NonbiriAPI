@@ -260,6 +260,15 @@ export function Backpack({
                   )}
                 </small>
               </UiSwitch>
+              {(values.feed_silver_fish_grams > values.trough_grams ||
+                values.feed_sweet_shrimp_grams > values.trough_grams) && (
+                <small className="wh-detail">
+                  {t(
+                    '自动续饭只用整份装得下的主粮。大份口粮可手动盛入。',
+                    'Refill tickets only use servings that fit. You can add a larger serving by hand.',
+                  )}
+                </small>
+              )}
             </div>
           </div>
 

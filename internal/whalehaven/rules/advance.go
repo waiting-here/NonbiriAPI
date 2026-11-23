@@ -201,7 +201,7 @@ func (s *State) Advance(until int64, p Parameters, enabled bool, guests []Guest)
 			if c.AtLimitMS == 0 {
 				reached := g.Working && g.MaxPearls > 0 && c.Pearls >= g.MaxPearls-1e-12
 				full := !g.Working && c.Grams >= g.RemainingGrams-1e-9
-				empty := !g.Working && h.TroughGrams == 0 && !s.CanRefill()
+				empty := !g.Working && h.TroughGrams == 0 && !s.CanRefill(p)
 				if reached || full || empty {
 					c.LeftEmpty = empty && !full
 					c.AtLimitMS = start + int64(math.Ceil(elapsed+step-1e-8))
@@ -239,27 +239,33 @@ func (s *State) recordFed(slot int64, grams float64) {
 	h.RecentFedHistory = append(h.RecentFedHistory, FedBucket{HourSlot: slot, Grams: grams})
 }
 
-func (s *State) CanRefill() bool {
-	b := s.Home.Buffs
-	return b.AutoRefillEnabled && b.AutoRefillTickets > 0 && (s.Inventory["sweet_shrimp"] > 0 || s.Inventory["silver_fish"] > 0)
+func (s *State) CanRefill(p Parameters) bool {
+	return s.refillFood(p) != ""
+}
+
+func (s *State) refillFood(p Parameters) string {
+	if !s.Home.Buffs.AutoRefillEnabled || s.Home.Buffs.AutoRefillTickets == 0 {
+		return ""
+	}
+	capacity := p.Value("trough_grams")
+	for _, id := range []string{"sweet_shrimp", "silver_fish"} {
+		if s.Inventory[id] > 0 && p.Value("feed_"+id+"_grams") <= capacity {
+			return id
+		}
+	}
+	return ""
 }
 
 func (s *State) refill(p Parameters) {
-	b := &s.Home.Buffs
-	if !b.AutoRefillEnabled || b.AutoRefillTickets == 0 {
+	id := s.refillFood(p)
+	if id == "" {
 		return
 	}
-	for _, id := range []string{"sweet_shrimp", "silver_fish"} {
-		if s.Inventory[id] == 0 {
-			continue
-		}
-		s.Home.TroughFeedType = id
-		s.Home.TroughGrams = float64(min(p.Value("trough_grams"), p.Value("feed_"+id+"_grams")))
-		s.Inventory[id]--
-		b.AutoRefillTickets--
-		b.AutoRefillEnabled = b.AutoRefillTickets > 0
-		return
-	}
+	s.Home.TroughFeedType = id
+	s.Home.TroughGrams = float64(p.Value("feed_" + id + "_grams"))
+	s.Inventory[id]--
+	s.Home.Buffs.AutoRefillTickets--
+	s.Home.Buffs.AutoRefillEnabled = s.Home.Buffs.AutoRefillTickets > 0
 }
 
 func (s *State) wake(now int64, p Parameters) {

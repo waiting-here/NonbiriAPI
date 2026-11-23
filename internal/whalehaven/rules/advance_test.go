@@ -136,6 +136,23 @@ func TestOfflineAuthorizedRefillsAndAroma(t *testing.T) {
 	}
 }
 
+func TestRefillTicketsKeepOversizedServings(t *testing.T) {
+	p := basic()
+	p["trough_grams"], p["feed_sweet_shrimp_grams"], p["feed_silver_fish_grams"] = 100, 180, 100
+	s := NewState(0, "today")
+	s.Inventory["sweet_shrimp"] = 1
+	mustApply(t, s, p, Action{Type: "toggle_auto_refill"})
+	s.Advance(1000, p, true, nil)
+	if s.CanRefill(p) || s.Home.TroughGrams != 0 || s.Inventory["sweet_shrimp"] != 1 || s.Home.Buffs.AutoRefillTickets != 1 {
+		t.Fatalf("oversized automatic serving: %v %v", s.Home, s.Inventory)
+	}
+	s.Inventory["silver_fish"] = 1
+	s.Advance(2000, p, true, nil)
+	if s.Home.TroughGrams <= 0 || s.Home.TroughFeedType != "silver_fish" || s.Inventory["silver_fish"] != 0 || s.Inventory["sweet_shrimp"] != 1 || s.Home.Buffs.AutoRefillTickets != 0 {
+		t.Fatalf("expected the whole serving that fits: %v %v", s.Home, s.Inventory)
+	}
+}
+
 func TestWorkerContributionLimitsAndSneakConservation(t *testing.T) {
 	s := NewState(0, "today")
 	p := basic()

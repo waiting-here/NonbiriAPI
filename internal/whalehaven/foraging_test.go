@@ -75,6 +75,12 @@ func TestForagingFindsFoodWhileKeepersAreOffline(t *testing.T) {
 	if len(plan(0)) != 0 {
 		t.Fatal("authorized refill must precede foraging")
 	}
+	if _, err := f.store.DB().Exec("UPDATE whale_haven_settings SET document=json_set(document,'$.values.feed_silver_fish_grams',400) WHERE revision=2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan(0)) != 1 {
+		t.Fatal("an oversized serving must leave the hungry whale free to forage")
+	}
 	set(guest, "snapshot=json_set(snapshot,'$.home.buffs.autoRefillEnabled',json('false'))")
 	set(host, "snapshot=json_set(snapshot,'$.home.unclaimedPearls',24,'$.home.pearlProgress',70,'$.home.wageProgress',30)")
 	if len(plan(0)) != 0 {
@@ -166,6 +172,39 @@ func TestForagingDoorSweepAndWrappedHostSample(t *testing.T) {
 	hosts, err := forageDoors(t.Context(), tx, "BAY16", true)
 	if err != nil || len(hosts) != forageBatchSize || hosts[0] != "BAY17" || !slices.Equal(hosts[1:], first[:forageBatchSize-1]) {
 		t.Fatalf("wrapped host sample: %v %v", hosts, err)
+	}
+}
+
+func TestForagingCanFindARefillFromAnEarlierServingSize(t *testing.T) {
+	f := newForagingFixture(t)
+	guest, host := f.user(t, "hungry"), f.user(t, "cook")
+	guestDoor := f.adopt(t, guest, "Fin")["social"].(map[string]any)["door"].(string)
+	hostDoor := f.adopt(t, host, "Shell")["social"].(map[string]any)["door"].(string)
+	if _, err := f.store.DB().Exec("UPDATE whale_haven_profiles SET snapshot=json_set(snapshot,'$.whale.satiety',15) WHERE user_id=?", guest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec("UPDATE whale_haven_profiles SET snapshot=json_set(snapshot,'$.home.buffs.autoRefillEnabled',json('true'),'$.inventory.silver_fish',1) WHERE user_id=?", host); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec("INSERT INTO whale_haven_settings SELECT 3,?,json_set(document,'$.values.feed_silver_fish_grams',400) FROM whale_haven_settings WHERE revision=2", f.at.Add(10*time.Second).UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	f.at = f.at.Add(30 * time.Second)
+	doors := []string{guestDoor, hostDoor}
+	slices.Sort(doors)
+	draw := func(n int) int {
+		if n == 100 {
+			door := doors[0]
+			doors = doors[1:]
+			if door == hostDoor {
+				return 99
+			}
+		}
+		return 0
+	}
+	_, pairs, err := f.service.findFoodVisits(t.Context(), "", draw)
+	if err != nil || !slices.Equal(pairs, []foodVisit{{guestDoor, hostDoor}}) {
+		t.Fatalf("host had a fitting serving before the policy change: %v %v", pairs, err)
 	}
 }
 

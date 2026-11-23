@@ -102,6 +102,29 @@ function initial(): Profile {
   };
 }
 
+test('an oversized serving needs confirmation even in an empty custom bowl', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.settings.values.trough_grams = 100;
+  profile.snapshot.inventory.silver_fish = 1;
+  const sent: Action[] = [];
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
+    if (route.request().method() === 'POST') sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await page.getByRole('button', { name: 'Bag', exact: true }).click();
+  await expect(page.getByText(/Refill tickets only use servings that fit/)).toBeVisible();
+  await page.getByRole('button', { name: 'Fill the bowl', exact: true }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('100 g');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  expect(sent).toEqual([]);
+});
+
 test('a visiting keeper sees hiring and meal state consistently in both havens', async ({
   page,
 }) => {

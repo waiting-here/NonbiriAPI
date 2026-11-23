@@ -113,9 +113,9 @@ func (w *world) openForager(door string) (*resident, error) {
 	return r, err
 }
 
-func wantsFood(r *resident) bool {
+func (w *world) wantsFood(r *resident) bool {
 	return r != nil && r.state.Whale.HasCompletedNaming && r.state.Whale.Location.Kind == "home" &&
-		!r.state.Whale.IsSleeping && r.state.Whale.Satiety <= 24 && r.state.Home.TroughGrams == 0 && !r.state.CanRefill()
+		!r.state.Whale.IsSleeping && r.state.Whale.Satiety <= 24 && r.state.Home.TroughGrams == 0 && !r.state.CanRefill(w.config)
 }
 
 func (w *world) canShareFood(r *resident) bool {
@@ -165,7 +165,7 @@ func (s *Service) findFoodVisits(ctx context.Context, cursor string, draw func(i
 			return next, nil, err
 		}
 		elapsed := w.now - max(from, w.lastPauseEnd)
-		if wantsFood(r) && elapsed > 0 && (elapsed >= 20_000 || roll < 3) {
+		if w.wantsFood(r) && elapsed > 0 && (elapsed >= 20_000 || roll < 3) {
 			guests = append(guests, r)
 		}
 	}
@@ -186,8 +186,8 @@ func (s *Service) findFoodVisits(ctx context.Context, cursor string, draw func(i
 		if err != nil {
 			return next, nil, err
 		}
-		// Only a refill can increase the food in a settled bowl.
-		if h == nil || (h.state.Home.TroughGrams < 50 && !h.state.CanRefill()) {
+		// An enabled refill could have filled the bowl under an earlier serving size.
+		if h == nil || (h.state.Home.TroughGrams < 50 && !h.state.Home.Buffs.AutoRefillEnabled) {
 			continue
 		}
 		if err := w.settle(h); err != nil {
@@ -232,7 +232,7 @@ func (s *Service) commitFoodVisit(ctx context.Context, pair foodVisit) error {
 	if err != nil || g == nil {
 		return err
 	}
-	if err := w.settle(g); err != nil || !wantsFood(g) {
+	if err := w.settle(g); err != nil || !w.wantsFood(g) {
 		return err
 	}
 	h, err := w.openForager(pair.host)

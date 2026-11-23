@@ -222,7 +222,7 @@ func (w *world) settleInterval(people []*resident, incoming map[int64][]*visit, 
 						end = min(end, w.midnight(at))
 					}
 					end = min(end, at+v.workLeft)
-				} else if p.state.Home.TroughGrams == 0 && !p.state.CanRefill() {
+				} else if p.state.Home.TroughGrams == 0 && !p.state.CanRefill(cfg) {
 					if err := w.farewell(v, at, cfg, "empty"); err != nil {
 						return 0, err
 					}
