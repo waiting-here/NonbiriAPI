@@ -542,7 +542,7 @@ func buildApplicationWithRuntimeOptions(startupContext context.Context, cfg *con
 		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
 	}
 	activityEngines, err = newActivityRuntime(startupContext, store, vault, authRuntime, roleAuthorizer,
-		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, gameRuntimes, options.ActivityNow)
+		maintenanceService, outbound, audits, userInvalidations, gameRuntimes.CancelUserDuelsTx, gameRuntimes, activityService, options.ActivityNow)
 	if err != nil {
 		return nil, fmt.Errorf("create limited activity runtimes: %w", err)
 	}

@@ -43,6 +43,8 @@ type actionRequest struct {
 	PresetID         string `json:"presetId,omitempty"`
 	ExpectedProfile  string `json:"expected_profile_revision"`
 	ExpectedSettings string `json:"expected_settings_revision"`
+
+	MaxSpillGrams *uint64 `json:"maxSpillGrams,omitempty"`
 }
 type exchangeRequest struct {
 	Quantity         string `json:"quantity"`
@@ -348,7 +350,10 @@ func (s *Service) apply(w *world, r *resident, a actionRequest, op string) error
 		}
 		quantity = *a.Quantity
 	}
-	result, err := r.state.Apply(rules.Action{Type: a.Type, FeedID: a.FeedID, Quantity: quantity, DecorID: a.DecorID, OutfitID: a.OutfitID, Name: a.Name, Zone: a.Zone, Streak: a.Streak, Key: a.Key, Enabled: a.Enabled, ForceSleep: a.ForceSleep}, w.now, w.config)
+	result, err := r.state.Apply(rules.Action{Type: a.Type, FeedID: a.FeedID, MaxSpillGrams: a.MaxSpillGrams, Quantity: quantity, DecorID: a.DecorID, OutfitID: a.OutfitID, Name: a.Name, Zone: a.Zone, Streak: a.Streak, Key: a.Key, Enabled: a.Enabled, ForceSleep: a.ForceSleep}, w.now, w.config)
+	if errors.Is(err, rules.ErrFeedSpill) {
+		return conflict(err.Error())
+	}
 	if err != nil {
 		return invalid(err.Error())
 	}

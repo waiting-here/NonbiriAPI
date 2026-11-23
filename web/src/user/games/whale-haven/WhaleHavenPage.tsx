@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWhaleText } from './copy';
 import { Link } from 'react-router';
@@ -76,11 +76,11 @@ function WhaleGame() {
   const [departure, setDeparture] = useState<{ peer: NeighborStation; preset?: string } | null>(
     null,
   );
-  const [purchase, setPurchase] = useState<{
+  const [confirmation, setConfirmation] = useState<{
     command: Action;
     title: string;
-    price: string;
-    unit: string;
+    description: ReactNode;
+    confirmLabel: string;
     revision: string;
     profileRevision: number;
     error?: string;
@@ -272,6 +272,37 @@ function WhaleGame() {
       settings: { values },
       snapshot,
     } = profile;
+    const ask = (action: Action, title: string, description: ReactNode, confirmLabel: string) =>
+      setConfirmation({
+        command: action,
+        title,
+        description,
+        confirmLabel,
+        revision: profile.settings_revision,
+        profileRevision: snapshot.revision,
+      });
+    if (command.type === 'use_feed' && command.feedId !== 'berry_teacake') {
+      const { troughGrams, troughFeedType } = snapshot.home;
+      const room = values.trough_grams - troughGrams;
+      const serving = values['feed_' + command.feedId + '_grams'];
+      const spill = Math.ceil(serving - room);
+      // An occupied bowl rejects mixed staples and leaves its last 10 g of space alone.
+      const canFill = troughGrams === 0 || (troughFeedType === command.feedId && room > 10);
+      if (canFill && spill > 0 && snapshot.inventory[command.feedId] > 0) {
+        ask(
+          { ...command, maxSpillGrams: spill },
+          t('饭碗装不下整份口粮', 'The whole serving won’t fit'),
+          t(
+            `这份口粮有 ${serving} 克，预计最多会浪费 ${spill} 克。继续添饭会用掉整份。`,
+            `This serving weighs ${serving} g. Up to ${spill} g may spill, and the whole serving will be used.`,
+          ),
+          t('仍然添饭', 'Fill anyway'),
+        );
+      } else {
+        void dispatch({ ...command, maxSpillGrams: 0 });
+      }
+      return;
+    }
     let title: string,
       price: number,
       unit = t('小鲸币', 'whale coins');
@@ -301,16 +332,19 @@ function WhaleGame() {
       void dispatch(command);
       return;
     }
-    setPurchase({
+    ask(
       command,
       title,
-      price: String(
-        BigInt(price) * BigInt(command.type === 'buy_feed' ? (command.quantity ?? 1) : 1),
-      ),
-      unit,
-      revision: profile.settings_revision,
-      profileRevision: snapshot.revision,
-    });
+      <>
+        {t('本次花费', 'Cost')}{' '}
+        {command.type === 'buy_feed' ? (
+          <Amount value={String(BigInt(price) * BigInt(command.quantity ?? 1))} unit={unit} />
+        ) : (
+          price + ' ' + unit
+        )}
+      </>,
+      t('确认', 'Confirm'),
+    );
   }
   const stageHost = useRef<HTMLDivElement>(null);
   const adopted = profile?.snapshot.whale.hasCompletedNaming;
@@ -475,7 +509,7 @@ function WhaleGame() {
                   : snap.inventory.silver_fish > 0
                     ? 'silver_fish'
                     : 'sweet_shrimp';
-              if (snap.inventory[id] > 0) void dispatch({ type: 'use_feed', feedId: id });
+              if (snap.inventory[id] > 0) choose({ type: 'use_feed', feedId: id });
               else deck('feed');
             }}
             onToggleSleep={(forceSleep) => void dispatch({ type: 'toggle_sleep', forceSleep })}
@@ -611,39 +645,34 @@ function WhaleGame() {
           onClose={() => setDeparture(null)}
         />
       )}
-      {purchase && (
+      {confirmation && (
         <ConfirmDialog
           open
-          title={purchase.title}
-          description={
-            <>
-              {t('本次花费', 'Cost')}{' '}
-              {purchase.command.type === 'buy_feed' ? (
-                <Amount value={purchase.price} unit={purchase.unit} />
-              ) : (
-                purchase.price + ' ' + purchase.unit
-              )}
-            </>
-          }
-          confirmLabel={t('确认', 'Confirm')}
+          title={confirmation.title}
+          description={confirmation.description}
+          confirmLabel={confirmation.confirmLabel}
           busy={busy}
           confirmDisabled={
-            purchase.revision !== profile.settings_revision ||
-            purchase.profileRevision !== snap.revision
+            confirmation.revision !== profile.settings_revision ||
+            confirmation.profileRevision !== snap.revision
           }
-          onCancel={() => setPurchase(null)}
+          onCancel={() => setConfirmation(null)}
           onConfirm={async () => {
-            if (await dispatch(purchase.command, (error) => setPurchase({ ...purchase, error })))
-              setPurchase(null);
+            if (
+              await dispatch(confirmation.command, (error) =>
+                setConfirmation({ ...confirmation, error }),
+              )
+            )
+              setConfirmation(null);
           }}
         >
-          {purchase.error && !busy && <p role="alert">{purchase.error}</p>}
-          {(purchase.revision !== profile.settings_revision ||
-            purchase.profileRevision !== snap.revision) && (
+          {confirmation.error && !busy && <p role="alert">{confirmation.error}</p>}
+          {(confirmation.revision !== profile.settings_revision ||
+            confirmation.profileRevision !== snap.revision) && (
             <p>
               {t(
-                '价格或存档已变动，请取消后重新选择。',
-                'The price or your saved game changed. Cancel and choose again.',
+                '小筑规则或存档已变动，请取消后重新选择。',
+                'The haven rules or your saved game changed. Cancel and choose again.',
               )}
             </p>
           )}

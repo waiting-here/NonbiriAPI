@@ -52,6 +52,7 @@ function initial(): Profile {
         stove_window_seconds: 172800,
         stove_required_grams: 180,
         feed_silver_fish_price_milli: 19000,
+        feed_silver_fish_grams: 200,
       },
     },
     social: { open: false, door: 'bay-a', accept_work: false, away: null, guests: [] },
@@ -100,6 +101,29 @@ function initial(): Profile {
     },
   };
 }
+
+test('an oversized serving needs confirmation even in an empty custom bowl', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.settings.values.trough_grams = 100;
+  profile.snapshot.inventory.silver_fish = 1;
+  const sent: Action[] = [];
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
+    if (route.request().method() === 'POST') sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await page.getByRole('button', { name: 'Bag', exact: true }).click();
+  await expect(page.getByText(/Refill tickets only use servings that fit/)).toBeVisible();
+  await page.getByRole('button', { name: 'Fill the bowl', exact: true }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('100 g');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  expect(sent).toEqual([]);
+});
 
 test('a visiting keeper sees hiring and meal state consistently in both havens', async ({
   page,
@@ -343,6 +367,13 @@ for (const width of [1440, 390]) {
               Number(profile.snapshot.wallet.gameMilli) - 19000 * body.quantity;
             profile.snapshot.inventory.silver_fish += body.quantity;
           }
+          if (body.type === 'use_feed') {
+            profile.snapshot.inventory.silver_fish--;
+            profile.snapshot.home.troughGrams = Math.min(
+              profile.settings.values.trough_grams,
+              profile.snapshot.home.troughGrams + profile.settings.values.feed_silver_fish_grams,
+            );
+          }
           if (body.type === 'send_visit')
             profile.social.away = {
               target: neighbor.id,
@@ -398,7 +429,26 @@ for (const width of [1440, 390]) {
           .poll(() => commands.filter((c) => c.type === 'buy_feed'))
           .toMatchObject([{ quantity: 3, feedId: 'silver_fish' }]);
         await expect(page.getByRole('status')).toContainText('已购入 热腾腾大碗白米饭 ×3');
+        const fills = () => commands.filter((command) => command.type === 'use_feed');
+        const fill = item.getByRole('button', { name: '盛入饭盆' });
+        await fill.click();
+        await expect(item).toContainText('库存 2 份');
+        expect(fills()).toMatchObject([{ maxSpillGrams: 0 }]);
+        await fill.click();
+        const spill = page.getByRole('alertdialog', { name: '饭碗装不下整份口粮' });
+        await expect(spill).toContainText('预计最多会浪费 40 克');
+        await expect(spill.getByRole('button', { name: '取消' })).toBeFocused();
+        await capture('refill');
+        await spill.getByRole('button', { name: '取消' }).click();
+        await expect(fill).toBeFocused();
+        await expect(item).toContainText('库存 2 份');
+        expect(fills()).toHaveLength(1);
         await page.getByRole('button', { name: '收起菜单面板' }).click();
+        await page.getByTitle(/点击一键添饭/).click();
+        await expect(spill).toContainText('这份口粮有 200 克');
+        await spill.getByRole('button', { name: '仍然添饭' }).click();
+        await expect(page.getByLabel('余粮', { exact: true })).toHaveText('360g');
+        expect(fills()).toMatchObject([{ maxSpillGrams: 0 }, { maxSpillGrams: 40 }]);
         await dock.getByRole('button', { name: '串门' }).click();
         await expect(page.getByText('Hidden identity')).toHaveCount(0);
         await page.getByRole('button', { name: '去串门', exact: true }).click();

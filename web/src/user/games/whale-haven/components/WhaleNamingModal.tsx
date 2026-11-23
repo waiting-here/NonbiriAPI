@@ -134,8 +134,8 @@ export function WhaleNamingModal({
         </label>
         <small>
           {t(
-            '仅开放的小筑可以互访。领养后可随时在「串门」更改。',
-            'Only open havens can visit each other. Change this anytime under Visits.',
+            '开放后可以互访。家里断粮时，饿了的小鲸可能自己去邻居家蹭饭。可随时在「串门」关门。',
+            'Open havens can visit each other. If the bowl runs empty, your hungry whale may swim to a neighbor for a meal. You can close your door under Visits.',
           )}
         </small>
         <div className="notice-actions">

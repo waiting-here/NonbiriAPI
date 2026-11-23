@@ -46,7 +46,7 @@ export type Action =
   | { type: 'adopt'; name: string; open: boolean }
   | { type: 'rename'; name: string }
   | { type: 'buy_feed'; feedId: FeedItemId; quantity?: number }
-  | { type: 'use_feed'; feedId: FeedItemId }
+  | { type: 'use_feed'; feedId: FeedItemId; maxSpillGrams?: number }
   | { type: 'toggle_decor'; decorId: DecorItemId }
   | { type: 'select_outfit'; outfitId: WhaleOutfitId }
   | { type: 'toggle_sleep'; forceSleep?: boolean }
