@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/appearance"
 	"github.com/waiting-here/NonbiriAPI/internal/attendance"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
@@ -30,6 +31,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/rewards"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/whalehaven"
 )
 
 type activityRuntime struct {
@@ -40,6 +42,7 @@ type activityRuntime struct {
 	appearance  *appearance.Service
 	images      *imageactivity.Service
 	fish        *fatfish.Service
+	whale       *whalehaven.Service
 	lake        *lakenotes.Service
 	lakeHost    *gamehost.Service
 	inactivity  *inactivity.Service
@@ -84,11 +87,12 @@ func (g limitedAdmissionGate) AuthorizeUserActivity(ctx context.Context, tx *sql
 
 func newActivityRuntime(ctx context.Context, store *db.Store, vault *secret.Vault, sessions *auth.Runtime, roles *roleFinalTxAuthorizer,
 	gate *maintenance.Service, outbound *egress.Stack, audits *auditRuntime, invalidator inactivity.Invalidator,
-	cancelGames inactivity.CancelUserTx, games *gamebuiltin.Runtime, now func() time.Time) (*activityRuntime, error) {
+	cancelGames inactivity.CancelUserTx, games *gamebuiltin.Runtime, pools *activities.Service, now func() time.Time) (*activityRuntime, error) {
 	if now == nil {
 		now = time.Now
 	}
 	a := &activityRuntime{now: now, cancelGames: cancelGames, lake: games.LakeNotes(), lakeHost: games.Service}
+	a.whale = whalehaven.New(store, sessions, pools, now)
 	var reportMu sync.Mutex
 	var lastReport time.Time
 	reportImageFailure := func(error) {
@@ -249,7 +253,11 @@ func (a *activityRuntime) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, 
 func (a *activityRuntime) Start(parent context.Context, failures chan<- error, unavailable func()) {
 	ctx, cancel := context.WithCancel(parent)
 	a.cancel = cancel
-	a.workers.Add(3)
+	a.workers.Add(4)
+	go func() {
+		defer a.workers.Done()
+		a.whale.RunForaging(ctx)
+	}()
 	go func() {
 		defer a.workers.Done()
 		a.rewards.Run(ctx, func(error) { slog.Error("reward delivery worker encountered an operational failure") })

@@ -71,10 +71,7 @@ func (s *State) Advance(until int64, p Parameters, enabled bool, guests []Guest)
 			s.wake(now, p)
 		}
 		capacity := s.BankCapacity(p)
-		room := float64(capacity-h.UnclaimedPearls-h.PaidWorkerWages) - (h.PearlProgress+h.WageProgress)/100
-		if room < 1e-10 {
-			room = 0
-		}
+		room := h.BankRoom(capacity)
 		atHome := whale.Location.Kind == "home"
 		ownerAwake := atHome && !whale.IsSleeping
 		if h.TroughGrams <= 0 && room > 0 && (ownerAwake || len(guests) > 0) {
