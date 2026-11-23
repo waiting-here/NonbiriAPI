@@ -145,6 +145,37 @@ func (f *stationFixture) call(t *testing.T, id int64, route string, input map[st
 func (f *stationFixture) adopt(t *testing.T, id int64, name string) map[string]any {
 	return f.call(t, id, "actions", map[string]any{"type": "adopt", "name": name, "open": true, "expected_profile_revision": "1", "expected_settings_revision": "2"}, "adopt-whale-fresh-player-house", 200)
 }
+func TestBowlRefillHonorsConfirmedSpillAfterAutomaticRefill(t *testing.T) {
+	f := newStationFixture(t)
+	f.enable(t)
+	user := f.user(t, "keeper")
+	profile := f.adopt(t, user, "Fin")
+	if _, err := f.store.DB().Exec(`UPDATE whale_haven_settings SET document=json_set(document,'$.values.trough_grams',250) WHERE revision=2`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`UPDATE whale_haven_profiles SET snapshot=json_set(snapshot,
+		'$.inventory.silver_fish',3,'$.home.buffs.autoRefillEnabled',json('true')) WHERE user_id=?`, user); err != nil {
+		t.Fatal(err)
+	}
+	action := map[string]any{"type": "use_feed", "feedId": "silver_fish", "maxSpillGrams": 0,
+		"expected_profile_revision":  strconv.FormatInt(int64(profile["snapshot"].(map[string]any)["revision"].(float64)), 10),
+		"expected_settings_revision": profile["settings_revision"]}
+	// A refill ticket adds a 180 g serving between the last snapshot and the click.
+	f.at = f.at.Add(time.Second)
+	f.call(t, user, "actions", action, "fill-bowl-without-any-spill", http.StatusConflict)
+	afterRefusal := f.call(t, user, "profile", nil, "", http.StatusOK)["snapshot"].(map[string]any)
+	if afterRefusal["inventory"].(map[string]any)["silver_fish"] != 2.0 {
+		t.Fatal("an unconfirmed manual refill spent a serving")
+	}
+	action["maxSpillGrams"] = 110
+	for range 2 {
+		result := f.call(t, user, "actions", action, "fill-bowl-with-confirmed-spill", http.StatusOK)["snapshot"].(map[string]any)
+		if result["inventory"].(map[string]any)["silver_fish"] != 1.0 || result["home"].(map[string]any)["troughGrams"] != 250.0 {
+			t.Fatalf("unexpected confirmed refill: %v", result)
+		}
+	}
+}
+
 func TestStationExchangeSharedWalletAndReplay(t *testing.T) {
 	f := newStationFixture(t)
 	user := f.user(t, "player")

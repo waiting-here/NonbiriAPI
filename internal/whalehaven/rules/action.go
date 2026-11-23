@@ -23,6 +23,9 @@ type Action struct {
 	Key        string `json:"key,omitempty"`
 	ForceSleep *bool  `json:"force_sleep,omitempty"`
 	Enabled    *bool  `json:"enabled,omitempty"`
+
+	// A nil limit allows the usual partial serving.
+	MaxSpillGrams *uint64 `json:"max_spill_grams,omitempty"`
 }
 
 type Result struct {
@@ -42,6 +45,9 @@ var (
 	errAway   = errors.New("小鲸正在串门，先召回她吧。")
 )
 
+// ErrFeedSpill leaves the serving in inventory when the confirmed limit is exceeded.
+var ErrFeedSpill = errors.New("饭碗余量已变，口粮会溢出更多。请重新添饭以查看当前用量。")
+
 // Apply runs on a state loaded inside the host's write transaction. The host
 // checks GameCostMilli against its ledger and commits both the purchase and
 // debit together. It supplies the time and advances the state before dispatch.
@@ -58,7 +64,7 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 		s.Inventory[a.FeedID] += a.Quantity
 		return Result{GameCostMilli: price * a.Quantity}, nil
 	case "use_feed":
-		return s.feed(a.FeedID, now, p)
+		return s.feed(a, now, p)
 	case "harvest_pearls":
 		earned := s.Home.UnclaimedPearls
 		if earned > math.MaxInt64-s.Wallet.Pearls {
@@ -169,7 +175,8 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 	return Result{}, nil
 }
 
-func (s *State) feed(id string, now int64, p Parameters) (Result, error) {
+func (s *State) feed(a Action, now int64, p Parameters) (Result, error) {
+	id := a.FeedID
 	if !slices.Contains(foodIDs, id) {
 		return Result{}, errAction
 	}
@@ -192,11 +199,15 @@ func (s *State) feed(id string, now int64, p Parameters) (Result, error) {
 			return Result{}, errors.New("等饭碗吃空，再换另一种主粮。")
 		}
 		capacity := float64(p.Value("trough_grams"))
-		grams = min(float64(p.Value(key+"grams")), capacity-s.Home.TroughGrams)
+		serving := float64(p.Value(key + "grams"))
+		grams = min(serving, capacity-s.Home.TroughGrams)
 		// As in the original bowl, leave the last ten grams of headroom
 		// alone instead of spending an entire serving to fill a tiny gap.
 		if grams <= 0 || (s.Home.TroughGrams > 0 && s.Home.TroughGrams >= capacity-10) {
 			return Result{}, errors.New("青花鲸鱼饭碗已经盛满啦。")
+		}
+		if a.MaxSpillGrams != nil && serving-grams > float64(*a.MaxSpillGrams) {
+			return Result{}, ErrFeedSpill
 		}
 		s.Home.TroughGrams += grams
 		s.Home.TroughFeedType = id
