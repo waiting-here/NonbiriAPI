@@ -119,11 +119,26 @@ test('Google discovery explains server-region failures and recovers in setup and
       await expect.poll(async () => (await catalog()).evidence.state).toBe('succeeded');
       expect((await catalog()).automatic_entries).toHaveLength(2);
       await control('region');
-      await page.goto(state.user_url + '/endpoints/' + endpoint);
-      await page
-        .getByRole('button', { name: copy.core['endpoints.refreshDiscovery'], exact: true })
-        .click();
+      await page.goto(state.user_url + '/endpoints/' + endpoint + '?focus_key_id=' + key);
+      const row = page.locator('tr.core-key-card');
+      const refresh = row.getByRole('button', {
+        name: copy.core['endpoints.refreshDiscovery'],
+        exact: true,
+      });
+      await expect(row.locator('.services-key-discovery .nb-num')).toHaveText('2');
+      await refresh.click();
       await expect(notice).toBeVisible();
+      await expect(
+        row.getByRole('button', {
+          name: copy.core['endpoints.discoveryFailedTitle'],
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(refresh).toBeEnabled();
+      const retained = await catalog();
+      expect(retained.evidence).toMatchObject({ state: 'failed', count: null });
+      expect(retained.evidence.last_success_at).toBeGreaterThan(0);
+      expect(retained.automatic_entries).toHaveLength(2);
       if (language === 'en' && width === 1440) {
         await page.getByRole('button', { name: copy.services.viewModels, exact: true }).click();
         const modelsPanel = page.locator('.nb-expandable-panel:not([hidden])');
@@ -158,7 +173,8 @@ test('Google discovery explains server-region failures and recovers in setup and
       await notice.screenshot({
         path: screenshotPath(`discovery-key-${language}-${width}-${theme}.png`),
       });
-      await page.locator('tr.core-key-card').screenshot({
+      await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+      await row.screenshot({
         path: screenshotPath(`discovery-key-controls-${language}-${width}-${theme}.png`),
       });
     } finally {

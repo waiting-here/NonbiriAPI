@@ -1,17 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ChoiceRow, Field, Note, Tabs } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
-import type { CatalogEntry, DiscoveryEvidence, Endpoint, EndpointKey } from '../types';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import type { CatalogEntry, Endpoint, EndpointKey } from '../types';
 import type { DiscoveryModel, DiscoverySource } from './types';
 import { DirectoryBatch } from './DirectoryBatch';
 import { useConnectionOperation } from './useConnectionOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { CoreErrorPanel, CoreLoading, CoreTime, DiscoveryStatus } from '../components';
 import { useNumberedCatalog } from '../numberedQueries';
-import { coreKeys } from '../queries';
 import { getCatalogSelection } from '../pageApi';
 import { PairManualCatalog } from '../EndpointDetail';
 
@@ -32,7 +31,6 @@ export function ServiceModelSetup({
   onAutoRefreshStarted?: () => void;
 }) {
   const { t } = useTranslation();
-  const client = useQueryClient();
   const [batchLocked, setBatchLocked] = useState(false);
   useEffect(() => {
     onLockChange?.(batchLocked);
@@ -49,39 +47,40 @@ export function ServiceModelSetup({
   const [selecting, setSelecting] = useState(false);
   const selectionRequest = useRef<AbortController | null>(null);
   useEffect(() => () => selectionRequest.current?.abort(), []);
-  const pager = usePagePager({
+  const scopeKey = `${accountId}:${entry.id}:${entryKey.id}`;
+  const selectionPager = usePagePager({
     station: 'user',
     listType: 'service-key-models',
-    scopeKey: accountId + ':' + entry.id + ':' + entryKey.id,
+    scopeKey,
     resetKey: JSON.stringify([view, search]),
   });
+  const manualPager = useUrlPagePager({
+    station: 'user',
+    listType: 'manual-catalog',
+    scopeKey,
+    pageParam: `manual_${entryKey.id}_page`,
+    pageSizeParam: `manual_${entryKey.id}_page_size`,
+  });
+  const editingManual = view === 'manual' && manageManual;
+  const pager = editingManual ? manualPager : selectionPager;
   const catalog = useNumberedCatalog(
     accountId,
     entry.id,
     entryKey.id,
     view,
-    {
-      page: pager.page,
-      pageSize: pager.pageSize,
-    },
-    view !== 'manual' || !manageManual,
-    search,
+    { page: pager.page, pageSize: pager.pageSize },
+    true,
+    editingManual ? '' : search,
   );
-  const refresh = useConnectionOperation(accountId, () => {
-    void client.invalidateQueries({
-      queryKey: coreKeys.catalogRoot(accountId, entry.id, entryKey.id),
-    });
-  });
+  const refresh = useConnectionOperation(accountId, () => undefined);
+  const available =
+    entry.enabled &&
+    entryKey.enabled &&
+    entryKey.credential_available !== false &&
+    entryKey.suspension_state === 'none';
   const started = useRef(false);
   useEffect(() => {
-    if (
-      !autoRefresh ||
-      !entryKey.discovery_source_id ||
-      !entry.enabled ||
-      !entryKey.enabled ||
-      started.current
-    )
-      return;
+    if (!autoRefresh || !entryKey.discovery_source_id || !available || started.current) return;
     started.current = true;
     onAutoRefreshStarted?.();
     void refresh
@@ -91,9 +90,8 @@ export function ServiceModelSetup({
     autoRefresh,
     onAutoRefreshStarted,
     entry.id,
-    entry.enabled,
+    available,
     entryKey.id,
-    entryKey.enabled,
     entryKey.discovery_source_id,
     refresh,
   ]);
@@ -101,13 +99,10 @@ export function ServiceModelSetup({
     view === 'automatic' ? catalog.data?.automatic_entries : catalog.data?.manual_entries;
   const locked =
     refresh.isPending || refresh.outcome === 'unknown' || refresh.outcome === 'refresh-failed';
-  const evidence = catalog.data?.evidence as
-    | (DiscoveryEvidence & {
-        last_success_at?: number | null;
-        added_count?: string | null;
-        removed_count?: string | null;
-      })
-    | undefined;
+  const evidence = catalog.data?.evidence;
+  const showResult =
+    !catalog.error &&
+    ((!refresh.isPending && refresh.outcome !== 'unknown') || evidence?.state === 'checking');
   const keyLabel =
     (entryKey as EndpointKey & { credential_note?: string }).credential_note ||
     entryKey.note ||
@@ -186,7 +181,7 @@ export function ServiceModelSetup({
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
-              disabled={locked || catalog.data?.evidence.state === 'checking' || !entryKey.enabled}
+              disabled={locked || evidence?.state === 'checking' || !available}
               onClick={() =>
                 void refresh
                   .run({ kind: 'refresh', endpointId: entry.id, keyId: entryKey.id })
@@ -197,14 +192,15 @@ export function ServiceModelSetup({
             </button>
           ) : null}
         </div>
-        <ConnectionOperationNotice operation={refresh} />
-        {catalog.data ? <DiscoveryStatus evidence={catalog.data.evidence} /> : null}
+        <ConnectionOperationNotice operation={refresh} showSaved={false} />
+        {showResult && evidence ? <DiscoveryStatus evidence={evidence} /> : null}
         {evidence?.last_success_at ? (
           <p className="nb-small nb-muted">
             {t('user.services.lastSuccessfulFetch')} · <CoreTime value={evidence.last_success_at} />
           </p>
         ) : null}
-        {evidence?.state === 'succeeded' &&
+        {showResult &&
+        evidence?.state === 'succeeded' &&
         evidence.added_count != null &&
         evidence.removed_count != null ? (
           <Note>
@@ -214,7 +210,7 @@ export function ServiceModelSetup({
             })}
           </Note>
         ) : null}
-        {catalog.data?.evidence.state === 'failed' ? (
+        {showResult && evidence?.state === 'failed' ? (
           <Note tone="warn">{t('user.services.retainedCatalog')}</Note>
         ) : null}
       </div>
@@ -244,12 +240,13 @@ export function ServiceModelSetup({
             )}
           </button>
         ) : null}
-        {view === 'manual' && manageManual ? (
+        {editingManual ? (
           <PairManualCatalog
             accountId={accountId}
             endpointId={entry.id}
             keyId={entryKey.id}
-            visible
+            catalog={catalog}
+            pager={manualPager}
           />
         ) : (
           <>

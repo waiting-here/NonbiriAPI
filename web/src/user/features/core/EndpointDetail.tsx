@@ -16,7 +16,7 @@ import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useOperation } from '@shared/operations/useOperation';
 import { readEndpointKey, readResourceResult, resourceStatus } from './resourceOperation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { Navigate, Link, useLocation, useNavigate } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
@@ -25,7 +25,7 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
 import { endpointReturnState, listReturnPath } from '@shared/operations/listReturn';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { usePagePager } from '@shared/operations/usePagePager';
+import { usePagePager, type PagePager } from '@shared/operations/usePagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
   getEndpoint,
@@ -58,12 +58,13 @@ import {
   invalidateResourceDependents,
   useEndpoint,
 } from './queries';
-import { useNumberedCatalog, useNumberedEndpointKeys } from './numberedQueries';
+import { useNumberedEndpointKeys } from './numberedQueries';
+import type { NumberedCatalogView } from './pageTypes';
 import { useManualImpacts } from './manualImpacts';
 import { KeyBrowseSummary } from './ResourceBrowse';
 import { createOperationIdentity, isOutcomeUnknown } from './request';
 import { endpointSecretDraftReducer, initialEndpointSecretDraftState } from './stateMachines';
-import { validateEndpointSecret, validateManualValue, validateResourceId } from './normalizers';
+import { validateEndpointSecret, validateManualValue } from './normalizers';
 import type {
   BindingReplacement,
   CatalogEntry,
@@ -100,17 +101,6 @@ const pageCopyKeys = {
 } as const;
 
 type ActionOutcome = 'conflict' | 'unknown' | 'error' | null;
-
-function manualCatalogPagerParams(keyId: string): {
-  pageParam: string;
-  pageSizeParam: string;
-} {
-  const safeKeyId = validateResourceId(keyId, 'endpoint key id');
-  return {
-    pageParam: `manual_${safeKeyId}_page`,
-    pageSizeParam: `manual_${safeKeyId}_page_size`,
-  };
-}
 
 function OutcomeNotice({
   outcome,
@@ -728,37 +718,18 @@ export function PairManualCatalog({
   accountId,
   endpointId,
   keyId,
-  visible,
+  catalog,
+  pager,
 }: {
   accountId: string;
   endpointId: string;
   keyId: string;
-  visible: boolean;
+  catalog: UseQueryResult<NumberedCatalogView, Error>;
+  pager: PagePager;
 }) {
   const { t } = useCoreCopy();
   const { t: text } = useTranslation();
   const queryClient = useQueryClient();
-  const { pageParam, pageSizeParam } = manualCatalogPagerParams(keyId);
-  const pager = useUrlPagePager({
-    station: 'user',
-    listType: 'manual-catalog',
-    scopeKey: `${accountId}:${endpointId}:${keyId}`,
-    scopeReady: true,
-    pageParam,
-    pageSizeParam,
-  });
-  const { page, pageSize, setPage, setPageSize } = pager;
-  const catalog = useNumberedCatalog(
-    accountId,
-    endpointId,
-    keyId,
-    'manual',
-    {
-      page,
-      pageSize,
-    },
-    Boolean(visible && accountId && endpointId && keyId),
-  );
   const [upstreamModel, setUpstreamModel] = useState('');
   const [provider, setProvider] = useState('');
   type Intent = { entries: { upstream_model_id: string; provider: string }[] };
@@ -956,8 +927,8 @@ export function PairManualCatalog({
             metadata={catalog.data.pagination}
             requestedPage={pager.page}
             busy={busy || catalog.isFetching}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
           />
         </>
       )}
@@ -1005,6 +976,7 @@ function EndpointKeyCard({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const evidence = keyData.browse?.discovery;
+  const discoveredCount = evidence?.state === 'succeeded' ? evidence.count : null;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState(initialEditing && keyData.suspension_state === 'none');
   const [editorVisited, setEditorVisited] = useState(false);
@@ -1247,8 +1219,8 @@ function EndpointKeyCard({
           data-cell="meta"
           data-label={t('endpoints.discovery')}
         >
-          {evidence?.count !== null && evidence?.count !== undefined ? (
-            <span className="nb-num">{evidence.count}</span>
+          {discoveredCount !== null ? (
+            <span className="nb-num">{discoveredCount}</span>
           ) : evidence?.state === 'failed' ? (
             <button type="button" className="nb-btn nb-btn--ghost nb-btn--sm" onClick={openModels}>
               {t('endpoints.discoveryFailedTitle')}
@@ -1273,7 +1245,7 @@ function EndpointKeyCard({
           >
             {!hasCatalog
               ? catalogAction
-              : evidence?.count != null
+              : discoveredCount !== null
                 ? '↻'
                 : t('endpoints.refreshDiscovery')}
           </button>
@@ -1303,7 +1275,7 @@ function EndpointKeyCard({
           </button>
         </td>
         <td data-cell="action" className="is-action">
-          <div className="nb-inline">
+          <div className="nb-inline services-key-actions">
             <button
               type="button"
               className="nb-btn nb-btn--secondary nb-btn--sm"
@@ -2221,6 +2193,11 @@ function FocusedEndpointKey({
   const current = useQuery({
     queryKey: coreKeys.focusedEndpointKey(accountId, endpoint.id, keyId),
     queryFn: ({ signal }) => getEndpointKey(endpoint.id, keyId, signal),
+    refetchOnMount: 'always',
+    refetchInterval: (query) =>
+      !query.state.error && query.state.data?.browse?.discovery.state === 'checking'
+        ? 1_000
+        : false,
   });
   return (
     <section className="core-card">

@@ -13,10 +13,10 @@ const catalog = {
   evidence: {
     state: 'failed',
     revision: '3',
-    result: 'nonempty',
+    result: null,
     safe_class: 'unavailable',
-    observed_at: 1,
-    count: '1',
+    observed_at: 2,
+    count: null,
     last_success_at: 1,
   },
   automatic_entries: [
@@ -24,7 +24,7 @@ const catalog = {
     { id: '41', upstream_model_id: 'retained-model', provider: '', source_type: 'automatic' },
   ],
   manual_entries: [],
-  pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+  pagination: { page: '1', page_size: 20, total_items: '2', total_pages: '1' },
 };
 const run = vi.fn().mockResolvedValue(undefined);
 vi.mock('./api', () => ({ connectionAPI: { models: vi.fn().mockResolvedValue({ data: [] }) } }));

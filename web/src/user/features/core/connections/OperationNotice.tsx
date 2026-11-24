@@ -55,7 +55,13 @@ function RetryOriginal({ operation }: { operation: ConnectionOperation }) {
   );
 }
 
-export function ConnectionOperationNotice({ operation }: { operation: ConnectionOperation }) {
+export function ConnectionOperationNotice({
+  operation,
+  showSaved = true,
+}: {
+  operation: ConnectionOperation;
+  showSaved?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <>
@@ -93,7 +99,7 @@ export function ConnectionOperationNotice({ operation }: { operation: Connection
           </div>
         </Note>
       ) : null}
-      {operation.outcome === 'confirmed' ? (
+      {showSaved && operation.outcome === 'confirmed' ? (
         <Note tone="ok">{t('common.connections.saved')}</Note>
       ) : null}
     </>
