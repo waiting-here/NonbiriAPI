@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type ConfigEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
+import { stationCopy } from './station-copy.ts';
 
 /**
  * Two independent stations, each a separate Vite build producing its own
@@ -38,6 +39,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
     define: mode === 'user' ? lakeNotesDefine : undefined,
     publicDir: fileURLToPath(new URL('./public/', import.meta.url)),
     plugins: [
+      stationCopy(),
       react(),
       ...(mode === 'admin'
         ? [

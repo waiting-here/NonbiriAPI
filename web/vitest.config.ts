@@ -2,10 +2,11 @@ import { lakeNotesDefine } from './lake-notes-copy.ts';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react-swc';
 import { defineConfig } from 'vitest/config';
+import { stationCopy } from './station-copy.ts';
 
 export default defineConfig({
   define: lakeNotesDefine,
-  plugins: [react()],
+  plugins: [stationCopy(), react()],
   resolve: {
     alias: {
       '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),

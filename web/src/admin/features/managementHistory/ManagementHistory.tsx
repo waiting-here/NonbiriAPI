@@ -47,6 +47,8 @@ import {
 } from './api';
 import './management-history.css';
 import { SnapshotChanges } from './SnapshotChanges';
+import { FeatureCopy } from '@shared/i18n/FeatureCopy';
+import { snapshotCopy } from '../../i18n/snapshotCopy';
 
 const sources = ['web', 'caller_key', 'mainstream_rule', 'ai_auto', 'ai_manual'];
 const outcomes = ['succeeded', 'partial', 'failed', 'rejected', 'no_change', 'accepted', 'unknown'];
@@ -857,51 +859,53 @@ function OperationDetail({
         ) : (
           <>
             {items.data.items.length ? (
-              <DataTable
-                caption={t('admin.managementHistory.targets')}
-                rows={items.data.items}
-                rowKey={(item) => item.ordinal}
-                columns={[
-                  {
-                    key: 'target',
-                    header: t('admin.managementHistory.target'),
-                    cell: 'title',
-                    render: (item) => (
-                      <span>
-                        {targetLink(item.target_kind, item.target_id) ? (
-                          <Link to={targetLink(item.target_kind, item.target_id)!}>
-                            {item.target_name || item.target_id}
-                          </Link>
-                        ) : (
-                          item.target_name || item.target_id || '—'
-                        )}
-                        <small className="nb-muted management-history__target-kind">
-                          {item.target_kind}{' '}
-                          {item.target_name && item.target_id ? ' · ' + item.target_id : ''}
-                        </small>
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'outcome',
-                    header: t('admin.managementHistory.fields.outcome'),
-                    cell: 'status',
-                    render: (item) => <OutcomeBadge outcome={item.outcome} />,
-                  },
-                  {
-                    key: 'code',
-                    header: t('admin.managementHistory.resultCode'),
-                    cell: 'meta',
-                    render: (item) => <span>{item.code || '—'}</span>,
-                  },
-                  {
-                    key: 'changes',
-                    header: t('admin.managementHistory.changedFields'),
-                    cell: 'meta',
-                    render: (item) => <SnapshotChanges item={item} />,
-                  },
-                ]}
-              />
+              <FeatureCopy catalog={snapshotCopy}>
+                <DataTable
+                  caption={t('admin.managementHistory.targets')}
+                  rows={items.data.items}
+                  rowKey={(item) => item.ordinal}
+                  columns={[
+                    {
+                      key: 'target',
+                      header: t('admin.managementHistory.target'),
+                      cell: 'title',
+                      render: (item) => (
+                        <span>
+                          {targetLink(item.target_kind, item.target_id) ? (
+                            <Link to={targetLink(item.target_kind, item.target_id)!}>
+                              {item.target_name || item.target_id}
+                            </Link>
+                          ) : (
+                            item.target_name || item.target_id || '—'
+                          )}
+                          <small className="nb-muted management-history__target-kind">
+                            {item.target_kind}{' '}
+                            {item.target_name && item.target_id ? ' · ' + item.target_id : ''}
+                          </small>
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'outcome',
+                      header: t('admin.managementHistory.fields.outcome'),
+                      cell: 'status',
+                      render: (item) => <OutcomeBadge outcome={item.outcome} />,
+                    },
+                    {
+                      key: 'code',
+                      header: t('admin.managementHistory.resultCode'),
+                      cell: 'meta',
+                      render: (item) => <span>{item.code || '—'}</span>,
+                    },
+                    {
+                      key: 'changes',
+                      header: t('admin.managementHistory.changedFields'),
+                      cell: 'meta',
+                      render: (item) => <SnapshotChanges item={item} />,
+                    },
+                  ]}
+                />
+              </FeatureCopy>
             ) : (
               <p className="nb-muted">{t('admin.managementHistory.noTargets')}</p>
             )}
