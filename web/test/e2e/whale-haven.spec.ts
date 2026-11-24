@@ -44,6 +44,9 @@ function initial(): Profile {
         welfare_cut_bp: 400,
         thursday_cut_bp: 800,
         guest_wage_bp: 2000,
+        guest_full_grams: 28,
+        visit_grams_per_pearl: 28,
+        visit_max_pearls: 2,
         daily_exchange_pearls: 75,
         wallet_cap_milli: 300000000,
         conch_cost_shards: 5,
@@ -261,13 +264,18 @@ test('a visiting keeper sees hiring and meal state consistently in both havens',
     });
   });
   await page.goto(USER_ORIGIN + '/games/whale-haven');
-  await expect(page.getByText(/已吃 0 克 · 餐食奖励预计 0 枚/)).toBeVisible();
+  await expect(page.getByText(/已吃 0 \/ 28 克 · 每 28 克可获 1 枚小鲸币/)).toBeVisible();
   await page.getByRole('button', { name: '去邻居家看她' }).click();
   await expect(page.getByText('小鲸鱼 · 串门用餐')).toBeVisible();
   await expect(page.getByText('小满 · 正在帮工')).toBeVisible();
-  profile.social.away.working = true;
-  profile.social.away.work_ends_at_ms = Date.now() + 120000;
+  profile.social.away.meal_paused = true;
   await page.getByRole('button', { name: '串门', exact: true }).click();
+  await page.getByRole('button', { name: '刷新串门状态' }).click();
+  await expect(page.locator('.voyage-card').getByText(/屋主的存钱罐满了/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '召回并结算' })).toBeEnabled();
+  profile.social.away.working = true;
+  delete profile.social.away.meal_paused;
+  profile.social.away.work_ends_at_ms = Date.now() + 120000;
   await page.getByRole('button', { name: '刷新串门状态' }).click();
   await expect(page.getByRole('heading', { name: '在外帮工' })).toBeVisible();
   await expect(page.getByText(/预计收工/)).toBeVisible();
@@ -582,7 +590,10 @@ test('a cold headpat keeps idle frames moving and plays the decoded action from 
   await page.addInitScript(() => {
     localStorage.setItem('nb.lang', 'zh');
     const draw = CanvasRenderingContext2D.prototype.drawImage;
-    CanvasRenderingContext2D.prototype.drawImage = function (image: CanvasImageSource, ...coords: number[]) {
+    CanvasRenderingContext2D.prototype.drawImage = function (
+      image: CanvasImageSource,
+      ...coords: number[]
+    ) {
       const [x, y] = coords;
       if (
         image instanceof HTMLImageElement &&

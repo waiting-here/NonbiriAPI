@@ -39,3 +39,26 @@ export function guestVisitLabel(
   if (guest.hire_blocked === 'wallet_full') return t('暂时无法收取工资', 'Unable to receive wages');
   return guest.allow_hire ? t('愿意帮工', 'Available to hire') : t('只来串门', 'Visiting only');
 }
+
+export function visitMealDetail(
+  eatenGrams: number,
+  values: Profile['settings']['values'],
+  paused: boolean | undefined,
+  t: ReturnType<typeof useWhaleText>,
+) {
+  const eaten = Math.floor(eatenGrams * 10) / 10;
+  if (paused)
+    return t(
+      `已吃 ${eaten} 克。屋主的存钱罐满了，收币后继续吃，也可现在召回。`,
+      `${eaten} g eaten. Your whale can eat again when the host collects their coins, or you can recall her now.`,
+    );
+  const progress = t(
+    `已吃 ${eaten} / ${values.guest_full_grams} 克`,
+    `${eaten} / ${values.guest_full_grams} g eaten`,
+  );
+  if (values.visit_max_pearls === 0) return progress;
+  return t(
+    `${progress} · 每 ${values.visit_grams_per_pearl} 克可获 1 枚小鲸币，回家结算`,
+    `${progress} · Each ${values.visit_grams_per_pearl} g can earn 1 whale coin on return`,
+  );
+}

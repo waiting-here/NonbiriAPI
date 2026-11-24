@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/whalehaven/config"
 )
 
 // The source program creates this populated database. Its own executable
@@ -56,6 +58,68 @@ func TestConvertReleasedAttendanceDatabase(t *testing.T) {
 
 func TestConvertReleasedSchema56Database(t *testing.T) {
 	convertReleasedFixture(t, "NONBIRI_RELEASED_SCHEMA56_FIXTURE", 0, 56, db.Schema56ManifestHash)
+}
+
+func TestSchema56VisitRewardRateChangesProspectively(t *testing.T) {
+	for _, tc := range []struct {
+		name                    string
+		full, rate, newRevision int64
+	}{{"old defaults", 28, 35, 4}, {"custom meal", 40, 35, 3}, {"custom reward", 28, 15, 3}} {
+		t.Run(tc.name, func(t *testing.T) {
+			path, vault := bootstrapTestPath(t, "whales.sqlite"), bootstrapTestVault(t)
+			store, err := db.Open(path, vault)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			dbtest.RestoreSchema56Fixture(t, store.DB())
+			cfg := config.Defaults()
+			cfg.Enabled = true
+			cfg.Values["visit_grams_per_pearl"] = 35
+			cfg.Values["guest_sneak_mg_per_second"] = 12
+			for revision := 2; revision <= 3; revision++ {
+				if revision == 3 {
+					cfg.Values["guest_full_grams"] = tc.full
+					cfg.Values["visit_grams_per_pearl"] = tc.rate
+				}
+				raw, err := json.Marshal(cfg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				mustExec(t, store.DB(), "INSERT INTO whale_haven_settings VALUES(?,?,?)", revision, revision, string(raw))
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{"converted", "current"} {
+				if result, err := Run(t.Context(), path, vault, Options{Apply: true}); err != nil || result.Status != want {
+					t.Fatal(result, err)
+				}
+			}
+			target, err := db.Open(path, vault)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer target.Close()
+			tx, err := target.ReadDB().BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			got, rev, err := config.Read(t.Context(), tx)
+			if err != nil || rev != tc.newRevision || got.Value("guest_full_grams") != tc.full || got.Value("guest_sneak_mg_per_second") != 12 || !got.Enabled {
+				t.Fatal("current settings", rev, got, err)
+			}
+			wantRate := tc.rate
+			if rev == 4 {
+				wantRate = 28
+			}
+			history, err := config.History(t.Context(), tx, 3, time.Now().UnixMilli())
+			if err != nil || len(history) != int(rev-2) || history[0].Settings.Value("visit_grams_per_pearl") != tc.rate || got.Value("visit_grams_per_pearl") != wantRate || history[len(history)-1].Settings.Value("visit_grams_per_pearl") != wantRate {
+				t.Fatal("effective visit rate", rev, history, err)
+			}
+		})
+	}
 }
 
 func convertReleasedFixture(t *testing.T, fixtureEnv string, keyByte byte, version int, manifest string) *db.Store {

@@ -120,7 +120,7 @@ func (w *world) wantsFood(r *resident) bool {
 
 func (w *world) canShareFood(r *resident) bool {
 	return r != nil && r.state.Whale.HasCompletedNaming && r.state.Home.TroughGrams >= 50 &&
-		r.state.Home.BankRoom(r.state.BankCapacity(w.config)) > 0 && w.guestCount(r.id) < 2
+		!r.state.BankFull(w.config) && w.guestCount(r.id) < 2
 }
 
 func (s *Service) findFoodVisits(ctx context.Context, cursor string, draw func(int) int) (string, []foodVisit, error) {

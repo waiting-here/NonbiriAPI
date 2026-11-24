@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -201,6 +202,11 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 	}); err != nil {
 		return err
 	}
+	if err := offlineStep(ctx, "migration", 57, "whale_haven_settings", "Whale Haven visit reward rate", func() error {
+		return updateVisitRewardRate(ctx, tx, time.Now().UnixMilli())
+	}); err != nil {
+		return err
+	}
 	if err := offlineStep(ctx, "migration", db.CurrentSchemaVersion, "schema_state", "schema version update", func() error {
 		updated, err := tx.ExecContext(ctx, "UPDATE schema_state SET version=? WHERE id=1 AND version=?", db.CurrentSchemaVersion, source)
 		if err != nil {
@@ -221,6 +227,17 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		committed = err == nil
 		return err
 	})
+}
+
+// Append a prospective correction to the old defaults without rewriting
+// historical meals or changing a site's customized reward or meal size.
+func updateVisitRewardRate(ctx context.Context, tx *sql.Tx, at int64) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO whale_haven_settings(revision,effective_at,document)
+		SELECT revision+1,MAX(effective_at,?),json_set(document,'$.values.visit_grams_per_pearl',28)
+		FROM (SELECT revision,effective_at,document FROM whale_haven_settings ORDER BY revision DESC LIMIT 1)
+		WHERE json_extract(document,'$.values.guest_full_grams')=28
+		AND json_extract(document,'$.values.visit_grams_per_pearl')=35`, at)
+	return err
 }
 
 func migrateSchema54(ctx context.Context, tx *sql.Tx) error {

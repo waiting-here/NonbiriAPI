@@ -5,12 +5,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
@@ -145,6 +150,73 @@ func (f *stationFixture) call(t *testing.T, id int64, route string, input map[st
 func (f *stationFixture) adopt(t *testing.T, id int64, name string) map[string]any {
 	return f.call(t, id, "actions", map[string]any{"type": "adopt", "name": name, "open": true, "expected_profile_revision": "1", "expected_settings_revision": "2"}, "adopt-whale-fresh-player-house", 200)
 }
+
+type whaleMutationCheck func() error
+
+func (check whaleMutationCheck) AuthorizeUserMutation(context.Context, *sql.Tx, int64) error {
+	return check()
+}
+
+func TestWhaleHTTPCanceledRequests(t *testing.T) {
+	f := newStationFixture(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	serverFailure := errors.New("server stopped the operation")
+	for _, tc := range []struct {
+		name                                           string
+		cancelRequest, expired, duringBody, noResponse bool
+		cause, failure                                 error
+	}{
+		{name: "client left during request", cancelRequest: true, failure: fmt.Errorf("read: %w", context.Canceled), noResponse: true},
+		{name: "client left while sending body", duringBody: true, cancelRequest: true, failure: context.Canceled, noResponse: true},
+		{name: "body read deadline expired", duringBody: true, failure: context.DeadlineExceeded},
+		{name: "dependency canceled a live request", failure: context.Canceled},
+		{name: "service failed as client left", cancelRequest: true, failure: serverFailure},
+		{name: "server canceled with a cause", cancelRequest: true, cause: serverFailure, failure: context.Canceled},
+		{name: "request deadline expired", expired: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			reqCtx := ctx
+			if tc.expired {
+				deadline, stop := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+				defer stop()
+				reqCtx = deadline
+			}
+			f.service.auth = whaleMutationCheck(func() error {
+				if tc.cancelRequest {
+					cancel(tc.cause)
+				}
+				return tc.failure
+			})
+			const path = "/api/games/whale-haven/actions"
+			var body io.Reader = strings.NewReader(`{"type":"recall_home"}`)
+			if tc.duringBody {
+				if tc.cancelRequest {
+					cancel(tc.cause)
+				}
+				body = iotest.ErrReader(tc.failure)
+			}
+			req := httptest.NewRequestWithContext(reqCtx, "POST", path, body)
+			rec := httptest.NewRecorder()
+			rec.Code = 0 // Distinguish returning without writing from sending a header.
+			logs.Reset()
+			f.routes["POST "+path](rec, req, resources.UserPrincipal{UserID: 1})
+			logged := strings.Contains(logs.String(), "Whale Haven request failed")
+			if tc.noResponse {
+				if rec.Code != 0 || rec.Body.Len() != 0 || logged {
+					t.Fatal(rec.Code, rec.Body.String(), logs.String())
+				}
+			} else if rec.Code != 500 || !strings.Contains(rec.Body.String(), "internal_error") || !logged {
+				t.Fatal(rec.Code, rec.Body.String(), logs.String())
+			}
+		})
+	}
+}
+
 func TestBowlRefillHonorsConfirmedSpillAfterAutomaticRefill(t *testing.T) {
 	f := newStationFixture(t)
 	f.enable(t)

@@ -153,7 +153,7 @@ func (w *world) neighbors(r *resident, q, filter string) ([]neighbor, error) {
 				return nil, e
 			}
 			n.project(p)
-			if n.Grams > 0 {
+			if n.Grams > 0 && !p.state.BankFull(w.config) {
 				available = append(available, n)
 			}
 		}
@@ -228,6 +228,12 @@ func (w *world) profile(r *resident, operation string) (map[string]any, error) {
 				out := map[string]any{"target": n.ID, "label": n.label(), "allow_hire": v.allowHire, "working": v.working, "started_at_ms": v.started}
 				if v.working {
 					out["work_ends_at_ms"] = w.now + v.workLeft
+				} else {
+					host, err := w.load(id)
+					if err != nil {
+						return nil, err
+					}
+					out["meal_paused"] = host.state.BankFull(w.config)
 				}
 				away = out
 			}

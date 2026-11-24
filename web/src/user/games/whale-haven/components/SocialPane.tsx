@@ -1,4 +1,4 @@
-import { guestVisitLabel, useWhaleText } from '../copy';
+import { guestVisitLabel, useWhaleText, visitMealDetail } from '../copy';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -121,6 +121,16 @@ export function SocialPane({
               : t('本次只串门', 'Visiting only')}
           </p>
           {social.away.working && shiftEnd(social.away.work_ends_at_ms)}
+          {!social.away.working && profile.snapshot.whale.location.kind === 'visiting' && (
+            <p>
+              {visitMealDetail(
+                profile.snapshot.whale.location.eatenGrams ?? 0,
+                values,
+                social.away.meal_paused,
+                t,
+              )}
+            </p>
+          )}
           <button
             type="button"
             disabled={busy}
