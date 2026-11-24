@@ -12,3 +12,14 @@ export function listReturnPath(state: unknown, listPath: string, ...otherLists: 
     ? value
     : listPath;
 }
+
+/** Preserve the model page's own list return when it opens an upstream pair. */
+export function endpointReturnState(state: unknown, destination: string): unknown {
+  if (destination.split('?')[0] !== '/models' || !state || typeof state !== 'object') return state;
+  const origin = state as Record<string, unknown>;
+  return {
+    returnTo: listReturnPath({ returnTo: origin.modelSourceParent }, '/models', '/issues'),
+    modelSourceEntry:
+      typeof origin.modelSourceEntry === 'string' ? origin.modelSourceEntry : undefined,
+  };
+}

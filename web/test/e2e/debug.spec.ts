@@ -325,6 +325,52 @@ for (const locale of ['en', 'zh'] as const)
         guard.assertNone();
       });
 
+test('retries a failed Debug start and copies only the explicitly formatted trace', async ({
+  context,
+  page,
+}) => {
+  const fixture = makeFixture('basic-auto-stream');
+  await prepareDebug(context, page, 'en', 'light', fixture);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: USER_ORIGIN });
+  let starts = 0;
+  await page.route('**/api/debug/session', async (route) => {
+    if (route.request().method() === 'POST' && ++starts === 1) {
+      await fulfillJSON(
+        route,
+        { error: { code: 'invalid_request', message: 'Fixture start declined' } },
+        400,
+      );
+    } else await route.fallback();
+  });
+  await page.goto(USER_ORIGIN + '/debug');
+  const start = page.getByRole('button', { name: 'Start Debug', exact: true }).first();
+  await start.click();
+  await expect(page.getByRole('alert')).toContainText(/Fixture start declined|invalid|could not/i);
+  await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
+  await start.click();
+  const trace = page.locator('.ops-debug-trace').first();
+  const summary = trace.locator('summary').first();
+  await expect(summary).toContainText('HTTP 422');
+  await expect(summary).toContainText('debug_dry_run_intercepted');
+  await expect(trace.locator('pre.ops-debug-json')).toHaveCount(0);
+  await revealTraceMarker(page, /Raw request body/);
+  const body = trace.locator('pre.ops-debug-json');
+  const raw = await body.innerText();
+  const format = trace.getByRole('button', { name: 'Format JSON' });
+  await format.click();
+  const pretty = JSON.stringify(JSON.parse(raw), null, 2);
+  await expect(body).toHaveText(pretty, { useInnerText: true });
+  await trace.getByRole('button', { name: 'Copy Request', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => (await navigator.clipboard.readText()).replace(/\r\n/g, '\n')),
+    )
+    .toBe(pretty);
+  await format.click();
+  expect(await body.innerText()).toBe(raw);
+  expect(starts).toBe(2);
+});
+
 test('Debug route starts dry, replaces, confirms live, and stops without retaining secrets', async ({
   context,
   page,

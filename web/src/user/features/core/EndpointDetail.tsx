@@ -23,7 +23,7 @@ import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLi
 import { PageHeader, SectionHead } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
-import { listReturnPath } from '@shared/operations/listReturn';
+import { endpointReturnState, listReturnPath } from '@shared/operations/listReturn';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
@@ -1665,7 +1665,7 @@ export function EndpointDetail({
   const returnTo =
     donationReturnTo === '/charity'
       ? listReturnPath(location.state, '/charity')
-      : (donationReturnTo ?? listReturnPath(location.state, '/endpoints', '/issues'));
+      : (donationReturnTo ?? listReturnPath(location.state, '/endpoints', '/issues', '/models'));
   type Intent =
     { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
   const retryAllowed = useRef(false);
@@ -1712,7 +1712,7 @@ export function EndpointDetail({
       if (deleted) {
         context.commit(() => {
           queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpointId) });
-          navigate(returnTo);
+          navigate(returnTo, { state: endpointReturnState(location.state, returnTo) });
         });
       } else {
         const currentError = queryClient.getQueryState(
@@ -1876,16 +1876,18 @@ export function EndpointDetail({
           }
           description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
           back={
-            <Link to={returnTo} state={location.state}>
+            <Link to={returnTo} state={endpointReturnState(location.state, returnTo)}>
               {donationReturnTo
                 ? ui(
                     donationReturnTo === '/charity'
                       ? 'user.charity.backToDonations'
                       : 'user.charity.backToDonation',
                   )
-                : returnTo.split('?')[0] === '/issues'
-                  ? text('user.records.issues')
-                  : t('endpoints.title')}
+                : returnTo.split('?')[0] === '/models'
+                  ? text('user.services.backToModelSources')
+                  : returnTo.split('?')[0] === '/issues'
+                    ? text('user.records.issues')
+                    : t('endpoints.title')}
             </Link>
           }
           actions={

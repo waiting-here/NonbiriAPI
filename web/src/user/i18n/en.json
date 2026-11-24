@@ -2822,7 +2822,7 @@
       "account.exportUnknown": "The export result could not be confirmed. Verify your Discord identity again to create a new export; the previous request will not run again.",
       "account.deleteUnknown": "The deletion response was unknown. Do not submit it again; check whether the account still exists.",
       "account.checkAuthority": "Check account status",
-      "account.deleteStillActive": "The account is still active. Verify your Discord identity again before another deletion attempt.",
+      "account.deleteStillActive": "The account is still active. You can confirm deletion again while your Discord verification is valid.",
       "account.authorityCheckFailed": "Account status could not be checked. The deletion request was not repeated.",
       "keys.clientTitle": "Enter these in your client",
       "keys.clientHelp": "Choose “OpenAI compatible” or “Custom OpenAI”, then enter these three items.",
@@ -3635,6 +3635,7 @@
     },
     "services": {
       "backToAllKeys": "Back to all keys",
+      "backToModelSources": "Back to model sources",
       "rotationRevisionChanged": "The credential changed while you were reviewing its impact. Review the updated list before replacing it.",
       "chooseManualModels": "Choose manual models to bind",
       "manageManualModels": "Manage manual models",

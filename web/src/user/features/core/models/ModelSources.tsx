@@ -29,6 +29,7 @@ import type {
 } from '../types';
 import { useModelText } from './copy';
 import { PersonalBindingPicker } from './PersonalBindingPicker';
+import { useModelSourceVisit } from './modelSourceVisit';
 import { boundIdentities, candidateIdentity } from './bindingIdentity';
 import { useBindingCopy } from './bindingCopy';
 
@@ -49,10 +50,15 @@ function BindingSelector({
   const copy = useBindingCopy();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
-  const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
+  const visit = useModelSourceVisit(accountId, model.id);
+  const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>(
+    visit.restored?.details ?? {},
+  );
   const [invalidSelection, setInvalidSelection] = useState(false);
   const [readAccessError, setReadAccessError] = useState<Error | null>(null);
-  const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>({});
+  const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>(
+    visit.restored?.nativeServices ?? {},
+  );
   const servicesFor = (id: string) => {
     const candidate = selectionDetails[id];
     return (
@@ -60,9 +66,10 @@ function BindingSelector({
       defaultBindingServices(candidate?.connector_type, candidate?.native_services ?? [])
     );
   };
-  const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () =>
-    initialBindingDraftState(accountId, model.id, model.binding_revision),
-  );
+  const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () => ({
+    ...initialBindingDraftState(accountId, model.id, model.binding_revision),
+    selections: visit.restored?.selections ?? [],
+  }));
   const bindingsKnown = Boolean(bindings.data);
   useEffect(() => {
     const revision = bindings.data?.binding_revision;
@@ -239,6 +246,15 @@ function BindingSelector({
         focusSearch={focusSearch}
         onSearchFocused={onSearchFocused}
         onAccessLoss={setReadAccessError}
+        restoredView={visit.restored?.view}
+        endpointState={visit.endpointState}
+        onManage={(view) =>
+          visit.remember(view, {
+            selections: draft.selections,
+            details: selectionDetails,
+            nativeServices: nativeSelections,
+          })
+        }
       />
       <p className="nb-small nb-muted">{copy.selectedHelp}</p>
       <p className="core-muted">{t('models.selectedCount', { count: draft.selections.length })}</p>

@@ -2822,7 +2822,7 @@
       "account.exportUnknown": "暂时无法确认导出结果。请重新验证 Discord 身份后创建新导出；先前请求不会再次执行。",
       "account.deleteUnknown": "删除响应状态未知。请勿再次提交；先检查账号是否仍然存在。",
       "account.checkAuthority": "检查账号状态",
-      "account.deleteStillActive": "账号仍处于活动状态；再次尝试删除前，请重新验证 Discord 身份。",
+      "account.deleteStillActive": "账号仍处于活动状态。Discord 身份验证仍有效时，可以再次确认注销。",
       "account.authorityCheckFailed": "暂时无法检查账号状态；删除请求未被重复提交。",
       "keys.clientTitle": "在客户端中填写",
       "keys.clientHelp": "选择「OpenAI 兼容」或「自定义 OpenAI」，再填写以下三项。",
@@ -3635,6 +3635,7 @@
     },
     "services": {
       "backToAllKeys": "返回全部密钥",
+      "backToModelSources": "返回模型来源",
       "rotationRevisionChanged": "评估影响期间凭据版本发生变化。请核对更新后的影响清单，再继续轮换。",
       "chooseManualModels": "选择要绑定的手动模型",
       "manageManualModels": "管理手动模型",

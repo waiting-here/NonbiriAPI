@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChoiceRow, Field, FilterBar, Fold, Note, Segmented } from '@shared/components/ui';
@@ -19,11 +19,12 @@ import { useBindingCopy } from './bindingCopy';
 import { isAccessLoss } from './feedback';
 import { ManualSource } from './ManualSource';
 import { useModelText } from './copy';
+import type { SourcePickerView } from './modelSourceVisit';
 import './binding-picker.css';
 
-function useSearchTerm() {
-  const [draft, setDraft] = useState('');
-  const [term, setTerm] = useState('');
+function useSearchTerm(initial = '') {
+  const [draft, setDraft] = useState(initial);
+  const [term, setTerm] = useState(initial.trim());
   useEffect(() => {
     const timer = window.setTimeout(() => setTerm(draft.trim()), 250);
     return () => window.clearTimeout(timer);
@@ -41,6 +42,9 @@ export function PersonalBindingPicker({
   focusSearch = false,
   onSearchFocused,
   onAccessLoss,
+  restoredView,
+  onManage,
+  endpointState,
 }: {
   accountId: string;
   modelId: string;
@@ -51,6 +55,9 @@ export function PersonalBindingPicker({
   focusSearch?: boolean;
   onSearchFocused?: () => void;
   onAccessLoss?: (error: Error) => void;
+  restoredView?: SourcePickerView;
+  onManage?: (view: SourcePickerView) => void;
+  endpointState?: { returnTo: string; modelSourceEntry: string; modelSourceParent: string };
 }) {
   const copy = useBindingCopy();
   const location = useLocation();
@@ -58,40 +65,46 @@ export function PersonalBindingPicker({
   const [manualLocked, setManualLocked] = useState(false);
   const [manualSaved, setManualSaved] = useState(false);
   const locked = externalLocked || manualLocked;
-  const [service, setService] = useState<Connection | null>(null);
-  const [serviceDraft, setServiceQuery, serviceQuery] = useSearchTerm();
-  const [endpoint, setEndpoint] = useState<Endpoint | null>(null);
-  const [endpointDraft, setEndpointQuery, endpointQuery] = useSearchTerm();
-  const [entryKey, setEntryKey] = useState<EndpointKey | null>(null);
-  const [keyDraft, setKeyQuery, keyQuery] = useSearchTerm();
-  const [queryDraft, setQueryDraft] = useState('');
-  const [query, setQuery] = useState('');
-  const [source, setSource] = useState<CatalogSourceType | ''>('');
-  const [step, setStep] = useState<'endpoints' | 'keys' | 'models'>('endpoints');
+  const [service, setService] = useState<Connection | null>(restoredView?.service ?? null);
+  const [serviceDraft, setServiceQuery, serviceQuery] = useSearchTerm(restoredView?.serviceSearch);
+  const [endpoint, setEndpoint] = useState<Endpoint | null>(restoredView?.endpoint ?? null);
+  const [endpointDraft, setEndpointQuery, endpointQuery] = useSearchTerm(
+    restoredView?.endpointSearch,
+  );
+  const [entryKey, setEntryKey] = useState<EndpointKey | null>(restoredView?.entryKey ?? null);
+  const [keyDraft, setKeyQuery, keyQuery] = useSearchTerm(restoredView?.keySearch);
+  const [queryDraft, setQueryDraft] = useState(restoredView?.modelSearch ?? '');
+  const [query, setQuery] = useState(restoredView?.modelSearch.trim() ?? '');
+  const [source, setSource] = useState<CatalogSourceType | ''>(restoredView?.source ?? '');
+  const [step, setStep] = useState<SourcePickerView['step']>(restoredView?.step ?? 'endpoints');
   const searchInput = useRef<HTMLInputElement>(null);
   const modelSearch = useRef<HTMLInputElement>(null);
   const pendingManual = useRef<{ keyId: string; upstream: string } | null>(null);
   const servicePager = usePagePager({
     station: 'user',
     listType: 'binding-services',
+    initialPage: restoredView?.pages.service,
     scopeKey: accountId,
     resetKey: serviceQuery,
   });
   const endpointPager = usePagePager({
     station: 'user',
     listType: 'models-binding-endpoints',
+    initialPage: restoredView?.pages.endpoint,
     scopeKey: accountId,
     resetKey: `${service?.id ?? ''}:${endpointQuery}`,
   });
   const keyPager = usePagePager({
     station: 'user',
     listType: 'models-binding-keys',
+    initialPage: restoredView?.pages.key,
     scopeKey: accountId,
     resetKey: `${endpoint?.id ?? ''}:${keyQuery}`,
   });
   const modelPager = usePagePager({
     station: 'user',
     listType: 'models-binding-candidates',
+    initialPage: restoredView?.pages.model,
     scopeKey: `${accountId}:${modelId}`,
     resetKey: `${entryKey?.id ?? ''}:${query}:${source}`,
   });
@@ -216,16 +229,19 @@ export function PersonalBindingPicker({
     setStep('endpoints');
     setSource('');
   };
-  const chooseEndpoint = (next: Endpoint) => {
-    pendingManual.current = null;
-    setManualSaved(false);
-    setEndpoint(next);
-    setEntryKey(null);
-    setKeyQuery('');
-    setQueryDraft('');
-    setQuery('');
-    setStep('keys');
-  };
+  const chooseEndpoint = useCallback(
+    (next: Endpoint) => {
+      pendingManual.current = null;
+      setManualSaved(false);
+      setEndpoint(next);
+      setEntryKey(null);
+      setKeyQuery('');
+      setQueryDraft('');
+      setQuery('');
+      setStep('keys');
+    },
+    [setKeyQuery],
+  );
   const chooseKey = (next: EndpointKey) => {
     pendingManual.current = null;
     setManualSaved(false);
@@ -251,7 +267,7 @@ export function PersonalBindingPicker({
     return () => {
       active = false;
     };
-  }, [endpoint, endpointQuery, endpoints.data]);
+  }, [endpoint, endpointQuery, endpoints.data, chooseEndpoint]);
   useEffect(() => {
     const rows = keys.data?.data;
     if (
@@ -654,9 +670,37 @@ export function PersonalBindingPicker({
                 className="nb-btn nb-btn--ghost"
                 aria-disabled={locked || undefined}
                 onClick={(event) => {
-                  if (locked) event.preventDefault();
+                  if (locked) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (
+                    event.button !== 0 ||
+                    event.ctrlKey ||
+                    event.metaKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  onManage?.({
+                    service,
+                    endpoint,
+                    entryKey,
+                    step,
+                    source,
+                    serviceSearch: serviceDraft,
+                    endpointSearch: endpointDraft,
+                    keySearch: keyDraft,
+                    modelSearch: queryDraft,
+                    pages: {
+                      service: servicePager.page,
+                      endpoint: endpointPager.page,
+                      key: keyPager.page,
+                      model: modelPager.page,
+                    },
+                  });
                 }}
-                state={{ returnTo: location.pathname + location.search }}
+                state={endpointState ?? { returnTo: location.pathname + location.search }}
                 to={
                   endpoint.connection_id
                     ? `/endpoints?${new URLSearchParams({ connection_id: endpoint.connection_id, endpoint_id: endpoint.id, focus_key_id: entryKey.id })}`
