@@ -306,6 +306,9 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await page
       .getByRole('button', { name: copy.management.permissions.defaults, exact: true })
       .click();
+    await page
+      .getByRole('button', { name: new RegExp(copy.management.permissions.groups.donations.title) })
+      .click();
     const scope = page.getByRole('slider', {
       name: copy.management.permissions.scope.title,
       exact: true,
