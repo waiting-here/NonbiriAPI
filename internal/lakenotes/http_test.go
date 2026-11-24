@@ -1,6 +1,7 @@
 package lakenotes
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -19,14 +20,14 @@ type userRoutes struct {
 
 func (r userRoutes) RegisterUserRoute(method, path string, handler resources.AuthorizedUserHandler) error {
 	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
-		handler(w, req.WithContext(r.f.ctx(r.f.user)), resources.UserPrincipal{UserID: r.f.user})
+		handler(w, req.WithContext(context.WithValue(req.Context(), actorContext{}, r.f.actors[r.f.user])), resources.UserPrincipal{UserID: r.f.user})
 	})
 	return nil
 }
 
 func (r userRoutes) RegisterContinuationUserRoute(method, path string, handler resources.AuthenticatedContinuationHandler) error {
 	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
-		handler(w, req.WithContext(r.f.ctx(r.f.user)), resources.ContinuationUserPrincipal{UserID: r.f.user})
+		handler(w, req.WithContext(context.WithValue(req.Context(), actorContext{}, r.f.actors[r.f.user])), resources.ContinuationUserPrincipal{UserID: r.f.user})
 	})
 	return nil
 }
@@ -38,7 +39,7 @@ type adminRoutes struct {
 
 func (r adminRoutes) RegisterAdminRoute(method, path string, handler http.Handler) error {
 	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
-		handler.ServeHTTP(w, req.WithContext(r.f.ctx(r.f.admin)))
+		handler.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), actorContext{}, r.f.actors[r.f.admin])))
 	})
 	return nil
 }

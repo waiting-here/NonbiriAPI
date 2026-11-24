@@ -184,6 +184,7 @@ type CastResult struct {
 	Profile ProfileView `json:"profile"`
 }
 type MutationResult[T any] struct {
-	Value    T
-	Replayed bool
+	Value     T
+	Replayed  bool
+	freshJSON []byte
 }

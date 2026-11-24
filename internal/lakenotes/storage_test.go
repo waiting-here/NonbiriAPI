@@ -112,6 +112,13 @@ func TestCastStorageRequiresKnownFormatAndExactRules(t *testing.T) {
 	if err != nil || current.Cast.AckTick != started.Value.Cast.AckTick || current.Cast.State.Plan != started.Value.Cast.State.Plan {
 		t.Fatal("saved checkpoint changed", current, err)
 	}
+	// The separately persisted reward is overlaid after snapshot decoding.
+	if _, err = f.database.Exec("UPDATE lake_notes_casts SET reward_plan=? WHERE id=?", []byte(`{"coins":25,"bait":"basic","count":1}`), id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.service.Cast(f.ctx(f.user), f.user, id); !errors.Is(err, ErrInvariant) {
+		t.Fatal("invalid reward accepted on a waiting cast", err)
+	}
 }
 
 func TestPriorBarbedCastGoldenRetainsOriginalPhysics(t *testing.T) {

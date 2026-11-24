@@ -2,7 +2,11 @@ package lakenotes
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -51,5 +55,61 @@ func TestUnexpectedDatabaseErrorHasSafeHTTPDiagnostic(t *testing.T) {
 		default:
 			t.Fatal("unexpected diagnostic field", key)
 		}
+	}
+}
+
+type diagnosticGate func() error
+
+func (gate diagnosticGate) AuthorizeUserActivity(context.Context, *sql.Tx, int64) error {
+	return gate()
+}
+
+func TestLakeRequestCancellationDiagnostics(t *testing.T) {
+	f := newFixture(t)
+	mux := http.NewServeMux()
+	if err := RegisterRoutes(userRoutes{mux, f}, userRoutes{mux, f}, adminRoutes{mux, f}, f.service); err != nil {
+		t.Fatal(err)
+	}
+	var log bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(applog.New(&log, slog.LevelInfo))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	for _, tc := range []struct {
+		name                string
+		cancelRequest       bool
+		cause, operationErr error
+		category            string
+	}{
+		{"disconnected", true, nil, fmt.Errorf("operation: %w", context.Canceled), ""},
+		{"disconnected with clean rollback", true, nil, errors.Join(context.Canceled, nil), ""},
+		{"disconnected with storage failure", true, nil, errors.Join(context.Canceled, ErrInvariant), "stored_state"},
+		{"internal cancellation", false, nil, context.Canceled, "cancelled"},
+		{"server cancellation", true, errors.New("server shutdown"), context.Canceled, "cancelled"},
+		{"deadline", true, context.DeadlineExceeded, context.DeadlineExceeded, "deadline"},
+		{"storage failed during disconnect", true, nil, ErrInvariant, "stored_state"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			log.Reset()
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			f.service.gate = diagnosticGate(func() error {
+				if tc.cancelRequest {
+					cancel(tc.cause)
+				}
+				return tc.operationErr
+			})
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, httptest.NewRequestWithContext(ctx, "GET", baseRoute+"/profile", nil))
+			if tc.category == "" {
+				if len(response.Header()) != 0 || response.Body.Len() != 0 || log.Len() != 0 {
+					t.Fatal("disconnected request wrote a response or logged a service error", response.Header(), log.String())
+				}
+				return
+			}
+			var entry struct{ Category string }
+			if response.Code != http.StatusServiceUnavailable || json.Unmarshal(log.Bytes(), &entry) != nil || entry.Category != tc.category {
+				t.Fatal("missing failure response or diagnostic", response.Code, log.String())
+			}
+		})
 	}
 }

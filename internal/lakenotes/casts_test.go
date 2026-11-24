@@ -34,6 +34,13 @@ func TestSingleCastReplayGenerationAndCumulativeBudget(t *testing.T) {
 	if _, e = f.service.Action(f.ctx(f.user), f.user, testKey(62), ActionInput{ExpectedProfileRevision: start.Value.Profile.Revision, Action: rules.Action{Name: "rest"}}); !errors.Is(e, ErrConflict) {
 		t.Fatal(e)
 	}
+	// Listing phase in a steady checkpoint's UPDATE rewrites the unique
+	// active-cast index even when the column value stays the same.
+	if _, err := f.database.Exec(`CREATE TEMP TRIGGER reject_redundant_cast_phase
+BEFORE UPDATE OF phase ON lake_notes_casts WHEN NEW.phase=OLD.phase
+BEGIN SELECT RAISE(ABORT, 'redundant cast phase write'); END`); err != nil {
+		t.Fatal(err)
+	}
 	in := checkpoint(c, 120)
 	ack, e := f.service.Checkpoint(f.ctx(f.user), f.user, c.ID, testKey(63), in)
 	if e != nil || ack.Value.Cast.AckTick != 120 {
