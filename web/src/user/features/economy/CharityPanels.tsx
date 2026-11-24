@@ -1426,7 +1426,6 @@ export function DonationKeyOverview({
         </div>
         <FilterBar
           activeCount={filter === 'all' ? 0 : 1}
-          onSubmit={() => {}}
           search={
             <Field label={t('user.charity.donationOverviewFilter')} size="short">
               {(field) => (

@@ -1,3 +1,4 @@
+import { QUERY_DEFAULTS } from '@shared/query/client';
 import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -870,7 +871,7 @@ describe('experimental policy and charity controls', () => {
     });
 
     await rendered.user.click(await screen.findByRole('button', { name: 'View models' }));
-    await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+    await rendered.user.click(await screen.findByRole('tab', { name: 'Manual models' }));
     const entryRow = (await screen.findByText('Vendor/Exact')).closest('li');
     if (!entryRow) throw new Error('Manual catalog row not found');
     await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
@@ -1205,6 +1206,8 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
+    // A freshly reconciled key is still current when the new focused panel mounts.
+    rendered.queryClient.setQueryDefaults(['user', 'core'], { staleTime: QUERY_DEFAULTS.staleTime });
     await screen.findByText('sk-a…tail');
     await rendered.user.click(screen.getByRole('button', { name: '＋ Add key' }));
     await rendered.user.type(screen.getByLabelText('Key'), marker);

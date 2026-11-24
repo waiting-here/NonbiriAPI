@@ -284,6 +284,7 @@ export function LogFilters({
         {toolbarActions}
       </div>
       <FilterBar
+        onReset={reset}
         as="div"
         ariaLabel={t('common.filter')}
         activeCount={
@@ -314,12 +315,6 @@ export function LogFilters({
         }
         footer={
           <div className="log-filters__actions">
-            <Button type="submit" variant="primary">
-              {t('common.search')}
-            </Button>
-            <Button type="button" onClick={reset}>
-              {t('common.resetFilter')}
-            </Button>
             <span className="log-filters__pending" role="status">
               {pendingFields.length > 0 &&
                 t('logs.applyEdits', { fields: pendingFields.join(' · ') })}

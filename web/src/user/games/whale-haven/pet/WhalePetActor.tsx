@@ -288,9 +288,10 @@ export function WhalePetActor({
       );
     }
     let current = true;
-    void requestMotion(assets, motion).then(() => {
+    void requestMotion(assets, motion, true).then((loaded) => {
       if (!current) return;
       rt.lastImpulseSeq = seq;
+      if (!loaded) return;
       rt.impulseState = state;
       rt.impulseUntilMs = performance.now() + (slice ? slice.frames * slice.frameMs : 1650);
       rt.frameIndex = 0;

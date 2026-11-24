@@ -286,7 +286,6 @@ export function PersonalBindingPicker({
         ariaLabel={copy.filterService}
         activeCount={service ? 1 : 0}
         secondaryAlwaysVisible
-        onSubmit={() => undefined}
         onReset={
           locked
             ? undefined

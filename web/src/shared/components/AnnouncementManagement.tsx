@@ -349,7 +349,6 @@ export function AnnouncementManagement({
         <FilterBar
           query={list}
           activeCount={[state, severity].filter(Boolean).length}
-          onSubmit={() => {}}
           search={
             <>
               <Field label={t('management.announcements.stateLabel')} size="short">

@@ -132,7 +132,11 @@ for (const locale of ['en', 'zh'] as const) {
     await connectionList.getByRole('button', { name: searchLabel, exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get('connections_page')).toBe('1');
     await expect.poll(() => new URL(page.url()).searchParams.get('connections_q')).toBe('Needle');
-    await connectionList.getByRole('button', { name: '2', exact: true }).click();
+    await expect(connectionList.getByRole('button', { name: '2', exact: true })).toBeHidden();
+    await connectionList
+      .getByRole('button', { name: locale === 'en' ? 'Next' : '下一页', exact: true })
+      .click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('connections_page')).toBe('2');
     const connectionLink = page.getByRole('link', { name: 'Needle connection 19', exact: true });
     await connectionLink.evaluate((link) =>
       link.scrollIntoView({ block: 'center', behavior: 'instant' }),

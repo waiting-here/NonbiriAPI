@@ -806,7 +806,8 @@ export function RequestAdaptationEditor({
   const [view, setView] = useState<View | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingUrl, setSavingUrl] = useState<string | null>(null);
+  const saving = savingUrl === url;
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState<'stale' | 'loadError' | 'savedRefreshFailed' | null>(
     null,
@@ -815,7 +816,6 @@ export function RequestAdaptationEditor({
   const generation = useRef(0);
   useLayoutEffect(() => {
     generation.current++;
-    setSaving(false);
     return () => {
       generation.current++;
     };
@@ -841,6 +841,7 @@ export function RequestAdaptationEditor({
         if (controller.signal.aborted) return;
         const next = parseView(payload);
         loadedContextRef.current = url;
+        setSavingUrl(null);
         setLoadedContext(url);
         setView(next);
         setDraft(newDraft(next));
@@ -907,7 +908,7 @@ export function RequestAdaptationEditor({
       return;
     }
     const operationGeneration = generation.current;
-    setSaving(true);
+    setSavingUrl(url);
     setNotice('');
     let successfulResponseReceived = false;
     try {
@@ -951,7 +952,9 @@ export function RequestAdaptationEditor({
         setNotice(copy('saveError'));
       }
     } finally {
-      if (generation.current === operationGeneration) setSaving(false);
+      setSavingUrl((current) =>
+        current === url && generation.current === operationGeneration ? null : current,
+      );
     }
   };
 

@@ -164,7 +164,6 @@ export function ReportsPage() {
         <PanelBody>
           <FilterBar
             activeCount={status ? 1 : 0}
-            onSubmit={() => {}}
             search={
               <>
                 <Field size="short" label={t('admin.reports.filter.status')}>

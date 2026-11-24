@@ -433,7 +433,6 @@ function PenaltyList({ scope }: { scope: Scope }) {
       <FilterBar
         query={query}
         activeCount={Object.values(filter).filter(Boolean).length}
-        onSubmit={() => {}}
         search={
           <>
             <Field label={text('处罚类型', 'Penalty type')} size="short">

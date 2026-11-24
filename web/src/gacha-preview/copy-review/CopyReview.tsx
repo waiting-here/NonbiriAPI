@@ -477,7 +477,6 @@ export function CopyReview({ backHref }: { backHref?: string } = {}) {
         as="div"
         ariaLabel={label('filters')}
         activeCount={active}
-        onSubmit={() => {}}
         search={
           <>
             <Field label={label('search')}>

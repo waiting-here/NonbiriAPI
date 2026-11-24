@@ -581,7 +581,6 @@ function LegalHoldSessionPanel({
         <FilterBar
           query={list}
           activeCount={Number(Boolean(state)) + Number(Boolean(kind))}
-          onSubmit={() => {}}
           search={
             <>
               <Field size="short" label={t('admin.legalHolds.filters.state')}>

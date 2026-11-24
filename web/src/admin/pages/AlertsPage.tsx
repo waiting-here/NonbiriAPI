@@ -734,7 +734,6 @@ export function AlertsPage() {
           <FilterBar
             query={result}
             activeCount={Number(resolved !== 'false') + Number(kind !== 'all')}
-            onSubmit={() => {}}
             footer={
               resolved !== 'false' || kind !== 'all' ? (
                 <button className="nb-btn nb-btn--secondary" type="button" onClick={resetFilters}>

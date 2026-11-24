@@ -23,9 +23,15 @@ export function resolveOutfitPetId(outfit?: string, isWorkerUniform?: boolean): 
 }
 
 type Motion = CodexPetStateId | 'feast' | 'workerFeast' | 'workerIdle' | 'sleeping' | 'look360';
-const ready = Promise.resolve();
+const ready = Promise.resolve(true);
+const unavailable = Promise.resolve(false);
+const passiveRetryMs = 30_000;
+interface MotionRequest {
+  promise: Promise<boolean>;
+  failedAt?: number;
+}
 const cache = new Map<string, Promise<LoadedCodexPetAssets>>();
-const pending = new WeakMap<LoadedCodexPetAssets, Map<Motion, Promise<void>>>();
+const pending = new WeakMap<LoadedCodexPetAssets, Map<Motion, MotionRequest>>();
 export function invalidateCodexPetCache(petId: string) {
   cache.delete(petId);
 }
@@ -49,10 +55,19 @@ async function sheet(
     cellHeight: slice.cellHeight ?? layout.cellHeight,
   };
 }
-export function requestMotion(assets: LoadedCodexPetAssets, motion: Motion): Promise<void> {
+export function requestMotion(
+  assets: LoadedCodexPetAssets,
+  motion: Motion,
+  retryOnInteraction = false,
+): Promise<boolean> {
   const requests = pending.get(assets)!;
   const existing = requests.get(motion);
-  if (existing) return existing;
+  if (
+    existing &&
+    (existing.failedAt === undefined ||
+      (!retryOnInteraction && performance.now() - existing.failedAt < passiveRetryMs))
+  )
+    return existing.promise;
   const layout = assets.highFpsLayout!;
   const extra =
     motion === 'workerIdle' ||
@@ -61,16 +76,20 @@ export function requestMotion(assets: LoadedCodexPetAssets, motion: Motion): Pro
     motion === 'feast' ||
     motion === 'look360';
   const slice = extra ? layout[motion] : layout.states[motion];
-  if (!slice?.sheet || (!extra && assets.stateSheets?.[motion])) return ready;
+  if (!slice?.sheet) return unavailable;
+  if (!extra && assets.stateSheets?.[motion]) return ready;
   const task = sheet(getSceneAssetUrl('pet/' + assets.manifest.id), slice, layout)
     .then((loaded) => {
       if (extra) assets[(motion + 'Sheet') as 'workerIdleSheet'] = loaded;
       else assets.stateSheets![motion] = loaded;
+      return true;
     })
     .catch(() => {
-      /* Keep the original idle frame if a motion is unavailable. */
+      // Animation frames reuse this result. A new gesture may retry immediately.
+      requests.set(motion, { promise: unavailable, failedAt: performance.now() });
+      return false;
     });
-  requests.set(motion, task);
+  requests.set(motion, { promise: task });
   return task;
 }
 export function loadCodexPetAssets(id: string): Promise<LoadedCodexPetAssets> {

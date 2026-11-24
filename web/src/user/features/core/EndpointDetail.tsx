@@ -1816,6 +1816,7 @@ export function EndpointDetail({
   };
 
   const showAddedKey = (key: EndpointKey) => {
+    queryClient.setQueryData(coreKeys.focusedEndpointKey(accountId, endpointId, key.id), key);
     setAddingKey(false);
     setDiscoverKey(key.id);
     setLastAddedKey(key.id);
@@ -2216,7 +2217,7 @@ function FocusedEndpointKey({
   params.delete('routes_' + keyId + '_page');
   const listPath = location.pathname + (params.size ? '?' + params.toString() : '');
   const current = useQuery({
-    queryKey: [...coreKeys.endpointKeysRoot(accountId, endpoint.id), 'focused', keyId],
+    queryKey: coreKeys.focusedEndpointKey(accountId, endpoint.id, keyId),
     queryFn: ({ signal }) => getEndpointKey(endpoint.id, keyId, signal),
   });
   return (

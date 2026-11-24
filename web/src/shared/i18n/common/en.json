@@ -371,7 +371,7 @@
       "saved": "Shared limits saved.",
       "refreshKeepDraft": "Refresh and keep input",
       "rateLimitedUntil": "Expected recovery: {{time}}",
-      "hint": "0 means unlimited. Personal and charity model calls share these settings. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. Cache-balanced routing keeps a valid session binding when it can queue; other requests try available connections first."
+      "hint": "Set concurrency or RPM to 0 to remove the limit for that dimension. Its overflow setting then has no effect. Personal and charity model calls share these settings. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. Cache-balanced routing keeps a valid session binding when it can queue; other requests try available connections first."
     },
     "itemId": "Donation #{{id}}",
     "choices": {

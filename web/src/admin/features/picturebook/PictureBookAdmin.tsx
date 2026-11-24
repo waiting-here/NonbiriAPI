@@ -309,7 +309,6 @@ const Catalog = forwardRef<
               Number(filter.configured !== 'all') +
               Number(filter.enabled !== 'all')
             }
-            onSubmit={() => {}}
             search={
               <Field label={t('搜索全部模型目录', 'Search the full model catalog')}>
                 {(props) => (

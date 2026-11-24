@@ -51,19 +51,23 @@ function AutomationInstructions() {
           <table className="nb-table">
             <thead>
               <tr>
-                <th>{text('method')}</th>
-                <th>{text('path')}</th>
-                <th>{text('purpose')}</th>
+                <th scope="col">{text('method')}</th>
+                <th scope="col">{text('path')}</th>
+                <th scope="col">{text('purpose')}</th>
               </tr>
             </thead>
             <tbody>
               {routes.map(([key, path]) => (
                 <tr key={key}>
-                  <td>GET</td>
-                  <td>
+                  <td data-cell="meta" data-label={text('method')}>
+                    GET
+                  </td>
+                  <td data-cell="title" data-label={text('path')}>
                     <code>{path}</code>
                   </td>
-                  <td>{text(key)}</td>
+                  <td data-cell="meta" data-label={text('purpose')}>
+                    {text(key)}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -904,7 +904,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
           <FilterBar
             query={pools}
             activeCount={Number(Boolean(poolType)) + Number(Boolean(poolState))}
-            onSubmit={() => {}}
             search={
               <>
                 <Field size="short" label={t('admin.activities.pools.filterType')}>
