@@ -374,6 +374,120 @@ describe('shared account management', () => {
     expect(writes[2].headers.get('Idempotency-Key')).toBe(writes[1].headers.get('Idempotency-Key'));
   });
 
+  it('validates inherited limits in the single-user and batch forms against the current steward grants', async () => {
+    const policy = defaultStewardPermissions(5);
+    policy.permissions['users.profile'] = true;
+    policy.limits['users.endpoint_limit_max'] = '3';
+    policy.limits['users.rpm_limit_max'] = '40';
+    const target = {
+      ...userFixture(),
+      endpoint_limit: '2',
+      effective_endpoint_limit: '2',
+      light_rpm_limit: '5',
+      effective_light_rpm_limit: '5',
+    };
+    const calls = install((call) => {
+      if (call.path === '/api/session')
+        return {
+          user: {
+            ...session(5).user,
+            steward_permissions: policy,
+            blocked_inherited_limits: ['endpoint_limit', 'rpm_limit', 'light_rpm_limit'],
+          },
+        };
+      if (call.path.startsWith('/api/steward/users?')) return page([target]);
+      if (call.path === '/api/steward/users/7' && call.method === 'GET') return target;
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<StewardPage />, {
+      station: 'user',
+      role: 'level5',
+      route: '/steward?tab=users',
+      locale: 'en',
+    });
+    await view.user.click(
+      (
+        await screen.findByText('Edit selected users’ inference limits', { selector: 'strong' })
+      ).closest('summary')!,
+    );
+    const inheritTitle = view.i18n.t('management.users.batchLimitInherit');
+    expect(
+      within(screen.getByLabelText('Light charity RPM action')).getByRole('option', {
+        name: inheritTitle,
+      }),
+    ).toBeDisabled();
+    expect(
+      within(screen.getByLabelText('Global RPM per user action')).getByRole('option', {
+        name: inheritTitle,
+      }),
+    ).toBeEnabled();
+    await view.user.click(screen.getByRole('button', { name: 'member-7' }));
+    await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
+    const save = screen.getByRole('button', { name: 'Save settings' });
+    const endpoint = screen.getByLabelText('Endpoint limit');
+    const light = screen.getByLabelText('Light charity RPM');
+    await view.user.clear(endpoint);
+    expect(save).toBeDisabled();
+    expect(endpoint).toHaveAccessibleDescription(/site default exceeds/);
+    await view.user.type(endpoint, '3');
+    expect(save).toBeEnabled();
+    await view.user.clear(light);
+    expect(save).toBeDisabled();
+    await view.user.type(light, '40');
+    expect(save).toBeEnabled();
+    expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+
+  it('supports a steward ban with an exact sub-day permission ceiling', async () => {
+    const policy = defaultStewardPermissions(5);
+    policy.permissions['users.ban_permanent'] = false;
+    policy.limits['users.ban_duration_max_seconds'] = '45';
+    let target = userFixture();
+    const calls = install((call) => {
+      if (call.path === '/api/session')
+        return { user: { ...session(5).user, steward_permissions: policy } };
+      if (call.path.startsWith('/api/steward/users?')) return page([target]);
+      if (call.path === '/api/steward/users/7' && call.method === 'GET') return target;
+      if (call.path.startsWith('/api/steward/users/7/penalties')) return page([]);
+      if (call.path === '/api/steward/users/7/ban' && call.method === 'POST') {
+        target = {
+          ...target,
+          is_banned: true,
+          banned_reason: String(call.body.reason),
+          revision: '2',
+        };
+        return new Response(null, { status: 204 });
+      }
+      throw new Error('Unexpected request ' + call.path);
+    });
+    const view = await renderWithProviders(<StewardPage />, {
+      station: 'user',
+      role: 'level5',
+      route: '/steward?tab=users&user=7',
+      locale: 'en',
+    });
+    await view.user.click(await screen.findByRole('tab', { name: 'Penalties' }));
+    await view.user.type(screen.getByLabelText('Reason'), 'Account review');
+    const ban = screen.getByRole('button', { name: 'Ban' });
+    expect(ban).toBeDisabled();
+    const duration = screen.getByRole('spinbutton', { name: /Ban duration \(seconds/ });
+    expect(duration).toHaveAttribute('max', '45');
+    await view.user.type(duration, '46');
+    expect(ban).toBeDisabled();
+    await view.user.clear(duration);
+    await view.user.type(duration, '45');
+    await view.user.click(ban);
+    const confirm = await screen.findByRole('alertdialog');
+    expect(confirm).toHaveTextContent('45 seconds');
+    await view.user.click(within(confirm).getByRole('button', { name: 'Ban user' }));
+    await waitFor(() =>
+      expect(calls.find((call) => call.method === 'POST')?.body).toMatchObject({
+        duration_seconds: 45,
+        reason: 'Account review',
+      }),
+    );
+  });
+
   it('keeps level-five controls and drafts after permission denials while allowing an authorized ban', async () => {
     const policy = defaultStewardPermissions(5);
     policy.permissions['users.profile'] = true;

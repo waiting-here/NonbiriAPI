@@ -39,6 +39,7 @@ export interface UsageSummary {
 }
 
 export interface UserProfile {
+  blocked_inherited_limits?: import('@shared/operations/userInferenceLimits').ManagedLimitKey[];
   steward_permissions?: import('@shared/operations/stewardPermissions').StewardPermissions;
   id: string;
   username: string;

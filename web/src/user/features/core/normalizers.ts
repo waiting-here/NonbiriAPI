@@ -18,6 +18,7 @@ import { oneOf } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
 import { normalizeRolePolicy } from '@shared/rolePolicy';
 import { normalizeStewardPermissions } from '@shared/operations/stewardPermissions';
+import { INFERENCE_LIMITS, type ManagedLimitKey } from '@shared/operations/userInferenceLimits';
 import { normalizeTransportRule } from '@shared/transportRule';
 import { normalizeAnnouncementSummary } from '../operations/data';
 import {
@@ -591,7 +592,24 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     'updated_at',
     'usage',
   ] as const;
-  const record = responseRecord(value, fields, ['steward_permissions'], 'user profile');
+  const record = responseRecord(
+    value,
+    fields,
+    ['steward_permissions', 'blocked_inherited_limits'],
+    'user profile',
+  );
+  const blocked = record.blocked_inherited_limits;
+  let blockedLimits: ManagedLimitKey[] | undefined;
+  if (blocked !== undefined) {
+    const keys: ManagedLimitKey[] = ['endpoint_limit', ...INFERENCE_LIMITS.map(({ key }) => key)];
+    if (
+      !Array.isArray(blocked) ||
+      blocked.length > keys.length ||
+      new Set(blocked).size !== blocked.length
+    )
+      invalid('blocked inherited limits');
+    blockedLimits = blocked.map((key) => oneOf(key, keys, 'blocked inherited limit'));
+  }
   const lang = record.lang;
   if (lang !== '' && lang !== 'zh' && lang !== 'en') invalid('account language');
   if (
@@ -652,6 +670,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     game_balance: creditAmount(record.game_balance, 'game balance', true),
     donation_credit: creditAmount(record.donation_credit, 'donation credit', false),
     effective_level: record.effective_level as UserProfile['effective_level'],
+    ...(blockedLimits === undefined ? {} : { blocked_inherited_limits: blockedLimits }),
     ...(record.steward_permissions === undefined
       ? {}
       : {

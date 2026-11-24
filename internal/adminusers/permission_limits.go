@@ -49,9 +49,7 @@ func authorizeProfilePermissions(ctx context.Context, tx *sql.Tx, actorID int64,
 		if item.value != nil {
 			value = *item.value
 		}
-		max, _ := strconv.ParseInt(p.Limits[item.limit], 10, 64)
-		// Endpoint zero is unlimited; only the unrestricted maximum permits it.
-		if value > max || item.limit == "users.endpoint_limit_max" && value == 0 && max < 10000 {
+		if !p.AllowsUserLimit(item.limit, value) {
 			return authz.ErrPermissionDenied
 		}
 	}

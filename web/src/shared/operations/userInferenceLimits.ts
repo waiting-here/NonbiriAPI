@@ -9,6 +9,7 @@ export const INFERENCE_LIMITS = [
   { key: 'light_concurrency_limit', label: 'management.users.lightConcurrencyLimit', max: 100000 },
 ] as const;
 export type InferenceLimitKey = (typeof INFERENCE_LIMITS)[number]['key'];
+export type ManagedLimitKey = 'endpoint_limit' | InferenceLimitKey;
 export type InferenceLimitDraft = Record<InferenceLimitKey, string>;
 export type InferenceLimitPatch = Partial<Record<InferenceLimitKey, string | null>>;
 

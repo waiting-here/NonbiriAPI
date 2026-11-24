@@ -19,6 +19,7 @@ import {
   parseInferenceLimit,
   inferenceCeiling,
   type InferenceLimitKey,
+  type ManagedLimitKey,
   type InferenceLimitPatch,
 } from '@shared/operations/userInferenceLimits';
 
@@ -47,6 +48,7 @@ export function UserLimitBatch({
   onBusy,
   loading,
   limits,
+  blockedInheritedLimits,
 }: {
   role: ManagementRole;
   users: AdminUser[];
@@ -56,6 +58,7 @@ export function UserLimitBatch({
   onBusy: (busy: boolean) => void;
   loading: boolean;
   limits?: StewardPermissions['limits'];
+  blockedInheritedLimits?: ManagedLimitKey[];
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(
@@ -94,8 +97,10 @@ export function UserLimitBatch({
   let invalid = false;
   for (const { key, max } of INFERENCE_LIMITS) {
     const field = draft[key];
-    if (field.mode === 'inherit') values[key] = null;
-    else if (field.mode === 'set') {
+    if (field.mode === 'inherit') {
+      if (blockedInheritedLimits?.includes(key)) invalid = true;
+      else values[key] = null;
+    } else if (field.mode === 'set') {
       const value = parseInferenceLimit(field.value, inferenceCeiling(key, max, limits));
       if (value === undefined || value === null) invalid = true;
       else values[key] = value;
@@ -144,9 +149,10 @@ export function UserLimitBatch({
         title={t('management.users.batchLimitApply')}
         description={t('common.governance.batchUsers', { count: confirmation?.length ?? 0 })}
         confirmLabel={t('management.users.batchLimitApply')}
+        confirmDisabled={loading || invalid}
         onCancel={() => setConfirmation(null)}
         onConfirm={() => {
-          if (!confirmation || loading) return;
+          if (!confirmation || loading || invalid) return;
           setResults(confirmation.map((item) => ({ item, state: 'queued' })));
           void execute(confirmation);
           setConfirmation(null);
@@ -193,7 +199,14 @@ export function UserLimitBatch({
         <fieldset className="nb-form user-limit-batch-fields" disabled={locked}>
           {INFERENCE_LIMITS.map(({ key, label, max }) => (
             <div className="nb-grid nb-grid--2" key={key}>
-              <Field label={t('management.users.batchLimitAction', { label: t(label) })}>
+              <Field
+                label={t('management.users.batchLimitAction', { label: t(label) })}
+                help={
+                  blockedInheritedLimits?.includes(key)
+                    ? t('common.governance.inheritAboveCeiling')
+                    : undefined
+                }
+              >
                 {(props) => (
                   <select
                     {...props}
@@ -206,7 +219,9 @@ export function UserLimitBatch({
                     }
                   >
                     <option value="keep">{t('management.users.batchLimitKeep')}</option>
-                    <option value="inherit">{t('management.users.batchLimitInherit')}</option>
+                    <option value="inherit" disabled={blockedInheritedLimits?.includes(key)}>
+                      {t('management.users.batchLimitInherit')}
+                    </option>
                     <option value="set">{t('management.users.batchLimitSet')}</option>
                   </select>
                 )}

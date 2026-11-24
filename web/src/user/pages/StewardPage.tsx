@@ -346,6 +346,7 @@ export function StewardPage() {
                   role="steward"
                   actorLevel={authority.data.effective_level === 5 ? 5 : 6}
                   permissions={authority.data.steward_permissions}
+                  blockedInheritedLimits={authority.data.blocked_inherited_limits}
                   account={authority.data.id}
                   scopeReady={allowed}
                   sessionError={authority.error}

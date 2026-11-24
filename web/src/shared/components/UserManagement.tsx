@@ -22,6 +22,7 @@ import {
   inferenceCeiling,
   parseInferenceLimit,
   type InferenceLimitDraft,
+  type ManagedLimitKey,
 } from '@shared/operations/userInferenceLimits';
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
@@ -103,6 +104,7 @@ interface UserDraft {
   economyReason: string;
   banReason: string;
   banDuration: string;
+  banDurationUnit: 'days' | 'seconds';
 }
 
 interface EconomyIntent {
@@ -133,6 +135,7 @@ const draftFor = (user: AdminUser): UserDraft => ({
   economyReason: '',
   banReason: '',
   banDuration: '',
+  banDurationUnit: 'days',
 });
 
 function projectedBalance(current: string, amount: string, direction: 'increase' | 'decrease') {
@@ -310,6 +313,7 @@ function UserAuthority({
   trainee = false,
   actorLevel = trainee ? 5 : 6,
   permissions,
+  blockedInheritedLimits,
 }: {
   user: AdminUser;
   refresh: () => Promise<unknown>;
@@ -318,6 +322,7 @@ function UserAuthority({
   trainee?: boolean;
   actorLevel?: 5 | 6;
   permissions?: StewardPermissions;
+  blockedInheritedLimits?: ManagedLimitKey[];
   account: string;
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
@@ -356,6 +361,7 @@ function UserAuthority({
   const may = (key: StewardPermission) =>
     role === 'admin' || actorLevel === 6 || policy.permissions[key];
   const limits = role === 'steward' && actorLevel === 5 ? policy.limits : undefined;
+  const cannotInherit = limits ? blockedInheritedLimits : undefined;
   const endpointMax = Number(limits?.['users.endpoint_limit_max'] ?? 10000);
   const profileEditable = editable && may('users.profile');
   const levelEditable = editable && may('users.level');
@@ -443,11 +449,14 @@ function UserAuthority({
   const invalidLimits =
     (profileEditable &&
       draft.endpointLimit !== (user.endpoint_limit ?? '') &&
-      endpoint === undefined) ||
+      (endpoint === undefined ||
+        (endpoint === null && cannotInherit?.includes('endpoint_limit')))) ||
     (limitsEditable &&
       INFERENCE_LIMITS.some(
         ({ key }) =>
-          draft.inferenceLimits[key] !== (user[key] ?? '') && inferenceLimits[key] === undefined,
+          draft.inferenceLimits[key] !== (user[key] ?? '') &&
+          (inferenceLimits[key] === undefined ||
+            (inferenceLimits[key] === null && cannotInherit?.includes(key))),
       ));
 
   const baseline =
@@ -504,9 +513,20 @@ function UserAuthority({
       setCoordinating(false);
     }
   };
-  const banSeconds = draft.banDuration.trim() ? Number(draft.banDuration) * 86_400 : undefined;
-  const banDurationLabel = draft.banDuration.trim()
-    ? t('management.users.banPresetLabel', { days: draft.banDuration.trim() })
+  const secondsUnit = maxBanSeconds < 86_400 || draft.banDurationUnit === 'seconds';
+  const duration = draft.banDuration.trim();
+  const banSeconds = duration ? Number(duration) * (secondsUnit ? 1 : 86_400) : undefined;
+  const validBan =
+    Boolean(draft.banReason.trim()) &&
+    (banSeconds === undefined
+      ? may('users.ban_permanent')
+      : /^[1-9][0-9]*$/.test(duration) &&
+        Number.isSafeInteger(banSeconds) &&
+        banSeconds <= maxBanSeconds);
+  const banDurationLabel = duration
+    ? secondsUnit
+      ? t('management.users.banSecondsLabel', { seconds: duration })
+      : t('management.users.banPresetLabel', { days: duration })
     : t('management.users.banPermanent');
   const mutationError =
     patch.error ?? profile.error ?? manualLevel.error ?? ban.error ?? unban.error;
@@ -558,13 +578,54 @@ function UserAuthority({
               />
             )}
           </Field>
-          <Field label={t('management.users.banDurationDays')} size="short">
+          {maxBanSeconds >= 86_400 && (
+            <Field label={t('management.users.banDurationUnit')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={draft.banDurationUnit}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      banDurationUnit: event.target.value === 'seconds' ? 'seconds' : 'days',
+                    })
+                  }
+                >
+                  <option value="days">{t('management.users.durationUnitDays')}</option>
+                  <option value="seconds">{t('management.users.durationUnitSeconds')}</option>
+                </select>
+              )}
+            </Field>
+          )}
+          <Field
+            label={
+              may('users.ban_permanent')
+                ? t(
+                    secondsUnit
+                      ? 'management.users.banDurationSeconds'
+                      : 'management.users.banDurationDays',
+                  )
+                : t(
+                    secondsUnit
+                      ? 'management.users.temporaryBanSeconds'
+                      : 'management.users.temporaryBanDays',
+                  )
+            }
+            size="short"
+            help={
+              limits
+                ? t('common.governance.ceiling', {
+                    max: secondsUnit ? maxBanSeconds : Math.floor(maxBanSeconds / 86_400),
+                  })
+                : undefined
+            }
+          >
             {(field) => (
               <input
                 {...field}
                 type="number"
                 min="1"
-                max={Math.floor(maxBanSeconds / 86400)}
+                max={secondsUnit ? maxBanSeconds : Math.floor(maxBanSeconds / 86_400)}
                 value={draft.banDuration}
                 onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
               />
@@ -581,12 +642,7 @@ function UserAuthority({
           <Button
             variant="danger-outline"
             type="button"
-            disabled={
-              !draft.banReason.trim() ||
-              (banSeconds === undefined
-                ? !may('users.ban_permanent')
-                : !Number.isSafeInteger(banSeconds) || banSeconds < 1 || banSeconds > maxBanSeconds)
-            }
+            disabled={!validBan}
             onClick={() => setConfirm('ban')}
           >
             {t('management.users.ban')}
@@ -771,6 +827,7 @@ function UserAuthority({
                 <InferenceLimitFields
                   user={baseline}
                   limits={limits}
+                  blockedInheritedLimits={cannotInherit}
                   value={draft.inferenceLimits}
                   onChange={(inferenceLimits) => setDraft({ ...draft, inferenceLimits })}
                 />
@@ -786,7 +843,10 @@ function UserAuthority({
                   size="short"
                   help={
                     profileEditable && limits
-                      ? t('common.governance.ceiling', { max: endpointMax })
+                      ? t('common.governance.ceiling', { max: endpointMax }) +
+                        (cannotInherit?.includes('endpoint_limit')
+                          ? ' ' + t('common.governance.inheritAboveCeiling')
+                          : '')
                       : undefined
                   }
                 >
@@ -1199,9 +1259,10 @@ function UserAuthority({
           )}
           danger
           busy={ban.isPending || unban.isPending}
+          confirmDisabled={confirm === 'ban' ? !canBan || !validBan : !canUnban}
           onCancel={() => setConfirm(null)}
           onConfirm={() => {
-            if (confirm === 'ban' && canBan)
+            if (confirm === 'ban' && canBan && validBan)
               ban.mutate(
                 {
                   revision: user.revision,
@@ -1281,6 +1342,7 @@ interface UserManagementProps {
   trainee?: boolean;
   actorLevel?: 5 | 6;
   permissions?: StewardPermissions;
+  blockedInheritedLimits?: ManagedLimitKey[];
   account: string;
   scopeReady: boolean;
   sessionError: unknown;
@@ -1303,6 +1365,7 @@ export function UserManagement({
   trainee = false,
   actorLevel = trainee ? 5 : 6,
   permissions,
+  blockedInheritedLimits,
   embedded = false,
 }: UserManagementProps) {
   const { t } = useTranslation();
@@ -1725,6 +1788,7 @@ export function UserManagement({
                 role={role}
                 users={eligibleUsers}
                 limits={batchPolicy?.limits}
+                blockedInheritedLimits={batchPolicy ? blockedInheritedLimits : undefined}
                 selected={limitSelected}
                 onSelected={setLimitSelected}
                 onBusy={setBatchBusy}
@@ -1992,6 +2056,7 @@ export function UserManagement({
                 account={account}
                 actorLevel={actorLevel}
                 permissions={permissions}
+                blockedInheritedLimits={blockedInheritedLimits}
                 renderDeletion={renderDeletion}
                 renderSecurity={renderSecurity}
                 onAuthorityLoss={onAuthorityLoss}

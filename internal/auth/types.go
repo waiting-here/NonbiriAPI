@@ -137,6 +137,7 @@ type UserEnvelope struct {
 }
 
 type User struct {
+	BlockedInheritedLimits         []string                 `json:"blocked_inherited_limits,omitempty"`
 	StewardPermissions             authz.StewardPermissions `json:"steward_permissions"`
 	ID                             string                   `json:"id"`
 	Username                       string                   `json:"username"`

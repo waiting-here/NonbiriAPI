@@ -3,6 +3,7 @@ import {
   INFERENCE_LIMITS,
   inferenceCeiling,
   type InferenceLimitDraft,
+  type ManagedLimitKey,
 } from '@shared/operations/userInferenceLimits';
 import { Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -15,9 +16,11 @@ export function InferenceLimitFields({
   value,
   onChange,
   limits,
+  blockedInheritedLimits,
 }: {
   user: AdminUser;
   limits?: StewardPermissions['limits'];
+  blockedInheritedLimits?: ManagedLimitKey[];
   value: InferenceLimitDraft;
   onChange: (value: InferenceLimitDraft) => void;
 }) {
@@ -39,6 +42,9 @@ export function InferenceLimitFields({
             ) +
             (limits
               ? ' · ' + t('common.governance.ceiling', { max: inferenceCeiling(key, max, limits) })
+              : '') +
+            (blockedInheritedLimits?.includes(key)
+              ? ' ' + t('common.governance.inheritAboveCeiling')
               : '')
           }
         >
