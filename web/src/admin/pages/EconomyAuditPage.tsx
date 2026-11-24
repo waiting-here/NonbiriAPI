@@ -737,7 +737,10 @@ export function EconomyAuditPage() {
       previous.set('view', value);
       return previous;
     });
-  const setFilter = (value: AuditFilter | ((current: AuditFilter) => AuditFilter)) => {
+  const setFilter = (
+    value: AuditFilter | ((current: AuditFilter) => AuditFilter),
+    targetView?: View,
+  ) => {
     const next = typeof value === 'function' ? value(filter) : value;
     const linkable = Boolean(next.kind && next.channel && publicDrill(next.kind, next.channel));
     const economyDrill =
@@ -746,6 +749,7 @@ export function EconomyAuditPage() {
         : undefined;
     setParams(
       (previous) => {
+        if (targetView) previous.set('view', targetView);
         for (const key of ['asset', 'bucket', 'from', 'to'] as const)
           previous.set(key, String(next[key]));
         previous.delete('kind');
@@ -998,10 +1002,7 @@ export function EconomyAuditPage() {
           ) : view === 'channels' ? (
             <ChannelDetails
               filter={filter}
-              select={(kind, channel) => {
-                setFilter((v) => ({ ...v, kind, channel }));
-                setView('operations');
-              }}
+              select={(kind, channel) => setFilter((v) => ({ ...v, kind, channel }), 'operations')}
             />
           ) : (
             <LedgerDetails key={JSON.stringify(filter)} filter={filter} />

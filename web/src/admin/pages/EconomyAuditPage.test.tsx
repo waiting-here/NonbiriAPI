@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { useLocation, useNavigate } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { EconomyAuditPage } from './EconomyAuditPage';
@@ -62,7 +63,87 @@ function response(body: unknown, status = 200) {
   });
 }
 
+function AuditHistoryControls() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output aria-label="Current audit address">{location.search}</output>
+      <button onClick={() => navigate(-1)}>Browser back</button>
+      <button onClick={() => navigate(1)}>Browser forward</button>
+    </>
+  );
+}
+
 describe('administrator economy audit', () => {
+  it.each([
+    ['welfare_claim', 'welfare', 'Daily welfare', true],
+    ['fixture_adjustment', 'fixture_channel', 'fixture_channel', false],
+  ] as const)(
+    'drills into %s in one navigation and restores only the allowed address context',
+    async (kind, channel, label, linkable) => {
+      const operations: URLSearchParams[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = new URL(
+            input instanceof Request ? input.url : String(input),
+            window.location.origin,
+          );
+          if (url.pathname === '/admin/api/session')
+            return response({ admin: { username: 'audit-admin' } });
+          if (url.pathname === '/admin/api/time-context')
+            return response({ mode: 'site', offset_minutes: 330 });
+          if (url.pathname.endsWith('/summary')) return response(summary);
+          if (url.pathname.endsWith('/channels'))
+            return response({
+              metadata,
+              data: [{ kind, channel, source_type: 'operation', known: linkable, metrics }],
+            });
+          if (url.pathname.endsWith('/operations')) {
+            operations.push(url.searchParams);
+            return response({ metadata, anchor_seq: '1', next_cursor: null, data: [] });
+          }
+          throw new Error('Unexpected audit request');
+        }),
+      );
+      const initial = '?view=channels&asset=general&bucket=day&from=100&to=200';
+      const view = await renderWithProviders(
+        <>
+          <AuditHistoryControls />
+          <EconomyAuditPage />
+        </>,
+        { station: 'admin', locale: 'en', role: 'admin', route: '/economy-audit' + initial },
+      );
+      await view.user.click(await screen.findByRole('button', { name: label }));
+      await waitFor(() => expect(operations.at(-1)?.get('kind')).toBe(kind));
+      expect(operations.at(-1)?.get('channel')).toBe(channel);
+      const address = screen.getByLabelText('Current audit address');
+      expect(address).toHaveTextContent('view=operations');
+      expect(new URLSearchParams(address.textContent ?? '').get('kind')).toBe(
+        linkable ? kind : null,
+      );
+      expect(new URLSearchParams(address.textContent ?? '').get('channel')).toBe(
+        linkable ? channel : null,
+      );
+      await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
+      await waitFor(() => expect(address.textContent).toBe(initial));
+      expect(
+        screen.queryByRole('button', { name: /Clear operation filter/ }),
+      ).not.toBeInTheDocument();
+      await view.user.click(screen.getByRole('button', { name: 'Browser forward' }));
+      await screen.findByRole('button', { name: /Clear operation filter/ });
+      await view.user.click(screen.getByRole('button', { name: 'Last 7 days' }));
+      await waitFor(() =>
+        expect(Number(operations.at(-1)?.get('to')) - Number(operations.at(-1)?.get('from'))).toBe(
+          7 * 86400,
+        ),
+      );
+      expect(operations.at(-1)?.get('kind')).toBe(kind);
+      expect(operations.at(-1)?.get('channel')).toBe(channel);
+    },
+  );
+
   it('recovers a failed summary without discarding the successful trend', async () => {
     let summaryReads = 0;
     let seriesReads = 0;

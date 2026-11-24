@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
+import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { ApiError } from '@shared/query/http';
@@ -65,6 +66,10 @@ const job = {
   skipped_active: '3',
   error_code: '',
 };
+function HistoryAddress() {
+  const location = useLocation();
+  return <output aria-label="History address">{location.search}</output>;
+}
 function history(view = 'groups') {
   return {
     view,
@@ -184,11 +189,17 @@ describe('management history workflows', () => {
     expect(mocks.start.mock.calls[0]?.[0].cutoff_max_id).toBe('9007199254740993');
     await screen.findByText('3 active operations retained');
   });
-  it('keeps draft filters off the network until the operator applies them', async () => {
-    const view = await renderWithProviders(<ManagementHistory account="synthetic" />, {
-      station: 'admin',
-      role: 'admin',
-    });
+  it('keeps free-text search scoped to the account and off the network until applied', async () => {
+    const view = await renderWithProviders(
+      <>
+        <ManagementHistory account="synthetic" />
+        <HistoryAddress />
+      </>,
+      {
+        station: 'admin',
+        role: 'admin',
+      },
+    );
     await screen.findByRole('button', { name: 'Open 123' });
     const initial = mocks.list.mock.calls.length;
     await view.user.type(
@@ -196,6 +207,11 @@ describe('management history workflows', () => {
       'Example operator',
     );
     expect(mocks.list).toHaveBeenCalledTimes(initial);
+    expect(screen.getByRole('button', { name: 'Clear all retained records' })).toBeDisabled();
+    expect(
+      screen.getByText('Apply or clear the edited filters before preparing cleanup.'),
+    ).toBeVisible();
+    expect(mocks.prepare).not.toHaveBeenCalled();
     await view.user.click(screen.getByRole('button', { name: /^Search$/ }));
     await waitFor(() =>
       expect(mocks.list).toHaveBeenLastCalledWith(
@@ -207,7 +223,59 @@ describe('management history workflows', () => {
         expect.any(AbortSignal),
       ),
     );
+    expect(screen.getByLabelText('History address').textContent).not.toContain('mh_search');
+    expect(screen.getByLabelText('History address').textContent).not.toContain('Example');
+    view.rerender(
+      <>
+        <ManagementHistory account="other" />
+        <HistoryAddress />
+      </>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('searchbox', { name: 'Find records' })).toHaveValue(''),
+    );
   });
+  it('counts, displays, and executes the server-prepared scope at its cutoff', async () => {
+    const prepared = {
+      filter: { source: 'ai_manual', action: 'approve' },
+      cutoff_max_id: '77',
+      all: false,
+    };
+    mocks.prepare.mockResolvedValue(prepared);
+    mocks.list.mockImplementation(async (filter, view) => ({
+      ...history(view),
+      total: filter.action === 'approve' ? '4' : '17',
+    }));
+    const view = await renderWithProviders(<ManagementHistory account="synthetic" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'synthetic' } });
+    await screen.findByRole('button', { name: 'Open 123' });
+    await view.user.click(screen.getByRole('button', { name: 'Clear all retained records' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(
+      within(dialog).getByText('This scope contains 4 operations through record 77.'),
+    ).toBeVisible();
+    expect(within(dialog).getByText(/approve/)).toBeVisible();
+    expect(mocks.list).toHaveBeenCalledWith(
+      prepared.filter,
+      'operations',
+      '1',
+      10,
+      '77',
+      expect.any(AbortSignal),
+    );
+    await view.user.click(within(dialog).getByRole('button', { name: 'Start cleanup' }));
+    await waitFor(() =>
+      expect(mocks.start).toHaveBeenCalledWith(
+        prepared,
+        expect.any(String),
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
   it('checks an uncertain resume without repeating the write after the connection returns', async () => {
     mocks.progress
       .mockResolvedValueOnce({ ...job, state: 'failed', error_code: 'storage_unavailable' })

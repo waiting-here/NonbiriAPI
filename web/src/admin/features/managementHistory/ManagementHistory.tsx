@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { retainQueryScope } from '@shared/query/retain';
 import { useEffect, useRef, useState } from 'react';
@@ -34,6 +34,7 @@ import {
   getHistory,
   getOperation,
   getOperationItems,
+  historyFilterFields as filterFields,
   historyRoot,
   prepareCleanup,
   resumeCleanup,
@@ -52,21 +53,6 @@ import { snapshotCopy } from '../../i18n/snapshotCopy';
 
 const sources = ['web', 'caller_key', 'mainstream_rule', 'ai_auto', 'ai_manual'];
 const outcomes = ['succeeded', 'partial', 'failed', 'rejected', 'no_change', 'accepted', 'unknown'];
-const filterFields = [
-  'time_from',
-  'time_to',
-  'source',
-  'actor_id',
-  'authorizer_id',
-  'domain',
-  'action',
-  'outcome',
-  'event_id',
-  'target_kind',
-  'target_id',
-  'group_key',
-  'search',
-] as const;
 const domains = [
   'users',
   'donations',
@@ -107,6 +93,7 @@ const domains = [
 function readFilter(params: URLSearchParams): Filter {
   const filter: Filter = {};
   for (const field of filterFields) {
+    if (field === 'search') continue;
     const value = params.get('mh_' + field);
     if (!value) continue;
     if (field === 'time_from' || field === 'time_to') {
@@ -154,13 +141,9 @@ function targetLink(kind: string, id: string | undefined) {
   return undefined;
 }
 function Executor({
-  source,
-  actor,
-  authorizer,
+  value: { source, actor, authorizer },
 }: {
-  source: string;
-  actor: Subject;
-  authorizer: Subject;
+  value: Pick<Operation, 'source' | 'actor' | 'authorizer'>;
 }) {
   const { t } = useTranslation();
   const role = (subject: Subject) =>
@@ -425,7 +408,29 @@ export function ManagementHistory({ account }: { account: string }) {
   const { t } = useTranslation();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
+  const location = useLocation();
+  const legacySearch = params.get('mh_search');
+  const savedSearch = location.state?.managementHistorySearch;
   const filter = readFilter(params);
+  if (account && legacySearch) filter.search = legacySearch;
+  else if (account && savedSearch?.account === account && typeof savedSearch.value === 'string')
+    filter.search = savedSearch.value;
+  useEffect(() => {
+    if (!account || legacySearch === null) return;
+    setParams(
+      (previous) => {
+        previous.delete('mh_search');
+        return previous;
+      },
+      {
+        replace: true,
+        state: {
+          ...location.state,
+          managementHistorySearch: legacySearch ? { account, value: legacySearch } : undefined,
+        },
+      },
+    );
+  }, [account, legacySearch, location.state, setParams]);
   const filterKey = JSON.stringify(filter);
   const view = params.get('mh_view') === 'operations' ? 'operations' : 'groups';
   const selected = params.get('mh_detail') ?? '';
@@ -475,17 +480,26 @@ export function ManagementHistory({ account }: { account: string }) {
       return next;
     });
   const apply = (value: Filter) =>
-    setParams((old) => {
-      const next = new URLSearchParams(old);
-      for (const key of filterFields) {
-        next.delete('mh_' + key);
-        if (value[key] !== undefined) next.set('mh_' + key, String(value[key]));
-      }
-      next.delete('mh_page');
-      next.delete('mh_detail');
-      next.delete('mh_group_page');
-      return next;
-    });
+    setParams(
+      (old) => {
+        const next = new URLSearchParams(old);
+        for (const key of filterFields) {
+          next.delete('mh_' + key);
+          if (key !== 'search' && value[key] !== undefined)
+            next.set('mh_' + key, String(value[key]));
+        }
+        next.delete('mh_page');
+        next.delete('mh_detail');
+        next.delete('mh_group_page');
+        return next;
+      },
+      {
+        state: {
+          ...location.state,
+          managementHistorySearch: value.search ? { account, value: value.search } : undefined,
+        },
+      },
+    );
   const changeView = (value: string) =>
     setParams((old) => {
       const next = new URLSearchParams(old);
@@ -523,7 +537,7 @@ export function ManagementHistory({ account }: { account: string }) {
       header: t('admin.managementHistory.executor'),
       mobileLabel: t('admin.managementHistory.executor'),
       cell: 'meta' as const,
-      render: (row: Group) => <Executor {...row} />,
+      render: (row: Group) => <Executor value={row} />,
     },
     {
       key: 'source',
@@ -679,7 +693,7 @@ export function ManagementHistory({ account }: { account: string }) {
                         header: t('admin.managementHistory.executor'),
                         mobileLabel: t('admin.managementHistory.executor'),
                         cell: 'meta',
-                        render: (row) => <Executor {...row} />,
+                        render: (row) => <Executor value={row} />,
                       },
                       {
                         key: 'outcome',
@@ -803,7 +817,7 @@ function OperationDetail({
               <ActionTitle {...detail.data} /> · <OutcomeBadge outcome={detail.data.outcome} />
             </p>
             <p>
-              <Executor {...detail.data} /> · <AgentTime value={detail.data.created_at} />
+              <Executor value={detail.data} /> · <AgentTime value={detail.data.created_at} />
             </p>
             <dl className="management-history__facts">
               <dt>{t('admin.managementHistory.fields.source')}</dt>
@@ -943,7 +957,14 @@ function CleanupPanel({
       const page =
         prepared.cutoff_max_id === '0'
           ? null
-          : await getHistory(input, 'operations', '1', 10, prepared.cutoff_max_id, context.signal);
+          : await getHistory(
+              prepared.filter,
+              'operations',
+              '1',
+              10,
+              prepared.cutoff_max_id,
+              context.signal,
+            );
       context.commit(() => setPreview({ prepared, total: page?.total ?? '0' }));
       return prepared;
     },

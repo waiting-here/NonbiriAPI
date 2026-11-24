@@ -270,7 +270,10 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
   const [configOverride, setConfigOverride] = useState<ActivitiesConfig | null>(null);
   const [configBase, setConfigBase] = useState<ActivitiesConfig | null>(null);
   const [confirmResume, setConfirmResume] = useState(false);
-  const [periodOverride, setPeriodOverride] = useState<PeriodDraft | null>(null);
+  const [periodOverride, setPeriodOverride] = useState<{
+    base: Period | null;
+    values: PeriodDraft;
+  } | null>(null);
   const [nextSchedule, setNextSchedule] = useState(() => nextThursdaySchedule(Date.now()));
   useEffect(() => {
     const refresh = () => setNextSchedule(nextThursdaySchedule(Date.now()));
@@ -311,7 +314,16 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       : config.data
         ? (configOverride ?? config.data)
         : null;
-  const periodDraft = periodOverride ?? draftForPeriod(period);
+  const periodDraft = periodOverride?.values ?? draftForPeriod(period);
+  const periodStale =
+    periodOverride !== null &&
+    (periodOverride.base?.id !== period?.id ||
+      periodOverride.base?.revision !== period?.revision ||
+      periodOverride.base?.state !== period?.state);
+  const validUserLimit =
+    /^\d+$/.test(periodDraft.per_user_limit) &&
+    Number(periodDraft.per_user_limit) >= 1 &&
+    Number(periodDraft.per_user_limit) <= 1000;
   const literature = periodDraft.literature.replaceAll('\r\n', '\n');
   const literatureError = isActivityLiterature(literature)
     ? null
@@ -428,13 +440,29 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     (period.state === 'open' || period.state === 'settling');
   const editPeriod = (patch: Partial<PeriodDraft>) => {
     savePeriod.reset();
-    setPeriodOverride((current) => ({ ...(current ?? periodDraft), ...patch }));
+    const base = periodOverride ? periodOverride.base : period;
+    const values = { ...periodDraft, ...patch };
+    setPeriodOverride(
+      JSON.stringify(values) === JSON.stringify(draftForPeriod(base)) ? null : { base, values },
+    );
+  };
+  const reviewLatestPeriod = () => {
+    if (!periodOverride) return;
+    const original = draftForPeriod(periodOverride.base);
+    const values = draftForPeriod(period);
+    for (const key of Object.keys(original) as (keyof PeriodDraft)[]) {
+      if (periodDraft[key] !== original[key]) values[key] = periodDraft[key];
+    }
+    setPeriodOverride({ base: period, values });
+    savePeriod.reset();
   };
   const submitPeriod = () => {
     const revision = thursdayMutationRevision(config.data, period);
     if (
       !periodAuthorityReady ||
       periodLocked ||
+      periodStale ||
+      !validUserLimit ||
       revision === null ||
       literatureError ||
       invalidPumps
@@ -535,7 +563,8 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
         dirty={
           (!configUnchanged && configOverride !== null) ||
           (periodOverride !== null &&
-            JSON.stringify(periodOverride) !== JSON.stringify(draftForPeriod(period))) ||
+            JSON.stringify(periodOverride.values) !==
+              JSON.stringify(draftForPeriod(periodOverride.base))) ||
           Boolean(adjustment.reason || adjustment.amount)
         }
         allowNavigation={({ currentLocation, nextLocation }) =>
@@ -816,7 +845,18 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                           />
                         )}
                       </Field>
-                      <Field size="short" label={t('admin.activities.period.perUserLimit')}>
+                      <Field
+                        size="short"
+                        label={t('admin.activities.period.perUserLimit')}
+                        error={
+                          validUserLimit
+                            ? undefined
+                            : text(
+                                '请输入 1 至 1000 的整数。',
+                                'Enter a whole number from 1 to 1000.',
+                              )
+                        }
+                      >
                         {(props) => (
                           <Affix
                             {...props}
@@ -894,6 +934,24 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                     </Note>
                   )}
                   {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
+                  {periodStale && (
+                    <Note tone="warn">
+                      <p>
+                        {text(
+                          '服务端期次已更新。核对最新期次后可保留你改过的字段。',
+                          'The period changed on the server. Review the latest period to keep the fields you edited.',
+                        )}
+                      </p>
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--secondary"
+                        disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
+                        onClick={reviewLatestPeriod}
+                      >
+                        {text('按最新期次核对', 'Review latest period')}
+                      </button>
+                    </Note>
+                  )}
                   {!validPositiveAmount(periodDraft.entry) && (
                     <p id="period-entry-hint" className="nb-small nb-muted">
                       {text(
@@ -910,6 +968,8 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                         !scopeReady ||
                         !periodAuthorityReady ||
                         periodLocked ||
+                        periodStale ||
+                        !validUserLimit ||
                         savePeriod.isPending ||
                         invalidPumps ||
                         Boolean(literatureError) ||

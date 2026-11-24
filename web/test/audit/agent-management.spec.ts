@@ -161,9 +161,44 @@ test('administrator configures a source, edits personal memory and cleans retain
       page.getByRole('button', { name: history.closeDetails, exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: history.backToGroups, exact: true }).click();
-    await page.getByRole('button', { name: history.cleanupFiltered, exact: true }).click();
+    const cleanup = page.getByRole('button', { name: history.cleanupFiltered, exact: true });
+    await page.getByRole('button', { name: common.common.moreFilters, exact: true }).click();
+    await page.getByLabel(history.fields.time_to, { exact: true }).fill('2099-12-31T23:59:00');
+    await expect(cleanup).toBeDisabled();
+    await expect(page.getByText(admin.admin.audit.cleanupDraft, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: common.common.search, exact: true }).click();
+    await expect(cleanup).toBeEnabled();
+    const [preparedResponse, countResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/cleanup/prepare') &&
+          response.request().method() === 'POST',
+      ),
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === '/admin/api/management-operations' &&
+          url.searchParams.get('view') === 'operations' &&
+          url.searchParams.has('snapshot_max_id') &&
+          url.searchParams.get('page_size') === '10'
+        );
+      }),
+      cleanup.click(),
+    ]);
+    const prepared = await preparedResponse.json();
+    const count = await countResponse.json();
+    expect(prepared.all).toBe(false);
+    expect(prepared.filter.domain).toBe('ai');
+    expect(prepared.filter.time_to).toBeGreaterThan(Date.now());
+    const countParams = new URL(countResponse.url()).searchParams;
+    expect(countParams.get('time_to')).toBe(String(prepared.filter.time_to));
+    expect(countParams.get('snapshot_max_id')).toBe(prepared.cutoff_max_id);
     const dialog = page.getByRole('alertdialog');
-    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(
+      history.cleanupScope
+        .replace('{{value}}', count.total)
+        .replace('{{cutoff}}', prepared.cutoff_max_id),
+    );
     await dialog.getByRole('button', { name: history.cleanupStart, exact: true }).click();
     await expect(dialog).not.toBeVisible();
     await expect(
