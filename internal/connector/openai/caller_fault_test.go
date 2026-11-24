@@ -15,68 +15,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
-func TestCallerParameterRequiresExactWireValue(t *testing.T) {
-	ctx := smartbackoff.WithCharityCall(t.Context(), true)
-	request := decodeAdapterRequest(t, `{"model":"m","messages":[],"temperature":1.0,"response_format":{"type": "json_object"}}`)
-	for _, tc := range []struct {
-		name, body string
-		policy     contract.AttemptPolicy
-		want       bool
-	}{
-		{"unchanged", `{"temperature":1.0}`, contract.AttemptPolicy{}, true},
-		{"normalized", `{"temperature":1}`, contract.AttemptPolicy{}, false},
-		{"overwritten", `{"temperature":0.5}`, contract.AttemptPolicy{}, false},
-		{"removed", `{}`, contract.AttemptPolicy{}, false},
-		{"adapted", `{"temperature":1.0}`, contract.AttemptPolicy{HasAdaptation: true}, false},
-		{"headers", `{"temperature":1.0}`, contract.AttemptPolicy{AdditionalHeaders: http.Header{"X-Mode": {"value"}}}, false},
-		{"managed", `{"temperature":1.0}`, contract.AttemptPolicy{ManagedHeaders: http.Header{"X-Session": {"value"}}}, false},
-		{"extensions", `{"temperature":1.0}`, contract.AttemptPolicy{NativeExtensions: map[string]json.RawMessage{"/temperature": json.RawMessage(`1.0`)}}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			match := unchangedCallerParameters(ctx, &http.Response{StatusCode: 400}, request.fields, []byte(tc.body), tc.policy)
-			if got := match != nil && match("temperature"); got != tc.want {
-				t.Fatalf("matched=%t want=%t", got, tc.want)
-			}
-		})
-	}
-	match := unchangedCallerParameters(ctx, &http.Response{StatusCode: 400}, request.fields, []byte(`{"response_format":{"type":"json_object"}}`), contract.AttemptPolicy{})
-	if match != nil && match("response_format") {
-		t.Fatal("codec whitespace normalization was treated as original bytes")
-	}
-}
-
-func TestCallerParameterNestedThinkingRequiresUnchangedPresentMember(t *testing.T) {
-	for _, tc := range []struct {
-		name, root, original, wire, param string
-		want                              bool
-	}{
-		{"type", "thinking", `{"type":"enabled","budget_tokens":4096}`, `{"type":"enabled","budget_tokens":4096}`, "thinking.type", true},
-		{"budget", "thinking", `{"budget_tokens":4096}`, `{"budget_tokens":4096}`, "thinking.budget_tokens", true},
-		{"effort", "reasoning", `{"effort":"low"}`, `{"effort":"low"}`, "reasoning.effort", true},
-		{"explicit null", "thinking", `{"type":null}`, `{"type":null}`, "thinking.type", true},
-		{"missing member", "thinking", `{}`, `{}`, "thinking.type", false},
-		{"scalar parent", "reasoning", `"low"`, `"low"`, "reasoning.effort", false},
-		{"null parent", "thinking", `null`, `null`, "thinking.type", false},
-		{"array parent", "thinking", `[{"type":"enabled"}]`, `[{"type":"enabled"}]`, "thinking.type", false},
-		{"duplicate member", "reasoning", `{"effort":"low","effort":"high"}`, `{"effort":"low","effort":"high"}`, "reasoning.effort", false},
-		{"literal dotted key", "reasoning.effort", `"low"`, `"low"`, "reasoning.effort", false},
-		{"changed sibling", "thinking", `{"type":"enabled","budget_tokens":4096}`, `{"type":"enabled","budget_tokens":8192}`, "thinking.type", false},
-		{"normalized parent", "reasoning", `{"effort": "low"}`, `{"effort":"low"}`, "reasoning.effort", false},
-		{"injected member", "thinking", `{}`, `{"type":"enabled"}`, "thinking.type", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			original := []byte(tc.original)
-			wire := []byte(fmt.Sprintf(`{%q:%s}`, tc.root, tc.wire))
-			match := unchangedCallerParameters(smartbackoff.WithCharityCall(t.Context(), true), &http.Response{StatusCode: 400}, []jsonField{{name: tc.root, value: original}}, wire, contract.AttemptPolicy{})
-			clear(wire)
-			clear(original)
-			if got := match != nil && match(tc.param); got != tc.want {
-				t.Fatalf("matched=%t want=%t", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestThinkingParameterHTTPFailurePreservesDiagnostics(t *testing.T) {
 	const payload = `{"error":{"message":"\"thinking\" is not supported on /v1/chat/completions and was not applied. Use \"reasoning_effort\" (or \"reasoning.effort\") to control thinking.","type":"invalid_request_error","param":"thinking","code":"unsupported_parameter"}}`
 	for _, stream := range []bool{false, true} {
@@ -102,11 +40,7 @@ func TestThinkingParameterHTTPFailurePreservesDiagnostics(t *testing.T) {
 				ctx = upstreamerror.WithCapture(ctx, func(_ context.Context, e upstreamerror.Event) { captured = string(e.Bytes()) })
 				writer := httptest.NewRecorder()
 				result := adapterForServer(t, server.URL, nil, nil).Attempt(ctx, writer, testTarget(server.URL, []byte("secret-material"), nil), request, "caller")
-				want := contract.StreakUpstreamFailure
-				if supplied {
-					want = contract.StreakNeutral
-				}
-				if result.StreakDisposition != want || result.ErrorDetail.CallerFault().Matches(400, "unsupported_parameter") != supplied || result.Success || result.Committed || result.UpstreamStatus != 400 || writer.Body.Len() != 0 || captured != payload {
+				if result.StreakDisposition != contract.StreakNeutral || !result.ErrorDetail.CallerFault().Matches(400, "unsupported_parameter") || result.Success || result.Committed || result.UpstreamStatus != 400 || writer.Body.Len() != 0 || captured != payload {
 					t.Fatalf("unexpected thinking failure: %+v", result)
 				}
 			})
@@ -161,11 +95,7 @@ func TestCallerParameterNativeResponsesAndConversion(t *testing.T) {
 			defer server.Close()
 			request := inferenceRequestForTest(t, contract.OperationResponses, `{"model":"m","input":"hi","temperature":0.25}`)
 			result := adapterForServer(t, server.URL, nil, nil).AttemptInference(smartbackoff.WithCharityCall(t.Context(), true), httptest.NewRecorder(), testTarget(server.URL, []byte("secret-material"), nil), request, kind, contract.AttemptPolicy{})
-			want := contract.StreakNeutral
-			if kind == contract.TypeOpenAIChatCompletions {
-				want = contract.StreakUpstreamFailure
-			}
-			if result.StreakDisposition != want || result.Success || result.UpstreamStatus != 422 {
+			if result.StreakDisposition != contract.StreakNeutral || result.Success || result.UpstreamStatus != 422 {
 				t.Fatalf("result=%+v", result)
 			}
 		})
@@ -212,7 +142,7 @@ func TestCallerParameterNativeCodecNormalization(t *testing.T) {
 		want      contract.StreakDisposition
 	}{
 		{"unchanged", `{"effort":"low"}`, contract.StreakNeutral},
-		{"normalized", `{"effort": "low"}`, contract.StreakUpstreamFailure},
+		{"normalized", `{"effort": "low"}`, contract.StreakNeutral},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +199,7 @@ func TestCallerParameterNativeEmbeddingAndImage(t *testing.T) {
 	}
 }
 
-func TestCallerParameterImageExtensionsRequireOriginalValue(t *testing.T) {
+func TestReportedImageParameterIndependentOfWireValue(t *testing.T) {
 	for _, tc := range []struct{ param, value, message string }{
 		{"n", `5`, "n 必须为 1–4 的整数"},
 		{"aspect_ratio", `"invalid"`, "Invalid aspect ratio."},
@@ -314,14 +244,10 @@ func TestCallerParameterImageExtensionsRequireOriginalValue(t *testing.T) {
 					ctx = upstreamerror.WithCapture(ctx, func(_ context.Context, event upstreamerror.Event) { captured = string(event.Bytes()) })
 					writer := httptest.NewRecorder()
 					result := adapterForServer(t, server.URL, nil, nil).AttemptImage(ctx, writer, testTarget(server.URL, []byte("secret-material"), nil), request, contract.AttemptPolicy{SafetyIdentifier: "caller", HasAdaptation: mode == "adapted"})
-					want := contract.StreakUpstreamFailure
-					if mode == "original" {
-						want = contract.StreakNeutral
-					}
-					if result.StreakDisposition != want || result.Success || result.Committed || result.Failure != FailureUpstream || result.FailureOrigin != contract.OriginUpstreamResponse || result.UpstreamStatus != 400 || writer.Body.Len() != 0 {
+					if result.StreakDisposition != contract.StreakNeutral || result.Success || result.Committed || result.Failure != FailureUpstream || result.FailureOrigin != contract.OriginUpstreamResponse || result.UpstreamStatus != 400 || writer.Body.Len() != 0 {
 						t.Fatalf("result=%+v", result)
 					}
-					if mode == "original" && (captured != payload || result.ErrorDetail.Message() != tc.message || !result.ErrorDetail.CallerFault().Matches(400, "invalid_value")) {
+					if captured != payload || result.ErrorDetail.Message() != tc.message || !result.ErrorDetail.CallerFault().Matches(400, "invalid_value") {
 						t.Fatal("classification changed the original error")
 					}
 				})

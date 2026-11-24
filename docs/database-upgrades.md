@@ -2,23 +2,25 @@
 
 ## Supported databases
 
-v1.4.2 uses schema 56. Stop a v1.4.0 or v1.4.1 instance and preserve its
+v1.4.3 uses schema 57. Stop the existing instance and preserve its
 complete recovery set before running the explicit offline conversion.
 
-| Starting state | How to use v1.4.2 |
+| Starting state | How to use v1.4.3 |
 | --- | --- |
-| Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 56. |
-| Exact current schema 56 | Start the service with its matching configuration and master key. |
-| Exact v1.4.0 / v1.4.1 schema 55 | Stop the service, preserve a matching recovery set and run the v1.4.2 offline upgrader. |
-| Exact v1.3.12 schema 54 | Use the same v1.4.2 converter. It also applies the model-usage conversion. |
-| Earlier supported database | Use the v1.3.12 upgrader first, then convert its schema 54 database using v1.4.2. |
+| Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 57. |
+| Exact current schema 57 | Start the service with its matching configuration and master key. |
+| Exact v1.4.2 schema 56 | Use the v1.4.3 offline upgrader to extend caller-error receipts and preserve fractional reservation discounts. |
+| Exact v1.4.0 / v1.4.1 schema 55 | The same converter also adds sign-in presentation settings. |
+| Exact v1.3.12 schema 54 | The same converter also applies the model-usage conversion. |
+| Earlier supported database | Use the v1.3.12 upgrader first, then convert its schema 54 database using v1.4.3. |
 
-The converter identifies both source layouts by their schema manifests.
+The converter identifies each source layout by its schema manifest.
 
 | Source reference | Schema | Manifest SHA-256 |
 | --- | --- | --- |
 | v1.3.12 (`03456c51`), shared by v1.3.10–v1.3.12 | 54 | `ca682daf10a780b8ab38d4095301324a1f007af3fb2ac159fbbbf0daef0107b5` |
 | v1.4.1 (`b1700f25`), shared by v1.4.0 and v1.4.1 | 55 | `a4c97524571580d8b513789c2a4d1b1ec80c1bdedec8d1eace14bcdcbc291ee4` |
+| v1.4.2 (`1bb01bdb`) | 56 | `5bfd5783118b05d6a6970bdf269bf6f3816aeeeed152ca0fcaa916b33a425358` |
 
 The v1.3.12 tool accepts its registered schema 16–26 and 33–53 sources.
 Consult that tool's source matrix before attempting the first leg.
@@ -52,7 +54,7 @@ go forward only. Preserve any new data accepted after reopening. Service startup
 and deployment hooks never invoke `--apply`.
 
 The following commands print their compiled identities without loading
-configuration or opening storage. The service declares exact startup at 56.
+configuration or opening storage. The service declares exact startup at 57.
 The upgrader lists the accepted source versions and their release identities.
 
 ```sh
@@ -61,6 +63,12 @@ The upgrader lists the accepted source versions and their release identities.
 ```
 
 ## Schema changes
+
+Schema 57 extends the caller-error receipt constraint to accept the numeric
+Google error code `400` for a verified HTTP 400 input rejection. Conversion
+copies the existing receipts and reinstates their dispatch and immutability guards.
+
+Schema 57 also adds a nullable integer basis-point snapshot to charity reservations. Older reservations retain the integer percentage recorded at admission.
 
 Schema 56 adds optional campaign covers and featured sign-in milestones.
 Existing campaigns keep the original illustration and have no featured days.

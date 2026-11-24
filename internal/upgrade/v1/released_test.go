@@ -54,6 +54,10 @@ func TestConvertReleasedAttendanceDatabase(t *testing.T) {
 	convertReleasedFixture(t, "NONBIRI_RELEASED_ATTENDANCE_FIXTURE", 0, 55, db.Schema55ManifestHash)
 }
 
+func TestConvertReleasedSchema56Database(t *testing.T) {
+	convertReleasedFixture(t, "NONBIRI_RELEASED_SCHEMA56_FIXTURE", 0, 56, db.Schema56ManifestHash)
+}
+
 func convertReleasedFixture(t *testing.T, fixtureEnv string, keyByte byte, version int, manifest string) *db.Store {
 	t.Helper()
 	path := os.Getenv(fixtureEnv)

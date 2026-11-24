@@ -6,8 +6,10 @@ go_command=${GO:-go}
 python_command=${PYTHON:-python3}
 released_commit=03456c51d7537e806fc1b4576fc7e9660dc3f696
 attendance_commit=b1700f25d7a73535af76cdd15c356d92eff0d8fd
+schema56_commit=1bb01bdb833396fdd25dc2229f3be6265c34bae5
 bash "$root/scripts/ensure-upgrade-source.sh" "$released_commit"
 bash "$root/scripts/ensure-upgrade-source.sh" "$attendance_commit"
+bash "$root/scripts/ensure-upgrade-source.sh" "$schema56_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 umask 077
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
@@ -20,7 +22,7 @@ cleanup() {
     esac
 }
 trap cleanup EXIT
-mkdir "$temporary/released" "$temporary/attendance" "$temporary/data"
+mkdir "$temporary/released" "$temporary/data"
 git archive "$released_commit" -- go.mod go.sum internal | tar -x -C "$temporary/released"
 "$python_command" - "$root" "$temporary" <<'PY'
 import json, pathlib, sys
@@ -49,17 +51,26 @@ export NONBIRI_UPGRADE_CLI="$temporary/upgrade.exe"
 "$go_command" test -count=1 -v -timeout=10m -run '^TestConvertReleasedDatabase$' ./internal/upgrade/v1
 NONBIRI_STABLE_UPGRADED_FIXTURE="$NONBIRI_RELEASED_FIXTURE" "$temporary/released-wallet.test" -test.run '^TestReleasedRejectsStableSchema$' -test.v -test.timeout 2m
 "$go_command" test -count=1 -v -timeout=2m -run '^TestEconomyAuditCatchUpFromReleasedBinary$' ./internal/economyaudit
-git archive "$attendance_commit" -- go.mod go.sum internal | tar -x -C "$temporary/attendance"
-cp "$root/internal/attendance/released_test.go" "$temporary/attendance/internal/attendance/"
-export NONBIRI_RELEASED_ATTENDANCE_FIXTURE="$temporary/data/attendance.db"
-(
-    unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
-    cd "$temporary/attendance"
-    "$go_command" test -c -o "$temporary/released-attendance.test" ./internal/attendance
-    "$temporary/released-attendance.test" -test.run '^TestWriteReleasedAttendanceFixture$' -test.v -test.timeout 2m
+check_attendance_source() (
+    source_dir="$temporary/attendance-$2"
+    mkdir "$source_dir"
+    git archive "$1" -- go.mod go.sum internal | tar -x -C "$source_dir"
+    cp "$root/internal/attendance/released_test.go" "$source_dir/internal/attendance/"
+    export NONBIRI_RELEASED_ATTENDANCE_FIXTURE="$temporary/data/attendance-$2.db"
+    if [[ "$2" == 56 ]]; then
+        export NONBIRI_RELEASED_SCHEMA56_FIXTURE="$NONBIRI_RELEASED_ATTENDANCE_FIXTURE"
+    fi
+    (
+        unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
+        cd "$source_dir"
+        "$go_command" test -c -o "$source_dir/attendance.test" ./internal/attendance
+        "$source_dir/attendance.test" -test.run '^TestWriteReleasedAttendanceFixture$' -test.v -test.timeout 2m
+    )
+    "$go_command" test -count=1 -v -timeout=5m -run "^$3$" ./internal/upgrade/v1
+    "$go_command" test -count=1 -v -timeout=2m -run '^TestReplayReleasedAttendance$' ./internal/attendance
+    "$source_dir/attendance.test" -test.run '^TestReleasedAttendanceRejectsUpgradedSchema$' -test.v -test.timeout 2m
 )
-"$go_command" test -count=1 -v -timeout=5m -run '^TestConvertReleasedAttendanceDatabase$' ./internal/upgrade/v1
-"$go_command" test -count=1 -v -timeout=2m -run '^TestReplayReleasedAttendance$' ./internal/attendance
-"$temporary/released-attendance.test" -test.run '^TestReleasedAttendanceRejectsUpgradedSchema$' -test.v -test.timeout 2m
-printf 'Released sources: %s %s\n' "$released_commit" "$attendance_commit"
+check_attendance_source "$attendance_commit" 55 TestConvertReleasedAttendanceDatabase
+check_attendance_source "$schema56_commit" 56 TestConvertReleasedSchema56Database
+printf 'Released sources: %s %s %s\n' "$released_commit" "$attendance_commit" "$schema56_commit"
 "$go_command" version

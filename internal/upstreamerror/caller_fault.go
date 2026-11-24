@@ -2,14 +2,12 @@ package upstreamerror
 
 import "encoding/json"
 
-// CallerFault is evidence from a complete input-length error or a request
-// error with the connector's caller-input proof. Its zero value
-// never exempts a failed attempt.
+// CallerFault identifies a caller-input error reported by the upstream.
+// The zero value does not exempt a failed attempt.
 // It retains no parameter name, value, request body or upstream message.
 type CallerFault struct {
-	status      int
-	code        string
-	inputLength bool
+	status int
+	code   string
 }
 
 func (f CallerFault) Matches(status int, code string) bool {
@@ -23,16 +21,19 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 	if c.gatewayCallerFault(fields) {
 		return CallerFault{status: c.responseStatus, code: "AI_APICallError"}
 	}
+	if c.googleCallerFault(fields) {
+		return CallerFault{status: c.responseStatus, code: "400"}
+	}
 	var kind, code, param, message string
 	if json.Unmarshal(fields["type"], &kind) != nil ||
 		json.Unmarshal(fields["code"], &code) != nil ||
 		json.Unmarshal(fields["message"], &message) != nil || message == "" {
 		return CallerFault{}
 	}
-	if c.InputLengthErrors && inputLengthError(kind, code, fields["param"], message) {
-		return CallerFault{status: c.responseStatus, code: code, inputLength: true}
+	if inputLengthError(kind, code, fields["param"], message) {
+		return CallerFault{status: c.responseStatus, code: code}
 	}
-	if c.UnchangedCallerParameter == nil || json.Unmarshal(fields["param"], &param) != nil ||
+	if json.Unmarshal(fields["param"], &param) != nil ||
 		!parameterErrorKind(c.responseStatus, kind, code) {
 		return CallerFault{}
 	}
@@ -48,9 +49,7 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 		"size", "quality", "style", "output_format", "output_compression", "partial_images",
 		"aspect_ratio", "resolution", "steps", "cfg_scale", "negative_prompt", "async",
 		"speed", "language":
-		if c.UnchangedCallerParameter(param) {
-			return CallerFault{status: c.responseStatus, code: code}
-		}
+		return CallerFault{status: c.responseStatus, code: code}
 	}
 	return CallerFault{}
 }

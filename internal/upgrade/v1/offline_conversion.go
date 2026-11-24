@@ -181,8 +181,22 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 			return err
 		}
 	}
-	if err := offlineStep(ctx, "migration", 56, "attendance_periods", "attendance presentation", func() error {
-		_, err := tx.ExecContext(ctx, db.AttendancePresentationSQL)
+	if source < 56 {
+		if err := offlineStep(ctx, "migration", 56, "attendance_periods", "attendance presentation", func() error {
+			_, err := tx.ExecContext(ctx, db.AttendancePresentationSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+	if err := offlineStep(ctx, "migration", 57, "dispatch_caller_parameter_errors", "Google caller error receipts", func() error {
+		_, err := tx.ExecContext(ctx, db.GoogleCallerParameterSQL)
+		return err
+	}); err != nil {
+		return err
+	}
+	if err := offlineStep(ctx, "migration", 57, "charity_reservations", "fractional discount snapshots", func() error {
+		_, err := tx.ExecContext(ctx, db.CharityDiscountPrecisionSQL)
 		return err
 	}); err != nil {
 		return err

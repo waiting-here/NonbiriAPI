@@ -57,7 +57,7 @@ func TestInputLengthFaultRequiresSpecificEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c := Context{CharityCall: true, InputLengthErrors: true, ContainsSecret: func([]byte) bool { return false }}
+			c := Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 			for _, status := range []int{400, 422} {
 				detail := c.ReadResponse(t.Context(), &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader(string(body)))})
 				if got := detail.CallerFault().Matches(status, tc.code); got != tc.want {
@@ -71,34 +71,33 @@ func TestInputLengthFaultRequiresSpecificEvidence(t *testing.T) {
 func TestInputLengthFaultRetainsResponseBoundary(t *testing.T) {
 	const valid = `{"error":{"type":"invalid_request_error","code":"invalid_value","param":"messages","message":"system/developer 消息字符数超限：6001，最多 5000","details":{"group":"system","actual":6001,"limit":5000,"unit":"unicode_code_point"}}}`
 	for _, tc := range []struct {
-		name, body, media  string
-		status             int
-		personal, disabled bool
+		name, body, media string
+		status            int
+		personal          bool
 	}{
-		{"ordinary caller", valid, "application/json", 400, true, false},
-		{"unsupported path", valid, "application/json", 400, false, true},
-		{"accepted", valid, "application/json", 200, false, false},
-		{"auth", valid, "application/json", 401, false, false},
-		{"rate limit", valid, "application/json", 429, false, false},
-		{"server", valid, "application/json", 500, false, false},
-		{"missing media", valid, "", 400, false, false},
-		{"wrong media", valid, "text/plain", 400, false, false},
-		{"wrong type", strings.Replace(valid, "invalid_request_error", "authentication_error", 1), "application/json", 400, false, false},
-		{"missing message", strings.Replace(valid, `"system/developer 消息字符数超限：6001，最多 5000"`, `null`, 1), "application/json", 400, false, false},
-		{"duplicate", strings.Replace(valid, `"param":`, `"param":"model","param":`, 1), "application/json", 400, false, false},
-		{"trailing", valid + `{}`, "application/json", 400, false, false},
-		{"truncated", valid[:len(valid)-1], "application/json", 400, false, false},
-		{"oversize", strings.Replace(valid, "system/developer", strings.Repeat("x", MaxBodyBytes), 1), "application/json", 400, false, false},
+		{"ordinary caller", valid, "application/json", 400, true},
+		{"accepted", valid, "application/json", 200, false},
+		{"auth", valid, "application/json", 401, false},
+		{"rate limit", valid, "application/json", 429, false},
+		{"server", valid, "application/json", 500, false},
+		{"missing media", valid, "", 400, false},
+		{"wrong media", valid, "text/plain", 400, false},
+		{"wrong type", strings.Replace(valid, "invalid_request_error", "authentication_error", 1), "application/json", 400, false},
+		{"missing message", strings.Replace(valid, `"system/developer 消息字符数超限：6001，最多 5000"`, `null`, 1), "application/json", 400, false},
+		{"duplicate", strings.Replace(valid, `"param":`, `"param":"model","param":`, 1), "application/json", 400, false},
+		{"trailing", valid + `{}`, "application/json", 400, false},
+		{"truncated", valid[:len(valid)-1], "application/json", 400, false},
+		{"oversize", strings.Replace(valid, "system/developer", strings.Repeat("x", MaxBodyBytes), 1), "application/json", 400, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			c := Context{CharityCall: !tc.personal, InputLengthErrors: !tc.disabled, ContainsSecret: func([]byte) bool { return false }}
+			c := Context{CharityCall: !tc.personal, ContainsSecret: func([]byte) bool { return false }}
 			detail := c.ReadResponse(t.Context(), &http.Response{StatusCode: tc.status, Header: http.Header{"Content-Type": {tc.media}}, Body: io.NopCloser(strings.NewReader(tc.body))})
 			if detail.CallerFault().Matches(tc.status, detail.Code()) {
 				t.Fatal("ineligible response supplied input-length evidence")
 			}
 		})
 	}
-	c := Context{CharityCall: true, InputLengthErrors: true, ContainsSecret: func([]byte) bool { return false }}
+	c := Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 	if c.Parse([]byte(valid)).CallerFault().Matches(400, "invalid_value") {
 		t.Fatal("non-HTTP input error supplied evidence")
 	}
@@ -113,14 +112,15 @@ func TestInputLengthFaultKeepsOnlyKnownCodeWhenDetailsAreSuppressed(t *testing.T
 		want                 bool
 	}{
 		{"input length", "messages", "system/developer 消息字符数超限：6001，最多 5000", true},
-		{"ordinary parameter", "temperature", "Invalid value.", false},
+		{"ordinary parameter", "temperature", "Invalid value.", true},
+		{"unrecognized resource", "model", "Invalid value.", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, err := json.Marshal(map[string]any{"error": map[string]string{"type": "invalid_request_error", "code": "invalid_value", "param": tc.param, "message": tc.message}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			c := Context{CharityCall: true, InputLengthErrors: true, ContainsSecret: func(value []byte) bool { return len(value) != 0 }, UnchangedCallerParameter: func(string) bool { return true }}
+			c := Context{CharityCall: true, ContainsSecret: func(value []byte) bool { return len(value) != 0 }}
 			detail := c.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(body)))})
 			if detail.CallerFault().Matches(400, "invalid_value") != tc.want || (detail.Code() == "invalid_value") != tc.want || strings.Contains(detail.Message(), tc.message) {
 				t.Fatalf("detail=%+v", detail)

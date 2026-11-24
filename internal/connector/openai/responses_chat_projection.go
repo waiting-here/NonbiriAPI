@@ -209,7 +209,7 @@ func (p *ResponsesChatProjection) write(body []byte, terminalError bool) error {
 func (p *ResponsesChatProjection) reject() (int, error) {
 	p.rejected = true
 	if p.committed && p.request.Stream {
-		frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeInternal, "response conversion failed"))
+		frame := httperr.SSEErrorFrame(httperr.Localize(httperr.New(httperr.CodeInternal, "response conversion failed"), httperr.Language(p.writer)))
 		defer clear(frame)
 		if err := p.write(frame, true); err != nil {
 			return 0, err

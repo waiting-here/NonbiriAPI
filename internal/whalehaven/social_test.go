@@ -498,6 +498,7 @@ func TestWhaleSocialWageAndPurchaseHaveSeparateMovements(t *testing.T) {
 	}
 	game.run(t, 1000, func(w *world) {
 		g := socialActor(t, w, 2)
+		g.state.Home.Buffs.WardrobeDiscountCoupons = 1
 		accept := true
 		commandSocial(t, w, g, actionRequest{Type: "send_visit", Target: "HOST", AllowHire: &accept})
 		commandSocial(t, w, socialActor(t, w, 1), actionRequest{Type: "catch_guest", NeighborID: "GUEST", Action: "hire"})
@@ -515,6 +516,10 @@ func TestWhaleSocialWageAndPurchaseHaveSeparateMovements(t *testing.T) {
 			t.Fatal("purchase failed to spend the wage", g.state.Wallet)
 		}
 	})
+	var coupons int64
+	if err := game.db.QueryRow("SELECT json_extract(snapshot,'$.home.buffs.wardrobeDiscountCoupons') FROM whale_haven_profiles WHERE user_id=2").Scan(&coupons); err != nil || coupons != 1 {
+		t.Fatalf("one-coin purchase should retain the coupon, got %d: %v", coupons, err)
+	}
 	rows, err := game.db.Query("SELECT created_at,reason,operation_id,pearls_delta,pearls_after FROM whale_haven_movements WHERE user_id=2 ORDER BY id")
 	if err != nil {
 		t.Fatal(err)

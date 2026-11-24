@@ -26,8 +26,8 @@ and earn social rewards. Whale coins and conch
 shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 
-This version uses database schema 56 and account export format 38. Use the
-standalone offline upgrader for v1.4.0 or v1.4.1 databases and the schema 54
+This source tree uses database schema 57 and account export format 38. Use the
+standalone offline upgrader for v1.4.0 through v1.4.2 databases and the schema 54
 bridge. Earlier supported sources first use the v1.3.12 upgrader.
 [Database upgrades](docs/database-upgrades.md) · [Changelog](CHANGELOG.md)
 
@@ -169,7 +169,7 @@ Authorized request-adaptation configuration reads show saved fixed-header and
 body values without response-protection markers. Marked items stay hidden as a
 whole. Mutation receipts and account exports continue to omit those values.
 
-Administrator and level-5/6 log pages show [global concurrency and RPM](docs/api-contract.md#global-pressure), with approximate 24-hour peaks and persistent observed maxima. Narrowly verified original caller-parameter errors leave donated-key failure streaks unchanged; ambiguous errors keep their existing treatment.
+Administrator and level-5/6 log pages show [global concurrency and RPM](docs/api-contract.md#global-pressure), with approximate 24-hour peaks and persistent observed maxima. When the upstream reports a recognized caller-input error, the donated key keeps its existing failure count.
 Short charity-request rejections explain the minimum-length requirement in
 English or Chinese, with the existing status, code, counts and penalty rules.
 Safe validation diagnostics also identify the rejected field, recorded reason
@@ -325,10 +325,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 56.
+Fresh databases start in maintenance with public features closed and use schema 57.
 Stop the old service, preserve its complete recovery set, and use the matching
 standalone [upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert an exact
-schema 54 or 55 database to schema 56. Earlier registered sources first use the v1.3.12
+schema 54, 55 or 56 database to schema 57. Earlier registered sources first use the v1.3.12
 upgrader. The service and deployment hooks leave conversion to the operator.
 Account export uses format 38.
 Upgrades are one-way: a server expecting an older or different schema cannot

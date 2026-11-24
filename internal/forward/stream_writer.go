@@ -87,6 +87,8 @@ func (w *streamWriter) armHeartbeat() {
 	w.mu.Unlock()
 }
 
+func (w *streamWriter) ErrorLanguage() string { return httperr.Language(w.writer) }
+
 func (w *streamWriter) Header() http.Header { return w.header }
 
 func (w *streamWriter) startLocked(status int) {

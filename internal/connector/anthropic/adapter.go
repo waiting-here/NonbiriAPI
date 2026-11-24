@@ -320,6 +320,9 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
 		result := connectorcontract.UpstreamFailed(upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode), connectorcontract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, a.maxJSONResponseBytes)
+		if result.ErrorDetail.CallerFault().Matches(response.StatusCode, result.ErrorDetail.Code()) {
+			result.StreakDisposition = connectorcontract.StreakNeutral
+		}
 		return result
 	}
 	if request.Stream {

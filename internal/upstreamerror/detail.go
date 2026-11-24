@@ -45,23 +45,15 @@ func (d Detail) ProviderReason() string               { return d.providerReason 
 // the connector's fingerprints, never by retained plaintext credentials.
 // ContainsSecret must start with fresh rolling state on every call.
 type Context struct {
-	CharityCall    bool
-	GoogleAPI      bool
-	Rules          []smartbackoff.Rule
-	BaseURL        string
-	PrivateModel   string
-	ContainsSecret func([]byte) bool
-	// UnchangedCallerParameter proves that a supported native parameter came
-	// from the caller and has the same raw JSON value in the final wire body.
-	UnchangedCallerParameter func(string) bool
-	// GatewayCallerInput proves the relevant caller values survived native
-	// Gateway translation without configured request rewriting.
-	GatewayCallerInput GatewayCallerInput
-	// InputLengthErrors enables structured input-length classification for JSON
-	// requests independently of caller-field rewriting.
-	InputLengthErrors bool
-	responseStatus    int
-	googleHTTPStatus  int
+	CharityCall bool
+	GoogleAPI   bool
+
+	Rules            []smartbackoff.Rule
+	BaseURL          string
+	PrivateModel     string
+	ContainsSecret   func([]byte) bool
+	responseStatus   int
+	googleHTTPStatus int
 }
 
 func (Context) String() string         { return "[redacted error context]" }
@@ -164,9 +156,9 @@ func (c Context) Parse(body []byte) Detail {
 	if cleanCode != code || !codePattern.MatchString(cleanCode) {
 		cleanCode = ""
 	}
-	if caller.inputLength {
-		// This discriminator comes from the fixed input-length code allowlist.
-		// Preserve it when configured-value guards suppress arbitrary detail.
+	if caller.code != "" {
+		// Recognized discriminators come from the fixed receipt code set.
+		// Request secrets can suppress free-form text independently.
 		cleanCode = caller.code
 	}
 	if !caller.Matches(c.responseStatus, cleanCode) {

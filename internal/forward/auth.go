@@ -144,6 +144,9 @@ func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(s
 			return
 		}
 
+		if identity.Language != "" {
+			writer = httperr.WithLanguage(writer, identity.Language)
+		}
 		observability.MarkAccessIdentity(request.Context(), identity.UserID, identity.Generation)
 		recordPath := request.URL.Path
 		if request.Method == http.MethodGet && strings.HasPrefix(recordPath, "/v1/models/") {

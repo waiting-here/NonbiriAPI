@@ -3,6 +3,7 @@ package charity
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 	"testing"
@@ -309,13 +310,18 @@ func TestModelConsumptionRecoveryAfterOfflineUpgrade(t *testing.T) {
 
 func reopenAfterOfflineUpgrade(t *testing.T, e *charityTestEnv) *claim.Service {
 	t.Helper()
+	return reopenAfterOfflineUpgradeFrom(t, e, dbtest.RestoreSchema54Fixture)
+}
+
+func reopenAfterOfflineUpgradeFrom(t *testing.T, e *charityTestEnv, restore func(*testing.T, *sql.DB)) *claim.Service {
+	t.Helper()
 	var path string
 	if err := e.store.DB().QueryRow("SELECT file FROM pragma_database_list WHERE name='main'").Scan(&path); err != nil {
 		t.Fatal(err)
 	}
 	// Recreate the exact prior layout around a real dispatched attempt, including
 	// its frozen receipt, response-start marker, ledger hold and token counters.
-	dbtest.RestoreSchema54Fixture(t, e.store.DB())
+	restore(t, e.store.DB())
 	if err := e.store.Close(); err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 )
 
-func TestGatewayCallerFaultResponsesAndOperationBoundary(t *testing.T) {
+func TestGatewayReportedCallerFaultAcrossOperations(t *testing.T) {
 	const message = "Unable to submit request because it has a maxOutputTokens value of 100000 but the supported range is from 1 (inclusive) to 65537 (exclusive). Update the value and try again."
 	payload := fmt.Sprintf(`{"error":{"type":"AI_APICallError","message":%q,"param":{"type":"AI_APICallError","message":%q,"statusCode":400,"isRetryable":false}}}`, message, message)
 	for _, kind := range []contract.Type{contract.TypeAISDKGatewayV3, contract.TypeAISDKGatewayV4} {
@@ -44,11 +44,7 @@ func TestGatewayCallerFaultResponsesAndOperationBoundary(t *testing.T) {
 					t.Fatal(err)
 				}
 				result := driver.Attempt(smartbackoff.WithCharityCall(t.Context(), true), input)
-				want := contract.StreakUpstreamFailure
-				if tc.op == contract.OperationResponses {
-					want = contract.StreakNeutral
-				}
-				if b.calls != 1 || result.Success || result.Committed || result.UpstreamStatus != 400 || result.FailureOrigin != contract.OriginUpstreamResponse || result.StreakDisposition != want || result.ErrorDetail.CallerFault().Matches(400, "AI_APICallError") != (want == contract.StreakNeutral) {
+				if b.calls != 1 || result.Success || result.Committed || result.UpstreamStatus != 400 || result.FailureOrigin != contract.OriginUpstreamResponse || result.StreakDisposition != contract.StreakNeutral || !result.ErrorDetail.CallerFault().Matches(400, "AI_APICallError") {
 					t.Fatalf("calls=%d result=%+v", b.calls, result)
 				}
 			})
