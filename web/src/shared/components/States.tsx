@@ -210,7 +210,7 @@ export function ErrorState({
       </span>
       <div>
         <h2>{unauthorized ? t('common.authRequiredTitle') : t('common.error')}</h2>
-        <p>{errorMessage(error, t, i18n.resolvedLanguage ?? i18n.language ?? 'en')}</p>
+        <p>{errorMessage(error, t, i18n?.resolvedLanguage ?? i18n?.language ?? 'en')}</p>
         {unauthorized && (
           <a
             className="nb-btn nb-btn--secondary"

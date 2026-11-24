@@ -51,7 +51,8 @@ holiday calendar; special dates can be handled with the fixed-window discount.
   its starting weekday. For example, Monday `22:00`–`02:00` includes early Tuesday.
 - Starts are inclusive and ends exclusive. Equal start/end values and overlapping
   periods are rejected, including overlaps across Sunday and Monday. Adjacent
-  periods are allowed. All percentages are integers from 0 through 100.
+  periods are allowed. Weekly percentages range from 0 through 100, with up to
+  two decimal places. For example, 0.05 represents five basis points payable.
 - `default_percent` applies outside the configured periods. An empty list applies
   that percentage throughout the week.
 
@@ -106,7 +107,9 @@ Older model receipts gain the disabled recurring default and an effective-discou
 projection at their original `updated_at`; stored receipt bytes and expiry stay
 unchanged. Fetch the model again to obtain its current price.
 
-Acceptance freezes the effective percentage. Crossing a schedule boundary,
+Acceptance records the effective payable percentage in integer basis points.
+Reservations created before schema 57 settle using the whole percentage recorded
+when they were accepted. Crossing a schedule boundary,
 editing settings, retrying or recovering a request does not change its captured
 price. The discount applies once to the selected base or long-context usage
 price. Per-request credit reservations use the effective price. Token reservation

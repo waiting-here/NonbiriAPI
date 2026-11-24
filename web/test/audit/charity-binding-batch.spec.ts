@@ -797,7 +797,7 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
         .getByText(batch.boundHere, { exact: true }),
     ).toBeVisible();
     await page.goto(state.user_url + '/steward?tab=charity');
-    await expect(page.getByRole('link', { name: presets.title })).toBeVisible();
+    await expect(page.getByRole('link', { name: presets.title })).toHaveCount(0);
     await page.goto(state.user_url + '/charity/channel-presets');
     await expect(
       page.getByText(common.management.permissions.denied, { exact: true }),

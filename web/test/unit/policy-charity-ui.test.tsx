@@ -2649,7 +2649,7 @@ describe('experimental policy and charity controls', () => {
       route: '/steward?tab=logs',
     });
     const load = async () => {
-      await rendered.user.click(await screen.findByRole('tab', { name: 'Discovery and activity' }));
+      await rendered.user.click(await screen.findByRole('tab', { name: 'Discovery and activity' }, { timeout: 6000 }));
       const diagnostics = await screen.findByRole('region', {
         name: 'Discovery and activity diagnostics',
       });

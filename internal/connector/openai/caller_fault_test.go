@@ -247,8 +247,15 @@ func TestReportedImageParameterIndependentOfWireValue(t *testing.T) {
 					if result.StreakDisposition != contract.StreakNeutral || result.Success || result.Committed || result.Failure != FailureUpstream || result.FailureOrigin != contract.OriginUpstreamResponse || result.UpstreamStatus != 400 || writer.Body.Len() != 0 {
 						t.Fatalf("result=%+v", result)
 					}
-					if captured != payload || result.ErrorDetail.Message() != tc.message || !result.ErrorDetail.CallerFault().Matches(400, "invalid_value") {
-						t.Fatal("classification changed the original error")
+					if !result.ErrorDetail.CallerFault().Matches(400, "invalid_value") {
+						t.Fatal("lost the reported caller error")
+					}
+					wantMessage := tc.message
+					if mode == "adapted" {
+						wantMessage = ""
+					}
+					if captured != payload || result.ErrorDetail.Message() != wantMessage {
+						t.Fatal("classification changed the existing disclosure boundary")
 					}
 				})
 			}

@@ -211,12 +211,14 @@ test('administrator assigns Codex individually and retains readable changes afte
         authorizationRequests.push(request.method());
     });
     await page.goto(state.admin_url + '/ai?ai_tab=settings');
+    await page.getByRole('tab', { name: copy.connectedAccounts, exact: true }).click();
     const codex = page.getByRole('region', { name: copy.codex.title, exact: true });
     await expect(codex.getByText(copy.codex.disconnected, { exact: true })).toBeVisible();
     await expect(
       codex.getByRole('button', { name: copy.codex.connect, exact: true }),
     ).toBeEnabled();
     await inspectLayouts(page, 'codex-disconnected', codex);
+    await page.getByRole('tab', { name: copy.driverSourcesAndBindings, exact: true }).click();
     await page.getByRole('button', { name: copy.drivers.addSource, exact: true }).click();
     const form = page.getByRole('form', { name: copy.drivers.editSource, exact: true });
     await form.getByLabel(copy.drivers.provider, { exact: true }).selectOption('codex');
@@ -456,6 +458,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
       (response) => new URL(response.url()).pathname === usagePath,
     );
     await page.goto(state.admin_url + '/ai?ai_tab=settings');
+    await page.getByRole('tab', { name: copy.connectedAccounts, exact: true }).click();
     const initialResponse = await initialUsageResponse;
     expect(initialResponse.status()).toBe(200);
     const initialUsage = (await initialResponse.json()) as CodexUsage;
@@ -479,6 +482,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     const localNumbers = await local.locator('.agent-token-grid strong').allTextContents();
     expect(localNumbers).toHaveLength(7);
 
+    await page.getByRole('tab', { name: copy.driverSourcesAndBindings, exact: true }).click();
     await page.getByRole('button', { name: copy.drivers.addSource, exact: true }).click();
     const form = page.getByRole('form', { name: copy.drivers.editSource, exact: true });
     await form.getByLabel(copy.drivers.provider, { exact: true }).selectOption('codex');
@@ -588,6 +592,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
       expect(response.status()).toBe(200);
       return (await response.json()) as CodexUsage;
     };
+    await page.getByRole('tab', { name: copy.connectedAccounts, exact: true }).click();
     const failedUsage = await refreshUsage();
     expect(failedUsage.official.availability).toBe('unavailable');
     expect(failedUsage.official.stale).toBe(true);
