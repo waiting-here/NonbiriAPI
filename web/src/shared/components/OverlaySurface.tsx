@@ -13,7 +13,15 @@ import {
   useSlottedContext,
   type DialogProps,
 } from 'react-aria-components';
-import { FocusScope, mergeProps, useModalOverlay, usePopover, useFocusManager } from 'react-aria';
+import {
+  FocusScope,
+  mergeProps,
+  useFocusManager,
+  useModalOverlay,
+  useOverlay,
+  useOverlayPosition,
+  usePopover,
+} from 'react-aria';
 import { OverlayPortal } from './OverlayPortal';
 
 function overlayState(open: boolean, onClose: () => void) {
@@ -139,61 +147,96 @@ export function ModalSurface({
   );
 }
 
-/** Stable positioning and dismissal for RAC collections and mixed dialog content. */
-export function AnchoredSurface({
-  open,
-  onClose,
-  triggerRef,
-  children,
-  className,
-  nonModal = false,
-  matchTrigger = false,
-}: {
+type AnchoredProps = {
   open: boolean;
   onClose: () => void;
   triggerRef: RefObject<Element | null>;
   children: ReactNode;
   className?: string;
-  nonModal?: boolean;
-  matchTrigger?: boolean;
-}) {
+};
+
+function usePopoverContent(triggerRef: AnchoredProps['triggerRef'], children: ReactNode) {
   const context = useSlottedContext(PopoverContext);
   const localRef = useRef<HTMLElement>(null);
   const [, ref] = useContextProps({ triggerRef }, localRef, PopoverContext);
-  const { popoverProps, underlayProps } = usePopover(
-    {
-      triggerRef,
-      popoverRef: ref,
-      placement: matchTrigger ? 'bottom start' : 'bottom end',
-      offset: 4,
-      isNonModal: nonModal,
-      shouldCloseOnInteractOutside: (target) => !triggerRef.current?.contains(target),
-    },
-    overlayState(open, onClose),
-  );
-  useLayoutEffect(() => {
-    const trigger = triggerRef.current;
-    const surface = ref.current;
-    if (!matchTrigger || !open || !trigger || !surface) return;
-    const resize = () => {
-      surface.style.width = String(trigger.getBoundingClientRect().width) + 'px';
-    };
-    resize();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(resize);
-    observer.observe(trigger);
-    return () => observer.disconnect();
-  }, [matchTrigger, open, ref, triggerRef]);
-  if (!open) return null;
   const content = [PopoverContext, ...(context?.clearContexts ?? [])].reduce<ReactNode>(
     (node, Context) => createElement(Context.Provider, { value: null }, node),
     children,
   );
+  return { ref, content };
+}
+
+/** Stable positioning and dismissal for RAC menus and mixed dialog content. */
+export function AnchoredSurface({ open, onClose, triggerRef, children, className }: AnchoredProps) {
+  const { ref, content } = usePopoverContent(triggerRef, children);
+  const { popoverProps, underlayProps } = usePopover(
+    {
+      triggerRef,
+      popoverRef: ref,
+      placement: 'bottom end',
+      offset: 4,
+      shouldCloseOnInteractOutside: (target) => !triggerRef.current?.contains(target),
+    },
+    overlayState(open, onClose),
+  );
+  if (!open) return null;
   return (
     <OverlayPortal>
-      {!nonModal && <div {...underlayProps} className="nb-popover-underlay" />}
-      <FocusScope restoreFocus contain={!nonModal} autoFocus={!nonModal}>
+      <div {...underlayProps} className="nb-popover-underlay" />
+      <FocusScope restoreFocus contain autoFocus>
         <section {...popoverProps} ref={ref} className={className}>
+          {content}
+        </section>
+      </FocusScope>
+    </OverlayPortal>
+  );
+}
+
+export function SuggestionSurface({
+  open,
+  onClose,
+  triggerRef,
+  children,
+  className,
+}: AnchoredProps) {
+  const { ref, content } = usePopoverContent(triggerRef, children);
+  const { overlayProps } = useOverlay({ isOpen: open, onClose, shouldCloseOnBlur: true }, ref);
+  const { overlayProps: positionProps, updatePosition } = useOverlayPosition({
+    targetRef: triggerRef,
+    overlayRef: ref,
+    placement: 'bottom start',
+    offset: 4,
+    isOpen: open,
+    // The browser may deliver focus scrolling after typing or ArrowDown has opened the list.
+    onClose: () => updatePosition(),
+  });
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    const surface = ref.current;
+    if (!open || !trigger || !surface) return;
+    const resize = () => {
+      surface.style.width = String(trigger.getBoundingClientRect().width) + 'px';
+    };
+    resize();
+    const sizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
+    sizeObserver?.observe(trigger);
+    const visibilityObserver =
+      typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver(([entry]) => {
+            if (entry && !entry.isIntersecting) onClose();
+          });
+    visibilityObserver?.observe(trigger);
+    return () => {
+      sizeObserver?.disconnect();
+      visibilityObserver?.disconnect();
+    };
+  }, [open, onClose, ref, triggerRef]);
+  if (!open) return null;
+  return (
+    <OverlayPortal>
+      <FocusScope restoreFocus>
+        <section {...mergeProps(overlayProps, positionProps)} ref={ref} className={className}>
           {content}
         </section>
       </FocusScope>

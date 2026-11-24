@@ -1,7 +1,7 @@
 import { FieldLabelContext } from './FieldLayoutContext';
 import { useEffect, useContext, useRef, type InputHTMLAttributes, type RefObject } from 'react';
 import { ComboBox, ComboBoxStateContext, Input, ListBox, ListBoxItem } from 'react-aria-components';
-import { AnchoredSurface } from '../OverlaySurface';
+import { SuggestionSurface } from '../OverlaySurface';
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'list'> & {
   value: string;
@@ -31,16 +31,14 @@ function Suggestions({
   );
   if (!state) return list;
   return (
-    <AnchoredSurface
+    <SuggestionSurface
       open={state.isOpen && !disabled}
       onClose={state.close}
       triggerRef={triggerRef}
-      nonModal
-      matchTrigger
       className="nb-suggestions-popover"
     >
       {list}
-    </AnchoredSurface>
+    </SuggestionSurface>
   );
 }
 
