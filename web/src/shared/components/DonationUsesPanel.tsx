@@ -122,11 +122,12 @@ export function DonationUsesPanel({
   }, [locked, onPendingChange]);
   return (
     <div className="nb-stack">
-      {role !== 'owner' && !donationKeyId && (reviewable || locked) ? (
+      {role !== 'owner' && !donationKeyId ? (
         <DonationUsesReviewAll
           role={role}
           donationId={donationId}
           donationRevision={donationRevision}
+          reviewable={reviewable}
           onLockedChange={setLocked}
           onReviewed={(results, labels) => {
             setReceipt({ results, labels });

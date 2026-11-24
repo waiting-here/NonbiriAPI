@@ -3,6 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { charityKeys } from '@shared/operations/charity';
 import { DonationUseReviewResults, DonationUsesPanel } from './DonationUsesPanel';
 import { NATIVE_SERVICES } from '@shared/nativeServices';
@@ -306,6 +307,23 @@ describe('normal donation review details', () => {
     );
   });
   it('retains successful write receipts and retries only reads after a real refresh error', async () => {
+    function Detail() {
+      const [busy, setBusy] = useState(false);
+      const [pending, setPending] = useState(true);
+      return (
+        <fieldset disabled={busy}>
+          <DonationUsesPanel
+            role="admin"
+            accountId="1"
+            donationId="3"
+            donationRevision="1"
+            reviewable={pending}
+            onPendingChange={setBusy}
+            onReviewed={() => setPending(false)}
+          />
+        </fieldset>
+      );
+    }
     let saved = false,
       failed = false;
     mocks.get.mockImplementation(async (_role, _donation, _page, size) => {
@@ -319,7 +337,8 @@ describe('normal donation review details', () => {
       saved = true;
       return [{ use_id: '6', ok: true }];
     });
-    const view = await setup();
+    const view = await renderWithProviders(<Detail />, { station: 'admin', role: 'admin' });
+    view.queryClient.setQueryData(['admin', 'session'], { admin: { id: '1', username: 'admin' } });
     await view.user.click(screen.getByText('Review material'));
     await screen.findByText('Pending version');
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
@@ -329,6 +348,8 @@ describe('normal donation review details', () => {
       }),
     );
     const retry = await screen.findByRole('button', { name: 'Check again' });
+    expect(retry).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Approve pending content' })).toBeNull();
     await view.user.click(retry);
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument(),
