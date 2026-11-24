@@ -109,26 +109,33 @@ function ScopedAttemptErrors({
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
   const load = useCallback(
-    async (after = 0) => {
+    (after = 0) => {
       controller.current?.abort();
       const request = new AbortController();
       controller.current = request;
-      setBusy(true);
-      setFailed(false);
-      try {
-        const result = await getErrorList(role, requestID, attempt, after, request.signal);
-        if (!request.signal.aborted) setPage(result);
-      } catch (error) {
-        if (!request.signal.aborted) {
+      return getErrorList(role, requestID, attempt, after, request.signal).then(
+        (result) => {
+          if (request.signal.aborted) return;
+          setPage(result);
+          setFailed(false);
+          setBusy(false);
+        },
+        (error) => {
+          if (request.signal.aborted) return;
           if (logAccessLost(error)) report(error);
           setFailed(true);
-        }
-      } finally {
-        if (!request.signal.aborted) setBusy(false);
-      }
+          setBusy(false);
+        },
+      );
     },
     [role, requestID, attempt, report],
   );
+  const startLoad = (after = 0) => {
+    setBusy(true);
+    setFailed(false);
+    void load(after);
+  };
+  const loading = busy || (readMetadata && !page && !failed);
   useEffect(() => {
     if (readMetadata) void load();
   }, [readMetadata, load]);
@@ -137,8 +144,8 @@ function ScopedAttemptErrors({
       <button
         className="nb-btn nb-btn--secondary"
         type="button"
-        disabled={busy}
-        onClick={() => void load()}
+        disabled={loading}
+        onClick={() => startLoad()}
       >
         {t('common.diagnostics.upstreamErrorDetails')}
       </button>
@@ -174,8 +181,8 @@ function ScopedAttemptErrors({
         <button
           className="nb-btn nb-btn--secondary"
           type="button"
-          disabled={busy}
-          onClick={() => void load(page.next_after!)}
+          disabled={loading}
+          onClick={() => startLoad(page.next_after!)}
         >
           {t('common.diagnostics.nextEvents')}
         </button>

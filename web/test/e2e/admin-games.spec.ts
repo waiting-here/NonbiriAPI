@@ -353,7 +353,7 @@ test('pausing games preserves unrelated edits and remembers the previous modules
   await fishing.click();
   await page.getByLabel('Worm bait', { exact: true }).fill('4.25');
   await page.getByRole('button', { name: 'Done, keep draft', exact: true }).click();
-  await page.getByLabel('Games master switch').click();
+  await page.getByLabel('Games master switch').press('Space');
   await page.getByRole('alertdialog').getByRole('button', { name: 'Disable and save' }).click();
   await expect.poll(() => config.patches.length).toBe(1);
   expect(config.patches[0]).toMatchObject({

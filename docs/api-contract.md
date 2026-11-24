@@ -1914,7 +1914,7 @@ Thursday `literature` accepts empty text or up to 1,024 Unicode characters and 4
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /admin/api/announcements` | `state,severity` plus legacy `cursor,limit` or numbered `page,page_size`; administrator page with numbered `pagination`. |
+| `GET /admin/api/announcements` | Optional `state`, `severity` and `title` filters with legacy `cursor,limit` or numbered `page,page_size`. The title filter accepts up to 160 Unicode characters and matches a literal substring of the Chinese or English draft title before pagination. Use the same filters when continuing a cursor. |
 | `POST /admin/api/announcements` | Complete bilingual draft fields, severity, pin/dismiss policy and nullable expiry; 201 receipt. |
 | `GET /admin/api/announcements/{id}` | Administrator draft/published detail. |
 | `PATCH /admin/api/announcements/{id}` | `expected_revision` plus a non-empty partial draft patch. |
@@ -2158,7 +2158,7 @@ Recent records include actual participant/payment information. Anonymous records
 | Method and path | Request / response |
 | --- | --- |
 | `GET /admin/api/reports/badge` | Pending badge count. |
-| `GET /admin/api/reports` | Optional `status` plus legacy `cursor,limit` or numbered `page,page_size`; case page with numbered `pagination`. |
+| `GET /admin/api/reports` | Optional `status` or `pending=true`, plus optional `search`. Supply legacy `cursor,limit` or numbered `page,page_size`. Matching precedes counting and pagination. |
 | `GET /admin/api/reports/{id}` | Optional `materials_cursor,materials_limit` or numbered `materials_page,materials_page_size`; case detail, bounded material page, and numbered `materials_pagination`. |
 | `GET /admin/api/reports/{id}/targets` | Legacy `cursor,limit` or numbered `page,page_size`; target page, each target includes canonical `donation_match_count`. |
 | `GET /admin/api/reports/{id}/targets/{targetId}/donations` | Legacy `cursor,limit` or numbered `page,page_size`; donation lineage page. |
@@ -2168,6 +2168,8 @@ Recent records include actual participant/payment information. Anonymous records
 | `GET|POST /admin/api/legal-holds` | GET filters `state,object_kind` plus legacy `cursor,limit` or numbered `page,page_size`; POST is an elevated create. |
 | `GET /admin/api/legal-holds/{id}` | Elevated hold detail. |
 | `POST /admin/api/legal-holds/{id}/release` | Elevated release. |
+
+The pending filter includes `pending_indexing`, `pending_review` and `approved_processing`. Choose either this filter or a specific status. The optional search matches a literal substring of the case ID, connector type or canonical base URL and accepts up to 160 Unicode characters after trimming whitespace. A continuation cursor belongs to the selected status, pending flag and search text.
 
 Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_state,expires_at,ended_reason,ended_at}`. They exclude donor identity, descriptions, safe notes, fingerprint, source key ID, and provenance. Legal holds cover only the documented object roots, never identity/session/account deletion, and last at most 365 days. The ordinary list/export window and new-report matching period do not change. An active hold can retain its object beyond ordinary expiry for authorized reads by known ID until the hold ends.
 

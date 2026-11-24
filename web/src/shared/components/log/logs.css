@@ -235,8 +235,15 @@
 .log-export .nb-more__menu a:hover {
   background: var(--nb-color-surface-alt);
 }
+.log-attempt-summary .nb-btn {
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
 .log-detail-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--nb-space-4);
   min-width: 0;
 }

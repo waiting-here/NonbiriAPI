@@ -129,13 +129,30 @@ for (const role of ['admin', 'level6', 'level5'] as const) {
         }, theme);
         for (const width of [1440, 390]) {
           await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+          await expect(
+            page.locator(width === 1440 ? '.inspection-dock' : '.nb-sheet .log-detail-content'),
+          ).toBeVisible();
+          if ((await attemptsHeading.locator('..').getAttribute('open')) === null)
+            await attemptsHeading.click();
+          await expect(links.first()).toBeVisible();
           await links.first().scrollIntoViewIfNeeded();
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);
-          expect(
-            await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
-          ).toBe(true);
+          const overflowing = await panel.evaluate((element) => {
+            if (element.scrollWidth <= element.clientWidth + 1) return [];
+            const edge = element.getBoundingClientRect().left + element.clientWidth;
+            const nodes = [...element.querySelectorAll<HTMLElement>('*')]
+              .filter((child) => child.getBoundingClientRect().right > edge + 1)
+              .map((child) => [
+                child.tagName,
+                child.className,
+                Math.round(child.getBoundingClientRect().width),
+              ])
+              .slice(0, 16);
+            return [element.scrollWidth - element.clientWidth, ...nodes];
+          });
+          expect(overflowing, `detail layout at ${width}px`).toEqual([]);
           await page.screenshot({
             path: resolve(output, `log-shortcuts-${theme}-${width}.png`),
             animations: 'disabled',

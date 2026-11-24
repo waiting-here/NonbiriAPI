@@ -58,13 +58,15 @@ These endpoints use the appropriate station session and same-origin protections.
 | GET | `/api/rewards/assets` | Asset names; card metadata is limited to owned cards |
 | GET | `/api/rewards/history?cursor=…` | Own successful receipts, 50 per page |
 | POST | `/api/rewards/redeem` | Submit `{"code":"EXAMPLE"}` with a stable retry key |
-| GET | `/admin/api/rewards?cursor=…` | Campaigns and delivery counts, 50 per page |
+| GET | `/admin/api/rewards?kind=code&cursor=…` | Campaigns and delivery counts, up to 50 matching rows per page. Optional `kind` accepts `code` or `broadcast`. Omit it for both types. |
 | GET | `/admin/api/rewards/assets` | Full configurable asset catalog |
 | POST | `/admin/api/rewards/preview` | Preview current eligibility |
 | POST | `/admin/api/rewards/create` | Create a code or confirm a broadcast |
 | POST | `/admin/api/rewards/update` | Change code metadata and limits using the current revision |
 | POST | `/admin/api/rewards/retry` | Retry a broadcast's failed accounts using `{"id":"…"}` |
 | GET | `/admin/api/rewards/failures?campaign_id=…&cursor=…` | Administrator-only failure details, 50 per page |
+
+The campaign list filters by type across the full result set before paging. Pass the same type with the returned cursor for the next page. Start at the first page when changing type. A code's `enabled` flag controls redemption. Broadcast progress is reported through the campaign's matched, claimed, skipped, pending and failed counts. Retrying a broadcast targets its failed recipients and preserves receipts for completed grants.
 
 Creation and redemption require `Idempotency-Key`. Preserve the key and complete body when retrying an uncertain result. Bodies are limited to 32 KiB; unknown fields and duplicate JSON keys are rejected. Bundles accept up to 32 distinct asset entries. Condition trees accept 64 nodes, a maximum depth of eight below the root, and up to sixteen children per group; NOT takes one child. Amounts are decimal strings.
 

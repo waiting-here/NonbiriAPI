@@ -53,6 +53,7 @@ import {
   type LogRole,
   type LogRouteKind,
   type RoleLogRow,
+  type RoleLogAttempt,
 } from './data';
 import { InspectionWorkspace } from './InspectionWorkspace';
 import { listReturnPath } from '@shared/operations/listReturn';
@@ -81,6 +82,18 @@ import {
   AttemptService,
   FailureStreak,
 } from './ManagementAttemptFailures';
+
+function failedAttempt(attempt: RoleLogAttempt): boolean {
+  return (
+    (attempt.status_code ?? 0) >= 400 ||
+    Boolean(
+      attempt.error_diagnostics ||
+      (attempt.result_kind === 'synthetic' && attempt.diag) ||
+      (attempt.role !== 'user' &&
+        (attempt.failure_disablement || attempt.health_impact?.streak_effect === 'incremented')),
+    )
+  );
+}
 
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   openai_chat_completions: 'common.operations.logs.route.openaiChatCompletions',
@@ -268,8 +281,7 @@ function AttemptTable({
       focusAttemptSeq !== undefined ||
       (detail.request.caller_status ?? 0) >= 400 ||
       Boolean(detail.request.caller_error_code) ||
-      ('attempts' in detail &&
-        detail.attempts.data.some((attempt) => (attempt.status_code ?? 0) >= 400)),
+      ('attempts' in detail && detail.attempts.data.some(failedAttempt)),
   );
   if (focusAttemptSeq !== previousFocus) {
     setPreviousFocus(focusAttemptSeq);
@@ -1568,7 +1580,7 @@ function ScopedRoleLogPanel({
                           <ol className="log-attempt-summary" aria-label={t('logs.attemptSummary')}>
                             {attemptSummaries.map((line, index) => (
                               <li key={index}>
-                                {(detailData.attempts.data[index]?.status_code ?? 0) >= 400 ? (
+                                {failedAttempt(detailData.attempts.data[index]) ? (
                                   <button
                                     type="button"
                                     className="nb-btn nb-btn--ghost"

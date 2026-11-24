@@ -51,16 +51,24 @@ function GatewayCapabilitiesEditor() {
   const [draft, setDraft] = useState<GatewayCapabilityEntry>(() => entryFor());
   const [outputText, setOutputText] = useState('0');
   const [deleteTarget, setDeleteTarget] = useState<GatewayCapabilityRecord | null>(null);
-  const retainedDrafts = useRef(
-    new Map<
-      string,
-      {
-        editor: GatewayCapabilityRecord | null;
-        draft: GatewayCapabilityEntry;
-        outputText: string;
-      }
-    >(),
+  const [retainedDrafts, setRetainedDrafts] = useState(
+    () =>
+      new Map<
+        string,
+        {
+          editor: GatewayCapabilityRecord | null;
+          draft: GatewayCapabilityEntry;
+          outputText: string;
+        }
+      >(),
   );
+  const removeRetained = (...ids: string[]) =>
+    setRetainedDrafts((previous) => {
+      if (!ids.some((id) => previous.has(id))) return previous;
+      const next = new Map(previous);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
   const hasAdvanced = draft.storage !== 'reject' || draft.cache !== 'reject';
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(entryFor(editor ?? undefined)) ||
@@ -99,14 +107,16 @@ function GatewayCapabilitiesEditor() {
   const open = (row: GatewayCapabilityRecord | null) => {
     revealEditor();
     const target = row?.id ?? 'new';
+    const otherDrafts = new Map(retainedDrafts);
     if (editor !== undefined) {
       const current = editor?.id ?? 'new';
       if (current === target) return;
-      if (dirty) retainedDrafts.current.set(current, { editor, draft, outputText });
-      else retainedDrafts.current.delete(current);
+      if (dirty) otherDrafts.set(current, { editor, draft, outputText });
+      else otherDrafts.delete(current);
     }
-    const retained = retainedDrafts.current.get(target);
-    retainedDrafts.current.delete(target);
+    const retained = otherDrafts.get(target);
+    otherDrafts.delete(target);
+    setRetainedDrafts(otherDrafts);
     operation.reset();
     setEditor(retained ? retained.editor : row);
     setDraft(retained?.draft ?? entryFor(row ?? undefined));
@@ -114,13 +124,12 @@ function GatewayCapabilitiesEditor() {
   };
   const complete = (result: GatewayCapabilityRecord | GatewayCapabilityDeleted) => {
     if ('deleted' in result) {
-      retainedDrafts.current.delete(result.id);
+      removeRetained(result.id);
       setDeleteTarget(null);
       if (editor?.id === result.id) setEditor(undefined);
       return;
     }
-    retainedDrafts.current.delete(editor?.id ?? 'new');
-    retainedDrafts.current.delete(result.id);
+    removeRetained(editor?.id ?? 'new', result.id);
     setEditor(result);
     setDraft(entryFor(result));
     setOutputText(String(result.max_output_tokens));
@@ -217,6 +226,7 @@ function GatewayCapabilitiesEditor() {
           body={t('gatewayCapabilities.emptyBody')}
         />
       )}
+      <DraftLeaveGuard dirty={(editor !== undefined && dirty) || retainedDrafts.size > 0} />
       {editor !== undefined ? (
         <form
           className="gateway-capability-editor"
@@ -225,7 +235,6 @@ function GatewayCapabilitiesEditor() {
             save();
           }}
         >
-          <DraftLeaveGuard dirty={dirty || retainedDrafts.current.size > 0} />
           <h3 ref={editorHeading} tabIndex={-1}>
             {t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}
           </h3>
@@ -444,7 +453,7 @@ function GatewayCapabilitiesEditor() {
               type="button"
               disabled={operation.isPending}
               onClick={() => {
-                retainedDrafts.current.delete(editor?.id ?? 'new');
+                removeRetained(editor?.id ?? 'new');
                 setEditor(undefined);
                 operation.reset();
               }}

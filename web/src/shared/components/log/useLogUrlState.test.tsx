@@ -75,6 +75,17 @@ describe('log time range', () => {
       'private model',
     );
   });
+  it('restores a legacy private filter into scoped history and replaces the original address', async () => {
+    const { router } = mount('?model=legacy&operation=chat_completions&page=4', 'user:7');
+    await waitFor(() => expect(query().has('model')).toBe(false));
+    expect(query().get('page')).toBe('4');
+    expect(router.state.location.state.logPrivate).toEqual({
+      scope: 'user:7',
+      filters: { model: 'legacy' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByText('Before logs')).toBeVisible();
+  });
   it.each(['images_generations', 'chat_completions', 'model_discovery'])(
     'preserves service operation %s through range updates and history',
     async (operation) => {

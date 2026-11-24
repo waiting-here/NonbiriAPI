@@ -1,14 +1,12 @@
 import { useLocation } from 'react-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { isLogOperation, validLogDiscordID, validLogResourceID } from './data';
 import { ATTEMPT_SEQ_PARAM } from './managementFailures';
 
-// URL-backed state for the shared log screens. Page, page size, text filters,
-// and the unix-second time range live in the query string so a filtered view
-// survives a refresh and can be shared as a link. Values restored from the
-// URL are parsed defensively: anything malformed falls back to the default
-// instead of reaching the API.
+// Public controls can be shared. Private filters remain scoped to this role and
+// account in the history entry, including filters in links saved on older versions.
+const privateFields = new Set(['endpoint_base_url', 'upstream_model', 'model', 'error_code']);
 
 export const relativeLogSeconds = { '15m': 900, '1h': 3600, '24h': 86400, '7d': 604800 } as const;
 export type RelativeLogRange = keyof typeof relativeLogSeconds;
@@ -105,9 +103,6 @@ export function useLogUrlState(
 } {
   const [searchParams, setSearchParams] = useSearchState();
   const location = useLocation();
-  const privateField = (name: string) =>
-    Boolean(scopeKey) &&
-    ['endpoint_base_url', 'upstream_model', 'model', 'error_code'].includes(name);
   const state = useMemo(() => {
     const source = new URLSearchParams(searchParams);
     const saved = location.state?.logPrivate;
@@ -118,16 +113,33 @@ export function useLogUrlState(
       typeof saved.filters === 'object'
     ) {
       for (const [key, value] of Object.entries(saved.filters)) {
-        if (privateField(key) && typeof value === 'string') source.set(key, value);
+        if (privateFields.has(key) && typeof value === 'string') source.set(key, value);
       }
     }
     return parseState(source, textParams, defaultPageSize);
   }, [searchParams, textParams, defaultPageSize, location.state, scopeKey]);
 
+  useEffect(() => {
+    if (!scopeKey || !Array.from(privateFields).some((key) => searchParams.has(key))) return;
+    const filters = Object.fromEntries(
+      Object.entries(state.filters).filter(([key]) => privateFields.has(key)),
+    );
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        for (const key of privateFields) next.delete(key);
+        return next;
+      },
+      { replace: true, state: { ...location.state, logPrivate: { scope: scopeKey, filters } } },
+    );
+  }, [scopeKey, searchParams, state.filters, setSearchParams, location.state]);
+
   const patch = useCallback(
     (partial: Partial<LogUrlState>, options?: LogPatchOptions) => {
       const localFilters = Object.fromEntries(
-        Object.entries(partial.filters ?? state.filters).filter(([key]) => privateField(key)),
+        Object.entries(partial.filters ?? state.filters).filter(
+          ([key]) => scopeKey && privateFields.has(key),
+        ),
       );
       setSearchParams(
         (prev) => {
@@ -137,7 +149,7 @@ export function useLogUrlState(
             if (options?.keepFilters?.includes(name)) continue;
             params.delete(name);
             const value = next.filters?.[name];
-            if (value && !privateField(name)) params.set(name, value);
+            if (value && (!scopeKey || !privateFields.has(name))) params.set(name, value);
           }
           params.delete('range');
           if (next.range && next.fromUnix === undefined && next.toUnix === undefined)
