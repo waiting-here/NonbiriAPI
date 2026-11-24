@@ -132,8 +132,7 @@ for (const role of ['admin', 'level6', 'level5'] as const) {
           await expect(
             page.locator(width === 1440 ? '.inspection-dock' : '.nb-sheet .log-detail-content'),
           ).toBeVisible();
-          if ((await attemptsHeading.locator('..').getAttribute('open')) === null)
-            await attemptsHeading.click();
+          await expect(attemptsHeading.locator('..')).toHaveAttribute('open', '');
           await expect(links.first()).toBeVisible();
           await links.first().scrollIntoViewIfNeeded();
           expect(
