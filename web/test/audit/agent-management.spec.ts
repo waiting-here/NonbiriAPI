@@ -470,6 +470,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     await container.locator('summary').filter({ hasText: common.common.failure.technical }).click();
     await expect(container.getByText(requestID, { exact: true })).toBeVisible();
   };
+  const initialCounts = await control('stats');
   let previousAdminBinding: DriverBinding | undefined;
   let seeded = false;
   try {
@@ -668,13 +669,13 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
     await expect(local.locator('.agent-token-grid strong')).toHaveText(localNumbers);
     await inspectLayouts(page, 'codex-quota-recovered', codex);
     expect(await control('stats')).toEqual({
-      models: 2,
+      models: initialCounts.models + 2,
       usage: beforeRecovery.usage + 1,
-      forbidden_models: 1,
-      forbidden_usage: 1,
-      denied: 0,
+      forbidden_models: initialCounts.forbidden_models + 1,
+      forbidden_usage: initialCounts.forbidden_usage + 1,
+      denied: initialCounts.denied,
     });
-    expect(beforeRecovery.usage).toBe(2);
+    expect(beforeRecovery.usage).toBe(initialCounts.usage + 2);
     expect(externalBrowserRequests).toEqual([]);
     expect(errors).toEqual([]);
   } finally {
@@ -723,7 +724,7 @@ test('connected Codex retains its catalogue, saves a model and recovers quota af
           expect(response.status()).toBe(200);
         }
         expect((await readStatus()).connected).toBe(false);
-        expect.soft((await control('stats')).denied).toBe(0);
+        expect.soft((await control('stats')).denied).toBe(initialCounts.denied);
       }
     } finally {
       await context.close();
