@@ -2149,7 +2149,12 @@ button.nb-row:hover {
 }
 
 @media (forced-colors: active) {
-  :focus-visible, [data-focus-visible] { outline: 2px solid Highlight; outline-offset: 2px; }
+  /* Forced colors suppress the box shadows used for component focus rings. */
+  :focus-visible,
+  [data-focus-visible] {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+  }
 }
 @media (width > 40rem) {
   [data-density='compact'] .nb-table :is(th, td) { padding-block: var(--nb-space-2); }

@@ -119,7 +119,7 @@ it('keeps saved appearance state raw while the effective background falls back a
   expect(view.container.querySelector('img')).toBeNull();
   view.rerender(tree(false));
   await waitFor(() => expect(document.documentElement.dataset.appearance).toBe('celestial'));
-  expect(view.container.querySelector('img')?.getAttribute('src')).toContain('celestial');
+  await waitFor(() => expect(view.container.querySelector('img')?.getAttribute('src')).toContain('celestial'));
   expect(screen.queryByText('R-18')).toBeNull();
   expect(select).not.toHaveBeenCalled();
   view.unmount();

@@ -163,7 +163,10 @@ async function selectTarget(view: Awaited<ReturnType<typeof setup>>) {
   const group = summary.closest('details')!;
   await view.user.click(summary);
   await view.user.click(await within(group).findByRole('button', { name: 'Add target' }));
-  expect(within(group).getByRole('checkbox')).toBeChecked();
+  const service = within(group).getByRole('checkbox', { name: 'Embeddings' });
+  expect(service).not.toBeChecked();
+  await view.user.click(service);
+  expect(service).toBeChecked();
   return group;
 }
 
