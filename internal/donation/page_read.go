@@ -72,6 +72,10 @@ func (s *Service) beginBrowseActorTxOn(ctx context.Context, database *sql.DB, ro
 }
 
 func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page pagination.Request) ([]int64, pagination.Metadata, error) {
+	return browseOrderedIDs(ctx, tx, query, args, page, "")
+}
+
+func browseOrderedIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page pagination.Request, sort string) ([]int64, pagination.Metadata, error) {
 	metadata, offset, err := queryread.Window(ctx, tx, query, args, page)
 	if errors.Is(err, pagination.ErrInvalid) {
 		return nil, metadata, ErrInvalidRequest
@@ -79,7 +83,15 @@ func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page p
 	if err != nil {
 		return nil, metadata, fmt.Errorf("donation: count browse rows: %w", err)
 	}
-	rows, err := tx.QueryContext(ctx, db.MaterializePage(query+` ORDER BY 1 LIMIT ? OFFSET ?`, `ORDER BY id`), append(args, page.Size, offset)...)
+	selection := db.MaterializePage(query+` ORDER BY 1 LIMIT ? OFFSET ?`, `ORDER BY id`)
+	if sort != "" {
+		order := " ORDER BY created_at ASC, id ASC"
+		if sort == "newest" {
+			order = " ORDER BY created_at DESC, id DESC"
+		}
+		selection = "SELECT id FROM (" + query + ")" + order + " LIMIT ? OFFSET ?"
+	}
+	rows, err := tx.QueryContext(ctx, selection, append(args, page.Size, offset)...)
 	if err != nil {
 		return nil, metadata, fmt.Errorf("donation: read browse rows: %w", err)
 	}

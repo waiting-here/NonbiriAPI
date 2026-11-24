@@ -61,5 +61,5 @@ func activeDiscountAt(percent, enabled int, start, end sql.NullInt64, encoded st
 	if err != nil {
 		return 0, ErrInvariant
 	}
-	return value, nil
+	return value.BasisPoints(), nil
 }

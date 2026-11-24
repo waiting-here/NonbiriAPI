@@ -225,6 +225,10 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     }
     await page.getByRole('button', { name: copy.management.permissions.none, exact: true }).click();
     await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: copy.management.permissions.save, exact: true })
+      .click();
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
     const noGrants = (await get(admin, state.admin_url, path)) as Policy;
     expect(noGrants.donation_scope).toBe('none');
@@ -243,6 +247,10 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
 
     await page.getByRole('button', { name: copy.management.permissions.all, exact: true }).click();
     await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: copy.management.permissions.save, exact: true })
+      .click();
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
     const full = (await get(admin, state.admin_url, path)) as Policy;
     expect(full.donation_scope).toBe('full');
@@ -299,6 +307,10 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await scope.press('ArrowRight');
     await expect(scope).toHaveValue('2');
     await page.getByRole('button', { name: copy.management.permissions.save, exact: true }).click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: copy.management.permissions.save, exact: true })
+      .click();
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
     expect(((await get(admin, state.admin_url, path)) as Policy).donation_scope).toBe('enhanced');
     const seniorPolicy = (await get(

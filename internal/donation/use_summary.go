@@ -36,7 +36,7 @@ const useReviewStatusSQL = `CASE
 
 func validReviewStatusFilter(status string) bool {
 	switch status {
-	case "", "pending", "approved_pending", "approved", "partially_approved", "rejected", "withdrawn", "mixed", "deleted", "expired":
+	case "", "any_pending", "pending", "approved_pending", "approved", "partially_approved", "rejected", "withdrawn", "mixed", "deleted", "expired":
 		return true
 	default:
 		return false

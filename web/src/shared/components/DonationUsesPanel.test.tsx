@@ -1,5 +1,5 @@
 import { ApiError } from '@shared/query/http';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { useQuery } from '@tanstack/react-query';
@@ -225,6 +225,11 @@ describe('normal donation review details', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText('Donation uses by service')).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(1));
     expect(mocks.review.mock.calls[0]![2]).toEqual({
       expected_revision: '1',
@@ -252,9 +257,19 @@ describe('normal donation review details', () => {
       .mockResolvedValue({});
     const view = await setup();
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     await screen.findByText('Version changed');
     expect(screen.queryByText('head-2…tail', { selector: 'li span' })).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(2));
     expect(mocks.review.mock.calls[1]![2].uses).toEqual(
       ['6', '7'].map((id) => ({
@@ -276,6 +291,11 @@ describe('normal donation review details', () => {
     });
     const view = await setup();
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     await view.user.click(await screen.findByRole('button', { name: 'Check saved result' }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Approve pending content' })).toBeEnabled(),
@@ -303,6 +323,11 @@ describe('normal donation review details', () => {
     await view.user.click(screen.getByText('Review material'));
     await screen.findByText('Pending version');
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     const retry = await screen.findByRole('button', { name: 'Check again' });
     await view.user.click(retry);
     await waitFor(() =>
@@ -345,6 +370,11 @@ describe('normal donation review details', () => {
     const view = await setup(<ActiveQueries />);
     await screen.findByText('catalog / Donation list: pending');
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     await screen.findByText('catalog / Donation list: approved');
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Approve pending content' })).toBeEnabled(),
@@ -369,6 +399,11 @@ describe('normal donation review details', () => {
     await view.user.click(screen.getByText('Review material'));
     await screen.findByText('Pending version');
     await view.user.click(screen.getByRole('button', { name: 'Return pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Return pending content',
+      }),
+    );
     await waitFor(() => expect(screen.queryByText('Pending version')).not.toBeInTheDocument());
     expect(screen.getByText('head-1…tail · Version 1')).toBeVisible();
     expect(mocks.review.mock.calls[0]![2]).toMatchObject({

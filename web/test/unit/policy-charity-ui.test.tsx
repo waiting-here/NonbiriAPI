@@ -2184,6 +2184,11 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('button', { name: 'Approve pending content' });
     expect(screen.queryByRole('button', { name: 'Models and bindings' })).toBeNull();
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     const manage = await screen.findByRole('button', { name: 'Models and bindings' });
     expect(screen.getAllByRole('button', { name: 'Models and bindings' })).toHaveLength(1);
     expect(donation.status).toBe('approved');
@@ -3484,7 +3489,9 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<UserLayout />, { station: 'user', role: 'user' });
     await screen.findByText('fixture-user');
     rendered.queryClient.setQueryData(userKeys.models, [model]);
-    await rendered.user.click(screen.getByRole('button', { name: 'Account actions · fixture-user' }));
+    await rendered.user.click(
+      screen.getByRole('button', { name: 'Account actions · fixture-user' }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Sign out' }));
     await expect(screen.findByText('logout refused')).resolves.toBeVisible();
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();

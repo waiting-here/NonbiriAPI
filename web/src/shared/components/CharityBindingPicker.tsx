@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useManagementCapability } from '@shared/charityManagement';
 import { useBindingPage, sessionAccount } from './charity/useBindingPage';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import {
   getDonationSourceKeysPage,
   getDonationSourcesPage,
@@ -240,7 +240,7 @@ function CharityBindingPickerBody({
   });
 
   const sessionCapabilityLost = management.data === true;
-  const sessionErrorLost = isUnauthorized(sessionError) || isForbidden(sessionError);
+  const sessionErrorLost = isUnauthorized(sessionError) || isManagementForbidden(sessionError);
   const canRead =
     Boolean(account) && management.authorityReady && !sessionCapabilityLost && !sessionError;
   const readEnabled = canRead && !managingKey;
@@ -320,7 +320,7 @@ function CharityBindingPickerBody({
 
   const requestErrors = [sessionError, sources.error, sourceKeys.error, candidates.error];
   const requestCapabilityLost = requestErrors.some(
-    (error) => isUnauthorized(error) || isForbidden(error),
+    (error) => isUnauthorized(error) || isManagementForbidden(error),
   );
   useEffect(() => {
     if (!sessionCapabilityLost && !requestCapabilityLost) return;
@@ -561,7 +561,6 @@ function CharityBindingPickerBody({
                       disabled={interactionBlocked}
                       onChange={(state) => {
                         setKeyState(state);
-                        setScope('all');
                         setSelectedSource(null);
                         resetKeySelection();
                       }}

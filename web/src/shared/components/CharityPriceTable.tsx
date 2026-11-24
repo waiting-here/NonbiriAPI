@@ -27,6 +27,22 @@ export interface CharityPriceTableProps {
   discount?: { percent: number; enabled: boolean; startAt?: number; endAt?: number };
 }
 
+const countdownListeners = new Set<() => void>();
+let countdownTimer: number | undefined;
+function subscribeCountdown(update: () => void) {
+  countdownListeners.add(update);
+  countdownTimer ??= window.setInterval(() => {
+    for (const listener of countdownListeners) listener();
+  }, 1000);
+  return () => {
+    countdownListeners.delete(update);
+    if (!countdownListeners.size) {
+      window.clearInterval(countdownTimer);
+      countdownTimer = undefined;
+    }
+  };
+}
+
 function formatCountdown(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds));
   const days = Math.floor(safe / 86400);
@@ -80,12 +96,20 @@ export function CharityPriceTable({
     const update = () =>
       setNow(serverNow + Math.floor((window.performance.now() - observedAt) / 1000));
     update();
-    if (effectiveDiscount.next_change_at === null) return undefined;
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, [effectiveDiscount.next_change_at, serverNow]);
+    if (compact || effectiveDiscount.next_change_at === null) return;
+    return subscribeCountdown(update);
+  }, [compact, effectiveDiscount.next_change_at, serverNow]);
 
   const active = effectiveDiscount.percent < 100;
+  const discountLabel = active
+    ? effectiveDiscount.percent === 0
+      ? t('user.charity.discountFree')
+      : t('user.charity.discountPercent', {
+          percent: (10000 - Math.round(effectiveDiscount.percent * 100)) / 100,
+        })
+    : t('common.recurringDiscount.currentPercent', {
+        percent: effectiveDiscount.percent,
+      });
   const nextChange = effectiveDiscount.next_change_at;
   const countdown = nextChange === null ? null : formatCountdown(nextChange - now);
   const showRewards = rows.length > 0 && rows.every((row) => row.rewardMilli !== undefined);
@@ -120,6 +144,7 @@ export function CharityPriceTable({
   if (compact)
     return (
       <div className="charity-prices-compact">
+        {active && <strong className="charity-discount">{discountLabel}</strong>}
         <dl>
           {(compact ? rows.slice(0, 4) : rows).map((row) => (
             <div key={row.label}>
@@ -135,7 +160,7 @@ export function CharityPriceTable({
             </div>
           ))}
         </dl>
-        {(rows.length > 4 || longContext || scheduleNote || deadline || penaltyNote) ? (
+        {rows.length > 4 || longContext || scheduleNote || deadline || penaltyNote ? (
           <div className="charity-price-notes">
             {rows.length > 4 && <p className="nb-sub">{t('common.modalityPricing.available')}</p>}
             {longContext && (
@@ -153,15 +178,7 @@ export function CharityPriceTable({
     <div className="charity-price-wrap">
       {effectiveDiscount.source !== 'none' ? (
         <p className="charity-discount" role="status">
-          <strong>
-            {active
-              ? effectiveDiscount.percent === 0
-                ? t('user.charity.discountFree')
-                : t('user.charity.discountPercent', { percent: 100 - effectiveDiscount.percent })
-              : t('common.recurringDiscount.currentPercent', {
-                  percent: effectiveDiscount.percent,
-                })}
-          </strong>
+          <strong>{discountLabel}</strong>
           {effectiveDiscount.source === 'fixed' &&
           effectiveDiscount.percent === 100 &&
           nextChange !== null ? (

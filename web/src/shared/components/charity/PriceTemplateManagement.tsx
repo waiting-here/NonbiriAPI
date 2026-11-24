@@ -14,7 +14,7 @@ import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { DraftLeaveGuard } from './DraftLeaveScope';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -79,7 +79,7 @@ export function PriceTemplateManagement({
     retry: false,
   });
   const lost = [list.error, detail.error].some(
-    (error) => isForbidden(error) || isUnauthorized(error),
+    (error) => isManagementForbidden(error) || isUnauthorized(error),
   );
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -377,7 +377,7 @@ function PriceTemplateEditor({
     retry: false,
   });
   const lost = [save.error, remove.error, latest.error].some(
-    (error) => isForbidden(error) || isUnauthorized(error),
+    (error) => isManagementForbidden(error) || isUnauthorized(error),
   );
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -390,11 +390,12 @@ function PriceTemplateEditor({
     save.outcome === 'refresh-failed' ||
     remove.outcome === 'refresh-failed';
   const validation = priceDraftError(draft);
-  const valid =
-    metadata.name.trim().length > 0 &&
+  const nameValid =
+    !!metadata.name.trim() &&
     Array.from(metadata.name.trim()).length <= 80 &&
-    Array.from(metadata.description).length <= 500 &&
-    !validation;
+    !/[\p{Cc}\p{Cf}]/u.test(metadata.name);
+  const descriptionValid = Array.from(metadata.description).length <= 500;
+  const valid = nameValid && descriptionValid && !validation;
   const dirty = signature() !== saved;
   const resetOutcome = () => {
     save.reset();
@@ -450,12 +451,14 @@ function PriceTemplateEditor({
       <Panel>
         <PanelBody>
           <fieldset className="nb-form nb-price-fields-section" disabled={locked}>
-            <Field label={t('common.workflow.templateName')}>
+            <Field
+              label={t('common.workflow.templateName')}
+              error={nameValid ? undefined : t('common.governance.textLength', { min: 1, max: 80 })}
+            >
               {(props) => (
                 <input
                   {...props}
                   value={metadata.name}
-                  maxLength={160}
                   onChange={(event) => {
                     resetOutcome();
                     setMetadata({ ...metadata, name: event.target.value });
@@ -463,7 +466,14 @@ function PriceTemplateEditor({
                 />
               )}
             </Field>
-            <Field label={t('common.workflow.templateDescription')}>
+            <Field
+              label={t('common.workflow.templateDescription')}
+              error={
+                descriptionValid
+                  ? undefined
+                  : t('common.governance.textLength', { min: 0, max: 500 })
+              }
+            >
               {(props) => (
                 <textarea
                   {...props}

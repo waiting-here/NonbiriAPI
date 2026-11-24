@@ -136,13 +136,19 @@ export function DonationUsesPanel({
         />
       ) : null}
       {role === 'owner' && donationKeyId ? (
-        <DonationKeyUseControls
-          role={role}
-          accountId={accountId}
-          donationId={donationId}
-          donationKeyId={donationKeyId}
-          uses={query.data ?? []}
-        />
+        query.isPending ? (
+          <LoadingState />
+        ) : query.error ? (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        ) : (
+          <DonationKeyUseControls
+            role={role}
+            accountId={accountId}
+            donationId={donationId}
+            donationKeyId={donationKeyId}
+            uses={query.data}
+          />
+        )
       ) : null}
       {!onReviewed ? (
         <DonationUseReviewResults results={receipt.results} labels={receipt.labels} />

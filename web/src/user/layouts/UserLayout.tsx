@@ -353,6 +353,13 @@ export function UserLayout() {
                     ) : null}
                   </li>
                 ))}
+                {showStewardEntry && !profile?.is_banned && (
+                  <li>
+                    <NavLink className="nb-user-header__nav-link" to="/steward" onClick={closeMenu}>
+                      {t('user.steward.title')}
+                    </NavLink>
+                  </li>
+                )}
               </ul>
               {menuOpen && (
                 <button

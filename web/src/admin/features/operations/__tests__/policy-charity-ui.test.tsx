@@ -8,7 +8,7 @@ import type {
   ManagedDonationKey,
   StewardDonation,
 } from '@shared/operations/charity';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
 import { useUserSession } from '../../../../user/data';
@@ -388,10 +388,16 @@ describe('Generation 2 charity management policy', () => {
     const approveButton = screen.getByRole('button', { name: 'Approve pending content' });
     expect(approveButton).toBeEnabled();
     await view.user.click(approveButton);
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
 
     await waitFor(() => expect(reviewRequests).toHaveLength(2));
-    expect(await screen.findByRole('cell', { name: 'All approved' })).toBeVisible();
     expect((await screen.findAllByText('Review saved.')).length).toBeGreaterThan(0);
+    await view.user.click(screen.getByRole('button', { name: 'Return to list' }));
+    expect(await screen.findByRole('cell', { name: 'All approved' })).toBeVisible();
     expect(committedReviews).toBe(1);
     expect(JSON.parse(String(reviewRequests[0].body))).toEqual({
       expected_revision: '7',
@@ -482,6 +488,11 @@ describe('Generation 2 charity management policy', () => {
     const approveButton = screen.getByRole('button', { name: 'Approve pending content' });
     expect(approveButton).toBeEnabled();
     await view.user.click(approveButton);
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
 
     await waitFor(() => expect(reviewRequests).toHaveLength(1));
     expect((await screen.findAllByText('Review saved.')).length).toBeGreaterThan(0);

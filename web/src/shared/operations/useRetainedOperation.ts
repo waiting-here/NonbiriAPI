@@ -9,7 +9,7 @@ import {
   type CharityManagementFrame,
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
-import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { conflictOrUnknown, operationKey, responseOutcomeUnknown } from './api';
 
 export interface OperationContext {
@@ -41,7 +41,7 @@ function inputSnapshot<T>(value: T): T {
 function isFinalAuthorityLoss(error: unknown): boolean {
   return (
     isUnauthorized(error) ||
-    (isForbidden(error) && !(error instanceof ApiError && error.code === 'elevated_required'))
+    (isManagementForbidden(error) && !(error instanceof ApiError && error.code === 'elevated_required'))
   );
 }
 

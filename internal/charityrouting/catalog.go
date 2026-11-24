@@ -233,11 +233,11 @@ func scanCatalogModel(scanner interface{ Scan(...any) error }, level int, now in
 	if err := projectCapabilityDiscount(&model.CapabilityModel, recurring, now); err != nil {
 		return CatalogModel{}, 0, err
 	}
-	model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent, model.EffectiveDiscount.Percent)
+	model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent, model.EffectiveDiscount.Percent.BasisPoints())
 	if err != nil {
 		return CatalogModel{}, 0, err
 	}
-	if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent, model.EffectiveDiscount.Percent); err != nil {
+	if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent, model.EffectiveDiscount.Percent.BasisPoints()); err != nil {
 		return CatalogModel{}, 0, err
 	}
 	return model, id, nil

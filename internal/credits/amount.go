@@ -122,9 +122,6 @@ func Mul(a, b int64) (int64, error) {
 // million tokens.
 var millionMilli = big.NewInt(1_000_000)
 
-// hundred is the discount-percentage divisor.
-var hundred = big.NewInt(100)
-
 // ceilDivBig returns ceil(a/b) for b>0 without float involvement.
 func ceilDivBig(a, b *big.Int) (*big.Int, error) {
 	q, r := new(big.Int).QuoRem(a, b, new(big.Int))

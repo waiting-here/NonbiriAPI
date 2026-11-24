@@ -1,4 +1,8 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import { managedUserFixture } from '../../../test/fixtures/managedUsers';
+import { UserLimitBatch } from './UserLimitBatch';
+import { ApiError } from '@shared/query/http';
+import * as managedUsers from '@shared/operations/managedUsers';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { normalizeDeletedAccount } from '@shared/operations/managedUsers';
@@ -95,4 +99,46 @@ it('links the exact deletion alert with the administrator list state but hides i
     },
   );
   expect(screen.queryByRole('link', { name: 'Related alert' })).toBeNull();
+});
+
+it('confirms the selected users and limit, then retries only uncertain items with the original key', async () => {
+  const users = [managedUserFixture('7'), managedUserFixture('8')];
+  const writes = vi
+    .spyOn(managedUsers, 'mutateManagedUser')
+    .mockResolvedValueOnce(users[0]!)
+    .mockRejectedValueOnce(new ApiError('network_error', 'The response was lost.', 0))
+    .mockResolvedValueOnce(users[1]!);
+  const view = await renderWithProviders(
+    <UserLimitBatch
+      role="admin"
+      users={users}
+      selected={['7', '8']}
+      onSelected={vi.fn()}
+      refresh={async () => {}}
+      onBusy={vi.fn()}
+      loading={false}
+    />,
+    { station: 'admin', locale: 'en' },
+  );
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } });
+  await view.user.click(screen.getByText('Edit selected users’ inference limits'));
+  await view.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Global RPM per user action' }),
+    'set',
+  );
+  await view.user.type(screen.getByRole('textbox', { name: 'Global RPM per user' }), '30');
+  await view.user.click(screen.getByRole('button', { name: 'Apply to selected users' }));
+  const preview = await screen.findByRole('alertdialog');
+  expect(preview).toHaveTextContent('member-7');
+  expect(preview).toHaveTextContent('member-8');
+  expect(preview).toHaveTextContent('30');
+  expect(writes).not.toHaveBeenCalled();
+  await view.user.click(within(preview).getByRole('button', { name: 'Apply to selected users' }));
+  await screen.findByText(/The result is uncertain/);
+  expect(writes.mock.calls.map((call) => call[1])).toEqual(['7', '8']);
+  const retry = screen.getByRole('button', { name: /Retry .*users/ });
+  await view.user.click(retry);
+  await waitFor(() => expect(screen.getAllByText(/Saved/, { selector: 'li' })).toHaveLength(2));
+  expect(writes.mock.calls.map((call) => call[1])).toEqual(['7', '8', '8']);
+  expect(writes.mock.calls[2]).toEqual(writes.mock.calls[1]);
 });

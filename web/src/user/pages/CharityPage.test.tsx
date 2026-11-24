@@ -30,7 +30,7 @@ vi.mock('../games/ranking/Leaderboard', () => ({
   ),
 }));
 
-it('shows only the selected charity section, keeps the board visible, and preserves inputs', async () => {
+it('shows only the selected charity section, limits the board to shared models, and preserves inputs', async () => {
   const view = await renderWithProviders(<CharityPage />, { station: 'user', route: '/charity' });
   const catalog = screen.getByRole('textbox', { name: 'Catalog search' });
   await view.user.type(catalog, 'selected model');
@@ -39,16 +39,16 @@ it('shows only the selected charity section, keeps the board visible, and preser
   expect(catalog).not.toBeVisible();
   expect(catalog.closest('[hidden]')).not.toHaveClass('economy-model-workspace');
   expect(screen.getByText('Owned donation list')).toBeVisible();
-  expect(screen.getByText('Charity board')).toBeVisible();
+  expect(screen.queryByText('Charity board')).not.toBeInTheDocument();
   await view.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
   const draft = screen.getByRole('textbox', { name: 'Donation draft' });
   await view.user.type(draft, 'My pending note');
   expect(screen.getByText('Owned donation list')).not.toBeVisible();
-  expect(screen.getByText('Charity board')).toBeVisible();
+  expect(screen.queryByText('Charity board')).not.toBeInTheDocument();
   await view.user.click(screen.getByRole('tab', { name: 'Shared models' }));
   expect(catalog).toHaveValue('selected model');
   expect(draft).not.toBeVisible();
   await view.user.click(screen.getByRole('tab', { name: 'Donate my keys' }));
   expect(draft).toHaveValue('My pending note');
-  expect(screen.getByText('Charity board')).toBeVisible();
+  expect(screen.queryByText('Charity board')).not.toBeInTheDocument();
 });

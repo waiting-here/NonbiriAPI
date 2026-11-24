@@ -1,12 +1,17 @@
 import { Link, useLocation } from 'react-router';
+import { decimalAmount } from '@shared/inactivity/amounts';
 import { logManagementReturnPath } from '@shared/components/log/managementNavigation';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   hasStewardPermission,
+  defaultStewardPermissions,
+  stewardLimitKeys,
   canAccessStewardCharityManagement,
   type StewardPermission,
 } from '@shared/operations/stewardPermissions';
+import { permissionGroups } from '@shared/operations/stewardPermissionGroups';
+import { permissionPresentationCopy } from '@shared/components/permissionPresentationCopy';
 import { StewardPermissionNotice } from '@shared/components/StewardPermissionNotice';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -137,13 +142,18 @@ export function StewardPage() {
   const authorityScope = authority.data
     ? `${authority.data.id}:${authority.data.effective_level}:${revision ?? '0'}`
     : '';
+  const visibleSection = access[section];
   // Mount sensitive readers only after queries from the previous policy are cleared.
   const [clearedScope, setClearedScope] = useState(authorityScope);
   const scopeChanged = clearedScope !== authorityScope;
   useEffect(() => {
     if (!scopeChanged) return;
     tabQueries.current = {};
-    if (clearedScope && (location.search || location.state))
+    if (
+      clearedScope &&
+      (clearedScope.split(':')[0] !== authority.data?.id || !allowed || !visibleSection) &&
+      (location.search || location.state)
+    )
       setSearchParams({}, { replace: true, state: null });
     let active = true;
     void clearSensitiveQueries().then(() => {
@@ -154,6 +164,9 @@ export function StewardPage() {
     };
   }, [
     authorityScope,
+    authority.data?.id,
+    allowed,
+    visibleSection,
     scopeChanged,
     clearedScope,
     clearSensitiveQueries,
@@ -165,6 +178,10 @@ export function StewardPage() {
     if (!authority.isPending && !allowed) void clearSensitiveQueries();
   }, [allowed, authority.isPending, clearSensitiveQueries]);
 
+  const policy =
+    authority.data?.steward_permissions ??
+    defaultStewardPermissions(authority.data?.effective_level ?? 0);
+  const permissionCopy = permissionPresentationCopy(t);
   if (authority.isPending || authorityRefreshing)
     return (
       <div className="page ops-page">
@@ -213,9 +230,15 @@ export function StewardPage() {
           description={t('user.steward.presentation.description')}
           actions={
             <div className="nb-actions">
-              <Link className="nb-btn nb-btn--secondary" to="/steward/ai">
-                {t('common.agent.title')}
-              </Link>
+              {(has('ai.chat') || has('ai.review.read')) && (
+                <Link
+                  className="nb-btn nb-btn--secondary"
+                  to="/steward/ai"
+                  state={{ returnTo: location.pathname + location.search }}
+                >
+                  {t('common.agent.title')}
+                </Link>
+              )}
               {has('endpoints.read') && (
                 <Link
                   className="nb-btn nb-btn--secondary"
@@ -237,6 +260,38 @@ export function StewardPage() {
             </div>
           }
         />
+        <details className="nb-card">
+          <summary>{t('common.governance.myPermissions')}</summary>
+          <p>
+            {t('management.permissions.scope.title')} ·{' '}
+            {t(`management.permissions.scope.${policy.donation_scope}.label`)}
+          </p>
+          {permissionGroups.map((group) => {
+            const granted = group.keys.filter((key) => key !== 'ai.memory.edit' && has(key));
+            return (
+              granted.length > 0 && (
+                <p key={group.id}>
+                  <strong>{permissionCopy.groups[group.id].title}</strong> ·{' '}
+                  {granted
+                    .map((key) => t(`management.permissions.labels.${key.replaceAll('.', '_')}`))
+                    .join(' · ')}
+                </p>
+              )
+            );
+          })}
+          <dl>
+            {stewardLimitKeys.map((key) => (
+              <div key={key}>
+                <dt>{t(`management.permissions.limits.${key.replaceAll('.', '_')}`)}</dt>
+                <dd>
+                  {key.endsWith('_milli')
+                    ? decimalAmount(policy.limits[key], 3)
+                    : policy.limits[key]}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </details>
         {section === 'users' && logReturnTo && (
           <Link to={logReturnTo}>{t('common.operations.logs.returnToLogs')}</Link>
         )}
@@ -344,7 +399,20 @@ export function StewardPage() {
               ) : null}
             </Suspense>
           ) : (
-            <StewardPermissionNotice />
+            <>
+              <StewardPermissionNotice
+                permission={section === 'charity' ? 'charity.read' : section + '.read'}
+              />
+              {sections.some((value) => access[value]) && (
+                <button
+                  className="nb-btn nb-btn--secondary"
+                  type="button"
+                  onClick={() => setSection(sections.find((value) => access[value])!)}
+                >
+                  {t('common.operations.charity.returnToList')}
+                </button>
+              )}
+            </>
           )}
         </Tabs>
       </div>

@@ -106,11 +106,7 @@ function CharityContent() {
         ? 'donate'
         : 'models';
   const selectTab = (value: string) => {
-    setSearchParams((previous) => {
-      const next = new URLSearchParams(previous);
-      next.set('tab', value);
-      return next;
-    });
+    setSearchParams({ tab: value });
   };
   const session = useUserSession();
   const publicConfig = usePublicConfig();
@@ -156,7 +152,11 @@ function CharityContent() {
           { value: 'donate', id: 'charity-tab-donate', label: t('user.charity.tabs.donate') },
         ]}
       />
-      <div className="charity-catalog-workspace economy-model-workspace">
+      <div
+        className={
+          tab === 'models' ? 'charity-catalog-workspace economy-model-workspace' : undefined
+        }
+      >
         <div
           id="charity-section-panel"
           role="tabpanel"
@@ -211,10 +211,12 @@ function CharityContent() {
             ) : null}
           </section>
         </div>
-        <aside className="economy-charity-sidebar">
-          <Leaderboard board="charity" foldHelp />
-          <CharitySafetyNotice />
-        </aside>
+        {tab === 'models' && (
+          <aside className="economy-charity-sidebar">
+            <Leaderboard board="charity" foldHelp />
+            <CharitySafetyNotice />
+          </aside>
+        )}
       </div>
     </div>
   );

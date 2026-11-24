@@ -1,5 +1,5 @@
 import { SuggestInput } from '@shared/components/ui/SuggestInput';
-import { useRef } from 'react';
+import { useRef, useState, type InputHTMLAttributes } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { fetchTimeZones } from '@shared/time';
@@ -12,6 +12,33 @@ import {
 } from '@shared/operations/recurringDiscount';
 import { Button, ChoiceRow, Field, Fields, FormActions, Note, Toggle } from '../ui';
 import { ErrorState } from '../States';
+
+function PercentInput({
+  value,
+  onChange,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState({ raw: String(value), parsed: value });
+  const input = Object.is(draft.parsed, value) ? draft.raw : String(value);
+  return (
+    <input
+      {...props}
+      type="text"
+      inputMode="decimal"
+      value={input}
+      aria-invalid={!Number.isFinite(value) || value < 0 || value > 100}
+      onChange={(event) => {
+        const raw = event.target.value;
+        const parsed = /^\d{1,3}(?:\.\d{0,2})?$/.test(raw) ? Number(raw) : NaN;
+        setDraft({ raw, parsed });
+        onChange(parsed);
+      }}
+    />
+  );
+}
 
 export function RecurringDiscountFields({
   value,
@@ -86,16 +113,13 @@ export function RecurringDiscountFields({
         </Field>
         <Field
           label={t('common.recurringDiscount.defaultPercent')}
-          help={t('common.recurringDiscount.defaultHelp')}
+          help={t('common.recurringDiscount.defaultHelp') + ' ' + t('common.governance.fullPrice')}
         >
           {(props) => (
-            <input
+            <PercentInput
               {...props}
-              type="number"
-              min={0}
-              max={100}
               value={value.default_percent}
-              onChange={(event) => set({ default_percent: Number(event.target.value) })}
+              onChange={(default_percent) => set({ default_percent })}
             />
           )}
         </Field>
@@ -111,6 +135,14 @@ export function RecurringDiscountFields({
             <legend>{t('common.recurringDiscount.period', { number: index + 1 })}</legend>
             <fieldset className="nb-recurring-discount__weekdays">
               <legend>{t('common.recurringDiscount.weekdays')}</legend>
+              <div className="nb-actions">
+                <Button type="button" onClick={() => update(index, { weekdays: [1, 2, 3, 4, 5] })}>
+                  {t('common.governance.workdays')}
+                </Button>
+                <Button type="button" onClick={() => update(index, { weekdays: [6, 7] })}>
+                  {t('common.governance.weekend')}
+                </Button>
+              </div>
               {weekdayKeys.map((key, day) => (
                 <ChoiceRow
                   key={key}
@@ -176,13 +208,10 @@ export function RecurringDiscountFields({
               </Field>
               <Field label={t('common.recurringDiscount.percent')}>
                 {(props) => (
-                  <input
+                  <PercentInput
                     {...props}
-                    type="number"
-                    min={0}
-                    max={100}
                     value={row.percent}
-                    onChange={(event) => update(index, { percent: Number(event.target.value) })}
+                    onChange={(percent) => update(index, { percent })}
                   />
                 )}
               </Field>

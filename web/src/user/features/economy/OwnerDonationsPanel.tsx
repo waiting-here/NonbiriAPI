@@ -6,7 +6,7 @@ import {
 } from '@shared/operations/donationUses';
 import { DonationStatusBadge } from '@shared/components/UseSummary';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -15,7 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from '@shared/components/States'
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { formatDateTime } from '@shared/utils/datetime';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { isStationSessionChanged } from '@shared/charityManagement';
 import { listReturnPath } from '@shared/operations/listReturn';
 import { copyForRecurringLimits } from '@shared/components/recurringLimitsCopy';
@@ -87,7 +87,7 @@ function inFamily(key: QueryKey | undefined, prefix: QueryKey): boolean {
 }
 
 const accessLost = (error: unknown) =>
-  isUnauthorized(error) || isForbidden(error) || isStationSessionChanged(error);
+  isUnauthorized(error) || isManagementForbidden(error) || isStationSessionChanged(error);
 
 export function OwnerDonationsPanel({
   accountID,
@@ -160,6 +160,14 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
     ? (rawStatus as DonationDisplayStatus | '')
     : '';
   const expanded = donationID(single(params, 'donation_expanded'));
+  const detailHeading = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (expanded && enabled) {
+      detailHeading.current?.focus();
+      detailHeading.current?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [expanded, enabled]);
   const [draft, setDraft] = useState({ source: q, value: q, invalid: false });
   const shownDraft = draft.source === q ? draft : { source: q, value: q, invalid: false };
   const pager = useUrlPagePager({
@@ -336,7 +344,10 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
                     item={item}
                     disabled={query.isFetching || Boolean(query.error)}
                     returnTo={`${location.pathname}${location.search}`}
-                    onOpenKeys={() => select(item.id)}
+                    onOpenKeys={(button) => {
+                      trigger.current = button;
+                      select(item.id);
+                    }}
                   />
                 ))}
               </div>
@@ -354,30 +365,44 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
           </>
         ) : null}
         {expanded && !accessLost(query.error) ? (
-          <Panel aria-label={t('user.charity.ownerPages.keys')}>
-            <PanelHead
-              level={3}
-              title={t('user.charity.donationNumber', { id: expanded })}
-              actions={
-                <Button type="button" variant="ghost" onClick={() => select('')}>
-                  {t('common.close')}
-                </Button>
-              }
-            />
-            <PanelBody>
-              <OwnerDonationKeys
-                key={`${accountID}:${expanded}`}
-                accountID={accountID}
-                donationID={expanded}
-                enabled={enabled && !query.isPending}
-                summary={query.data?.data.find((item) => item.id === expanded)?.useSummary}
-                status={
-                  query.data?.data.find((item) => item.id === expanded)?.status ??
-                  (view === 'history' || view === 'hidden' ? 'deleted' : undefined)
+          <div
+            ref={detailHeading}
+            tabIndex={-1}
+            role="region"
+            aria-label={t('user.charity.ownerPages.keys')}
+          >
+            <Panel>
+              <PanelHead
+                level={3}
+                title={t('user.charity.donationNumber', { id: expanded })}
+                actions={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      select('');
+                      trigger.current?.focus();
+                    }}
+                  >
+                    {t('common.close')}
+                  </Button>
                 }
               />
-            </PanelBody>
-          </Panel>
+              <PanelBody>
+                <OwnerDonationKeys
+                  key={`${accountID}:${expanded}`}
+                  accountID={accountID}
+                  donationID={expanded}
+                  enabled={enabled && !query.isPending}
+                  summary={query.data?.data.find((item) => item.id === expanded)?.useSummary}
+                  status={
+                    query.data?.data.find((item) => item.id === expanded)?.status ??
+                    (view === 'history' || view === 'hidden' ? 'deleted' : undefined)
+                  }
+                />
+              </PanelBody>
+            </Panel>
+          </div>
         ) : null}
       </Tabs>
     </div>
@@ -393,7 +418,7 @@ function DonationSummary({
   item: OwnerDonationSummary;
   disabled: boolean;
   returnTo: string;
-  onOpenKeys: () => void;
+  onOpenKeys: (button: HTMLElement) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -471,7 +496,12 @@ function DonationSummary({
             {t('user.charity.openDonationDetail')}
           </Link>
         )}
-        <Button type="button" variant="secondary" disabled={disabled} onClick={onOpenKeys}>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={disabled}
+          onClick={(event) => onOpenKeys(event.currentTarget)}
+        >
           {t('user.charity.ownerPages.keys')}
         </Button>
       </div>

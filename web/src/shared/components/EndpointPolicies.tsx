@@ -32,7 +32,7 @@ import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { validManagementSearch } from '@shared/operations/charityModelPages';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { formatCount } from '@shared/utils/formatNumber';
 import { DraftLeaveGuard, DraftLeaveScope } from './charity/DraftLeaveScope';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from './States';
@@ -53,7 +53,7 @@ import {
 import './EndpointPolicies.css';
 
 type Props = { role: CharityRole; accountId: string; onCapabilityLoss?: () => void };
-const denied = (error: unknown) => isForbidden(error) || isUnauthorized(error);
+const denied = (error: unknown) => isManagementForbidden(error) || isUnauthorized(error);
 const periodKeys = {
   auto: 'common.endpointPolicies.periods.auto',
   five_hour: 'common.endpointPolicies.periods.five_hour',
@@ -631,11 +631,13 @@ function PolicyEditor({
   const locked =
     reading || save.isPending || save.outcome === 'unknown' || save.outcome === 'refresh-failed';
   const disabled = locked || save.outcome === 'conflict';
-  const valid = draft.every(
-    (rule) =>
-      rule.value.trim().length > 0 &&
-      Array.from(rule.value).length <= (rule.kind === 'code' ? 64 : 160),
-  );
+  const validRule = (rule: EndpointBackoffRule) =>
+    rule.kind === 'code'
+      ? /^[A-Za-z0-9_.:-]{1,64}$/.test(rule.value)
+      : !!rule.value.trim() &&
+        Array.from(rule.value.trim()).length <= 160 &&
+        !/[\p{Cc}\p{Cf}]/u.test(rule.value.trim());
+  const valid = draft.every(validRule);
   const change = (index: number, patch: Partial<EndpointBackoffRule>) => {
     setDraft((previous) =>
       previous.map((rule, position) => (position === index ? { ...rule, ...patch } : rule)),
@@ -713,12 +715,18 @@ function PolicyEditor({
                       </select>
                     )}
                   </Field>
-                  <Field label={t('common.endpointPolicies.valueLabel', { number: index + 1 })}>
+                  <Field
+                    label={t('common.endpointPolicies.valueLabel', { number: index + 1 })}
+                    error={
+                      validRule(rule)
+                        ? undefined
+                        : t('common.governance.ruleValue', { max: rule.kind === 'code' ? 64 : 160 })
+                    }
+                  >
                     {(props) => (
                       <input
                         {...props}
                         value={rule.value}
-                        maxLength={rule.kind === 'code' ? 64 : 320}
                         required
                         onChange={(event) => change(index, { value: event.target.value })}
                       />
@@ -866,7 +874,13 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
   useEffect(() => {
     if (denied(routes.error)) onCapabilityLoss?.();
   }, [routes.error, onCapabilityLoss]);
-  const count = routes.data?.routes.length ?? 0;
+  const [search, setSearch] = useState('');
+  const filtered = (routes.data?.routes ?? []).filter((row) =>
+    [row.source_base_url, row.gateway_origin, row.credential_header].some((value) =>
+      value.toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+  );
+  const count = filtered.length;
   const pages = Math.max(1, Math.ceil(count / pager.pageSize));
   const page = Math.min(Number(pager.page), pages);
   if (routes.data && String(page) !== pager.page) pager.setPage(String(page));
@@ -913,12 +927,22 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
                       count: routes.data.routes.length,
                     })}
                   </p>
+                  <Field label={t('common.search')}>
+                    {(props) => (
+                      <input
+                        {...props}
+                        type="search"
+                        value={search}
+                        onChange={(event) => {
+                          setSearch(event.target.value);
+                          pager.setPage('1');
+                        }}
+                      />
+                    )}
+                  </Field>
                   <DataTable
                     caption={t('common.endpointPolicies.loadedRoutes')}
-                    rows={routes.data.routes.slice(
-                      (page - 1) * pager.pageSize,
-                      page * pager.pageSize,
-                    )}
+                    rows={filtered.slice((page - 1) * pager.pageSize, page * pager.pageSize)}
                     rowKey={(row) => row.source_base_url}
                     columns={[
                       {
@@ -929,6 +953,12 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
                         render: (row) => (
                           <span className="mono endpoint-policy-url">{row.source_base_url}</span>
                         ),
+                      },
+                      {
+                        key: 'connector',
+                        header: t('common.operations.charity.source'),
+                        cell: 'meta',
+                        render: () => t('common.governance.connectorAny'),
                       },
                       {
                         key: 'gateway',

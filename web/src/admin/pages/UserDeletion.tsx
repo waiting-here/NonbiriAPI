@@ -44,7 +44,7 @@ export function UserDeletion({
     };
   }, [user.revision]);
   const submit = async () => {
-    if (!password) return;
+    if (!password || elevating || deletion.isPending) return;
     const expected = user.revision;
     const submitted = password;
     setPassword('');
@@ -54,8 +54,8 @@ export function UserDeletion({
       const elevation = await elevateAdmin(submitted);
       if (revision.current !== expected) return;
       token.current = elevation.token;
-      setOpen(false);
-      deletion.mutate({ revision: expected });
+      await deletion.mutateAsync({ revision: expected });
+      if (revision.current === expected) setOpen(false);
     } catch (error) {
       if (revision.current === expected) setElevationError(error);
     } finally {
@@ -64,7 +64,12 @@ export function UserDeletion({
   };
   return (
     <>
-      <button className="nb-btn nb-btn--danger-outline" type="button" onClick={() => setOpen(true)}>
+      <button
+        className="nb-btn nb-btn--danger-outline"
+        type="button"
+        disabled={elevating || deletion.isPending}
+        onClick={() => setOpen(true)}
+      >
         {t('management.users.delete')}
       </button>
       {open ? (
@@ -93,6 +98,12 @@ export function UserDeletion({
                 type="password"
                 autoComplete="current-password"
                 value={password}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void submit();
+                  }
+                }}
                 onChange={(event) => {
                   setPassword(event.target.value);
                   setElevationError(null);
@@ -103,7 +114,7 @@ export function UserDeletion({
           {elevationError ? <ErrorState error={elevationError} /> : null}
         </ConfirmDialog>
       ) : null}
-      {deletion.error ? <ErrorState error={deletion.error} /> : null}
+      {!open && deletion.error ? <ErrorState error={deletion.error} /> : null}
     </>
   );
 }

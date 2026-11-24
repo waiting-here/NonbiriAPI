@@ -1,3 +1,4 @@
+import { ConfirmDialog } from './ConfirmDialog';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -76,6 +77,7 @@ export function EndpointTagRules({
       getEndpointTagRulesPage(role, query, pager.page, pager.pageSize, signal),
     retry: false,
   });
+  const [removing, setRemoving] = useState<EndpointTagRule | null>(null);
   const [editor, setEditor] = useState<{ rule: EndpointTagRule; editing: boolean } | null>(null);
   const mutation = useMutation({
     mutationFn: (action: RuleMutation) =>
@@ -121,6 +123,22 @@ export function EndpointTagRules({
 
   return (
     <div className="nb-stack endpoint-rules">
+      <ConfirmDialog
+        open={removing !== null}
+        danger
+        title={t('management.endpoints.rules.delete')}
+        description={t('common.governance.removeRule', {
+          pattern: removing?.pattern ?? '',
+          tags: removing?.tags.join(', ') ?? '',
+        })}
+        confirmLabel={t('management.endpoints.rules.delete')}
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => {
+          if (removing)
+            mutation.mutate({ kind: 'delete', pattern: removing.pattern, key: operationKey() });
+          setRemoving(null);
+        }}
+      />
       <p className="nb-muted">{t('management.endpoints.rules.description')}</p>
       <p className="nb-muted">{t('management.endpoints.rules.precedence')}</p>
       <FilterBar
@@ -328,16 +346,7 @@ export function EndpointTagRules({
                         >
                           {t('management.endpoints.rules.edit')}
                         </Button>
-                        <Button
-                          disabled={busy}
-                          onClick={() =>
-                            mutation.mutate({
-                              kind: 'delete',
-                              pattern: rule.pattern,
-                              key: operationKey(),
-                            })
-                          }
-                        >
+                        <Button disabled={busy} onClick={() => setRemoving(rule)}>
                           {t('management.endpoints.rules.delete')}
                         </Button>
                       </div>

@@ -46,8 +46,9 @@ export type DonationPageRole = CharityRole;
 export type DonationHandlingState = DonationHandling['state'];
 
 export interface ManagedDonationPageFilters {
+  sort?: 'oldest' | 'newest' | '';
   status?: DonationStatus | '';
-  review_status?: DonationDisplayStatus | '';
+  review_status?: DonationDisplayStatus | 'any_pending' | '';
   handling?: DonationHandlingState | '';
   q?: string;
   user_id?: string;
@@ -277,7 +278,7 @@ function queryText(value: unknown, label: string): string {
 function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
   const root = exactRecord(
     value,
-    ['status', 'review_status', 'handling', 'q', 'user_id', 'discord_id'],
+    ['status', 'review_status', 'handling', 'q', 'user_id', 'discord_id', 'sort'],
     'donation page filters',
     [],
   );
@@ -303,7 +304,7 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
       ? ''
       : oneOf(
           root.review_status,
-          ['', ...DONATION_DISPLAY_STATUSES],
+          ['', 'any_pending', ...DONATION_DISPLAY_STATUSES],
           'donation review status filter',
         );
   const user_id =
@@ -315,7 +316,18 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
       ? ''
       : string(root.discord_id, 'donor Discord id', { ascii: true });
   if (discord_id && !/^[1-9][0-9]{0,19}$/.test(discord_id)) invalidResponse('donor Discord id');
-  return { status, review_status, handling, q, user_id, discord_id };
+  return {
+    status,
+    review_status,
+    handling,
+    q,
+    user_id,
+    discord_id,
+    sort:
+      root.sort === undefined
+        ? ''
+        : oneOf(root.sort, ['', 'oldest', 'newest'] as const, 'donation sort'),
+  };
 }
 
 interface NormalizedSourceFilters {
@@ -785,6 +797,7 @@ export function getManagedDonationsPage(
   pageArguments(page, pageSize);
   return decoded(
     queryPath(`${root}/donations`, {
+      sort: normalizedFilters.sort || undefined,
       status: normalizedFilters.status || undefined,
       review_status: normalizedFilters.review_status || undefined,
       handling: normalizedFilters.handling || undefined,

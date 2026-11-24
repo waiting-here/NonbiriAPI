@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
   apiFetch,
-  isForbidden,
+  isManagementForbidden,
   isNotFoundError,
   isUnauthorized,
   refetchAuthoritativeQueries,
@@ -349,7 +349,7 @@ export function failManagementSessionRequest(
   if (
     error !== undefined &&
     !isUnauthorized(error) &&
-    !isForbidden(error) &&
+    !isManagementForbidden(error) &&
     !isNotFoundError(error) &&
     !(error instanceof ApiError && error.code === 'invalid_response')
   )
@@ -643,7 +643,7 @@ async function managementWrite<T>(
 }
 
 function isManagementCapabilityError(error: unknown): boolean {
-  return isForbidden(error) || isUnauthorized(error);
+  return isManagementForbidden(error) || isUnauthorized(error);
 }
 
 interface ManagementReadSnapshot {

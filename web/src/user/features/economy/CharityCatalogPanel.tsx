@@ -1,3 +1,4 @@
+import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
@@ -303,6 +304,17 @@ export function CharityCatalogPanel({
 
   const pageData = catalog.data;
   const busy = catalog.isFetching;
+  useRateLimitRefresh(
+    enabled && pageData && !catalog.isPlaceholderData
+      ? pageData.models.map(({ effectiveDiscount }) => {
+          const next = effectiveDiscount.next_change_at;
+          return next === null || next <= pageData.serverNow
+            ? null
+            : Math.ceil(catalog.dataUpdatedAt / 1000) + next - pageData.serverNow;
+        })
+      : [],
+    () => catalog.refetch({ throwOnError: true }),
+  );
   const toggleDescription = (modelID: string) => {
     setExpanded((current) => {
       const next = new Set(current);
@@ -385,7 +397,11 @@ export function CharityCatalogPanel({
         <ErrorState error={catalog.error} onRetry={() => void catalog.refetch()} />
       ) : pageData ? (
         <div className="economy-catalog-results" aria-busy={busy}>
-          {busy ? <LoadingState /> : null}
+          {busy && (
+            <span className="sr-only" role="status">
+              {t('common.loading')}
+            </span>
+          )}
           {priceCount === 0 ? (
             <EmptyState
               title={t('user.charity.catalog.emptyTitle')}
@@ -438,6 +454,7 @@ export function CharityCatalogPanel({
                       {model.publicDescription ? (
                         <span className="nb-sub charity-model-preview">
                           {Array.from(model.publicDescription).slice(0, 60).join('')}
+                          {Array.from(model.publicDescription).length > 60 && '…'}
                         </span>
                       ) : null}
                     </>

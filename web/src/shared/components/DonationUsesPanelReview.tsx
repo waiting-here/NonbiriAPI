@@ -1,3 +1,4 @@
+import { ConfirmDialog } from './ConfirmDialog';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -38,6 +39,7 @@ export function DonationUsesReviewAll({
 }) {
   const { t } = useTranslation();
   const [note, setNote] = useState('');
+  const [confirmation, setConfirmation] = useState<ReviewPlan | null>(null);
   const [empty, setEmpty] = useState(false);
   const root = role === 'admin' ? ['admin', 'operations'] : ['user'];
   const prepare = useRetainedOperation<
@@ -103,7 +105,7 @@ export function DonationUsesReviewAll({
         setEmpty(true);
         return;
       }
-      await review.mutateAsync(plan);
+      setConfirmation(plan);
     } catch {
       /* Retained operations keep the original request for recovery. */
     }
@@ -142,6 +144,31 @@ export function DonationUsesReviewAll({
           {t('common.connections.rejectAllUses')}
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={t(
+          confirmation?.body.decision === 'reject'
+            ? 'common.connections.rejectAllUses'
+            : 'common.connections.approveAllUses',
+        )}
+        description={t('common.governance.reviewScope', {
+          id: donationId,
+          count: confirmation?.rows.length ?? 0,
+        })}
+        confirmLabel={t(
+          confirmation?.body.decision === 'reject'
+            ? 'common.connections.rejectAllUses'
+            : 'common.connections.approveAllUses',
+        )}
+        danger={confirmation?.body.decision === 'reject'}
+        busy={review.isPending}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (!confirmation) return;
+          review.mutate(confirmation);
+          setConfirmation(null);
+        }}
+      />
       {prepare.isPending || review.isPending ? <LoadingState /> : null}
       {empty ? <Note>{t('common.connections.noPendingContent')}</Note> : null}
       {prepare.error ? <ErrorState error={prepare.error} /> : null}

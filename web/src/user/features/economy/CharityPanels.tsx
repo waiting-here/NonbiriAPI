@@ -6,7 +6,7 @@ import { DonationShareFields } from './DonationShareFields';
 import { contextPriceProps, contextRows } from './contextPrices';
 import { ModelTypesSummary } from '@shared/components/ModelTypesField';
 import { useEndpointCreateOptions } from '../core/queries';
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useState, type FormEvent, type ReactNode, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -326,6 +326,10 @@ export function DonationComposer({
   const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [thresholdByKey, setThresholdByKey] = useState<Record<string, string>>({});
+  const [bulkExpiry, setBulkExpiry] = useState(createTimeDraft);
+  const [bulkThreshold, setBulkThreshold] = useState('10');
+  const manualExpiry = useRef(new Set<string>());
+  const manualThreshold = useRef(new Set<string>());
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
   const [receipt, setReceipt] = useState<Donation>();
@@ -349,6 +353,7 @@ export function DonationComposer({
     ) ||
     new Set(selectedChoices.map((choice) => choice.key.id)).size !== selectedChoices.length;
   const keyExpiry = (id: string) => (expiryByKey[id] ? timeDraftValue(expiryByKey[id]) : null);
+  const unresolvedExpiry = selectedChoices.find((choice) => keyExpiry(choice.key.id) === undefined);
   const expiryLabel = (id: string) => {
     const expiry = keyExpiry(id);
     return expiry === undefined
@@ -381,7 +386,13 @@ export function DonationComposer({
       return invalid(t('user.charity.splitDonationSources'), 'pick');
     for (const choice of selectedChoices) {
       if (keyExpiry(choice.key.id) === undefined)
-        return invalid(t('user.charity.expiryInvalid'), 'options-' + choice.key.id, 'input');
+        return invalid(
+          t('user.charity.expiryInvalid') +
+            ' · ' +
+            (choice.key.note || maskedKey(choice.key.displayHead, choice.key.displayTail)),
+          'options-' + choice.key.id,
+          'input[type="datetime-local"]',
+        );
       if (!validFailureThreshold(thresholdByKey[choice.key.id] ?? '10'))
         return invalid(
           t('common.failurePolicy.invalid'),
@@ -428,6 +439,8 @@ export function DonationComposer({
       const result = await mutation.mutateAsync(input);
       setDescription('');
       setSelectedChoices([]);
+      manualExpiry.current.clear();
+      manualThreshold.current.clear();
       setExpiryByKey({});
       setThresholdByKey({});
       setAuthorized(false);
@@ -463,6 +476,61 @@ export function DonationComposer({
             >
               {t('user.charity.presentation.openPicker')}
             </button>
+            {selectedChoices.length > 1 && (
+              <Fold title={t('common.governance.batchKeyOptions')}>
+                <p>{t('common.governance.applyUntouched', { count: selectedChoices.length })}</p>
+                <Field label={t('user.charity.keyExpiry')}>
+                  {(props) => (
+                    <TimeInput
+                      {...props}
+                      station="user"
+                      draft={bulkExpiry}
+                      disabled={locked}
+                      onChange={setBulkExpiry}
+                    />
+                  )}
+                </Field>
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  disabled={locked || timeDraftValue(bulkExpiry) === undefined}
+                  onClick={() =>
+                    setExpiryByKey((current) => ({
+                      ...current,
+                      ...Object.fromEntries(
+                        selectedChoices
+                          .filter(({ key }) => !manualExpiry.current.has(key.id))
+                          .map(({ key }) => [key.id, bulkExpiry]),
+                      ),
+                    }))
+                  }
+                >
+                  {t('common.governance.applyExpiry')}
+                </button>
+                <FailureThresholdInput
+                  value={bulkThreshold}
+                  onChange={setBulkThreshold}
+                  disabled={locked}
+                />
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--secondary"
+                  disabled={locked || !validFailureThreshold(bulkThreshold)}
+                  onClick={() =>
+                    setThresholdByKey((current) => ({
+                      ...current,
+                      ...Object.fromEntries(
+                        selectedChoices
+                          .filter(({ key }) => !manualThreshold.current.has(key.id))
+                          .map(({ key }) => [key.id, bulkThreshold]),
+                      ),
+                    }))
+                  }
+                >
+                  {t('common.governance.applyThreshold')}
+                </button>
+              </Fold>
+            )}
             {selectedChoices.length > 0 ? (
               <ul className="donation-review-keys">
                 {selectedChoices.map((choice) => (
@@ -512,14 +580,15 @@ export function DonationComposer({
                             station="user"
                             disabled={locked}
                             draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
-                            onChange={(update) =>
+                            onChangeCapture={() => manualExpiry.current.add(choice.key.id)}
+                            onChange={(update) => {
                               setExpiryByKey((current) => ({
                                 ...current,
                                 [choice.key.id]: update(
                                   current[choice.key.id] ?? createTimeDraft(),
                                 ),
-                              }))
-                            }
+                              }));
+                            }}
                             onClick={(event) => event.stopPropagation()}
                             aria-label={t('user.charity.keyExpiryFor', {
                               key: maskedKey(choice.key.displayHead, choice.key.displayTail),
@@ -530,9 +599,10 @@ export function DonationComposer({
                       <FailureThresholdInput
                         value={thresholdByKey[choice.key.id] ?? '10'}
                         disabled={locked}
-                        onChange={(value) =>
-                          setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }))
-                        }
+                        onChange={(value) => {
+                          manualThreshold.current.add(choice.key.id);
+                          setThresholdByKey((current) => ({ ...current, [choice.key.id]: value }));
+                        }}
                       />
                     </Fold>
                   </li>
@@ -706,13 +776,26 @@ export function DonationComposer({
         <FormActions
           note={t('user.charity.presentation.selectedCount', { count: selectedChoices.length })}
         >
+          {unresolvedExpiry && (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() =>
+                invalid(
+                  t('user.charity.expiryInvalid'),
+                  'options-' + unresolvedExpiry.key.id,
+                  'input[type="datetime-local"]',
+                )
+              }
+            >
+              {t('common.governance.checkExpiry')}
+            </button>
+          )}
           <button
             className="nb-btn nb-btn--primary"
             type="submit"
             form={formID}
-            disabled={
-              locked || selectedChoices.some((choice) => keyExpiry(choice.key.id) === undefined)
-            }
+            disabled={locked || !!unresolvedExpiry}
           >
             {mutation.isPending ? t('common.working') : t('user.charity.submit')}
           </button>
@@ -814,23 +897,6 @@ export function DonationKeyPanel({
   const blockingReasons = keyBlockingReasons(donationKey);
   return (
     <article className="economy-donation-key">
-      {accountID &&
-      donationId &&
-      donationRevision &&
-      donationKey.endpointId !== undefined &&
-      (donationStatus === 'pending' || donationStatus === 'approved') &&
-      donationKey.endedReason === null &&
-      donationKey.charityState !== 'ended' &&
-      donationKey.charityState !== 'expired' ? (
-        <Fold plain lazy title={t('common.connections.addServices')}>
-          <OwnerUseAddition
-            accountId={accountID}
-            donationId={donationId}
-            donationRevision={donationRevision}
-            donationKey={donationKey}
-          />
-        </Fold>
-      ) : null}
       <div className="item-header">
         <div>
           {donationId ? (
@@ -872,6 +938,23 @@ export function DonationKeyPanel({
             ))}
         </div>
       </div>
+      {accountID &&
+      donationId &&
+      donationRevision &&
+      donationKey.endpointId !== undefined &&
+      (donationStatus === 'pending' || donationStatus === 'approved') &&
+      donationKey.endedReason === null &&
+      donationKey.charityState !== 'ended' &&
+      donationKey.charityState !== 'expired' ? (
+        <Fold plain lazy title={t('common.connections.addServices')}>
+          <OwnerUseAddition
+            accountId={accountID}
+            donationId={donationId}
+            donationRevision={donationRevision}
+            donationKey={donationKey}
+          />
+        </Fold>
+      ) : null}
       {accountID && donationKey.endpointId && donationKey.endpointKeyId ? (
         <Link
           className="nb-btn nb-btn--secondary"
@@ -1045,6 +1128,11 @@ export function DonationKeyPanel({
           keyID={donationKey.id}
           revision={donationRevision}
           disabled={
+            (!donationKey.streak.failureDisabled &&
+              Number(donationKey.streak.count) === 0 &&
+              !donationKey.serviceStatuses?.some(
+                (service) => service.failure_disabled || Number(service.failure_streak) > 0,
+              )) ||
             ['pending', 'expired', 'ended'].includes(donationKey.charityState) ||
             (donationStatus !== undefined && donationStatus !== 'approved')
           }

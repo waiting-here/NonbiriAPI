@@ -1,3 +1,4 @@
+import { Link, useLocation } from 'react-router';
 import { TableCheckbox } from './ui/TableCheckbox';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +31,8 @@ type Props = {
   scopeReady: boolean;
   canRead?: boolean;
   canTag?: boolean;
+  canReadUsers?: boolean;
+  canReadLogs?: boolean;
   sessionError?: unknown;
   back?: ReactNode;
   embedded?: boolean;
@@ -48,12 +51,15 @@ function EndpointUsersPanel({
   role,
   account,
   baseURL,
+  canReadUsers,
 }: {
+  canReadUsers: boolean;
   role: ManagementRole;
   account: string;
   baseURL: string;
 }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'admin.endpoint-users',
@@ -91,7 +97,22 @@ function EndpointUsersPanel({
               key: 'user',
               header: t('common.userId'),
               cell: 'title',
-              render: (user) => <span className="mono">{user.user_id}</span>,
+              render: (user) =>
+                canReadUsers ? (
+                  <Link
+                    className="mono"
+                    state={{ returnTo: location.pathname + location.search }}
+                    to={
+                      role === 'admin'
+                        ? '/users?user=' + user.user_id
+                        : '/steward?tab=users&user=' + user.user_id
+                    }
+                  >
+                    {user.user_id}
+                  </Link>
+                ) : (
+                  <span className="mono">{user.user_id}</span>
+                ),
             },
             ...(['endpoint_count', 'key_count', 'enabled_count'] as const).map((key, index) => ({
               key,
@@ -140,11 +161,14 @@ export function EndpointManagement({
   scopeReady,
   canRead = true,
   canTag = true,
+  canReadUsers = role === 'admin',
+  canReadLogs = role === 'admin',
   sessionError,
   back,
   embedded = false,
 }: Props) {
   const { t } = useTranslation();
+  const location = useLocation();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
   const query = params.get('q') ?? '';
@@ -188,7 +212,8 @@ export function EndpointManagement({
       : [];
   const [editTag, setEditTag] = useState<string>(ENDPOINT_TAGS[0]);
   const tags = useMutation({
-    mutationFn: (add: boolean) => setEndpointTags(role, selected, editTag, add),
+    mutationFn: (change: { add: boolean; urls: string[]; tag: string }) =>
+      setEndpointTags(role, change.urls, change.tag, change.add),
     onSuccess: async () => {
       setSelection({ scope: '', urls: [] });
       await client.invalidateQueries({
@@ -364,14 +389,14 @@ export function EndpointManagement({
                 <Button
                   type="button"
                   disabled={selected.length === 0}
-                  onClick={() => tags.mutate(true)}
+                  onClick={() => tags.mutate({ add: true, urls: selected, tag: editTag })}
                 >
                   {t('management.endpoints.addTag')}
                 </Button>
                 <Button
                   type="button"
                   disabled={selected.length === 0}
-                  onClick={() => tags.mutate(false)}
+                  onClick={() => tags.mutate({ add: false, urls: selected, tag: editTag })}
                 >
                   {t('management.endpoints.removeTag')}
                 </Button>
@@ -484,6 +509,29 @@ export function EndpointManagement({
                             ))
                           : t('management.endpoints.untagged')}
                       </div>
+                      {canTag && !group.tag_rules.length && (
+                        <Fold plain title={t('management.endpoints.tags')}>
+                          <div className="nb-actions">
+                            {ENDPOINT_TAGS.map((tag) => (
+                              <Button
+                                size="sm"
+                                key={tag}
+                                aria-pressed={group.manual_tags.includes(tag)}
+                                disabled={tags.isPending || result.isFetching}
+                                onClick={() =>
+                                  tags.mutate({
+                                    urls: [group.base_url],
+                                    tag,
+                                    add: !group.manual_tags.includes(tag),
+                                  })
+                                }
+                              >
+                                {t(endpointTagKeys[tag])}
+                              </Button>
+                            ))}
+                          </div>
+                        </Fold>
+                      )}
                       {group.tag_rules.length ? (
                         <>
                           <p className="nb-muted endpoint-management-url">
@@ -566,23 +614,42 @@ export function EndpointManagement({
                   cell: 'action',
                   align: 'action',
                   render: (group) => (
-                    <Button
-                      type="button"
-                      aria-expanded={expanded === group.base_url}
-                      onClick={() => toggleExpanded(group.base_url)}
-                    >
-                      {t(
-                        expanded === group.base_url
-                          ? 'management.endpoints.hideUsers'
-                          : 'management.endpoints.showUsers',
+                    <div className="nb-actions">
+                      {canReadLogs && (
+                        <Link
+                          to={
+                            (role === 'admin' ? '/logs?' : '/steward?tab=logs&') +
+                            'endpoint_base_url=' +
+                            encodeURIComponent(group.base_url)
+                          }
+                          state={{ returnTo: location.pathname + location.search }}
+                        >
+                          {t('management.users.viewLogs')}
+                        </Link>
                       )}
-                    </Button>
+                      <Button
+                        type="button"
+                        aria-expanded={expanded === group.base_url}
+                        onClick={() => toggleExpanded(group.base_url)}
+                      >
+                        {t(
+                          expanded === group.base_url
+                            ? 'management.endpoints.hideUsers'
+                            : 'management.endpoints.showUsers',
+                        )}
+                      </Button>
+                    </div>
                   ),
                 },
               ]}
               renderDetail={(group) =>
                 expanded === group.base_url ? (
-                  <EndpointUsersPanel role={role} account={account} baseURL={group.base_url} />
+                  <EndpointUsersPanel
+                    canReadUsers={canReadUsers}
+                    role={role}
+                    account={account}
+                    baseURL={group.base_url}
+                  />
                 ) : null
               }
             />

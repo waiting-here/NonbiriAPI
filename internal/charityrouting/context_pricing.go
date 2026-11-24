@@ -291,37 +291,37 @@ func stewardContextPricing(p AdminPricing, out *StewardPricing) {
 		out.ContextPenalty = &StewardContextPenalty{InputThreshold: p.ContextPenalty.InputThreshold, Fine: p.ContextPenalty.Fine}
 	}
 }
-func capabilityContextPricing(out *CapabilityPricing, encoded string, discount, current int) error {
+func capabilityContextPricing(out *CapabilityPricing, encoded string, discount, currentBasisPoints int) error {
 	p, err := credits.DecodeContextPricing(encoded)
 	if err != nil {
 		return ErrInvariant
 	}
-	out.UserModalitiesMilli, err = capabilityModalityPricing(p.UserModalities, 100)
+	out.UserModalitiesMilli, err = capabilityModalityPricing(p.UserModalities, 10000)
 	if err != nil {
 		return err
 	}
-	out.DiscountedUserModalitiesMilli, err = capabilityModalityPricing(p.UserModalities, discount)
+	out.DiscountedUserModalitiesMilli, err = capabilityModalityPricing(p.UserModalities, discount*100)
 	if err != nil {
 		return err
 	}
-	out.CurrentUserModalitiesMilli, err = capabilityModalityPricing(p.UserModalities, current)
+	out.CurrentUserModalitiesMilli, err = capabilityModalityPricing(p.UserModalities, currentBasisPoints)
 	if err != nil {
 		return err
 	}
 	if l := p.LongContext; l != nil {
-		v, err := capabilityPricing(out.Mode, l.RequestPrice, l.UserPrices, discount, current)
+		v, err := capabilityPricing(out.Mode, l.RequestPrice, l.UserPrices, discount, currentBasisPoints)
 		if err != nil {
 			return err
 		}
-		v.UserModalitiesMilli, err = capabilityModalityPricing(l.UserModalities, 100)
+		v.UserModalitiesMilli, err = capabilityModalityPricing(l.UserModalities, 10000)
 		if err != nil {
 			return err
 		}
-		v.DiscountedUserModalitiesMilli, err = capabilityModalityPricing(l.UserModalities, discount)
+		v.DiscountedUserModalitiesMilli, err = capabilityModalityPricing(l.UserModalities, discount*100)
 		if err != nil {
 			return err
 		}
-		v.CurrentUserModalitiesMilli, err = capabilityModalityPricing(l.UserModalities, current)
+		v.CurrentUserModalitiesMilli, err = capabilityModalityPricing(l.UserModalities, currentBasisPoints)
 		if err != nil {
 			return err
 		}

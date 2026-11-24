@@ -309,6 +309,13 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await page
       .getByRole('button', { name: common.common.workflow.addCount.replace('{{count}}', '2') })
       .click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', {
+        name: common.common.workflow.addCount.replace('{{count}}', '2'),
+        exact: true,
+      })
+      .click();
     await expect(
       page.getByText(common.common.workflow.bindingConflict, { exact: true }),
     ).toBeVisible();
@@ -320,6 +327,13 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await page.getByRole('button', { name: common.common.workflow.refreshSelection }).click();
     await page
       .getByRole('button', { name: common.common.workflow.addCount.replace('{{count}}', '2') })
+      .click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', {
+        name: common.common.workflow.addCount.replace('{{count}}', '2'),
+        exact: true,
+      })
       .click();
     await expect(page.getByRole('region', { name: batch.results })).toContainText(
       batch.status.added,
@@ -397,6 +411,13 @@ test('completed key binding returns to the donation list and reopens a fresh rev
         .click();
       await page.getByRole('checkbox', { name: /binding-up-4/ }).check();
       await page
+        .getByRole('button', {
+          name: common.common.workflow.addCount.replace('{{count}}', '1'),
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole('alertdialog')
         .getByRole('button', {
           name: common.common.workflow.addCount.replace('{{count}}', '1'),
           exact: true,

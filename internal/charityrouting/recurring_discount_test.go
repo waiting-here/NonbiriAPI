@@ -32,7 +32,7 @@ func (*revokedReceiptAdmin) AuthorizeAdminMutation(context.Context, *sql.Tx, int
 
 func recurringConfig(percent int) *charitydiscount.Config {
 	v := charitydiscount.Default()
-	v.Enabled, v.DefaultPercent = true, percent
+	v.Enabled, v.DefaultPercent = true, charitydiscount.Percent(percent)
 	return &v
 }
 
@@ -118,7 +118,7 @@ func TestRecurringDiscountCurrentPricesAndDecisionClock(t *testing.T) {
 				}
 				m := catalog.Models[0]
 				p := m.Pricing
-				if m.EffectiveDiscount.Percent != wantPercent {
+				if float64(m.EffectiveDiscount.Percent) != float64(wantPercent) {
 					t.Fatal(m.EffectiveDiscount)
 				}
 				if token {

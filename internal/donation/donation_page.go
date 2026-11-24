@@ -93,7 +93,7 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	if err != nil {
 		return empty, err
 	}
-	query := `SELECT d.id AS id FROM donations d JOIN donation_handling h ON h.donation_id=d.id
+	query := `SELECT d.id AS id,d.created_at AS created_at FROM donations d JOIN donation_handling h ON h.donation_id=d.id
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now - terminalRetention}
 	predicate, values := access.predicate(now)
@@ -105,7 +105,11 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		query, args = appendOwnerView(query, args, filter.OwnerView, now)
 	}
 	query, args = appendManagementFilter(query, args, filter, now)
-	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
+	sort := filter.Sort
+	if sort == "" {
+		sort = "oldest"
+	}
+	ids, metadata, err := browseOrderedIDs(ctx, tx, query, args, page, sort)
 	if err != nil {
 		return empty, err
 	}
