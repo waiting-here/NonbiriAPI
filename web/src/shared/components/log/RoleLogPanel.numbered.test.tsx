@@ -244,14 +244,21 @@ describe('numbered role log panel', () => {
       timeZoneFixture('/admin/api/time-zones'),
       {
         method: 'GET',
-        path: '/admin/api/logs?page=1&page_size=20',
+        path: '/admin/api/logs?upstream_model=legacy-test-model&page=1&page_size=20',
         body: listBody([adminRow(7)], pagination()),
       },
     ]);
-    const view = await renderWithProviders(<RoleLogPanel role="admin" />, {
-      station: 'admin',
-      role: 'admin',
-    });
+    const view = await renderWithProviders(
+      <>
+        <RoleLogPanel role="admin" />
+        <LocationProbe />
+      </>,
+      {
+        station: 'admin',
+        role: 'admin',
+        route: '/logs?upstream_model=legacy-test-model',
+      },
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     const sessionFetch = vi.fn(async () => ({ admin: { username: 'page-reader' } }));
     await act(async () => {
@@ -262,6 +269,8 @@ describe('numbered role log panel', () => {
       });
     });
     await screen.findByRole('button', { name: 'Details' });
+    expect(queryFromProbe(view.container).has('upstream_model')).toBe(false);
+    expect(screen.getByLabelText('Model used')).toHaveValue('legacy-test-model');
     await act(async () => {
       await view.queryClient.refetchQueries({
         queryKey: ['admin', 'session'],

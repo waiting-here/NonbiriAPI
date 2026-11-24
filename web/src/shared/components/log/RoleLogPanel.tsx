@@ -665,7 +665,7 @@ function ScopedRoleLogPanel({
   const { state: urlState, patch: patchUrlState } = useLogUrlState(
     textParams,
     LOG_DEFAULT_PAGE_SIZE,
-    role + ':' + accountID,
+    scopeReady && accountID ? role + ':' + accountID : '',
   );
   const [windowEnd, setWindowEnd] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {

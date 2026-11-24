@@ -174,6 +174,92 @@ async function prepare(page: Page, role: Role, locale: 'en' | 'zh', width: numbe
   return { origin, guard };
 }
 
+test('cold opening personal logs replaces a legacy private model once and restores it on forward', async ({
+  page,
+}) => {
+  const { origin } = await prepare(page, 'user', 'en', 1440);
+  const marker = 'legacy-test-model';
+  let releaseSession!: () => void;
+  const sessionGate = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  const sessionRequest = page.waitForRequest(
+    (request) => request.url() === origin + '/api/session',
+  );
+  await page.route(origin + '/api/session', async (route) => {
+    await sessionGate;
+    await route.fallback();
+  });
+  const before = origin + '/before-log-migration';
+  await page.route(before, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Before request logs</title>' }),
+  );
+  await page.addInitScript(() => {
+    const replace = history.replaceState.bind(history);
+    history.replaceState = (state, title, url) => {
+      if (
+        url &&
+        location.pathname === '/logs' &&
+        new URL(location.href).searchParams.has('model') &&
+        !new URL(String(url), location.href).searchParams.has('model')
+      ) {
+        const root = document.documentElement;
+        root.dataset.privateLogReplacements = String(
+          Number(root.dataset.privateLogReplacements ?? 0) + 1,
+        );
+      }
+      replace(state, title, url);
+    };
+  });
+  const seen: (string | null)[] = [];
+  await page.route(origin + '/api/logs?*', async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    seen.push(params.get('model'));
+    const data = Array.from({ length: 20 }, (_, index) => ({
+      ...row('user', index + 61),
+      model: marker,
+    }));
+    await route.fulfill({
+      json: {
+        data,
+        next_cursor: null,
+        pagination: windowFor(100, Number(params.get('page') ?? 1), 20),
+      },
+    });
+  });
+  await page.goto(before);
+  const initialHistory = await page.evaluate(() => history.length);
+  await page.goto(origin + '/logs?model=' + marker + '&operation=chat_completions&page=4', {
+    waitUntil: 'domcontentloaded',
+  });
+  await sessionRequest;
+  expect(seen).toEqual([]);
+  releaseSession();
+  const expectRestored = async () => {
+    await expect.poll(() => new URL(page.url()).searchParams.has('model')).toBe(false);
+    const restored = new URL(page.url());
+    expect(restored.searchParams.get('page')).toBe('4');
+    expect(restored.searchParams.get('operation')).toBe('chat_completions');
+    await expect(page.getByLabel('Model', { exact: true })).toHaveValue(marker);
+    expect(await page.evaluate(() => history.state?.usr?.logPrivate)).toEqual({
+      scope: 'user:1',
+      filters: { model: marker },
+    });
+  };
+  await expectRestored();
+  await expect.poll(() => seen.length).toBeGreaterThan(0);
+  expect(seen.every((value) => value === marker)).toBe(true);
+  expect(await page.evaluate(() => history.length)).toBe(initialHistory + 1);
+  await expect(page.locator('html')).toHaveAttribute('data-private-log-replacements', '1');
+  await page.goBack();
+  await expect(page).toHaveURL(before);
+  await page.goForward();
+  await expectRestored();
+  await page.reload();
+  await expectRestored();
+  expect(seen.every((value) => value === marker)).toBe(true);
+});
+
 for (const role of ['admin', 'steward'] as const) {
   test(
     role + ' log inspector measures its content area and restores row focus',
