@@ -106,10 +106,11 @@ func TestConnectionUsesTraineeSeesWholeQualifiedDonation(t *testing.T) {
 	id := parseTestID(t, donation.ID)
 	uses := ownerUsesForTest(t, e, owner, id)
 	selected := uses[0]
+	submitted := e.clock.Add(60)
 	stageUseForTest(t, e, selected)
 	for _, filter := range []string{"approved_pending", "any_pending"} {
 		queue, err := e.service.DonationsStewardPage(context.Background(), actor, ManagementFilter{ReviewStatus: filter}, pagination.Default())
-		if err != nil || len(queue.Data) != 1 || queue.Data[0].Status != "approved" || queue.Data[0].UseSummary.Pending != "1" || queue.Data[0].KeyCount != "2" || queue.Data[0].SourceCount != "2" {
+		if err != nil || len(queue.Data) != 1 || queue.Data[0].Status != "approved" || queue.Data[0].UseSummary.Pending != "1" || queue.Data[0].ReviewSubmittedAt == nil || *queue.Data[0].ReviewSubmittedAt != submitted || queue.Data[0].CreatedAt == submitted || queue.Data[0].KeyCount != "2" || queue.Data[0].SourceCount != "2" {
 			t.Fatalf("pending-use queue for %s: %+v, %v", filter, queue, err)
 		}
 	}

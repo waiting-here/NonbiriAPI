@@ -1402,6 +1402,8 @@ export function UserManagement({
   const batchScope = JSON.stringify([
     account,
     role,
+    actorLevel,
+    permissions?.revision,
     query,
     banned,
     level,

@@ -1777,19 +1777,44 @@ function DonationsPanel({
   const { listRef, detailRef, remember } = useDetailNavigation(selected, navigationReady);
   const capabilityLost =
     isManagementForbidden(list.error) || isUnauthorized(list.error) || isUnauthorized(detail.error);
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  const hasWaitingRows =
+    !selected &&
+    list.data?.data.some(
+      (row) => row.review_submitted_at !== undefined || row.status === 'pending',
+    );
+  useEffect(() => {
+    if (!hasWaitingRows) return;
+    const timer = window.setInterval(() => setNow(Date.now() / 1000), 60_000);
+    return () => window.clearInterval(timer);
+  }, [hasWaitingRows]);
   const [nextReviewError, setNextReviewError] = useState<unknown>(null);
   const [findingNext, setFindingNext] = useState(false);
+  const nextRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => nextRequest.current?.abort(), []);
   const [noNext, setNoNext] = useState(false);
   const nextReview = async () => {
+    nextRequest.current?.abort();
+    const request = new AbortController();
+    nextRequest.current = request;
     setFindingNext(true);
     setNextReviewError(null);
     try {
       const page = await getManagedDonationsPage(
         role,
-        { review_status: 'any_pending', sort, q: query, user_id: userID, discord_id: discordID },
+        {
+          review_status: 'any_pending',
+          handling: handling as ManagedDonationPageFilters['handling'],
+          sort,
+          q: query,
+          user_id: userID,
+          discord_id: discordID,
+        },
         '1',
         10,
+        request.signal,
       );
+      if (request.signal.aborted) return;
       const next = page.data.find((row) => row.id !== selected);
       if (next) {
         setSelected(next.id);
@@ -1798,9 +1823,9 @@ function DonationsPanel({
         setNoNext(false);
       } else setNoNext(true);
     } catch (error) {
-      setNextReviewError(error);
+      if (!request.signal.aborted) setNextReviewError(error);
     } finally {
-      setFindingNext(false);
+      if (!request.signal.aborted) setFindingNext(false);
     }
   };
   const reviewedTargetUnavailable =
@@ -2192,12 +2217,15 @@ function DonationsPanel({
                             ].join(' · ')}
                           >
                             {t('common.itemId', { id: item.id })} ·{' '}
-                            {formatDateTime(item.created_at)}{' '}
-                            {item.status === 'pending' &&
+                            {formatDateTime(item.review_submitted_at ?? item.created_at)}{' '}
+                            {(item.review_submitted_at !== undefined ||
+                              item.status === 'pending') &&
                               t('common.governance.waitMinutes', {
                                 count: Math.max(
                                   0,
-                                  Math.floor((Date.now() / 1000 - item.created_at) / 60),
+                                  Math.floor(
+                                    (now - (item.review_submitted_at ?? item.created_at)) / 60,
+                                  ),
                                 ),
                               })}
                             {BigInt(item.source_count) > BigInt(item.sources.length)

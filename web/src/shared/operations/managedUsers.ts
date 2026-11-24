@@ -581,11 +581,12 @@ export function mutateManagedUser(
   id: string,
   body: unknown,
   key: string,
+  signal?: AbortSignal,
 ): Promise<AdminUser> {
   return decoded(
     userPath(role, id),
     normalizeAdminUser,
-    idempotentOptions(key, { method: 'PATCH', json: body }),
+    idempotentOptions(key, { method: 'PATCH', json: body, signal }),
   );
 }
 export async function banManagedUser(

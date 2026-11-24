@@ -14,6 +14,7 @@ import {
   priceDraftError,
   draftPriceConfig,
   priceDraft,
+  priceDraftSignature,
   snapshotPriceDraft,
   type PriceDraft,
 } from './priceDraft';
@@ -276,7 +277,7 @@ function ModelForm({
   });
   const [draft, updateDraft] = useState(initialDraft);
   const [baseRevision, setBaseRevision] = useState(model?.revision);
-  const [savedDraft, setSavedDraft] = useState(() => JSON.stringify(initialDraft()));
+  const [savedDraft, setSavedDraft] = useState(() => priceDraftSignature(draft));
   const [undoPrice, setUndoPrice] = useState<PriceDraft | null>(null);
   const [priceSource, setPriceSource] = useState('');
   const [createdModel, setCreatedModel] = useState<CharityModel | null>(null);
@@ -781,7 +782,7 @@ function ModelForm({
                 },
                 {
                   onSuccess: (result) => {
-                    setSavedDraft(JSON.stringify(draft));
+                    setSavedDraft(priceDraftSignature(draft));
                     if (!model) setCreatedModel(result);
                   },
                 },
@@ -801,7 +802,7 @@ function ModelForm({
             onClick={() =>
               save.mutate(save.variables!, {
                 onSuccess: (result) => {
-                  setSavedDraft(JSON.stringify(draft));
+                  setSavedDraft(priceDraftSignature(draft));
                   if (!model) setCreatedModel(result);
                 },
               })
@@ -821,8 +822,9 @@ function ModelForm({
               save.outcome === 'refresh-failed'
             }
             onClick={() => {
-              setDraft(modelDraft(model));
-              setSavedDraft(JSON.stringify(modelDraft(model)));
+              const latest = modelDraft(model);
+              setDraft(latest);
+              setSavedDraft(priceDraftSignature(latest));
               setBaseRevision(model.revision);
               save.reset();
             }}
@@ -866,7 +868,7 @@ function ModelForm({
   return (
     <Card className="charity-model-editor">
       <DraftLeaveGuard
-        dirty={JSON.stringify(draft) !== savedDraft}
+        dirty={priceDraftSignature(draft) !== savedDraft}
         allowNavigation={({ currentLocation, nextLocation }) => {
           const next = new URLSearchParams(nextLocation.search);
           const current = new URLSearchParams(currentLocation.search);

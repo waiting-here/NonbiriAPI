@@ -111,6 +111,7 @@ export type DonationStateCounts = Record<DonationState, string>;
 
 interface DonationPageCommon {
   use_summary?: UseSummary;
+  review_submitted_at?: number;
   discord_public_thanks?: boolean | null;
   id: string;
   status: DonationStatus;
@@ -423,6 +424,11 @@ function donationCommon(root: ReturnType<typeof record>, label: string): Donatio
   );
   return {
     ...(useSummary === undefined ? {} : { use_summary: useSummary }),
+    ...(root.review_submitted_at === undefined
+      ? {}
+      : {
+          review_submitted_at: unixSecond(root.review_submitted_at, `${label} pending review time`),
+        }),
     discord_public_thanks:
       root.discord_public_thanks == null
         ? null
@@ -465,10 +471,12 @@ function stewardOwner(value: unknown, label: string): StewardDonationPageOwner |
 
 function normalizeAdminDonationPageItem(value: unknown, index: number): AdminDonationPageItem {
   const label = `administrator donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
-    ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
-    'owner',
-  ]);
+  const root = record(
+    value,
+    [...DONATION_COMMON_FIELDS, 'owner', 'use_summary', 'review_submitted_at'],
+    label,
+    [...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'), 'owner'],
+  );
   return {
     ...donationCommon(root, label),
     owner: adminOwner(root.owner, `${label} owner`),
@@ -477,10 +485,12 @@ function normalizeAdminDonationPageItem(value: unknown, index: number): AdminDon
 
 function normalizeStewardDonationPageItem(value: unknown, index: number): StewardDonationPageItem {
   const label = `steward donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
-    ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
-    'owner',
-  ]);
+  const root = record(
+    value,
+    [...DONATION_COMMON_FIELDS, 'owner', 'use_summary', 'review_submitted_at'],
+    label,
+    [...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'), 'owner'],
+  );
   return {
     ...donationCommon(root, label),
     owner: stewardOwner(root.owner, `${label} owner`),

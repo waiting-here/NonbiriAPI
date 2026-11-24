@@ -77,7 +77,7 @@ export function UserLimitBatch({
         context.assertCurrent();
         context.commit(() => update(item, 'running'));
         try {
-          await mutateManagedUser(role, item.id, item.body, item.key);
+          await mutateManagedUser(role, item.id, item.body, item.key, context.signal);
           context.commit(() => update(item, 'saved'));
         } catch (error) {
           context.commit(() =>

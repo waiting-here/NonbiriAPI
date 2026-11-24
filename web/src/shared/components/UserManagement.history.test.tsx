@@ -140,5 +140,5 @@ it('confirms the selected users and limit, then retries only uncertain items wit
   await view.user.click(retry);
   await waitFor(() => expect(screen.getAllByText(/Saved/, { selector: 'li' })).toHaveLength(2));
   expect(writes.mock.calls.map((call) => call[1])).toEqual(['7', '8', '8']);
-  expect(writes.mock.calls[2]).toEqual(writes.mock.calls[1]);
+  expect(writes.mock.calls[2]?.slice(0, 4)).toEqual(writes.mock.calls[1]?.slice(0, 4));
 });

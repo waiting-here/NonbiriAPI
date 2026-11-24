@@ -10,12 +10,13 @@ import (
 // Pending and approved are independent pointers: one use can count in both.
 // ReviewStatus is a display summary and never grants or ends authorization.
 type UseSummary struct {
-	Total        string `json:"total"`
-	Pending      string `json:"pending"`
-	Approved     string `json:"approved"`
-	Rejected     string `json:"rejected"`
-	Withdrawn    string `json:"withdrawn"`
-	ReviewStatus string `json:"review_status"`
+	Total          string `json:"total"`
+	Pending        string `json:"pending"`
+	Approved       string `json:"approved"`
+	Rejected       string `json:"rejected"`
+	Withdrawn      string `json:"withdrawn"`
+	ReviewStatus   string `json:"review_status"`
+	firstPendingAt *int64
 }
 
 const useSummaryFromSQL = ` FROM donation_keys summary_key
@@ -66,7 +67,7 @@ func readUseSummariesTx(ctx context.Context, tx *sql.Tx, ids []int64) (map[int64
 	rows, err := tx.QueryContext(ctx, `SELECT summary_key.donation_id,COUNT(*),
 COUNT(summary_use.current_pending_revision_id),COUNT(summary_use.current_approved_revision_id),
 COALESCE(SUM(summary_latest.review_state='rejected'),0),COALESCE(SUM(summary_latest.review_state='cancelled'),0),`+
-		useReviewStatusSQL+useSummaryFromSQL+` WHERE summary_key.donation_id IN (`+strings.TrimRight(strings.Repeat("?,", len(ids)), ",")+`) GROUP BY summary_key.donation_id`, args...)
+		useReviewStatusSQL+`,MIN((SELECT pending.created_at FROM donation_use_revisions pending WHERE pending.id=summary_use.current_pending_revision_id))`+useSummaryFromSQL+` WHERE summary_key.donation_id IN (`+strings.TrimRight(strings.Repeat("?,", len(ids)), ",")+`) GROUP BY summary_key.donation_id`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +75,11 @@ COALESCE(SUM(summary_latest.review_state='rejected'),0),COALESCE(SUM(summary_lat
 	for rows.Next() {
 		var id, total, pending, approved, rejected, withdrawn int64
 		var status string
-		if err := rows.Scan(&id, &total, &pending, &approved, &rejected, &withdrawn, &status); err != nil {
+		var firstPending sql.NullInt64
+		if err := rows.Scan(&id, &total, &pending, &approved, &rejected, &withdrawn, &status, &firstPending); err != nil {
 			return nil, err
 		}
-		out[id] = UseSummary{Total: strconv.FormatInt(total, 10), Pending: strconv.FormatInt(pending, 10), Approved: strconv.FormatInt(approved, 10), Rejected: strconv.FormatInt(rejected, 10), Withdrawn: strconv.FormatInt(withdrawn, 10), ReviewStatus: status}
+		out[id] = UseSummary{Total: strconv.FormatInt(total, 10), Pending: strconv.FormatInt(pending, 10), Approved: strconv.FormatInt(approved, 10), Rejected: strconv.FormatInt(rejected, 10), Withdrawn: strconv.FormatInt(withdrawn, 10), ReviewStatus: status, firstPendingAt: unixPointer(firstPending)}
 	}
 	return out, rows.Err()
 }
