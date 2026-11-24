@@ -15,6 +15,7 @@
 package httperr
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -292,6 +293,31 @@ func sanitizeError(e Error, allowUpstreamContext bool) Error {
 		e.Diag = ""
 	}
 	return e
+}
+
+// IsClientCancellation reports whether the request was canceled and
+// cancellation alone explains the operation error, including driver cleanup.
+func IsClientCancellation(ctx context.Context, err error) bool {
+	return err != nil && context.Cause(ctx) == context.Canceled && onlyCancellation(err)
+}
+
+func onlyCancellation(err error) bool {
+	for err != nil {
+		if err == context.Canceled {
+			return true
+		}
+		if joined, ok := err.(interface{ Unwrap() []error }); ok {
+			causes := joined.Unwrap()
+			for _, cause := range causes {
+				if !onlyCancellation(cause) {
+					return false
+				}
+			}
+			return len(causes) > 0
+		}
+		err = errors.Unwrap(err)
+	}
+	return false
 }
 
 // WriteJSON writes a JSON success body with Cache-Control: no-store, the

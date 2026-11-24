@@ -16,7 +16,7 @@ import (
 )
 
 type castRow struct {
-	id, period                 string
+	id, period, storedPhase    string
 	user, generation, revision int64
 	state                      rules.Cast
 	elapsed                    int64
@@ -34,10 +34,9 @@ func scanCastContext(ctx context.Context, scan func(...any) error) (_ castRow, r
 	var snapshot, reward []byte
 	var rulesID string
 	var version int
-	var phase string
 	var paused, held bool
 	var tick uint64
-	e := scan(&row.id, &row.user, &row.period, &rulesID, &version, &row.generation, &row.revision, &snapshot, &reward, &phase, &paused, &tick, &held, &row.elapsed, &row.started, &row.lease)
+	e := scan(&row.id, &row.user, &row.period, &rulesID, &version, &row.generation, &row.revision, &snapshot, &reward, &row.storedPhase, &paused, &tick, &held, &row.elapsed, &row.started, &row.lease)
 	if errors.Is(e, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}
@@ -50,17 +49,22 @@ func scanCastContext(ctx context.Context, scan func(...any) error) (_ castRow, r
 	if e != nil {
 		return row, ErrInvariant
 	}
+	// Decode validated the full snapshot. Revalidate only when separately
+	// persisted reward or controller fields can change that validated state.
+	recheck := string(reward) != "{}" || row.state.Paused != paused || row.state.Held != held
 	if string(reward) != "{}" {
 		if e = json.Unmarshal(reward, &row.state.Reward); e != nil {
 			return row, ErrInvariant
 		}
 	}
-	if row.state.Phase != phase || row.state.Tick != tick {
+	if row.state.Phase != row.storedPhase || row.state.Tick != tick {
 		return row, ErrInvariant
 	}
 	row.state.Paused, row.state.Held = paused, held
-	if e = rules.ValidateCast(row.state); e != nil {
-		return row, ErrInvariant
+	if recheck {
+		if e = rules.ValidateCast(row.state); e != nil {
+			return row, ErrInvariant
+		}
 	}
 	return row, nil
 }
@@ -132,12 +136,23 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	if e != nil {
 		return e
 	}
-	var terminal any
-	if c.state.Terminal() {
-		terminal = now.Unix()
+	// Updating phase makes SQLite rewrite the active-cast uniqueness index,
+	// even when this checkpoint only advanced ticks within the same phase.
+	const update = "UPDATE lake_notes_casts SET rules_id=?,storage_version=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,updated_at=?"
+	const where = " WHERE id=? AND user_id=? AND revision=?"
+	query := update + where
+	args := []any{rules.RulesID, castStorageVersion, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), now.Unix()}
+	if c.state.Phase != c.storedPhase || c.state.Terminal() {
+		var terminal any
+		if c.state.Terminal() {
+			terminal = now.Unix()
+		}
+		query = update + ",phase=?,terminal_at=?" + where
+		args = append(args, c.state.Phase, terminal)
 	}
+	args = append(args, c.id, c.user, c.revision)
 	write := lakePhase(ctx, "write")
-	r, e := tx.ExecContext(ctx, "UPDATE lake_notes_casts SET rules_id=?,storage_version=?,phase=?,paused=?,generation=?,revision=revision+1,last_tick=?,snapshot=?,reward_plan=?,held=?,active_elapsed_ns=?,active_started_at_ns=?,lease_until_ns=?,last_ack_json=?,terminal_at=?,updated_at=? WHERE id=? AND user_id=? AND revision=?", rules.RulesID, castStorageVersion, c.state.Phase, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), terminal, now.Unix(), c.id, c.user, c.revision)
+	r, e := tx.ExecContext(ctx, query, args...)
 	write(e)
 	if e != nil {
 		return e
@@ -150,6 +165,7 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 		return ErrConflict
 	}
 	c.revision++
+	c.storedPhase = c.state.Phase
 	return nil
 }
 func (s *Service) castResultTx(ctx context.Context, tx *sql.Tx, c castRow, now time.Time, known profileProjection) (CastResult, error) {

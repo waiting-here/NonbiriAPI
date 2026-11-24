@@ -75,6 +75,10 @@ func testHTTPCheckpointPersistence(t *testing.T, returning bool) {
 		if err = json.Unmarshal(body, &result); err != nil {
 			t.Fatal(err)
 		}
+		expected, err := json.Marshal(result)
+		if err != nil || !bytes.Equal(body, append(expected, '\n')) || response.Header.Get("Content-Type") != "application/json; charset=utf-8" || response.Header.Get("Cache-Control") != "no-store" {
+			t.Fatal("checkpoint response encoding or headers changed", err)
+		}
 		return result
 	}
 	current := request("POST", baseRoute+"/casts", StartInput{view.Revision}, testKey(950))
@@ -95,6 +99,10 @@ func testHTTPCheckpointPersistence(t *testing.T, returning bool) {
 	paused := request("POST", path+"/pause", control(read.Cast), testKey(952))
 	if !paused.Cast.Paused {
 		t.Fatal("pause was not persisted")
+	}
+	closedReplay := request("POST", path+"/checkpoint", first, testKey(951))
+	if !closedReplay.Cast.Readonly || !closedReplay.Cast.Paused || closedReplay.Cast.AckTick != ack.Cast.AckTick {
+		t.Fatal("checkpoint retry returned the original active controller after pause")
 	}
 	current = request("POST", path+"/resume", control(paused.Cast), testKey(953))
 	if current.Cast.Generation == paused.Cast.Generation || current.Cast.State.Held {
