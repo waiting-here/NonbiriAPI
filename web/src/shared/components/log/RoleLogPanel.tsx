@@ -30,13 +30,13 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isApiError, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import { attemptHealthSummary } from './attemptHealthText';
@@ -183,28 +183,7 @@ function useStationScope(
   explicitAccountID: string | undefined,
   explicitScopeReady: boolean | undefined,
 ) {
-  const queryClient = useQueryClient();
-  const sessionKey = useMemo(
-    () => (role === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const)),
-    [role],
-  );
-  const subscribe = useCallback(
-    (notify: () => void) =>
-      queryClient.getQueryCache().subscribe((event) => {
-        if (
-          event.query.queryKey.length === 2 &&
-          event.query.queryKey[0] === sessionKey[0] &&
-          event.query.queryKey[1] === 'session'
-        )
-          notify();
-      }),
-    [queryClient, sessionKey],
-  );
-  const snapshot = useCallback(
-    () => queryClient.getQueryState(sessionKey),
-    [queryClient, sessionKey],
-  );
-  const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const session = useStationSessionSnapshot(role === 'admin' ? 'admin' : 'user');
   const derivedAccountID = sessionIdentity(role, session?.data);
   const accountID = explicitAccountID ?? derivedAccountID ?? '';
   const scopeReady = explicitScopeReady ?? (accountID.length > 0 && !session?.error);

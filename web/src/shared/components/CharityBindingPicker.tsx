@@ -13,7 +13,7 @@ import { FilterBar } from './ui/FilterBar';
 import { KeyStateFilter } from './charity/KeyStateFilter';
 import type { KeyStateFilter as KeyState } from '@shared/operations/keyState';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useManagementCapability } from '@shared/charityManagement';
@@ -124,12 +124,10 @@ type SessionProjection = {
 export function CharityBindingPicker(props: CharityBindingPickerProps) {
   const { onChange } = props;
   const management = useManagementCapability(props.role);
-  const session = useQuery<SessionProjection | null>({
-    queryKey: props.role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
-    enabled: false,
-    retry: false,
-  });
-  const account = sessionAccount(props.role, session.data);
+  const session = useStationSessionSnapshot<SessionProjection | null>(
+    props.role === 'admin' ? 'admin' : 'user',
+  );
+  const account = sessionAccount(props.role, session?.data);
   const identity = `${props.role}:${props.modelId}:${props.fixedKey?.key_id ?? 'any-key'}:${account ?? 'none'}`;
   const [selectionScope, setSelectionScope] = useState<{
     identity: string;
@@ -151,7 +149,7 @@ export function CharityBindingPicker(props: CharityBindingPickerProps) {
       }
       account={account}
       management={management}
-      sessionError={session.error}
+      sessionError={session?.error}
     />
   );
 }

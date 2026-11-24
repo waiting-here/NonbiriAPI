@@ -5,7 +5,8 @@ import {
 } from '@shared/operations/stewardPermissions';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { charityKeys, getDonationBadge, type CharityRole } from '@shared/operations/charity';
 import { getManagedDonationsPage } from '@shared/operations/donationPages';
@@ -24,12 +25,9 @@ export function DonationPendingBadge({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const session = useQuery<{
+  const session = useStationSessionSnapshot<{
     user?: { id?: string; effective_level: number; steward_permissions?: StewardPermissions };
-  }>({
-    queryKey: ['user', 'session'],
-    queryFn: skipToken,
-  }).data;
+  }>('user')?.data;
   const currentAccount =
     (!session?.user?.id || session.user.id === accountID) &&
     session?.user?.steward_permissions?.donation_scope !== 'none';

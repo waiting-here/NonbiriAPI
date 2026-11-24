@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
 import { captureStationSession, stationSessionMatches } from '@shared/charityManagement';
 import { ErrorState } from '@shared/components/States';
 import { Fold } from '@shared/components/ui';
@@ -22,7 +23,7 @@ export const PlaytestPane = forwardRef<PlaytestWorkspace, { versionID?: string; 
 function PlaytestPane({ versionID, contentHash }, ref) {
   const text = useFatFishText(), client = useQueryClient();
   const supportError = localPlaySupportError();
-  const administrator = useQuery({ queryKey: ['admin', 'session'], enabled: false }).data;
+  const administrator = useStationSessionSnapshot('admin')?.data;
   const session = useRef<FatFishSessionController | null>(null);
   const live = useRef(true), running = useRef(false);
   const [controller, setController] = useState<FatFishSessionController | null>(null);
