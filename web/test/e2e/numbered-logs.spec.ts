@@ -456,6 +456,25 @@ test('complete header lists fetch lazily and remain usable in light and dark des
   });
   await expect(response.getByRole('heading', { name: 'Response 2' })).toBeVisible();
   await expect(response.getByText('/wD+', { exact: true })).toBeVisible();
+  const headerSearch = request.getByRole('searchbox');
+  await headerSearch.fill('full-tail');
+  await headerSearch.focus();
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator(width === 390 ? '.nb-sheet' : '.inspection-dock')).toBeVisible();
+    await expect(headerSearch).toHaveValue('full-tail');
+    await expect(headerSearch).toBeFocused();
+    await expect(response.getByText('/wD+', { exact: true })).toBeVisible();
+    if (width === 390) {
+      const sheet = page.locator('.nb-sheet');
+      await sheet.getByRole('button').last().focus();
+      await page.keyboard.press('Tab');
+      await expect
+        .poll(() => sheet.evaluate((node) => node.contains(document.activeElement)))
+        .toBe(true);
+      await headerSearch.focus();
+    }
+  }
   for (const theme of ['light', 'dark']) {
     await page.evaluate((value) => {
       localStorage.setItem('nb.theme', value);
