@@ -65,6 +65,7 @@
 
 .nb-sheet__body {
   display: grid;
+  grid-auto-rows: max-content;
   align-content: start;
   gap: var(--nb-space-5);
   min-height: 0;
