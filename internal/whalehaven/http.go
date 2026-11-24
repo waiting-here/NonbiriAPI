@@ -16,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -121,7 +122,7 @@ func (s *Service) Register(reg resources.UserRouteRegistrar) error {
 		if err := reg.RegisterUserRoute(route.method, prefix+route.path, func(out http.ResponseWriter, req *http.Request, user resources.UserPrincipal) {
 			value, err := s.handle(req, user.UserID, route.path)
 			if err != nil {
-				if context.Cause(req.Context()) == context.Canceled && errors.Is(err, context.Canceled) {
+				if httperr.IsClientCancellation(req.Context(), err) {
 					return
 				}
 				writeFailure(out, err)

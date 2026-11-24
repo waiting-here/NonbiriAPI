@@ -170,6 +170,8 @@ func TestWhaleHTTPCanceledRequests(t *testing.T) {
 		cause, failure                                 error
 	}{
 		{name: "client left during request", cancelRequest: true, failure: fmt.Errorf("read: %w", context.Canceled), noResponse: true},
+		{name: "client canceled all operations", cancelRequest: true, failure: errors.Join(context.Canceled, fmt.Errorf("close: %w", context.Canceled)), noResponse: true},
+		{name: "rollback failed after client canceled", cancelRequest: true, failure: errors.Join(context.Canceled, serverFailure)},
 		{name: "client left while sending body", duringBody: true, cancelRequest: true, failure: context.Canceled, noResponse: true},
 		{name: "body read deadline expired", duringBody: true, failure: context.DeadlineExceeded},
 		{name: "dependency canceled a live request", failure: context.Canceled},

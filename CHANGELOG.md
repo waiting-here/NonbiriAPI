@@ -20,6 +20,16 @@ Each version entry describes its source and compatibility boundary; a release ta
 - Improve service setup, donation review, permission and limit editing, operations,
   request logs and station assistant approvals. Mobile navigation, keyboard focus,
   draft recovery and on-demand loading cover both stations.
+- A default 28-gram meal now earns an eligible visiting whale one pearl.
+  A full host bank pauses the meal and shows the reason to the visiting keeper.
+  The offline upgrade applies the new rate to the previous default combination.
+- Service key details follow model discovery through completion. Failed refreshes
+  show the latest failure alongside the retained catalog. Model actions fit their
+  labels on desktop and mobile.
+- Reduce SQLite index writes during Lake Notes checkpoints and reuse freshly
+  encoded receipts. Skip unchanged pressure samples and report Whale Haven
+  traffic by route. Committed activity updates can reach subscribers after
+  the initiating client disconnects.
 
 ## 1.4.2 — 2026-11-21
 
