@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
 import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -50,16 +51,24 @@ function GatewayCapabilitiesEditor() {
   const [draft, setDraft] = useState<GatewayCapabilityEntry>(() => entryFor());
   const [outputText, setOutputText] = useState('0');
   const [deleteTarget, setDeleteTarget] = useState<GatewayCapabilityRecord | null>(null);
-  const retainedDrafts = useRef(
-    new Map<
-      string,
-      {
-        editor: GatewayCapabilityRecord | null;
-        draft: GatewayCapabilityEntry;
-        outputText: string;
-      }
-    >(),
+  const [retainedDrafts, setRetainedDrafts] = useState(
+    () =>
+      new Map<
+        string,
+        {
+          editor: GatewayCapabilityRecord | null;
+          draft: GatewayCapabilityEntry;
+          outputText: string;
+        }
+      >(),
   );
+  const removeRetained = (...ids: string[]) =>
+    setRetainedDrafts((previous) => {
+      if (!ids.some((id) => previous.has(id))) return previous;
+      const next = new Map(previous);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
   const hasAdvanced = draft.storage !== 'reject' || draft.cache !== 'reject';
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(entryFor(editor ?? undefined)) ||
@@ -89,16 +98,25 @@ function GatewayCapabilitiesEditor() {
     operation.reset();
     setDraft((value) => ({ ...value, ...patch }));
   };
+  const editorHeading = useRef<HTMLHeadingElement>(null);
+  const revealEditor = () =>
+    requestAnimationFrame(() => {
+      editorHeading.current?.focus({ preventScroll: true });
+      editorHeading.current?.scrollIntoView?.({ block: 'center' });
+    });
   const open = (row: GatewayCapabilityRecord | null) => {
+    revealEditor();
     const target = row?.id ?? 'new';
+    const otherDrafts = new Map(retainedDrafts);
     if (editor !== undefined) {
       const current = editor?.id ?? 'new';
       if (current === target) return;
-      if (dirty) retainedDrafts.current.set(current, { editor, draft, outputText });
-      else retainedDrafts.current.delete(current);
+      if (dirty) otherDrafts.set(current, { editor, draft, outputText });
+      else otherDrafts.delete(current);
     }
-    const retained = retainedDrafts.current.get(target);
-    retainedDrafts.current.delete(target);
+    const retained = otherDrafts.get(target);
+    otherDrafts.delete(target);
+    setRetainedDrafts(otherDrafts);
     operation.reset();
     setEditor(retained ? retained.editor : row);
     setDraft(retained?.draft ?? entryFor(row ?? undefined));
@@ -106,25 +124,29 @@ function GatewayCapabilitiesEditor() {
   };
   const complete = (result: GatewayCapabilityRecord | GatewayCapabilityDeleted) => {
     if ('deleted' in result) {
-      retainedDrafts.current.delete(result.id);
+      removeRetained(result.id);
       setDeleteTarget(null);
       if (editor?.id === result.id) setEditor(undefined);
       return;
     }
-    retainedDrafts.current.delete(editor?.id ?? 'new');
-    retainedDrafts.current.delete(result.id);
+    removeRetained(editor?.id ?? 'new', result.id);
     setEditor(result);
     setDraft(entryFor(result));
     setOutputText(String(result.max_output_tokens));
   };
+  const anthropic = draft.adapter.startsWith('anthropic_');
+  const validOutput =
+    /^\d+$/.test(outputText) &&
+    Number(outputText) >= (anthropic ? 1 : 0) &&
+    Number(outputText) <= 2147483647;
   const save = () => {
+    if (!validOutput) return;
     const entry = { ...draft, max_output_tokens: Number(outputText) };
     const intent: GatewayCapabilityIntent = editor
       ? { action: 'update', id: editor.id, expected_revision: editor.revision, entry }
       : { action: 'create', expected_revision: '0', entry };
     operation.mutate(intent, { onSuccess: complete });
   };
-  const anthropic = draft.adapter.startsWith('anthropic_');
   const feedback = (
     <OperationFeedback
       outcome={operation.outcome}
@@ -204,6 +226,7 @@ function GatewayCapabilitiesEditor() {
           body={t('gatewayCapabilities.emptyBody')}
         />
       )}
+      <DraftLeaveGuard dirty={(editor !== undefined && dirty) || retainedDrafts.size > 0} />
       {editor !== undefined ? (
         <form
           className="gateway-capability-editor"
@@ -212,7 +235,9 @@ function GatewayCapabilitiesEditor() {
             save();
           }}
         >
-          <h3>{t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}</h3>
+          <h3 ref={editorHeading} tabIndex={-1}>
+            {t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}
+          </h3>
           <Fields columns={1}>
             <fieldset className="gateway-capability-group" disabled={operation.isPending}>
               <legend>{t('gatewayCapabilities.target')}</legend>
@@ -260,6 +285,8 @@ function GatewayCapabilitiesEditor() {
                     disabled={operation.isPending}
                     onChange={(event) => {
                       const adapter = event.target.value as GatewayAdapter;
+                      if (adapter.startsWith('anthropic_') && Number(outputText) === 0)
+                        setOutputText('1');
                       const efforts = draft.efforts.filter((value) =>
                         gatewayAdapterEfforts(adapter).includes(value),
                       );
@@ -323,6 +350,7 @@ function GatewayCapabilitiesEditor() {
                     {...props}
                     required
                     type="number"
+                    aria-invalid={!validOutput}
                     min={anthropic ? 1 : 0}
                     max={2147483647}
                     step={1}
@@ -413,7 +441,11 @@ function GatewayCapabilitiesEditor() {
           </Fields>
           {!deleteTarget ? feedback : null}
           <FormActions>
-            <button className="nb-btn nb-btn--primary" type="submit" disabled={operation.isPending}>
+            <button
+              className="nb-btn nb-btn--primary"
+              type="submit"
+              disabled={operation.isPending || !validOutput}
+            >
               {t(operation.isPending ? 'common.working' : 'common.save')}
             </button>
             <button
@@ -421,7 +453,7 @@ function GatewayCapabilitiesEditor() {
               type="button"
               disabled={operation.isPending}
               onClick={() => {
-                retainedDrafts.current.delete(editor?.id ?? 'new');
+                removeRetained(editor?.id ?? 'new');
                 setEditor(undefined);
                 operation.reset();
               }}

@@ -1133,3 +1133,10 @@ tr:first-child td {
     grid-template-columns: 1fr;
   }
 }
+
+@media (prefers-reduced-transparency: reduce) {
+  .site-header {
+    backdrop-filter: none;
+    background: var(--nb-color-surface-raised);
+  }
+}

@@ -56,7 +56,7 @@ func (api *httpAPI) listNumbered(writer http.ResponseWriter, request *http.Reque
 	}
 	allowed := []string{"status", "review_status", "q"}
 	if role != recurringOwner {
-		allowed = append(allowed, "handling", "user_id", "discord_id")
+		allowed = append(allowed, "handling", "user_id", "discord_id", "sort")
 	} else {
 		allowed = append(allowed, "view")
 	}
@@ -66,6 +66,7 @@ func (api *httpAPI) listNumbered(writer http.ResponseWriter, request *http.Reque
 		return true
 	}
 	filter := ManagementFilter{Status: values.Get("status"), ReviewStatus: values.Get("review_status"), Query: values.Get("q"), Handling: values.Get("handling"), OwnerView: values.Get("view")}
+	filter.Sort = values.Get("sort")
 	filter.UserID, filter.DiscordID = values.Get("user_id"), values.Get("discord_id")
 	if values.Has("user_id") && filter.UserID == "" || values.Has("discord_id") && filter.DiscordID == "" {
 		writeDonationError(writer, ErrInvalidRequest)

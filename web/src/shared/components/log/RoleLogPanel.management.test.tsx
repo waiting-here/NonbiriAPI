@@ -183,12 +183,21 @@ it.each(['admin', 'level6', 'level5'] as const)(
     );
     const modelPath = `${role === 'admin' ? '/charity?' : '/steward?tab=charity&'}charity_section=models&charity_model=31`;
     const modelLinks = await screen.findAllByRole('link', { name: 'Manage charity model' });
-    expect(modelLinks[0]).toHaveAttribute('href', modelPath);
+    expect(modelLinks[0].getAttribute('href')?.split('&log_context=')[0]).toBe(modelPath);
+    expect(
+      new URL(modelLinks[0].getAttribute('href')!, 'https://site.test').searchParams.get(
+        'log_context',
+      ),
+    ).toContain('request_id=');
     const panel = await screen.findByRole('dialog', { name: /Log details/ });
     await view.user.click(within(panel).getByText('Service call attempts', { selector: 'strong' }));
     const keyLinks = await within(panel).findAllByRole('link', { name: 'Manage charity key' });
-    expect(keyLinks[0]).toHaveAttribute('href', modelPath + '&managed_donation=8&managed_key=12');
-    expect(keyLinks[1]).toHaveAttribute('href', modelPath + '&managed_donation=9&managed_key=13');
+    expect(keyLinks[0].getAttribute('href')?.split('&log_context=')[0]).toBe(
+      modelPath + '&managed_donation=8&managed_key=12',
+    );
+    expect(keyLinks[1].getAttribute('href')?.split('&log_context=')[0]).toBe(
+      modelPath + '&managed_donation=9&managed_key=13',
+    );
     const before = JSON.parse(screen.getByTestId('location').textContent!).path;
     expect(new URL(before, 'https://test').searchParams.get('page')).toBe('2');
     await view.user.click(keyLinks[1]);
@@ -255,7 +264,7 @@ it.each(['admin', 'steward'] as const)(
         health_impact: { streak_effect: 'incremented', streak_before: '9', streak_after: '10' },
       },
     ]);
-    const view = await renderHistoricalLogs(
+    await renderHistoricalLogs(
       <DisplayTimeContext.Provider value={{ mode: 'site', offset_minutes: 480 }}>
         <RoleLogPanel role={role} accountId="viewer" />
       </DisplayTimeContext.Provider>,
@@ -266,7 +275,7 @@ it.each(['admin', 'steward'] as const)(
       },
     );
     const panel = within(await screen.findByRole('dialog', { name: /Log details/ }));
-    await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
+    expect(await panel.findByRole('heading', { name: 'Attempt 1' })).toBeVisible();
     const call = (number: number) =>
       within(panel.getByRole('heading', { name: `Attempt ${number}` }).closest('li')!);
     const noDisablement = 'This attempt did not trigger automatic disablement';
@@ -336,13 +345,13 @@ it('leaves charity health observations out of personal attempts in management lo
   fixtures('admin', false, { summary: [], routeKind: 'openai_chat_completions' }, [
     { health_impact: { streak_effect: 'reset', streak_after: '0' } },
   ]);
-  const view = await renderHistoricalLogs(<RoleLogPanel role="admin" accountId="viewer" />, {
+  await renderHistoricalLogs(<RoleLogPanel role="admin" accountId="viewer" />, {
     station: 'admin',
     role: 'admin',
     route: `/logs?request_id=${requestID}`,
   });
   const panel = within(await screen.findByRole('dialog', { name: /Log details/ }));
-  await view.user.click(await panel.findByText('Service call attempts', { selector: 'strong' }));
+  await panel.findByRole('heading', { name: 'Attempt 1' });
   expect(panel.getByRole('heading', { name: 'Attempt 1' })).toBeVisible();
   expect(panel.queryByText('Consecutive failures cleared')).not.toBeInTheDocument();
   expect(panel.queryByText('Consecutive failure change not recorded')).not.toBeInTheDocument();
@@ -422,6 +431,13 @@ it.each([
 );
 
 it('accepts only matching station log return paths', () => {
+  const carried = new URLSearchParams({
+    log_context:
+      'request_id=' + requestID + '&page=3&range=15m&user_id=99&endpoint_base_url=private',
+  });
+  expect(logManagementReturnPath(null, 'admin', '?' + carried)).toBe(
+    '/logs?request_id=' + requestID + '&page=3&range=15m',
+  );
   expect(logManagementReturnPath({ logReturnTo: '/logs?page=2' }, 'admin')).toBe('/logs?page=2');
   expect(logManagementReturnPath({ logReturnTo: '/steward?tab=logs&page=2' }, 'steward')).toBe(
     '/steward?tab=logs&page=2',

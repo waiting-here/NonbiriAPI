@@ -1,4 +1,10 @@
-import { INFERENCE_LIMITS, type InferenceLimitDraft } from '@shared/operations/userInferenceLimits';
+import type { StewardPermissions } from '@shared/operations/stewardPermissions';
+import {
+  INFERENCE_LIMITS,
+  inferenceCeiling,
+  type InferenceLimitDraft,
+  type ManagedLimitKey,
+} from '@shared/operations/userInferenceLimits';
 import { Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdminUser } from '@shared/operations/managedUsers';
@@ -9,24 +15,38 @@ export function InferenceLimitFields({
   user,
   value,
   onChange,
+  limits,
+  blockedInheritedLimits,
 }: {
   user: AdminUser;
+  limits?: StewardPermissions['limits'];
+  blockedInheritedLimits?: ManagedLimitKey[];
   value: InferenceLimitDraft;
   onChange: (value: InferenceLimitDraft) => void;
 }) {
   const { t } = useTranslation();
   return (
     <div className="nb-grid nb-grid--2">
-      {INFERENCE_LIMITS.map(({ key, label }) => (
+      {INFERENCE_LIMITS.map(({ key, label, max }) => (
         <Field
           key={key}
           label={t(label)}
-          help={t(
-            user[key] === null
-              ? 'management.users.limitInherited'
-              : 'management.users.limitEffective',
-            { value: formatCount(user[('effective_' + key) as keyof AdminUser] as string).display },
-          )}
+          help={
+            t(
+              user[key] === null
+                ? 'management.users.limitInherited'
+                : 'management.users.limitEffective',
+              {
+                value: formatCount(user[('effective_' + key) as keyof AdminUser] as string).display,
+              },
+            ) +
+            (limits
+              ? ' · ' + t('common.governance.ceiling', { max: inferenceCeiling(key, max, limits) })
+              : '') +
+            (blockedInheritedLimits?.includes(key)
+              ? ' ' + t('common.governance.inheritAboveCeiling')
+              : '')
+          }
         >
           {(props) => (
             <input

@@ -194,6 +194,9 @@ func (a *Adapter) Attempt(ctx context.Context, w http.ResponseWriter, target con
 	if response.StatusCode != 200 {
 		result = contract.UpstreamFailed(failure("upstream request failed"), contract.OriginUpstreamResponse)
 		result.ErrorDetail = errorContext.ReadResponse(ctx, response, min(a.backend.MaxResponseBytes(), MaxJSONBytes))
+		if result.ErrorDetail.CallerFault().Matches(response.StatusCode, result.ErrorDetail.Code()) {
+			result.StreakDisposition = contract.StreakNeutral
+		}
 		return result
 	}
 	expected := "application/json"

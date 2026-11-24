@@ -1,12 +1,13 @@
 import { normalizeCloudflareProxyMode, type CloudflareProxyMode } from '@shared/cloudflareProxy';
 import { normalizeTransportRule, type TransportRule } from '@shared/transportRule';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
 import { clearResourceNavigation } from '@shared/operations/resourceNavigation';
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
   apiFetch,
-  isForbidden,
+  isManagementForbidden,
   isNotFoundError,
   isUnauthorized,
   refetchAuthoritativeQueries,
@@ -349,7 +350,7 @@ export function failManagementSessionRequest(
   if (
     error !== undefined &&
     !isUnauthorized(error) &&
-    !isForbidden(error) &&
+    !isManagementForbidden(error) &&
     !isNotFoundError(error) &&
     !(error instanceof ApiError && error.code === 'invalid_response')
   )
@@ -503,21 +504,11 @@ export function useManagementCapability(frame: CharityManagementFrame) {
     staleTime: Infinity,
     retry: false,
   });
-  const sessionKey =
-    frame === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const);
-  // Subscribe to the station session without creating an unsolicited read.
-  // A real station session query, when mounted, shares this key and updates
-  // this observer after login/role restoration.
-  const session = useQuery({
-    queryKey: sessionKey,
-    // The station's session observer owns the read function. A local cache
-    // subscriber must not replace it during a background refresh.
-    enabled: false,
-    retry: false,
-  });
+  // Reevaluate management reads after an account switch has discarded the old account's queries.
+  const session = useStationSessionSnapshot(frame === 'admin' ? 'admin' : 'user', true);
   useEffect(() => {
     if (frame !== 'steward') return;
-    const level = sessionEffectiveLevel(session.data);
+    const level = sessionEffectiveLevel(session?.data);
     const previous = previousEffectiveLevel.current;
     // A mounted steward page can remain alive while the session query is
     // downgraded.  Treat that authoritative transition as a capability loss
@@ -526,21 +517,21 @@ export function useManagementCapability(frame: CharityManagementFrame) {
       managementCapabilityLoss(client, frame);
     }
     previousEffectiveLevel.current = level;
-  }, [client, frame, session.data]);
+  }, [client, frame, session?.data]);
   useEffect(() => {
     const marker = managementRevocations.get(client)?.get(frame);
     const authority = sessionAuthority(client, frame);
     if (capability.data !== true || !marker || authority.requestSerial <= marker.generation) return;
     if (
-      !session.error &&
+      !session?.error &&
       authority.subject === marker.subject &&
       authority.elevated &&
-      authoritativeSessionRestored(frame, session.data)
+      authoritativeSessionRestored(frame, session?.data)
     ) {
       clearRevoked(client, frame);
       client.setQueryData(charityManagementKeys.capability(frame), false);
     }
-  }, [capability.data, client, frame, session.data, session.dataUpdatedAt, session.error]);
+  }, [capability.data, client, frame, session?.data, session?.dataUpdatedAt, session?.error]);
   return {
     ...capability,
     authorityReady: managementAuthorityReady(client, frame),
@@ -643,7 +634,7 @@ async function managementWrite<T>(
 }
 
 function isManagementCapabilityError(error: unknown): boolean {
-  return isForbidden(error) || isUnauthorized(error);
+  return isManagementForbidden(error) || isUnauthorized(error);
 }
 
 interface ManagementReadSnapshot {

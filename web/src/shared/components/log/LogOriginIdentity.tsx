@@ -1,3 +1,4 @@
+import { withLogContext } from './managementNavigation';
 import { Link, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { LogOrigin } from '@shared/operations/logOrigin';
@@ -17,7 +18,10 @@ export function LogOriginIdentity({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const linkState = { logReturnTo: location.pathname + location.search };
+  const linkState = {
+    logPrivate: location.state?.logPrivate,
+    logReturnTo: location.pathname + location.search,
+  };
   const params = new URLSearchParams();
   if (role === 'steward') params.set('tab', 'users');
   if (value.origin_deleted && value.history_record_id)
@@ -52,7 +56,10 @@ export function LogOriginIdentity({
               ·{' '}
               <Link
                 state={linkState}
-                to={`${role === 'admin' ? '/users' : '/steward'}?${params.toString()}`}
+                to={withLogContext(
+                  `${role === 'admin' ? '/users' : '/steward'}?${params.toString()}`,
+                  linkState.logReturnTo,
+                )}
               >
                 {t(
                   value.origin_deleted
@@ -82,7 +89,10 @@ export function LogOriginIdentity({
       {available ? (
         <Link
           state={linkState}
-          to={`${role === 'admin' ? '/users' : '/steward'}?${params.toString()}`}
+          to={withLogContext(
+            `${role === 'admin' ? '/users' : '/steward'}?${params.toString()}`,
+            linkState.logReturnTo,
+          )}
         >
           {t(value.origin_deleted ? 'common.history.openHistory' : 'common.history.openAccount')}
         </Link>

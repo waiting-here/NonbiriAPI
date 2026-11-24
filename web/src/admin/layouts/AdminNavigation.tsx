@@ -1,5 +1,9 @@
+import { useQuery } from '@tanstack/react-query';
+import { useAdminAlertPage } from '../features/operations/alertPage';
+import { reportPageKeys } from '../features/operations/reportPages';
+import { getReportBadge } from '../features/operations/reports';
 import type { TFunction } from 'i18next';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { DonationPendingBadge } from '@shared/components/DonationPendingBadge';
@@ -57,6 +61,39 @@ export function AdminNavigation({
   const input = useRef<HTMLInputElement>(null);
   const nav = useRef<HTMLElement>(null);
   const [query, setQuery] = useState('');
+  const alerts = useAdminAlertPage(
+    accountId ? 'admin:' + accountId : undefined,
+    'false',
+    '1',
+    20,
+    Boolean(accountId),
+  );
+  const reports = useQuery({
+    queryKey: reportPageKeys.badge(accountId || 'anonymous'),
+    queryFn: ({ signal }) => getReportBadge(signal),
+    enabled: Boolean(accountId),
+    retry: false,
+    refetchInterval: 30_000,
+  });
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== 'k' ||
+        !input.current ||
+        input.current.closest('[inert]')
+      )
+        return;
+      event.preventDefault();
+      input.current.focus();
+      input.current.select();
+    };
+    document.addEventListener('keydown', focusSearch);
+    return () => document.removeEventListener('keydown', focusSearch);
+  }, []);
   const normalizedQuery = searchable(query).trim();
   const searching = normalizedQuery.length > 0;
   const otherLanguage = i18n.resolvedLanguage === 'zh' ? 'en' : 'zh';
@@ -85,7 +122,32 @@ export function AdminNavigation({
   }
 
   return (
-    <nav ref={nav} className="nb-admin-sidebar__nav" aria-label={t('admin.shell.navLabel')}>
+    <nav
+      ref={nav}
+      onKeyDown={(event) => {
+        if (
+          !searching ||
+          event.nativeEvent.isComposing ||
+          !['ArrowUp', 'ArrowDown'].includes(event.key)
+        )
+          return;
+        const anchors = Array.from(
+          nav.current?.querySelectorAll<HTMLAnchorElement>('a.nb-admin-sidebar__link') ?? [],
+        );
+        if (!anchors.length) return;
+        event.preventDefault();
+        const index = anchors.indexOf(document.activeElement as HTMLAnchorElement);
+        const next =
+          index < 0
+            ? event.key === 'ArrowDown'
+              ? 0
+              : anchors.length - 1
+            : (index + (event.key === 'ArrowDown' ? 1 : -1) + anchors.length) % anchors.length;
+        anchors[next].focus();
+      }}
+      className="nb-admin-sidebar__nav"
+      aria-label={t('admin.shell.navLabel')}
+    >
       <div className="nb-nav-lookup" role="search" aria-label={t('admin.navigation.findPage')}>
         <label htmlFor="admin-page-search">{t('admin.navigation.findPage')}</label>
         <div className="nb-nav-lookup__input">
@@ -110,7 +172,7 @@ export function AdminNavigation({
                 event.preventDefault();
                 clear();
               }
-              if (event.key === 'Enter' && searching && matches.length === 1) {
+              if (event.key === 'Enter' && searching && matches.length > 0) {
                 event.preventDefault();
                 nav.current?.querySelector<HTMLAnchorElement>('a.nb-admin-sidebar__link')?.click();
               }
@@ -161,6 +223,12 @@ export function AdminNavigation({
             )}
             <div className="nb-admin-sidebar__items" id={listId} hidden={titled && !open}>
               {items.map((item) => {
+                const count =
+                  item.key === 'admin-alerts' && !alerts.error
+                    ? alerts.data?.pagination.total_items
+                    : item.key === 'admin-reports' && !reports.error
+                      ? reports.data?.total
+                      : undefined;
                 const link = (
                   <NavLink
                     key={item.key}
@@ -172,6 +240,14 @@ export function AdminNavigation({
                   >
                     {item.icon && <Icon name={item.icon} />}
                     <span className="nb-admin-sidebar__label">{labelFor(item, t)}</span>
+                    {count && count !== '0' && (
+                      <span
+                        className="nb-badge"
+                        aria-label={t('admin.reports.badge.exactCount', { count })}
+                      >
+                        {BigInt(count) > 99n ? '99+' : count}
+                      </span>
+                    )}
                   </NavLink>
                 );
                 return item.key === 'admin-charity' ? (

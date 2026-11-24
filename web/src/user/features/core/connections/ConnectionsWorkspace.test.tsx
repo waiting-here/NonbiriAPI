@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNativeDialog } from '../../../../../test/unit/nativeDialog';
 import { renderWithProviders } from '../../../../../test/unit/support';
@@ -227,6 +227,95 @@ describe('connection identification', () => {
     await view.user.click(back);
     await screen.findByRole('table', { name: 'Keys' });
     expect(screen.getByRole('tab', { name: 'Keys' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('closes a deleted credential and refreshes its service list even when its detail now returns 404', async () => {
+    const { fetch } = connectionReads();
+    const normal = fetch.getMockImplementation()!;
+    let deleted = false;
+    const writes: unknown[] = [];
+    fetch.mockImplementation(async (input, init) => {
+      const path = new URL(String(input), 'https://fixture.example').pathname;
+      if (path === '/api/credentials/7' && init?.method === 'DELETE') {
+        writes.push(JSON.parse(String(init.body)));
+        deleted = true;
+        return new Response(null, { status: 204 });
+      }
+      if (deleted && path === '/api/credentials/7')
+        return Response.json({ error: { code: 'not_found', message: 'Removed' } }, { status: 404 });
+      if (deleted && path === '/api/connections/2/credentials') return json(page([]));
+      return normal(input, init);
+    });
+    const view = await renderWithProviders(<ConnectionsWorkspace user={account} />, {
+      station: 'user',
+      role: 'user',
+      route: '/endpoints?connection_id=2&credential_id=7',
+    });
+    view.queryClient.setQueryData(['user', 'session'], { user: account });
+    await view.user.click(await screen.findByRole('button', { name: 'Delete service key' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await view.user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await screen.findByRole('button', { name: 'Add new key' });
+    expect(screen.queryByRole('heading', { name: credential.note })).not.toBeInTheDocument();
+    expect(writes).toEqual([{ expected_revision: '1' }]);
+  });
+
+  it('lets a pending rotation assessment fail, retry and adopt a newer credential revision before entering a new secret', async () => {
+    const { fetch } = connectionReads();
+    const normal = fetch.getMockImplementation()!;
+    let finish!: (result: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    let assessments = 0;
+    let waitingForRetry = true;
+    fetch.mockImplementation(async (input, init) => {
+      if (
+        new URL(String(input), 'https://fixture.example').pathname === '/api/credentials/7/impact'
+      ) {
+        assessments++;
+        if (waitingForRetry) return pending;
+      }
+      return normal(input, init);
+    });
+    const view = await renderWithProviders(<ConnectionsWorkspace user={account} />, {
+      station: 'user',
+      role: 'user',
+      route: '/endpoints?connection_id=2&credential_id=7',
+    });
+    await view.user.click(await screen.findByRole('button', { name: 'Replace key secret' }));
+    const rotation = await screen.findByRole('region', { name: 'Replace key secret' });
+    const secretLabel = view.i18n.t('common.connections.newSecret');
+    expect(within(rotation).queryByLabelText(secretLabel)).not.toBeInTheDocument();
+    await act(async () => {
+      finish(
+        Response.json(
+          { error: { code: 'invalid_request', message: 'Assessment unavailable' } },
+          { status: 400 },
+        ),
+      );
+      await pending;
+    });
+    const retry = await within(rotation).findByRole('button', { name: /retry|try again/i });
+    expect(within(rotation).queryByLabelText(secretLabel)).not.toBeInTheDocument();
+    waitingForRetry = false;
+    await view.user.click(retry);
+    await within(rotation).findByLabelText(secretLabel);
+    act(() =>
+      view.queryClient.setQueryData(
+        ['user', 'core', 'account', '1', 'connections', 'credential', '7'],
+        { ...credential, revision: '2' },
+      ),
+    );
+    await within(rotation).findByText(view.i18n.t('user.services.rotationRevisionChanged'));
+    expect(within(rotation).queryByLabelText(secretLabel)).not.toBeInTheDocument();
+    const proceed = within(rotation).getByRole('button', {
+      name: 'Continue with current revision',
+    });
+    await waitFor(() => expect(proceed).toBeEnabled());
+    await view.user.click(proceed);
+    await within(rotation).findByLabelText(secretLabel);
+    expect(assessments).toBeGreaterThanOrEqual(3);
   });
 
   it('finishes an in-flight settings save after switching tabs without losing the request', async () => {

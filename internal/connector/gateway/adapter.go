@@ -208,9 +208,6 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
-	if err == nil && response != nil && response.StatusCode == http.StatusBadRequest && errorContext.CharityCall {
-		errorContext.GatewayCallerInput = callerInput(chat, body, policy)
-	}
 	upload.Release()
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()

@@ -1,3 +1,4 @@
+import { defaultBindingServices } from '@shared/nativeServices';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold, Note } from '@shared/components/ui';
@@ -41,7 +42,10 @@ export function TargetMatrix({
       {
         endpoint_key_id: candidate.endpoint_key_id,
         upstream_model_id: candidate.upstream_model_id,
-        native_services: [...(candidate.native_services ?? [])],
+        native_services: defaultBindingServices(
+          candidate.connector_type,
+          candidate.native_services ?? [],
+        ),
         options: candidate.native_services ?? [],
         label: candidate.endpoint_note || candidate.endpoint_base_url,
         service_routes: candidate.service_routes,

@@ -4,7 +4,7 @@ import { ServiceHealth } from './ResourceHealth';
 import { smartBackoffDeadline } from '@shared/operations/smartBackoff';
 import { Button } from '@shared/components/ui/Button';
 import { Field, FilterBar, StatusBadge } from './ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { Fold } from '@shared/components/ui/Fold';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,7 +25,7 @@ import {
 } from '@shared/operations/donationPages';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { DonationHandlingStatus } from './DonationHandling';
 import { KeyLimitSummary } from './KeyRoutingLimits';
@@ -45,6 +45,7 @@ export interface CharitySourceBrowserProps {
   accountId: string;
   enabled: boolean;
   onOpenDonation: (donationId: string, keyId?: string) => void;
+  renderKeyDetail?: (key: ManagedDonationKeySummary) => ReactNode;
   onCapabilityLoss?: () => void;
 }
 
@@ -363,9 +364,7 @@ function RecurringSummary({ keyValue }: { keyValue: ManagedDonationKeySummary })
   );
 }
 
-function keySummaryTone(
-  keyValue: ManagedDonationKeySummary,
-): 'ok' | 'warn' | 'bad' | 'neutral' {
+function keySummaryTone(keyValue: ManagedDonationKeySummary): 'ok' | 'warn' | 'bad' | 'neutral' {
   if (
     keyValue.streak.failure_disabled ||
     keyValue.charity_state === 'suspended' ||
@@ -386,10 +385,14 @@ function keySummaryTone(
 
 function KeySummary({
   keyValue,
+  scoped,
   onOpenDonation,
   disabled,
+  detail,
 }: {
+  detail?: ReactNode;
   keyValue: ManagedDonationKeySummary;
+  scoped?: boolean;
   onOpenDonation: CharitySourceBrowserProps['onOpenDonation'];
   disabled: boolean;
 }) {
@@ -498,16 +501,17 @@ function KeySummary({
       </section>
       <RecurringSummary keyValue={keyValue} />
       <div className="ops-actions charity-source-browser__actions">
-        <Button
-          type="button"
-
-          disabled={disabled}
-          onClick={() => onOpenDonation(keyValue.donation_id)}
-        >
-          {t('common.operations.charity.sourceBrowser.manageDonation', {
-            id: keyValue.donation_id,
-          })}
-        </Button>
+        {!scoped && (
+          <Button
+            type="button"
+            disabled={disabled}
+            onClick={() => onOpenDonation(keyValue.donation_id)}
+          >
+            {t('common.operations.charity.sourceBrowser.manageDonation', {
+              id: keyValue.donation_id,
+            })}
+          </Button>
+        )}
         <Button
           type="button"
           variant="primary"
@@ -517,6 +521,7 @@ function KeySummary({
           {t('common.operations.charity.sourceBrowser.manageKey', { id: keyValue.key_id })}
         </Button>
       </div>
+      {detail}
     </article>
   );
 }
@@ -527,6 +532,7 @@ export function CharitySourceBrowser({
   charityModelID,
   enabled,
   onOpenDonation,
+  renderKeyDetail,
   onCapabilityLoss,
 }: CharitySourceBrowserProps) {
   const { t } = useTranslation();
@@ -668,7 +674,7 @@ export function CharitySourceBrowser({
     () => sourceKeys.refetch({ throwOnError: true }),
   );
   const authorityError = [sources.error, sourceKeys.error].find(
-    (error) => isUnauthorized(error) || isForbidden(error),
+    (error) => isUnauthorized(error) || isManagementForbidden(error),
   );
   const navigationReady = sourceKey
     ? !sources.isPending && !sources.isFetching && !sourceKeys.isPending && !sourceKeys.isFetching
@@ -1211,10 +1217,12 @@ export function CharitySourceBrowser({
                 <div className="charity-source-browser__key-list">
                   {keyPage.data.map((keyValue) => (
                     <KeySummary
+                      scoped={Boolean(charityModelID)}
                       key={keyValue.key_id}
                       keyValue={keyValue}
                       disabled={sourceBusy || sourceKeysBusy || Boolean(sources.error)}
                       onOpenDonation={onOpenDonation}
+                      detail={renderKeyDetail?.(keyValue)}
                     />
                   ))}
                 </div>

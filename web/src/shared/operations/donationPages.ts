@@ -46,8 +46,9 @@ export type DonationPageRole = CharityRole;
 export type DonationHandlingState = DonationHandling['state'];
 
 export interface ManagedDonationPageFilters {
+  sort?: 'oldest' | 'newest' | '';
   status?: DonationStatus | '';
-  review_status?: DonationDisplayStatus | '';
+  review_status?: DonationDisplayStatus | 'any_pending' | '';
   handling?: DonationHandlingState | '';
   q?: string;
   user_id?: string;
@@ -110,6 +111,7 @@ export type DonationStateCounts = Record<DonationState, string>;
 
 interface DonationPageCommon {
   use_summary?: UseSummary;
+  review_submitted_at?: number;
   discord_public_thanks?: boolean | null;
   id: string;
   status: DonationStatus;
@@ -277,7 +279,7 @@ function queryText(value: unknown, label: string): string {
 function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
   const root = exactRecord(
     value,
-    ['status', 'review_status', 'handling', 'q', 'user_id', 'discord_id'],
+    ['status', 'review_status', 'handling', 'q', 'user_id', 'discord_id', 'sort'],
     'donation page filters',
     [],
   );
@@ -303,7 +305,7 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
       ? ''
       : oneOf(
           root.review_status,
-          ['', ...DONATION_DISPLAY_STATUSES],
+          ['', 'any_pending', ...DONATION_DISPLAY_STATUSES],
           'donation review status filter',
         );
   const user_id =
@@ -315,7 +317,18 @@ function donationFilters(value: unknown): Required<ManagedDonationPageFilters> {
       ? ''
       : string(root.discord_id, 'donor Discord id', { ascii: true });
   if (discord_id && !/^[1-9][0-9]{0,19}$/.test(discord_id)) invalidResponse('donor Discord id');
-  return { status, review_status, handling, q, user_id, discord_id };
+  return {
+    status,
+    review_status,
+    handling,
+    q,
+    user_id,
+    discord_id,
+    sort:
+      root.sort === undefined
+        ? ''
+        : oneOf(root.sort, ['', 'oldest', 'newest'] as const, 'donation sort'),
+  };
 }
 
 interface NormalizedSourceFilters {
@@ -411,6 +424,11 @@ function donationCommon(root: ReturnType<typeof record>, label: string): Donatio
   );
   return {
     ...(useSummary === undefined ? {} : { use_summary: useSummary }),
+    ...(root.review_submitted_at === undefined
+      ? {}
+      : {
+          review_submitted_at: unixSecond(root.review_submitted_at, `${label} pending review time`),
+        }),
     discord_public_thanks:
       root.discord_public_thanks == null
         ? null
@@ -453,10 +471,12 @@ function stewardOwner(value: unknown, label: string): StewardDonationPageOwner |
 
 function normalizeAdminDonationPageItem(value: unknown, index: number): AdminDonationPageItem {
   const label = `administrator donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
-    ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
-    'owner',
-  ]);
+  const root = record(
+    value,
+    [...DONATION_COMMON_FIELDS, 'owner', 'use_summary', 'review_submitted_at'],
+    label,
+    [...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'), 'owner'],
+  );
   return {
     ...donationCommon(root, label),
     owner: adminOwner(root.owner, `${label} owner`),
@@ -465,10 +485,12 @@ function normalizeAdminDonationPageItem(value: unknown, index: number): AdminDon
 
 function normalizeStewardDonationPageItem(value: unknown, index: number): StewardDonationPageItem {
   const label = `steward donation ${index + 1}`;
-  const root = record(value, [...DONATION_COMMON_FIELDS, 'owner', 'use_summary'], label, [
-    ...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'),
-    'owner',
-  ]);
+  const root = record(
+    value,
+    [...DONATION_COMMON_FIELDS, 'owner', 'use_summary', 'review_submitted_at'],
+    label,
+    [...DONATION_COMMON_FIELDS.filter((field) => field !== 'discord_public_thanks'), 'owner'],
+  );
   return {
     ...donationCommon(root, label),
     owner: stewardOwner(root.owner, `${label} owner`),
@@ -785,6 +807,7 @@ export function getManagedDonationsPage(
   pageArguments(page, pageSize);
   return decoded(
     queryPath(`${root}/donations`, {
+      sort: normalizedFilters.sort || undefined,
       status: normalizedFilters.status || undefined,
       review_status: normalizedFilters.review_status || undefined,
       handling: normalizedFilters.handling || undefined,

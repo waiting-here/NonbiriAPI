@@ -530,7 +530,7 @@ for (const locale of ['en', 'zh'] as const) {
     });
     await expect(modelPanel).toBeVisible();
     await shot('models-panel');
-    await modelPanel.locator('summary').filter({ hasText: serviceUI.manualModels }).click();
+    await modelPanel.getByRole('tab', { name: serviceUI.manualModels }).click();
     const manual = modelPanel.getByLabel(core['endpoints.manualModel'], {
       exact: true,
     });

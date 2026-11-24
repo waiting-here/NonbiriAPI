@@ -102,6 +102,31 @@ describe('managed shared key limits', () => {
       concurrency_queue_limit: 9,
     });
   });
+  it('keeps an invalid queue draft when reject is selected and omits it from the patch', async () => {
+    patch.mockReset().mockResolvedValue(undefined);
+    const { user } = await setup();
+    const mode = screen.getByLabelText('When concurrency is full');
+    await user.selectOptions(mode, 'queue');
+    const field = screen.getByLabelText('Concurrency queue limit');
+    await user.clear(field);
+    await user.type(field, '2147483648');
+    const save = screen.getByRole('button', { name: 'Save shared limits' });
+    expect(save).toBeDisabled();
+    await user.selectOptions(mode, 'reject');
+    await user.selectOptions(mode, 'queue');
+    expect(screen.getByLabelText('Concurrency queue limit')).toHaveValue(2147483648);
+    await user.selectOptions(mode, 'reject');
+    const rpm = screen.getByRole('spinbutton', { name: 'Maximum RPM' });
+    await user.clear(rpm);
+    await user.type(rpm, '20');
+    await user.click(save);
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch.mock.calls[0]?.[3]).toEqual({
+      expected_revision: '7',
+      expected_key_limits_revision: '5',
+      max_rpm: 20,
+    });
+  });
   it('uses revisions from an asynchronous query reread without a manual rerender', async () => {
     patch.mockReset().mockResolvedValue(undefined);
     const load = vi.fn(async () => {

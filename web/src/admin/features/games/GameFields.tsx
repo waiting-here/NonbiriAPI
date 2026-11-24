@@ -1,8 +1,7 @@
+import { PercentInput } from './PercentInput';
 import { useTranslation } from 'react-i18next';
 import { Affix, Field, Fields, Fold, Toggle } from '@shared/components/ui';
 import type { GamesConfig, RPSModeConfig } from '../operations/economy';
-import { percentBP } from './config';
-import { fishingChanceFromPercent } from './fishing';
 import { useGameAdminText } from './copy';
 
 type Props = {
@@ -93,37 +92,25 @@ export function FishingFields({ draft, disabled, edit }: Props) {
             )}
           >
             {(props) => (
-              <Affix
+              <PercentInput
                 {...props}
                 unit="%"
-                type="number"
-                inputMode="decimal"
-                min="0"
                 max="100"
-                step="0.01"
-                value={numeric(value.blue_fish_chance_bps / 100)}
+                basisPoints={value.blue_fish_chance_bps}
                 name="fishing.blue_fish_chance_bps"
-                onChange={(event) =>
-                  update({ blue_fish_chance_bps: fishingChanceFromPercent(event.target.value) })
-                }
+                onBasisChange={(points) => update({ blue_fish_chance_bps: points })}
               />
             )}
           </Field>
           <Field size="short" label={text('奶蟹概率', 'Milk-crab probability')}>
             {(props) => (
-              <Affix
+              <PercentInput
                 {...props}
                 unit="%"
-                type="number"
-                inputMode="decimal"
-                min="0"
                 max="100"
-                step="0.01"
-                value={numeric(value.milk_crab_chance_bps / 100)}
+                basisPoints={value.milk_crab_chance_bps}
                 name="fishing.milk_crab_chance_bps"
-                onChange={(event) =>
-                  update({ milk_crab_chance_bps: fishingChanceFromPercent(event.target.value) })
-                }
+                onBasisChange={(points) => update({ milk_crab_chance_bps: points })}
               />
             )}
           </Field>
@@ -138,17 +125,14 @@ export function FishingFields({ draft, disabled, edit }: Props) {
           {pumps.map((pump) => (
             <Field size="short" key={pump} label={t(`admin.games.rps.pumps.${pump}`)}>
               {(props) => (
-                <Affix
+                <PercentInput
                   {...props}
                   unit="%"
-                  type="number"
-                  min="0"
                   max="99.99"
-                  step="0.01"
-                  value={numeric(value.rake_bp[pump] / 100)}
+                  basisPoints={value.rake_bp[pump]}
                   name={`fishing.rake_bp.${pump}`}
-                  onChange={(event) =>
-                    update({ rake_bp: { ...value.rake_bp, [pump]: percentBP(event.target.value) } })
+                  onBasisChange={(points) =>
+                    update({ rake_bp: { ...value.rake_bp, [pump]: points } })
                   }
                 />
               )}
@@ -299,18 +283,15 @@ export function RPSFields({ draft, disabled, edit }: Props) {
                 {pumps.map((pump) => (
                   <Field size="short" key={pump} label={t(`admin.games.rps.pumps.${pump}`)}>
                     {(props) => (
-                      <Affix
+                      <PercentInput
                         {...props}
                         unit="%"
-                        type="number"
-                        min="0"
                         max="99.99"
-                        step="0.01"
-                        value={numeric(value.pumps_bp[pump] / 100)}
+                        basisPoints={value.pumps_bp[pump]}
                         name={`rps.${mode}.pumps_bp.${pump}`}
-                        onChange={(event) =>
+                        onBasisChange={(points) =>
                           update({
-                            pumps_bp: { ...value.pumps_bp, [pump]: percentBP(event.target.value) },
+                            pumps_bp: { ...value.pumps_bp, [pump]: points },
                           })
                         }
                       />

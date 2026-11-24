@@ -2,7 +2,7 @@ import { Suspense, use, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CopyValue } from '@shared/components/CopyValue';
 import { Button, Fold, Sheet, Tabs } from '@shared/components/ui';
-import { MODEL_TYPE_LABEL_KEYS, MODEL_TYPE_PATHS } from '@shared/modelTypes';
+import { MODEL_TYPE_LABEL_KEYS, MODEL_TYPE_PATHS, type ModelType } from '@shared/modelTypes';
 import { CoreErrorPanel, CoreLoading } from './components';
 import type { CatalogView, ClientModel, ModelBrowserProps, Source } from './ClientModelBrowser';
 
@@ -28,16 +28,66 @@ function ModelBrowserContent({
 
 const initialView: CatalogView = { page: '1', pageSize: 10, query: '', draft: '' };
 
+function shellQuote(value: string) {
+  return "'" + value.replaceAll("'", "'\\''") + "'";
+}
+
+function sampleRequest(type: ModelType, name: string, input: string) {
+  const url = shellQuote(window.location.origin + MODEL_TYPE_PATHS[type]);
+  const curl = `curl --fail-with-body ${url} -H "Authorization: Bearer $NONBIRI_KEY"`;
+  if (
+    type === 'audio_transcriptions' ||
+    type === 'audio_translations' ||
+    type === 'images_edits' ||
+    type === 'images_variations'
+  ) {
+    const file = type.startsWith('audio_') ? 'file=@audio.mp3' : 'image=@image.png';
+    return {
+      curl: `${curl} --form-string ${shellQuote('model=' + name)} -F ${shellQuote(file)}${type === 'images_edits' ? ' --form-string ' + shellQuote('prompt=' + input) : ''}`,
+    };
+  }
+  const body: Record<string, unknown> = { model: name };
+  switch (type) {
+    case 'chat_completions':
+      body.messages = [{ role: 'user', content: input }];
+      break;
+    case 'images_generations':
+    case 'completions':
+      body.prompt = input;
+      break;
+    case 'responses_compact':
+      body.input = [{ role: 'user', content: input }];
+      break;
+    case 'decisions':
+      body.input = input;
+      body.questions = [{ type: 'predicate', instructions: input }];
+      break;
+    case 'systemone':
+      body.state = 'question';
+      body.questions = { q: { type: 'noul' } };
+      break;
+    case 'rerank':
+      body.query = input;
+      body.documents = [input];
+      break;
+    case 'audio_speech':
+      body.input = input;
+      body.voice = 'alloy';
+      break;
+    default:
+      body.input = input;
+  }
+  return {
+    body,
+    curl: `${curl} -H 'Content-Type: application/json' --data-binary ${shellQuote(JSON.stringify(body))}${type === 'audio_speech' ? ' --output speech.mp3' : ''}`,
+  };
+}
+
 function ModelUsage({ model }: { model: ClientModel }) {
   const { t } = useTranslation();
-  const type = model.types.find(
-    (value) => value === 'chat_completions' || value === 'responses' || value === 'embeddings',
-  );
-  const input = t('user.core.keys.sampleInput');
-  const body =
-    type === 'chat_completions'
-      ? { model: model.name, messages: [{ role: 'user', content: input }] }
-      : { model: model.name, input };
+  const [selected, setSelected] = useState<ModelType>();
+  const type = selected && model.types.includes(selected) ? selected : model.types[0];
+  const example = type ? sampleRequest(type, model.name, t('user.core.keys.sampleInput')) : null;
   return (
     <Fold plain lazy title={t('user.core.keys.supportedPaths')}>
       <ul className="api-model-paths">
@@ -48,17 +98,33 @@ function ModelUsage({ model }: { model: ClientModel }) {
           </li>
         ))}
       </ul>
-      {type ? (
+      {type && example ? (
         <div className="api-model-example">
-          <h4>{t('user.core.keys.exampleBody')}</h4>
+          {model.types.length > 1 ? (
+            <select
+              aria-label={t('user.core.keys.supportedPaths')}
+              value={type}
+              onChange={(event) => setSelected(event.target.value as ModelType)}
+            >
+              {model.types.map((item) => (
+                <option key={item} value={item}>
+                  {t(MODEL_TYPE_LABEL_KEYS[item])}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {example.body ? <h4>{t('user.core.keys.exampleBody')}</h4> : null}
           <p className="nb-small nb-muted">
             {t('user.core.keys.exampleBilling', { path: MODEL_TYPE_PATHS[type] })}
           </p>
-          <CopyValue
-            value={JSON.stringify(body, null, 2)}
-            label={t('user.core.keys.exampleBody')}
-            variant="secondary"
-          />
+          {example.body ? (
+            <CopyValue
+              value={JSON.stringify(example.body, null, 2)}
+              label={t('user.core.keys.exampleBody')}
+              variant="secondary"
+            />
+          ) : null}
+          <CopyValue value={example.curl} label="cURL" variant="secondary" />
         </div>
       ) : null}
     </Fold>

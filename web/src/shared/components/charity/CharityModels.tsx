@@ -75,7 +75,7 @@ import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicyDraft } from '@shared/rolePolicy';
 import '@shared/styles/charity-management.css';
 import { timeDraftValue } from '@shared/time';
@@ -129,7 +129,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
     ...priceDraft(model),
     cloudflareProxy: model?.cloudflare_proxy_enabled ?? false,
     sessionHeaders: sessionHeaderDraft(model?.session_headers),
-    modelTypes: model ? [...model.model_types] : ['chat_completions', 'responses'],
+    modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
     isMainstream: model?.is_mainstream ?? false,
@@ -240,6 +240,11 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
 }
 
 function ModelForm({
+  canDelete = true,
+  canEditSettings = true,
+  canEditPricing = true,
+  canManageBindings = true,
+  canSetNonMainstream = true,
   role,
   canEditAffinity = role === 'admin',
   canManageTemplates = role === 'admin',
@@ -250,6 +255,11 @@ function ModelForm({
   onCapabilityLoss,
   onCreated,
 }: {
+  canDelete?: boolean;
+  canEditSettings?: boolean;
+  canEditPricing?: boolean;
+  canManageBindings?: boolean;
+  canSetNonMainstream?: boolean;
   disabled?: boolean;
   canEditAffinity?: boolean;
   canManageTemplates?: boolean;
@@ -261,9 +271,13 @@ function ModelForm({
   onCreated?: (model: CharityModel) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [draft, updateDraft] = useState(() => modelDraft(model));
+  const initialDraft = () => ({
+    ...modelDraft(model),
+    ...(!model && !canSetNonMainstream ? { isMainstream: true } : {}),
+  });
+  const [draft, updateDraft] = useState(initialDraft);
   const [baseRevision, setBaseRevision] = useState(model?.revision);
-  const [savedDraft, setSavedDraft] = useState(() => priceDraftSignature(modelDraft(model)));
+  const [savedDraft, setSavedDraft] = useState(() => priceDraftSignature(draft));
   const [undoPrice, setUndoPrice] = useState<PriceDraft | null>(null);
   const [priceSource, setPriceSource] = useState('');
   const [createdModel, setCreatedModel] = useState<CharityModel | null>(null);
@@ -317,9 +331,9 @@ function ModelForm({
   const unknownSave = save.error && responseOutcomeUnknown(save.error);
   const capabilityLost =
     isUnauthorized(save.error) ||
-    isForbidden(save.error) ||
+    isManagementForbidden(save.error) ||
     isUnauthorized(remove.error) ||
-    isForbidden(remove.error);
+    isManagementForbidden(remove.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -363,45 +377,46 @@ function ModelForm({
             })}
           </p>
         ) : null}
-        <Fields legend={copy.basicSettings} columns={2}>
-          <Field label={t(charityCopyKey(role, 'provider'))}>
-            {(field) => (
-              <input
-                {...field}
-                value={draft.provider}
-                onChange={(event) => {
-                  const provider = event.target.value;
-                  setDraft((current) => ({ ...current, provider }));
-                }}
-              />
-            )}
-          </Field>
-          <Field label={t(charityCopyKey(role, 'model'))}>
-            {(field) => (
-              <input
-                {...field}
-                value={draft.model}
-                onChange={(event) => {
-                  const model = event.target.value;
-                  setDraft((current) => ({ ...current, model }));
-                }}
-              />
-            )}
-          </Field>
-        </Fields>
-        <Toggle
-          disabled={fieldsDisabled}
-          label={t('common.operations.charity.enableCharityModel')}
-          checked={draft.enabled}
-          onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
-        />
-        <ModelTypesField
-          value={draft.modelTypes}
-          onChange={(modelTypes) => setDraft((current) => ({ ...current, modelTypes }))}
-          disabled={save.isPending || fieldsDisabled}
-          showError
-        />
-
+        <fieldset className="ops-unframed" disabled={!canEditSettings}>
+          <Fields legend={copy.basicSettings} columns={2}>
+            <Field label={t(charityCopyKey(role, 'provider'))}>
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.provider}
+                  onChange={(event) => {
+                    const provider = event.target.value;
+                    setDraft((current) => ({ ...current, provider }));
+                  }}
+                />
+              )}
+            </Field>
+            <Field label={t(charityCopyKey(role, 'model'))}>
+              {(field) => (
+                <input
+                  {...field}
+                  value={draft.model}
+                  onChange={(event) => {
+                    const model = event.target.value;
+                    setDraft((current) => ({ ...current, model }));
+                  }}
+                />
+              )}
+            </Field>
+          </Fields>
+          <Toggle
+            disabled={fieldsDisabled}
+            label={t('common.operations.charity.enableCharityModel')}
+            checked={draft.enabled}
+            onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
+          />
+          <ModelTypesField
+            value={draft.modelTypes}
+            onChange={(modelTypes) => setDraft((current) => ({ ...current, modelTypes }))}
+            disabled={save.isPending || fieldsDisabled}
+            showError
+          />
+        </fieldset>
         <p className="nb-sub">{t('common.operations.charity.operationHelp')}</p>
         {draft.modelTypes.includes('embeddings') ? (
           <p className="nb-sub">{t('common.operations.charity.embeddingBillingHelp')}</p>
@@ -426,6 +441,7 @@ function ModelForm({
               {(field) => (
                 <select
                   {...field}
+                  disabled={!canEditSettings}
                   value={draft.routeStrategy}
                   onChange={(event) => {
                     const routeStrategy = event.target.value as ModelDraft['routeStrategy'];
@@ -466,166 +482,172 @@ function ModelForm({
               </Field>
             ) : null}
           </Fields>
-          <Fields legend={t('common.operations.charity.accessSettings')} columns={1}>
-            <Toggle
-              disabled={fieldsDisabled}
-              label={copy.mainstream}
-              checked={draft.isMainstream}
-              onChange={(isMainstream) => setDraft((current) => ({ ...current, isMainstream }))}
-            />
-            <fieldset className="nb-fieldset ops-model-levels">
-              <legend>{t('common.operations.charity.allowedLevels')}</legend>
-              <div className="ops-model-level-actions">
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  type="button"
-                  onClick={() =>
-                    setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
-                  }
-                >
-                  {t('common.operations.charity.selectAllLevels')}
-                </button>
-                <button
-                  className="nb-btn nb-btn--secondary"
-                  type="button"
-                  onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
-                >
-                  {t('common.operations.charity.clearAllLevels')}
-                </button>
-              </div>
-              <div className="ops-model-level-options">
-                {MODEL_LEVELS.map((level) => (
-                  <ChoiceRow
-                    key={level}
-                    label={t('common.operations.charity.levelLabel', { level })}
-                    checked={draft.allowedLevels.includes(level)}
-                    onChange={(checked) =>
-                      setDraft((current) => ({
-                        ...current,
-                        allowedLevels: checked
-                          ? MODEL_LEVELS.filter(
-                              (candidate) =>
-                                candidate === level || current.allowedLevels.includes(candidate),
-                            )
-                          : current.allowedLevels.filter((candidate) => candidate !== level),
-                      }))
+          <fieldset disabled={!canEditSettings} className="ops-unframed">
+            <Fields legend={t('common.operations.charity.accessSettings')} columns={1}>
+              <Toggle
+                disabled={fieldsDisabled || !canSetNonMainstream}
+                label={copy.mainstream}
+                checked={draft.isMainstream}
+                onChange={(isMainstream) => setDraft((current) => ({ ...current, isMainstream }))}
+              />
+              <fieldset className="nb-fieldset ops-model-levels">
+                <legend>{t('common.operations.charity.allowedLevels')}</legend>
+                <div className="ops-model-level-actions">
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    type="button"
+                    onClick={() =>
+                      setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
+                    }
+                  >
+                    {t('common.operations.charity.selectAllLevels')}
+                  </button>
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    type="button"
+                    onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
+                  >
+                    {t('common.operations.charity.clearAllLevels')}
+                  </button>
+                </div>
+                <div className="ops-model-level-options">
+                  {MODEL_LEVELS.map((level) => (
+                    <ChoiceRow
+                      key={level}
+                      label={t('common.operations.charity.levelLabel', { level })}
+                      checked={draft.allowedLevels.includes(level)}
+                      onChange={(checked) =>
+                        setDraft((current) => ({
+                          ...current,
+                          allowedLevels: checked
+                            ? MODEL_LEVELS.filter(
+                                (candidate) =>
+                                  candidate === level || current.allowedLevels.includes(candidate),
+                              )
+                            : current.allowedLevels.filter((candidate) => candidate !== level),
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+                {draft.allowedLevels.length === 0 ? (
+                  <small className="ops-model-level-empty">
+                    {t('common.operations.charity.noAllowedLevels')}
+                  </small>
+                ) : null}
+              </fieldset>
+              <Field
+                label={t('common.operations.charity.publicDescription')}
+                help={t('common.operations.charity.publicDescriptionHelp')}
+                size="long"
+              >
+                {(field) => (
+                  <textarea
+                    {...field}
+                    rows={5}
+                    value={draft.publicDescription}
+                    aria-label={t('common.operations.charity.publicDescription')}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, publicDescription: event.target.value }))
                     }
                   />
-                ))}
-              </div>
-              {draft.allowedLevels.length === 0 ? (
-                <small className="ops-model-level-empty">
-                  {t('common.operations.charity.noAllowedLevels')}
-                </small>
-              ) : null}
-            </fieldset>
-            <Field
-              label={t('common.operations.charity.publicDescription')}
-              help={t('common.operations.charity.publicDescriptionHelp')}
-              size="long"
-            >
-              {(field) => (
-                <textarea
-                  {...field}
-                  rows={5}
-                  value={draft.publicDescription}
-                  aria-label={t('common.operations.charity.publicDescription')}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, publicDescription: event.target.value }))
-                  }
-                />
-              )}
-            </Field>
-          </Fields>
+                )}
+              </Field>
+            </Fields>
+          </fieldset>
         </Fields>
 
-        <div className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}>
-          <div className="nb-workflow-price-editor">
-            <PriceConfigFields
-              disabled={fieldsDisabled}
-              allowSearchUnits={draft.modelTypes.length === 1 && draft.modelTypes[0] === 'rerank'}
-              value={draft}
-              role={role}
-              onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
-              modeRef={pricingModeInput}
-              discountError={discountError}
-              recurringError={validationError === 'recurringDiscount'}
-              actions={
-                <>
-                  <Button
-                    type="button"
-                    ref={referenceTrigger}
-                    aria-expanded={referenceOpen}
-                    onClick={() => setReferenceOpen(true)}
-                  >
-                    {t('common.workflow.openPriceReference')}
-                  </Button>
-                  {priceSource ? (
-                    <p role="status">
-                      {t('common.workflow.priceApplied', { source: priceSource })}
-                    </p>
-                  ) : null}
-                  {undoPrice ? (
+        <fieldset disabled={!canEditPricing} className="ops-unframed">
+          <div
+            className={`nb-workflow-price-workspace${referenceOpen ? ' is-reference-open' : ''}`}
+          >
+            <div className="nb-workflow-price-editor">
+              <PriceConfigFields
+                disabled={fieldsDisabled}
+                allowSearchUnits={draft.modelTypes.length === 1 && draft.modelTypes[0] === 'rerank'}
+                value={draft}
+                role={role}
+                onChange={(fields) => setDraft((current) => ({ ...current, ...fields }))}
+                modeRef={pricingModeInput}
+                discountError={discountError}
+                recurringError={validationError === 'recurringDiscount'}
+                actions={
+                  <>
                     <Button
                       type="button"
-                      onClick={() => {
-                        setDraft((current) => ({ ...current, ...structuredClone(undoPrice) }));
-                        setUndoPrice(null);
-                        setPriceSource('');
-                        pricingModeInput.current?.focus();
-                      }}
+                      ref={referenceTrigger}
+                      aria-expanded={referenceOpen}
+                      onClick={() => setReferenceOpen(true)}
                     >
-                      {t('common.workflow.undoPrice')}
+                      {t('common.workflow.openPriceReference')}
                     </Button>
-                  ) : null}
-                </>
-              }
-            />
-          </div>
-          <div
-            className="nb-workflow-price-reference"
-            hidden={!referenceOpen}
-            ref={referencePanel}
-            tabIndex={-1}
-          >
-            <Panel aria-label={t('common.workflow.priceReferencePanel')}>
-              <PanelHead
-                title={t('common.workflow.priceReferencePanel')}
-                level={3}
-                description={t('common.workflow.currentPriceTarget', {
-                  name: model?.full_name ?? `[公益]${draft.provider}/${draft.model}`,
-                })}
-                actions={
-                  <Button type="button" onClick={() => setReferenceOpen(false)}>
-                    {t('common.workflow.returnPriceDraft')}
-                  </Button>
+                    {priceSource ? (
+                      <p role="status">
+                        {t('common.workflow.priceApplied', { source: priceSource })}
+                      </p>
+                    ) : null}
+                    {undoPrice ? (
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setDraft((current) => ({ ...current, ...structuredClone(undoPrice) }));
+                          setUndoPrice(null);
+                          setPriceSource('');
+                          pricingModeInput.current?.focus();
+                        }}
+                      >
+                        {t('common.workflow.undoPrice')}
+                      </Button>
+                    ) : null}
+                  </>
                 }
               />
-              <PanelBody>
-                <div className="nb-workflow-price-reference-body">
-                  <PriceTools
-                    canManageTemplates={canManageTemplates}
-                    role={role}
-                    onCapabilityLoss={onCapabilityLoss}
-                    onApply={(config, name, revision) => {
-                      setUndoPrice(snapshotPriceDraft(draft));
-                      setDraft((current) => ({ ...current, ...priceDraft(config) }));
-                      setPriceSource(`${name} · ${revision}`);
-                      if (window.matchMedia?.('(width < 64rem)').matches) setReferenceOpen(false);
-                    }}
-                  />
+            </div>
+            <div
+              className="nb-workflow-price-reference"
+              hidden={!referenceOpen}
+              ref={referencePanel}
+              tabIndex={-1}
+            >
+              <Panel aria-label={t('common.workflow.priceReferencePanel')}>
+                <PanelHead
+                  title={t('common.workflow.priceReferencePanel')}
+                  level={3}
+                  description={t('common.workflow.currentPriceTarget', {
+                    name: model?.full_name ?? `[公益]${draft.provider}/${draft.model}`,
+                  })}
+                  actions={
+                    <Button type="button" onClick={() => setReferenceOpen(false)}>
+                      {t('common.workflow.returnPriceDraft')}
+                    </Button>
+                  }
+                />
+                <PanelBody>
+                  <div className="nb-workflow-price-reference-body">
+                    <PriceTools
+                      canManageTemplates={canManageTemplates}
+                      role={role}
+                      onCapabilityLoss={onCapabilityLoss}
+                      onApply={(config, name, revision) => {
+                        setUndoPrice(snapshotPriceDraft(draft));
+                        setDraft((current) => ({ ...current, ...priceDraft(config) }));
+                        setPriceSource(`${name} · ${revision}`);
+                        if (window.matchMedia?.('(width < 64rem)').matches) setReferenceOpen(false);
+                      }}
+                    />
+                  </div>
+                </PanelBody>
+                <div className="nb-workflow-price-reference-mobile-return">
+                  <PanelFoot>
+                    <Button type="button" onClick={() => setReferenceOpen(false)}>
+                      {t('common.workflow.returnWithoutFilling')}
+                    </Button>
+                  </PanelFoot>
                 </div>
-              </PanelBody>
-              <div className="nb-workflow-price-reference-mobile-return">
-                <PanelFoot>
-                  <Button type="button" onClick={() => setReferenceOpen(false)}>
-                    {t('common.workflow.returnWithoutFilling')}
-                  </Button>
-                </PanelFoot>
-              </div>
-            </Panel>
+              </Panel>
+            </div>
           </div>
-        </div>
+        </fieldset>
 
         <Fold
           title={t('common.operations.charity.advancedRequests')}
@@ -639,44 +661,50 @@ function ModelForm({
             draft.rolePolicy.rules.length,
           )}
         >
-          <CloudflareProxyField
-            enabled={draft.cloudflareProxy}
-            mode={model?.cloudflare_proxy_mode}
-            disabled={save.isPending || fieldsDisabled}
-            onChange={(cloudflareProxy) => setDraft((current) => ({ ...current, cloudflareProxy }))}
-          />
-          <SessionHeaderFields
-            value={draft.sessionHeaders}
-            onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
-          />
-          {draft.modelTypes.includes('chat_completions') ||
-          draft.modelTypes.includes('responses') ? (
-            <>
-              <TransportRuleField
-                disabled={fieldsDisabled}
-                value={draft.transportRule}
-                onChange={(transportRule) => setDraft((current) => ({ ...current, transportRule }))}
-              />
-              <Toggle
-                disabled={fieldsDisabled}
-                label={t(charityCopyKey(role, 'flattenExperimental'))}
-                checked={draft.flatten}
-                onChange={(flatten) => setDraft((current) => ({ ...current, flatten }))}
-              />
-            </>
-          ) : null}
-          <Field label={copy.excluded} help={copy.excludedHint} size="long">
-            {(field) => (
-              <textarea
-                {...field}
-                value={draft.excluded}
-                onChange={(event) => {
-                  const excluded = event.target.value;
-                  setDraft((current) => ({ ...current, excluded }));
-                }}
-              />
-            )}
-          </Field>
+          <fieldset className="ops-unframed" disabled={!canEditSettings}>
+            <CloudflareProxyField
+              enabled={draft.cloudflareProxy}
+              mode={model?.cloudflare_proxy_mode}
+              disabled={save.isPending || fieldsDisabled}
+              onChange={(cloudflareProxy) =>
+                setDraft((current) => ({ ...current, cloudflareProxy }))
+              }
+            />
+            <SessionHeaderFields
+              value={draft.sessionHeaders}
+              onChange={(sessionHeaders) => setDraft((value) => ({ ...value, sessionHeaders }))}
+            />
+            {draft.modelTypes.includes('chat_completions') ||
+            draft.modelTypes.includes('responses') ? (
+              <>
+                <TransportRuleField
+                  disabled={fieldsDisabled}
+                  value={draft.transportRule}
+                  onChange={(transportRule) =>
+                    setDraft((current) => ({ ...current, transportRule }))
+                  }
+                />
+                <Toggle
+                  disabled={fieldsDisabled}
+                  label={t(charityCopyKey(role, 'flattenExperimental'))}
+                  checked={draft.flatten}
+                  onChange={(flatten) => setDraft((current) => ({ ...current, flatten }))}
+                />
+              </>
+            ) : null}
+            <Field label={copy.excluded} help={copy.excludedHint} size="long">
+              {(field) => (
+                <textarea
+                  {...field}
+                  value={draft.excluded}
+                  onChange={(event) => {
+                    const excluded = event.target.value;
+                    setDraft((current) => ({ ...current, excluded }));
+                  }}
+                />
+              )}
+            </Field>
+          </fieldset>
           {draft.modelTypes.includes('chat_completions') ||
           draft.modelTypes.includes('responses') ? (
             <RolePolicyEditor
@@ -686,7 +714,7 @@ function ModelForm({
                 setDraft((current) => ({ ...current, rolePolicy }));
                 save.reset();
               }}
-              disabled={save.isPending || fieldsDisabled}
+              disabled={!canManageBindings || save.isPending || fieldsDisabled}
             />
           ) : null}
         </Fold>
@@ -794,8 +822,9 @@ function ModelForm({
               save.outcome === 'refresh-failed'
             }
             onClick={() => {
-              setDraft(modelDraft(model));
-              setSavedDraft(priceDraftSignature(modelDraft(model)));
+              const latest = modelDraft(model);
+              setDraft(latest);
+              setSavedDraft(priceDraftSignature(latest));
               setBaseRevision(model.revision);
               save.reset();
             }}
@@ -803,7 +832,7 @@ function ModelForm({
             {t('common.operations.charity.reloadModel')}
           </button>
         ) : null}
-        {model ? (
+        {model && canDelete ? (
           <button
             className="nb-btn nb-btn--danger"
             type="button"
@@ -819,7 +848,7 @@ function ModelForm({
           </button>
         ) : null}
       </FormActions>
-      {confirmDelete && model ? (
+      {canDelete && confirmDelete && model ? (
         <ConfirmDialog
           open
           title={t(charityCopyKey(role, 'deleteModelTitle'))}
@@ -860,6 +889,7 @@ function ModelForm({
 }
 
 function BindingsPanel({
+  canManage,
   role,
   accountId,
   refresh,
@@ -875,12 +905,16 @@ function BindingsPanel({
   model: CharityModel;
   onCapabilityLoss?: () => void;
   showAdaptation: boolean;
+  canManage: boolean;
   canEditAdaptation?: boolean;
   renderKeyManager: (props: CharityPickerKeyManagerProps) => ReactNode;
 }) {
   const { t } = useTranslation();
   const adaptationCopy = useRequestAdaptationCopy();
   const [adaptationBinding, setAdaptationBinding] = useState('');
+  const [removal, setRemoval] = useState<{ id: string; revision: string; label: string } | null>(
+    null,
+  );
   const [editingBinding, setEditingBinding] = useState('');
   const [visitedBindings, setVisitedBindings] = useState<string[]>([]);
   const [addMode, setAddMode] = useState<'single' | 'group'>('single');
@@ -909,7 +943,7 @@ function BindingsPanel({
     () => bindings.refetch({ throwOnError: true }),
   );
 
-  const capabilityLost = isUnauthorized(bindings.error) || isForbidden(bindings.error);
+  const capabilityLost = isUnauthorized(bindings.error) || isManagementForbidden(bindings.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -930,16 +964,19 @@ function BindingsPanel({
   );
   const mutationCapabilityLost =
     isUnauthorized(order.error) ||
-    isForbidden(order.error) ||
+    isManagementForbidden(order.error) ||
     isUnauthorized(remove.error) ||
-    isForbidden(remove.error);
+    isManagementForbidden(remove.error);
   useEffect(() => {
     if (mutationCapabilityLost) onCapabilityLoss?.();
   }, [mutationCapabilityLost, onCapabilityLoss]);
   const move = (index: number, offset: number) => {
     if (!bindings.data) return;
     const ids = orderedBindings.map((entry) => entry.id);
-    [ids[index], ids[index + offset]] = [ids[index + offset], ids[index]];
+    const position = index + offset;
+    if (!Number.isInteger(position) || position < 0 || position >= ids.length || position === index)
+      return;
+    ids.splice(position, 0, ...ids.splice(index, 1));
     setOrderDraft({ ids, revision: bindings.data.binding_revision });
   };
   const orderedBindings =
@@ -986,6 +1023,25 @@ function BindingsPanel({
         </Fold>
       ) : null}
       <Card>
+        <ConfirmDialog
+          open={removal !== null}
+          danger
+          title={t('common.operations.charity.remove')}
+          description={t('common.governance.unbind', {
+            model: model.full_name,
+            target: removal?.label ?? '',
+          })}
+          confirmLabel={t('common.operations.charity.remove')}
+          onCancel={() => setRemoval(null)}
+          onConfirm={() => {
+            if (removal && canManage)
+              remove.mutate(
+                { id: removal.id, revision: removal.revision },
+                { onSuccess: () => setRemoval(null) },
+              );
+          }}
+          busy={remove.isPending}
+        />
         <h3 id={`charity-model-connections-${model.id}`}>
           {t('common.operations.charity.orderedBindings')}
         </h3>
@@ -1080,19 +1136,21 @@ function BindingsPanel({
                       </td>
                       <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
                         <div className="nb-actions">
-                          <button
-                            className="nb-btn nb-btn--secondary nb-btn--sm"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => {
-                              setEditingBinding(entry.id);
-                              setVisitedBindings((previous) =>
-                                previous.includes(entry.id) ? previous : [...previous, entry.id],
-                              );
-                            }}
-                          >
-                            {t('common.connections.editBindingSources')}
-                          </button>
+                          {canManage && (
+                            <button
+                              className="nb-btn nb-btn--secondary nb-btn--sm"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                setEditingBinding(entry.id);
+                                setVisitedBindings((previous) =>
+                                  previous.includes(entry.id) ? previous : [...previous, entry.id],
+                                );
+                              }}
+                            >
+                              {t('common.connections.editBindingSources')}
+                            </button>
+                          )}
                           {sourceKeys.map((sourceKey) => (
                             <button
                               key={sourceKey.donation_key_id}
@@ -1127,7 +1185,7 @@ function BindingsPanel({
                               {adaptationCopy('title')}
                             </button>
                           ) : null}
-                          {bindings.data.can_reorder !== false ? (
+                          {canManage && bindings.data.can_reorder !== false ? (
                             <>
                               <button
                                 className="nb-btn nb-btn--secondary nb-btn--sm"
@@ -1145,21 +1203,46 @@ function BindingsPanel({
                               >
                                 {t('common.operations.charity.moveDown')}
                               </button>
+                              <form
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  const next = Number(
+                                    new FormData(event.currentTarget).get('position'),
+                                  );
+                                  move(index, next - index - 1);
+                                }}
+                              >
+                                <input
+                                  aria-label={t('common.governance.position')}
+                                  name="position"
+                                  type="number"
+                                  min={1}
+                                  max={orderedBindings.length}
+                                  required
+                                  disabled={busy}
+                                />
+                                <Button type="submit" size="sm" disabled={busy}>
+                                  {t('common.governance.move')}
+                                </Button>
+                              </form>
                             </>
                           ) : null}
-                          <button
-                            className="nb-btn nb-btn--danger nb-btn--sm"
-                            type="button"
-                            disabled={busy || orderChanged}
-                            onClick={() =>
-                              remove.mutate({
-                                id: entry.id,
-                                revision: bindings.data.binding_revision,
-                              })
-                            }
-                          >
-                            {t('common.operations.charity.remove')}
-                          </button>
+                          {canManage && (
+                            <button
+                              className="nb-btn nb-btn--danger nb-btn--sm"
+                              type="button"
+                              disabled={busy || orderChanged}
+                              onClick={() =>
+                                setRemoval({
+                                  id: entry.id,
+                                  revision: bindings.data.binding_revision,
+                                  label: entry.upstream_model_id + ' · #' + entry.id,
+                                })
+                              }
+                            >
+                              {t('common.operations.charity.remove')}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1181,7 +1264,13 @@ function BindingsPanel({
         {showAdaptation &&
         adaptationBinding &&
         bindings.data?.bindings.some((entry) => entry.id === adaptationBinding) ? (
-          <Fold lazy title={t('common.operations.charity.adaptationSettings')}>
+          <Sheet
+            open
+            size="lg"
+            title={t('common.operations.charity.adaptationSettings')}
+            closeLabel={t('common.connections.returnToBindings')}
+            onClose={() => setAdaptationBinding('')}
+          >
             <RequestAdaptationEditor
               key={`${accountId}:${model.id}:${adaptationBinding}`}
               url={`${role === 'admin' ? '/admin/api' : '/api/steward'}/charity-models/${encodeURIComponent(model.id)}/bindings/${encodeURIComponent(adaptationBinding)}/request-adaptation`}
@@ -1198,7 +1287,7 @@ function BindingsPanel({
               })()}
               editable={canEditAdaptation}
             />
-          </Fold>
+          </Sheet>
         ) : null}
         {orderChanged ? (
           <FormActions note={t('common.operations.charity.saveOrderHelp')}>
@@ -1244,42 +1333,44 @@ function BindingsPanel({
               />
             </Sheet>
           ))}
-        <section hidden={Boolean(editingBinding)} className="nb-stack">
-          <Field
-            label={t('common.connections.addBindingMode')}
-            help={t('common.connections.addBindingModeHelp')}
-          >
-            {(props) => (
-              <select
-                {...props}
-                value={addMode}
-                onChange={(event) => {
-                  const mode = event.target.value as 'single' | 'group';
-                  setAddMode(mode);
-                  if (mode === 'group') setGroupVisited(true);
-                }}
-              >
-                <option value="single">{t('common.connections.addSeparateSources')}</option>
-                <option value="group">{t('common.connections.combineSources')}</option>
-              </select>
-            )}
-          </Field>
-          <div hidden={addMode !== 'single'}>
-            <BindingAddForm
-              role={role}
-              accountId={accountId}
-              model={model}
-              refresh={refresh}
-              onCapabilityLoss={onCapabilityLoss}
-              renderKeyManager={renderKeyManager}
-            />
-          </div>
-          {groupVisited ? (
-            <div hidden={addMode !== 'group'}>
-              <CharityTargets role={role} accountId={accountId} model={model} inline />
+        {canManage && (
+          <section hidden={Boolean(editingBinding)} className="nb-stack">
+            <Field
+              label={t('common.connections.addBindingMode')}
+              help={t('common.connections.addBindingModeHelp')}
+            >
+              {(props) => (
+                <select
+                  {...props}
+                  value={addMode}
+                  onChange={(event) => {
+                    const mode = event.target.value as 'single' | 'group';
+                    setAddMode(mode);
+                    if (mode === 'group') setGroupVisited(true);
+                  }}
+                >
+                  <option value="single">{t('common.connections.addSeparateSources')}</option>
+                  <option value="group">{t('common.connections.combineSources')}</option>
+                </select>
+              )}
+            </Field>
+            <div hidden={addMode !== 'single'}>
+              <BindingAddForm
+                role={role}
+                accountId={accountId}
+                model={model}
+                refresh={refresh}
+                onCapabilityLoss={onCapabilityLoss}
+                renderKeyManager={renderKeyManager}
+              />
             </div>
-          ) : null}
-        </section>
+            {groupVisited ? (
+              <div hidden={addMode !== 'group'}>
+                <CharityTargets role={role} accountId={accountId} model={model} inline />
+              </div>
+            ) : null}
+          </section>
+        )}
         {order.error ? (
           <ErrorState error={order.error} />
         ) : remove.error ? (
@@ -1296,6 +1387,12 @@ export function ModelsPanel({
   role,
   accountId,
   canRead = true,
+  canCreate = true,
+  canDelete = true,
+  canEditSettings = true,
+  canEditPricing = true,
+  canManageBindings = true,
+  canSetNonMainstream = true,
   canEditAffinity = role === 'admin',
   canEditAdaptation = role === 'admin',
   canManageTemplates = role === 'admin',
@@ -1312,6 +1409,12 @@ export function ModelsPanel({
   role: CharityRole;
   accountId: string;
   canRead?: boolean;
+  canCreate?: boolean;
+  canDelete?: boolean;
+  canEditSettings?: boolean;
+  canEditPricing?: boolean;
+  canManageBindings?: boolean;
+  canSetNonMainstream?: boolean;
   canEditAffinity?: boolean;
   canEditAdaptation?: boolean;
   canManageTemplates?: boolean;
@@ -1321,7 +1424,7 @@ export function ModelsPanel({
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const logReturnTo = logManagementReturnPath(location.state, role);
+  const logReturnTo = logManagementReturnPath(location.state, role, location.search);
   const manageTriggerId = useId();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
@@ -1443,13 +1546,13 @@ export function ModelsPanel({
     : !models.isPending && !models.isFetching;
   const { listRef, detailRef, remember } = useDetailNavigation(selectedId, navigationReady);
   const capabilityLost = [models.error, detail.error].some(
-    (error) => isUnauthorized(error) || isForbidden(error),
+    (error) => isUnauthorized(error) || isManagementForbidden(error),
   );
   const resourceDenied = Boolean(
     logReturnTo &&
-    isForbidden(detail.error) &&
+    isManagementForbidden(detail.error) &&
     !isUnauthorized(models.error) &&
-    !isForbidden(models.error),
+    !isManagementForbidden(models.error),
   );
   useEffect(() => {
     if (capabilityLost && !resourceDenied) onCapabilityLoss?.();
@@ -1478,7 +1581,7 @@ export function ModelsPanel({
         description={selected ? `${selected.full_name} · #${selected.id}` : undefined}
         back={
           logReturnTo && (!managingKey || !selected) ? (
-            <Link className="nb-btn nb-btn--ghost" to={logReturnTo}>
+            <Link className="nb-btn nb-btn--ghost" to={logReturnTo} state={{logPrivate:location.state?.logPrivate}}>
               {t('common.operations.logs.returnToLogs')}
             </Link>
           ) : !managingKey && (creating || selectedId) ? (
@@ -1494,7 +1597,7 @@ export function ModelsPanel({
           ) : undefined
         }
         actions={
-          !creating && !selectedId ? (
+          canCreate && !creating && !selectedId ? (
             <button
               type="button"
               className="nb-btn nb-btn--primary"
@@ -1517,8 +1620,10 @@ export function ModelsPanel({
           {t('common.outcome.saved')} · {createdNotice}
         </Note>
       ) : null}
-      {creating ? (
+      {creating && !canCreate && <StewardPermissionNotice />}
+      {creating && canCreate ? (
         <ModelForm
+          canSetNonMainstream={canSetNonMainstream}
           role={role}
           canEditAffinity={canEditAffinity}
           canManageTemplates={canManageTemplates}
@@ -1694,7 +1799,7 @@ export function ModelsPanel({
                 keyID: managedKey,
                 backLabel: logReturnTo ? t('common.operations.logs.returnToLogs') : undefined,
                 onBack: () => {
-                  if (logReturnTo) navigate(logReturnTo);
+                  if (logReturnTo) navigate(logReturnTo,{state:{logPrivate:location.state?.logPrivate}});
                   else
                     setParams((current) => {
                       const next = new URLSearchParams(current);
@@ -1722,6 +1827,11 @@ export function ModelsPanel({
                 </a>
               </nav>
               <ModelForm
+                canEditSettings={canEditSettings}
+                canEditPricing={canEditPricing}
+                canDelete={canDelete}
+                canManageBindings={canManageBindings}
+                canSetNonMainstream={canSetNonMainstream}
                 disabled={detail.isFetching}
                 key={`model:${selected.id}`}
                 role={role}
@@ -1733,6 +1843,7 @@ export function ModelsPanel({
                 onCapabilityLoss={onCapabilityLoss}
               />
               <BindingsPanel
+                canManage={canManageBindings}
                 key={`bindings:${selected.id}`}
                 role={role}
                 accountId={accountId}

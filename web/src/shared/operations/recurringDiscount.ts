@@ -35,6 +35,17 @@ export const defaultRecurringDiscount = (): RecurringDiscount => ({
 export function validPeriodTime(value: string, end = false): boolean {
   return /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value) || (end && value === '24:00');
 }
+function discountPercent(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 100 ||
+    value !== Math.round(value * 100) / 100
+  )
+    return invalidResponse(label);
+  return value;
+}
 export function normalizeRecurringDiscount(value: unknown): RecurringDiscount {
   const item = exactRecord(
     value,
@@ -46,7 +57,7 @@ export function normalizeRecurringDiscount(value: unknown): RecurringDiscount {
   return {
     enabled: boolean(item.enabled, 'recurring discount enabled'),
     time_zone: timeZone,
-    default_percent: integer(item.default_percent, 'default discount percent', 0, 100),
+    default_percent: discountPercent(item.default_percent, 'default discount percent'),
     periods: array(item.periods, 'discount periods', 16).map((value) => {
       const period = exactRecord(
         value,
@@ -70,7 +81,7 @@ export function normalizeRecurringDiscount(value: unknown): RecurringDiscount {
         weekdays,
         start_time: start,
         end_time: end,
-        percent: integer(period.percent, 'period discount percent', 0, 100),
+        percent: discountPercent(period.percent, 'period discount percent'),
       };
     }),
   };
@@ -79,7 +90,7 @@ export function normalizeEffectiveDiscount(value: unknown): EffectiveDiscount {
   const item = exactRecord(value, ['source', 'percent', 'next_change_at'], 'effective discount');
   return {
     source: oneOf(item.source, ['none', 'fixed', 'recurring'] as const, 'discount source'),
-    percent: integer(item.percent, 'effective discount percent', 0, 100),
+    percent: discountPercent(item.percent, 'effective discount percent'),
     next_change_at: nullableUnixSecond(item.next_change_at, 'next price change'),
   };
 }

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '@shared/query/http';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TFunction } from 'i18next';
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import {
@@ -394,6 +395,15 @@ function SettingField({
                     ? t('admin.settings.enumValues.empty')
                     : scalar(entry.raw_default)}
           </p>
+          {preview ? <p className="muted">{preview}</p> : null}
+          {entry.type === 'text' ? (
+            <p className="muted">
+              {t('admin.settings.legalBytes', {
+                count: utf8Bytes(draft.text),
+                max: entry.maximum,
+              })}
+            </p>
+          ) : null}
           <details className="setting-info">
             <summary
               aria-label={t('admin.settings.fieldDetails')}
@@ -417,14 +427,7 @@ function SettingField({
                   : ''}
               </p>
             ) : null}
-            {entry.type === 'text' ? (
-              <p className="muted">
-                {t('admin.settings.legalBytes', {
-                  count: utf8Bytes(draft.text),
-                  max: entry.maximum,
-                })}
-              </p>
-            ) : null}
+
             {entry.independent_gates.length ? (
               <p className="muted">
                 {t('admin.settings.catalogIndependentGate')}:{' '}
@@ -439,7 +442,7 @@ function SettingField({
             {value === null && !entry.null_writable ? (
               <p className="muted">{t('admin.settings.notConfigured')}</p>
             ) : null}
-            {preview ? <p className="muted">{preview}</p> : null}
+
             {draft.text === '0' ? <p className="muted">{entry.zero_semantics[locale]}</p> : null}
             {draft.isNull ? <p className="muted">{entry.null_semantics[locale]}</p> : null}
             {!draft.isNull && draft.text === '' ? (
@@ -691,6 +694,21 @@ export function SettingsPage() {
     }
   }
   const proposed = { ...authority.data?.values, ...pending };
+  const configuredAmount = (key: string) => {
+    const value = proposed[key];
+    return value === undefined || value === null || value === ''
+      ? null
+      : amountMilli(String(value));
+  };
+  const invalidAward = REWARD_PAIRS.some(([minKey, maxKey]) => {
+    const min = configuredAmount(minKey),
+      max = configuredAmount(maxKey);
+    return min !== null && max !== null && min > max;
+  });
+  const levels = LEVEL_THRESHOLDS.map(configuredAmount).filter(
+    (value): value is bigint => value !== null && value > 0n,
+  );
+  const invalidLevels = levels.some((value, index) => index > 0 && levels[index - 1] >= value);
   const dependencyError =
     proposed.donation_accept_enabled && !proposed.charity_enabled
       ? t('admin.settings.dependencies.donations')
@@ -698,10 +716,11 @@ export function SettingsPage() {
           proposed.checkin_mode !== 'disabled' &&
           proposed.site_timezone_offset_minutes === null
         ? t('admin.settings.dependencies.timezone')
-        : amountMilli(String(proposed.checkin_award_min_milli ?? '0'))! >
-            amountMilli(String(proposed.checkin_award_max_milli ?? '0'))!
+        : invalidAward
           ? t('admin.settings.dependencies.checkinBounds')
-          : null;
+          : invalidLevels
+            ? t('admin.settings.dependencies.levels')
+            : null;
   const errorMessages: Record<string, string> = {
     'Enable shared models before accepting donations.': t('admin.settings.dependencies.donations'),
     'The minimum check-in reward must not exceed the maximum.': t(
@@ -770,6 +789,13 @@ export function SettingsPage() {
     ...GROUP_ORDER.filter((name) => allGroups.includes(name) || EXTRA_GROUP_LABELS[name]),
     ...allGroups.filter((name) => !GROUP_ORDER.includes(name)),
   ];
+  const matchedTools = Object.keys(EXTRA_GROUP_LABELS).filter(
+    (group) =>
+      search.trim() &&
+      [group, navigationLabel(t, group), extraGroupDefaults[group]].some((term) =>
+        term.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+      ),
+  );
   const requestedGroup = params.get('group');
   const activeGroup =
     requestedGroup && navigationGroups.includes(requestedGroup)
@@ -838,6 +864,12 @@ export function SettingsPage() {
 
   return (
     <div className="page ops-page">
+      <DraftLeaveGuard
+        dirty={pendingCount > 0}
+        allowNavigation={({ currentLocation, nextLocation }) =>
+          currentLocation.pathname === nextLocation.pathname
+        }
+      />
       <PageHeader title={t('admin.settings.title')} />
       <div className="settings-search-bar">
         <FilterBar
@@ -860,7 +892,10 @@ export function SettingsPage() {
                   type="search"
                   value={searchDraft}
                   placeholder={t('admin.settings.searchHelp')}
-                  onChange={(event) => setSearchDraft(event.target.value)}
+                  onChange={(event) => {
+                    setSearchDraft(event.target.value);
+                    setSearch(event.target.value);
+                  }}
                 />
               )}
             </Field>
@@ -963,10 +998,22 @@ export function SettingsPage() {
             </nav>
             <div className="settings-content">
               {search.trim() ? (
-                groups.size ? (
-                  [...groups].map(([name, entries]) => (
-                    <Group key={name} name={name} entries={entries} {...editor} />
-                  ))
+                groups.size || matchedTools.length ? (
+                  <>
+                    {matchedTools.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        className="nb-btn nb-btn--secondary"
+                        onClick={() => selectGroup(name)}
+                      >
+                        {navigationLabel(t, name)}
+                      </button>
+                    ))}
+                    {[...groups].map(([name, entries]) => (
+                      <Group key={name} name={name} entries={entries} {...editor} />
+                    ))}
+                  </>
                 ) : (
                   <EmptyState
                     title={t('admin.settings.ordinaryEmpty')}
@@ -1032,31 +1079,35 @@ export function SettingsPage() {
             ) : null}
             {save.isSuccess ? <p role="status">{t('admin.settings.saved')}</p> : null}
           </div>
-          <SaveBar
-            dirtyCount={pendingCount}
-            scope={
-              <>
-                {editedGroups.map((name) => navigationLabel(t, name)).join(' · ')}
-                {dangerousChanges ? (
-                  <small className="settings-save-warning">
-                    {t('admin.settings.confirmationHint', {
-                      defaultValue: 'Settings requiring care will be confirmed before saving.',
-                    })}
-                  </small>
-                ) : null}
-              </>
-            }
-            busy={save.isPending}
-            saveDisabled={saveDisabled}
-            onSave={requestSave}
-            onDiscard={() => {
-              setDrafts({});
-              save.reset();
-            }}
-            saveLabel={save.isPending ? t('common.working') : t('admin.settings.saveAll')}
-            discardLabel={t('admin.settings.discardAll')}
-            dirtyLabel={(count) => t('admin.settings.pendingChanges', { count })}
-          />
+          {!search.trim() && EXTRA_GROUP_LABELS[activeGroup] ? (
+            <p className="field-help">{t('admin.audit.settingsSavedSeparately')}</p>
+          ) : (
+            <SaveBar
+              dirtyCount={pendingCount}
+              scope={
+                <>
+                  {editedGroups.map((name) => navigationLabel(t, name)).join(' · ')}
+                  {dangerousChanges ? (
+                    <small className="settings-save-warning">
+                      {t('admin.settings.confirmationHint', {
+                        defaultValue: 'Settings requiring care will be confirmed before saving.',
+                      })}
+                    </small>
+                  ) : null}
+                </>
+              }
+              busy={save.isPending}
+              saveDisabled={saveDisabled}
+              onSave={requestSave}
+              onDiscard={() => {
+                setDrafts({});
+                save.reset();
+              }}
+              saveLabel={save.isPending ? t('common.working') : t('admin.settings.saveAll')}
+              discardLabel={t('admin.settings.discardAll')}
+              dirtyLabel={(count) => t('admin.settings.pendingChanges', { count })}
+            />
+          )}
           <ConfirmDialog
             open={confirmation !== null}
             danger
@@ -1073,7 +1124,20 @@ export function SettingsPage() {
               save.mutate(confirmation);
               setConfirmation(null);
             }}
-          />
+          >
+            {confirmation && (
+              <dl>
+                {Object.entries(confirmation.values).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{catalogLabels[key] ?? key}</dt>
+                    <dd>
+                      {scalar(authority.data?.values[key] ?? null)} → {scalar(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </ConfirmDialog>
         </>
       ) : null}
     </div>

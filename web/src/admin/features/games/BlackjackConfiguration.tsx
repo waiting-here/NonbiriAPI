@@ -1,7 +1,7 @@
+import { PercentInput } from './PercentInput';
 import { Affix, Field, Fields, Fold, FormActions } from '@shared/components/ui';
 import type { BlackjackConfig } from '@shared/games/blackjack';
 import { useGameAdminText } from './copy';
-import { percentBP } from './config';
 
 export function validateBlackjackConfiguration(
   config: { master_enabled: boolean; blackjack: BlackjackConfig },
@@ -131,19 +131,16 @@ export function BlackjackConfiguration({
               }
             >
               {(props) => (
-                <Affix
+                <PercentInput
                   {...props}
                   unit="%"
-                  type="number"
-                  min="0"
                   max="99.99"
-                  step="0.01"
-                  value={Number.isNaN(value.rake_bp[field]) ? '' : value.rake_bp[field] / 100}
+                  basisPoints={value.rake_bp[field]}
                   disabled={disabled}
-                  onChange={(e) =>
+                  onBasisChange={(points) =>
                     onChange({
                       ...value,
-                      rake_bp: { ...value.rake_bp, [field]: percentBP(e.target.value) },
+                      rake_bp: { ...value.rake_bp, [field]: points },
                     })
                   }
                 />

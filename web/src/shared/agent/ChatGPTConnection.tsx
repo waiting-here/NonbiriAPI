@@ -1,3 +1,5 @@
+import { CopyValue } from '@shared/components/CopyValue';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +41,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
     enabled: active,
     retry: false,
   });
+  const [disconnect, setDisconnect] = useState<{ revision: string; name: string } | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [newAccount, setNewAccount] = useState(false);
   const [filename, setFilename] = useState('');
@@ -110,7 +113,7 @@ export function ChatGPTConnection({ account, active }: { account: string; active
         anchor.href = url;
         anchor.download = 'instance-target.json';
         anchor.click();
-        URL.revokeObjectURL(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       });
     },
     reconcile: async (_intent, _failure, context) => {
@@ -244,9 +247,10 @@ export function ChatGPTConnection({ account, active }: { account: string; active
                       variant="danger-outline"
                       disabled={busy || unresolved}
                       onClick={() =>
-                        void action
-                          .run({ action: 'logout', revision: status.data.revision })
-                          .catch(() => undefined)
+                        setDisconnect({
+                          revision: status.data.revision,
+                          name: status.data.account_label || 'ChatGPT',
+                        })
                       }
                     >
                       {t('common.agent.drivers.disconnect')}
@@ -292,11 +296,25 @@ export function ChatGPTConnection({ account, active }: { account: string; active
                 </li>
                 <li>
                   <p>{t('common.agent.drivers.helperStep')}</p>
-                  <pre className="agent-raw">
-                    {
-                      'go build -o nonbiri-chatgpt-login.exe ./cmd/nonbiri-chatgpt-login\n./nonbiri-chatgpt-login.exe --target instance-target.json --output connection.json'
-                    }
-                  </pre>
+                  {(['Windows', 'macOS / Linux'] as const).map((platform) => {
+                    const binary =
+                      platform === 'Windows'
+                        ? 'nonbiri-chatgpt-login.exe'
+                        : 'nonbiri-chatgpt-login';
+                    const command =
+                      'go build -o ' +
+                      binary +
+                      ' ./cmd/nonbiri-chatgpt-login\n./' +
+                      binary +
+                      ' --target instance-target.json --output connection.json';
+                    return (
+                      <div key={platform}>
+                        <strong>{platform}</strong>
+                        <pre className="agent-raw">{command}</pre>
+                        <CopyValue value={command} label={platform} showValue={false} />
+                      </div>
+                    );
+                  })}
                   <p className="nb-small">{t('common.agent.drivers.helperKeep')}</p>
                 </li>
                 <li>
@@ -388,6 +406,24 @@ export function ChatGPTConnection({ account, active }: { account: string; active
           ) : null}
         </div>
       </PanelBody>
+      <ConfirmDialog
+        open={Boolean(
+          disconnect && status.data?.connected && disconnect.revision === status.data.revision,
+        )}
+        title={t('common.agent.drivers.disconnect')}
+        description={t('common.agent.disconnectAccountConfirm', { name: disconnect?.name })}
+        confirmLabel={t('common.agent.drivers.disconnect')}
+        danger
+        busy={busy}
+        onCancel={() => setDisconnect(null)}
+        onConfirm={() => {
+          if (disconnect && disconnect.revision === status.data?.revision)
+            void action
+              .run({ action: 'logout', revision: disconnect.revision })
+              .catch(() => undefined);
+          setDisconnect(null);
+        }}
+      />
     </Panel>
   );
 }

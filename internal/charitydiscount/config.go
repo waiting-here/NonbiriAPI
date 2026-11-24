@@ -5,8 +5,11 @@ package charitydiscount
 import (
 	"encoding/json"
 	"errors"
+	"math"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/calendar"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
@@ -21,17 +24,40 @@ const (
 
 var ErrInvalid = errors.New("charity discount: invalid configuration or instant")
 
+// Percent is the public 0–100 percentage with up to two decimal places.
+type Percent float64
+
+var percentageNumber = regexp.MustCompile(`^(0|[1-9][0-9]{0,2})(\.[0-9]{1,2})?$`)
+
+func (p *Percent) UnmarshalJSON(data []byte) error {
+	if !percentageNumber.Match(data) {
+		return ErrInvalid
+	}
+	n, err := strconv.ParseFloat(string(data), 64)
+	if err != nil || n > 100 {
+		return ErrInvalid
+	}
+	*p = Percent(n)
+	return nil
+}
+
+func (p Percent) BasisPoints() int { return int(math.Round(float64(p) * 100)) }
+
+func (p Percent) valid() bool {
+	return p >= 0 && p <= 100 && p == Percent(float64(p.BasisPoints())/100)
+}
+
 type Period struct {
-	Weekdays  []int  `json:"weekdays"`
-	StartTime string `json:"start_time"`
-	EndTime   string `json:"end_time"`
-	Percent   int    `json:"percent"`
+	Weekdays  []int   `json:"weekdays"`
+	StartTime string  `json:"start_time"`
+	EndTime   string  `json:"end_time"`
+	Percent   Percent `json:"percent"`
 }
 
 type Config struct {
 	Enabled        bool     `json:"enabled"`
 	TimeZone       string   `json:"time_zone"`
-	DefaultPercent int      `json:"default_percent"`
+	DefaultPercent Percent  `json:"default_percent"`
 	Periods        []Period `json:"periods"`
 }
 
@@ -57,7 +83,7 @@ func (value *Config) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		Enabled        *bool              `json:"enabled"`
 		TimeZone       *string            `json:"time_zone"`
-		DefaultPercent *int               `json:"default_percent"`
+		DefaultPercent *Percent           `json:"default_percent"`
 		Periods        *[]json.RawMessage `json:"periods"`
 	}
 	if json.Unmarshal(data, &wire) != nil || wire.Enabled == nil || wire.TimeZone == nil ||
@@ -70,10 +96,10 @@ func (value *Config) UnmarshalJSON(data []byte) error {
 			return ErrInvalid
 		}
 		var period struct {
-			Weekdays  *[]int  `json:"weekdays"`
-			StartTime *string `json:"start_time"`
-			EndTime   *string `json:"end_time"`
-			Percent   *int    `json:"percent"`
+			Weekdays  *[]int   `json:"weekdays"`
+			StartTime *string  `json:"start_time"`
+			EndTime   *string  `json:"end_time"`
+			Percent   *Percent `json:"percent"`
 		}
 		if json.Unmarshal(encoded, &period) != nil || period.Weekdays == nil ||
 			period.StartTime == nil || period.EndTime == nil || period.Percent == nil {
@@ -125,12 +151,13 @@ func Normalize(value Config) (Config, error) {
 }
 
 type span struct {
-	start, end, percent int
+	start, end int
+	percent    Percent
 }
 
 func prepare(value Config) (Config, []span, error) {
 	if len(value.TimeZone) == 0 || len(value.TimeZone) > 64 || !calendar.ValidZone(value.TimeZone) ||
-		!validPercent(value.DefaultPercent) || len(value.Periods) > MaxPeriods {
+		!value.DefaultPercent.valid() || len(value.Periods) > MaxPeriods {
 		return Config{}, nil, ErrInvalid
 	}
 	value = value.Clone()
@@ -142,7 +169,7 @@ func prepare(value Config) (Config, []span, error) {
 		period := &value.Periods[index]
 		start, startOK := clockSeconds(period.StartTime, false)
 		end, endOK := clockSeconds(period.EndTime, true)
-		if !startOK || !endOK || start == end || !validPercent(period.Percent) ||
+		if !startOK || !endOK || start == end || !period.Percent.valid() ||
 			len(period.Weekdays) < 1 || len(period.Weekdays) > 7 {
 			return Config{}, nil, ErrInvalid
 		}

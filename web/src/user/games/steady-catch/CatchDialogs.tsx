@@ -29,12 +29,7 @@ export function CatchDialog({
       onDismiss={onClose}
       className={className}
       aria-label={title}
-      onClick={(e) => {
-        if (e.target !== e.currentTarget) return;
-        const r = e.currentTarget.getBoundingClientRect();
-        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
-          onClose();
-      }}
+      dismissOnBackdrop
     >
       <div className="dialog-top">
         {eyebrow || count !== undefined ? (

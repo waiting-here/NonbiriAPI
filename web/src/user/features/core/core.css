@@ -1254,6 +1254,12 @@
   align-items: center;
   gap: var(--nb-space-3);
 }
+.models-workspace .core-binding-row > .nb-actions {
+  grid-column: 4;
+}
+.models-workspace .core-binding-row > .nb-more {
+  grid-column: 5;
+}
 .models-workspace .model-source-main {
   display: grid;
   min-width: 0;

@@ -1,3 +1,5 @@
+import { ConfirmDialog } from './ConfirmDialog';
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
 import { Button } from '@shared/components/ui/Button';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -9,7 +11,7 @@ import {
   stationSessionMatches,
   StationSessionChangedError,
 } from '@shared/charityManagement';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { charityKeys, type CharityRole } from '@shared/operations/charity';
 import {
   resetFailures,
@@ -26,6 +28,7 @@ import { FailureResetDetails } from './FailureResetDetails';
 export interface FailureResetChoice {
   id: string;
   label: string;
+  failed?: boolean;
   target: FailureResetTarget;
 }
 interface Props {
@@ -93,7 +96,7 @@ export function FailureResetControl({
         return result;
       } catch (error) {
         guard();
-        if (isUnauthorized(error) || isForbidden(error)) {
+        if (isUnauthorized(error) || isManagementForbidden(error)) {
           if (isUnauthorized(error)) clearStationSession(client, role);
           setLost(true);
           onCapabilityLoss?.();
@@ -101,23 +104,30 @@ export function FailureResetControl({
         throw error;
       }
     };
-    const run = new FailureResetRun(targets, {
-      select: (query, cursor) => request(() => selectFailureResets(role, query, cursor)),
-      reset: (items, key) => request(() => resetFailures(role, items, key)),
-      guard,
-      yield: () => new Promise((resolve) => setTimeout(resolve, 0)),
-      progress: () => {
-        if (!mounted.current) return;
-        if (isStationSessionChanged(run.error) || !stationSessionMatches(client, role, snapshot)) {
-          active.current = null;
-          setJob(null);
-          setChosen(new Map());
-          return;
-        }
-        render((n) => n + 1);
-        if (run.phase === 'done' || run.phase === 'paused') void refresh();
+    const run = new FailureResetRun(
+      targets,
+      {
+        select: (query, cursor) => request(() => selectFailureResets(role, query, cursor)),
+        reset: (items, key) => request(() => resetFailures(role, items, key)),
+        guard,
+        yield: () => new Promise((resolve) => setTimeout(resolve, 0)),
+        progress: () => {
+          if (!mounted.current) return;
+          if (
+            isStationSessionChanged(run.error) ||
+            !stationSessionMatches(client, role, snapshot)
+          ) {
+            active.current = null;
+            setJob(null);
+            setChosen(new Map());
+            return;
+          }
+          render((n) => n + 1);
+          if (run.phase === 'done' || run.phase === 'paused') void refresh();
+        },
       },
-    });
+      true,
+    );
     active.current = run;
     setJob(run);
     void run.resume();
@@ -134,6 +144,7 @@ export function FailureResetControl({
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   return (
     <Fold className="failure-reset-control" title={t('common.failureReset.title')}>
+      <DraftLeaveGuard dirty={working || job?.phase === 'paused'} />
       <p>{t('common.failureReset.help')}</p>
       {!job ? (
         <>
@@ -160,6 +171,17 @@ export function FailureResetControl({
               {t('common.failureReset.clear')}
             </Button>
           </div>
+          {choices.some((row) => row.failed !== undefined) && (
+            <Button
+              type="button"
+              disabled={disabled || !choices.some((row) => row.failed)}
+              onClick={() =>
+                setChosen(new Map(choices.filter((row) => row.failed).map((row) => [row.id, row])))
+              }
+            >
+              {t('common.governance.selectFailed')}
+            </Button>
+          )}
           <div className="failure-reset-choices">
             {choices.map((choice) => (
               <ChoiceRow
@@ -199,9 +221,30 @@ export function FailureResetControl({
         </>
       ) : (
         <>
+          <ConfirmDialog
+            open={job.phase === 'confirming'}
+            title={t('common.failureReset.title')}
+            description={t('common.governance.resetScope', { count: counts?.selected ?? 0 })}
+            confirmLabel={t('common.failureReset.title')}
+            onCancel={() => {
+              active.current = null;
+              setJob(null);
+            }}
+            onConfirm={() => void job.confirm()}
+          >
+            <ul>
+              {Array.from(job.entries.values())
+                .slice(0, 100)
+                .map((row) => (
+                  <li key={row.key_id}>
+                    #{row.donation_id} / #{row.key_id}
+                  </li>
+                ))}
+            </ul>
+          </ConfirmDialog>
           <p role="status" aria-live="polite">
             {t(
-              job.phase === 'selecting'
+              job.phase === 'selecting' || job.phase === 'confirming'
                 ? 'common.failureReset.selecting'
                 : job.phase === 'resetting'
                   ? 'common.failureReset.resetting'

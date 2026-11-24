@@ -1,8 +1,9 @@
+import { stewardPermissionKeys, stewardLimitKeys } from '@shared/operations/stewardPermissions';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { useTranslation } from 'react-i18next';
-import { Fold } from '@shared/components/ui';
+import { Fold, StatusBadge } from '@shared/components/ui';
 import type { ReactElement } from 'react';
-import { formatCredits } from '../../user/games/common/strict';
+import { creditsFromMilli, formatCredits } from '../../user/games/common/strict';
 import { formatCount } from '@shared/utils/formatNumber';
 import { NATIVE_SERVICE_LABEL_KEYS, type NativeService } from '@shared/nativeServices';
 import { AgentTime } from './AgentParts';
@@ -63,6 +64,12 @@ const fieldNames: Record<string, string> = {
   calls_limit: 'common.agent.changeFields.calls',
   tokens_limit: 'common.agent.changeFields.tokens',
   token_reserve: 'common.agent.changeFields.tokenReserve',
+  decision: 'common.agent.reviewDecision',
+  approval_note: 'common.agent.changeFields.note',
+  asset: 'management.resources.resource',
+  quantity: 'management.resources.quantity',
+  expected_quantity: 'common.agent.previousQuantity',
+  charity_model_id: 'common.agent.changeFields.model',
   safe_note: 'common.agent.changeFields.note',
   expires_at: 'common.agent.changeFields.expires',
   threshold: 'common.agent.changeFields.failureThreshold',
@@ -93,6 +100,7 @@ const fieldNames: Record<string, string> = {
 const valueNames: Record<string, string> = {
   approve: 'common.agent.decisions.approve',
   reject: 'common.agent.decisions.reject',
+  force_reject: 'common.agent.operationNames.forceReject',
   increase: 'common.agent.changeValues.increase',
   decrease: 'common.agent.changeValues.decrease',
   balance: 'common.agent.changeValues.balance',
@@ -152,12 +160,21 @@ export function OperationSummary({
         .join(', ');
     if (key === 'expires_at' && typeof value === 'number')
       return <AgentTime value={value * 1000} />;
-    if (key === 'duration_seconds')
+    if (key === 'duration_seconds' || key === 'users.ban_duration_max_seconds')
       return t('common.agent.changeValues.seconds', { value: formatCount(String(value)).display });
     if (key === 'concurrency_overflow' || key === 'rpm_overflow')
       return t(value === 'queue' ? 'common.keyLimits.queue' : 'common.keyLimits.reject');
     const text = String(value);
     if (key.endsWith('_id')) return text;
+    if (key === 'donation_scope' && ['none', 'standard', 'enhanced', 'full'].includes(text))
+      return t(`management.permissions.scope.${text}.label`);
+    if (key.endsWith('_milli') && /^\d{1,30}$/.test(text))
+      return (
+        <span className="agent-number">
+          <CreditNumber value={formatCredits(creditsFromMilli(BigInt(text)))} />{' '}
+          {t('common.creditsUnit')}
+        </span>
+      );
     if (
       key === 'amount' ||
       key === 'price_limit' ||
@@ -204,6 +221,38 @@ export function OperationSummary({
         </p>,
       ];
     });
+  const policyRows = (kind: 'permissions' | 'limits') => {
+    const known = kind === 'permissions' ? stewardPermissionKeys : stewardLimitKeys;
+    const proposed = object(input[kind]),
+      saved = object(before[kind]);
+    return known.flatMap((key) => {
+      if (!(key in proposed) || proposed[key] === saved[key]) return [];
+      const copyKey = key.replaceAll('.', '_');
+      const label =
+        kind === 'permissions'
+          ? t(`management.permissions.labels.${copyKey}`)
+          : t(`management.permissions.limits.${copyKey}`);
+      return [
+        <p key={key}>
+          <strong>{label}</strong> ·{' '}
+          {saved[key] !== undefined ? <>{renderValue(key, saved[key])} → </> : null}
+          {renderValue(key, proposed[key])}
+        </p>,
+      ];
+    });
+  };
+  const resourceRoute =
+    operation.kind === 'management.api' &&
+    (input.route === 'PATCH /admin/api/users/{id}/resources' ||
+      input.route === 'PATCH /api/steward/users/{id}/resources');
+  const reviewKeys =
+    operation.kind === 'donation.review' && Array.isArray(before.keys)
+      ? before.keys.map(object)
+      : [];
+  const reviewCount =
+    operation.kind === 'donation.review'
+      ? object(before.use_summary)[input.decision === 'force_reject' ? 'total' : 'pending']
+      : undefined;
   const name =
     operation.kind === 'donation.review'
       ? input.decision === 'approve'
@@ -215,7 +264,7 @@ export function OperationSummary({
   return (
     <div className="nb-stack nb-stack--sm">
       <strong>{name ? t(name) : preview?.title || operation.kind}</strong>
-      {operation.target_id ? (
+      {operation.target_id && !resourceRoute ? (
         <p>
           {t(
             operation.kind.startsWith('users.')
@@ -241,8 +290,63 @@ export function OperationSummary({
           )}
         </p>
       ) : null}
+      {(preview?.dangerous || preview?.requires_elevation) && (
+        <div className="nb-actions">
+          {preview.dangerous && (
+            <StatusBadge tone="bad">{t('common.agent.highRiskOperation')}</StatusBadge>
+          )}
+          {preview.requires_elevation && (
+            <StatusBadge tone="warn">{t('common.agent.elevationNeeded')}</StatusBadge>
+          )}
+        </div>
+      )}
       {fields(input, before)}
-      {operation.kind === 'management.api' ? (
+      {operation.kind === 'users.permissions' && (
+        <>
+          {policyRows('permissions')}
+          {policyRows('limits')}
+        </>
+      )}
+      {resourceRoute && (
+        <>
+          {t('common.agent.targetUser', { id: String(object(input.path_params).id ?? '') })}
+          {fields(
+            Object.fromEntries(
+              Object.entries(object(input.body)).filter(([key]) =>
+                ['asset', 'direction', 'quantity', 'expected_quantity', 'reason'].includes(key),
+              ),
+            ),
+            {},
+          )}
+        </>
+      )}
+      {typeof reviewCount === 'string' && (
+        <p>{t('common.agent.reviewScope', { count: formatCount(reviewCount).display })}</p>
+      )}
+      {reviewKeys.length > 0 && (
+        <Fold title={t('common.agent.reviewVisibleKeys', { count: reviewKeys.length })}>
+          {reviewKeys.map((key) => (
+            <div key={String(key.id)}>
+              <strong>
+                {t('common.agent.changeFields.key')} #{String(key.id)}
+              </strong>
+              {typeof key.binding_count === 'string' && (
+                <p>
+                  {t('common.agent.currentBindingCount', {
+                    count: formatCount(key.binding_count).display,
+                  })}
+                </p>
+              )}
+              {typeof key.safe_note === 'string' && key.safe_note && (
+                <p>
+                  {t('common.agent.changeFields.note')} · {key.safe_note}
+                </p>
+              )}
+            </div>
+          ))}
+        </Fold>
+      )}
+      {operation.kind === 'management.api' && !resourceRoute ? (
         <>
           <p>{t('common.agent.managementRequestHelp')}</p>
           <pre className="agent-raw">{JSON.stringify(input, null, 2)}</pre>

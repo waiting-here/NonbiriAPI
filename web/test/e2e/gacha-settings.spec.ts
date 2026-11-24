@@ -74,7 +74,16 @@ async function setup(page: Page, theme = 'light') {
   const writes: AdminInput[] = [];
   await page.route('**/admin/api/gacha', async (route) => {
     if (route.request().method() === 'POST') {
-      writes.push(route.request().postDataJSON() as AdminInput);
+      const write = route.request().postDataJSON() as AdminInput;
+      writes.push(write);
+      if (write.kind === 'settings') {
+        Object.assign(configuration, {
+          rules: write.rules,
+          shop: write.shop,
+          entry_enabled: write.entry_enabled,
+          revision: configuration.revision + 1,
+        });
+      }
     }
     await route.fulfill({ json: configuration });
   });
@@ -158,6 +167,36 @@ for (const theme of ['light', 'dark'] as const)
     });
   }
 
+test('gacha settings submit exact percentage digits and retain empty numeric drafts', async ({
+  page,
+}) => {
+  const writes = await setup(page);
+  const settings = page.getByRole('tab', { name: '规则与商店', exact: true });
+  await settings.click();
+  const nRate = page.getByLabel('N 基础概率（%）', { exact: true });
+  await nRate.fill('');
+  await nRate.pressSequentially('0.05');
+  await page.getByLabel('R 基础概率（%）', { exact: true }).fill('89.95');
+  const cap = page.getByLabel('每月常驻券合计上限', { exact: true });
+  const save = page.getByRole('button', { name: '保存规则与商店设置', exact: true });
+  await cap.fill('');
+  await expect(cap).toHaveValue('');
+  await expect(save).toBeDisabled();
+  await cap.fill('0');
+  await save.click();
+  await expect.poll(() => writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({
+    kind: 'settings',
+    expected_revision: 1,
+    rules: { weights: [5, 8995, 900, 100] },
+    shop: { permanent_cap: 0 },
+  });
+  await page.getByRole('tab', { name: '配置模板', exact: true }).click();
+  await settings.click();
+  await expect(nRate).toHaveValue('0.05');
+  await expect(cap).toHaveValue('0');
+});
+
 test('saving a gacha template does not also submit a pool', async ({ page }) => {
   const guard = collectConsoleViolations(page);
   const writes = await setup(page);
@@ -165,7 +204,8 @@ test('saving a gacha template does not also submit a pool', async ({ page }) => 
   const dialog = page.getByRole('dialog', { name: '限定奖池', exact: true });
   await dialog.getByLabel('奖池名称', { exact: true }).fill('新模板');
   await dialog.getByRole('button', { name: '另存为配置模板', exact: true }).click();
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('奖池名称', { exact: true })).toHaveValue('新模板');
   await expectNoSubmit(page);
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({

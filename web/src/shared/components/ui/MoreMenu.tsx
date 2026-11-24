@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Menu, MenuItem, MenuSection, MenuTrigger, Separator } from 'react-aria-components';
 import { AnchoredSurface } from '../OverlaySurface';
 
@@ -55,6 +55,26 @@ export function MoreMenu({
     }
     setOpen(next);
   };
+  const groups: {
+    entries: { item: MoreMenuItem; id: string }[];
+    selectable: boolean;
+    divider: boolean;
+  }[] = [];
+  let divider = false;
+  items.forEach((item, index) => {
+    if (item === 'separator') {
+      divider = true;
+      return;
+    }
+    const selectable = item.checked !== undefined;
+    let group = groups.at(-1);
+    if (!group || divider || group.selectable !== selectable) {
+      group = { entries: [], selectable, divider: groups.length > 0 && divider };
+      groups.push(group);
+    }
+    group.entries.push({ item, id: String(index) });
+    divider = false;
+  });
   return (
     <span className="nb-more">
       <MenuTrigger isOpen={open} onOpenChange={openMenu}>
@@ -78,32 +98,33 @@ export function MoreMenu({
             aria-label={label}
             shouldFocusWrap
           >
-            {items.map((item, index) =>
-              item === 'separator' ? (
-                <Separator key={'sep-' + index} />
-              ) : (
+            {groups.map(({ entries, selectable, divider }) => (
+              <Fragment key={entries[0].id}>
+                {divider && <Separator />}
                 <MenuSection
-                  key={index}
-                  selectionMode={item.checked === undefined ? 'none' : 'multiple'}
-                  selectedKeys={item.checked ? [String(index)] : []}
+                  selectionMode={selectable ? 'multiple' : 'none'}
+                  selectedKeys={entries.filter(({ item }) => item.checked).map(({ id }) => id)}
                 >
-                  <MenuItem
-                    id={String(index)}
-                    isDisabled={item.disabled}
-                    shouldCloseOnSelect
-                    textValue={
-                      item.ariaLabel ?? (typeof item.label === 'string' ? item.label : undefined)
-                    }
-                    aria-label={item.ariaLabel}
-                    className={item.danger ? 'is-danger' : ''}
-                    href={item.to ?? item.href}
-                    onAction={item.onSelect}
-                  >
-                    <span title={item.title}>{item.label}</span>
-                  </MenuItem>
+                  {entries.map(({ item, id }) => (
+                    <MenuItem
+                      key={id}
+                      id={id}
+                      isDisabled={item.disabled}
+                      shouldCloseOnSelect
+                      textValue={
+                        item.ariaLabel ?? (typeof item.label === 'string' ? item.label : undefined)
+                      }
+                      aria-label={item.ariaLabel}
+                      className={item.danger ? 'is-danger' : ''}
+                      href={item.to ?? item.href}
+                      onAction={item.onSelect}
+                    >
+                      <span title={item.title}>{item.label}</span>
+                    </MenuItem>
+                  ))}
                 </MenuSection>
-              ),
-            )}
+              </Fragment>
+            ))}
           </Menu>
         </AnchoredSurface>
       </MenuTrigger>

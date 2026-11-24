@@ -81,12 +81,12 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 		return err
 	}
 	if err := admins.RegisterAdminRoute(http.MethodGet, "/admin/api/rewards", func(w http.ResponseWriter, r *http.Request, p limitedactivities.AdminPrincipal) {
-		cursor, err := readCursor(r)
+		query, err := readListQuery(r, true)
 		if err != nil {
 			respond(w, nil, err)
 			return
 		}
-		out, e := s.List(r.Context(), p.UserID, cursor)
+		out, e := s.list(r.Context(), p.UserID, query.Get("cursor"), query.Get("kind"))
 		respond(w, out, e)
 	}); err != nil {
 		return err
@@ -188,29 +188,27 @@ func RegisterRoutes(users limitedactivities.UserRouteRegistrar, admins limitedac
 	})
 }
 func readCursor(r *http.Request) (string, error) {
+	query, err := readListQuery(r, false)
+	return query.Get("cursor"), err
+}
+
+func readListQuery(r *http.Request, allowKind bool) (url.Values, error) {
 	if r.Body != nil {
 		b, err := io.ReadAll(io.LimitReader(r.Body, 1))
 		if err != nil || len(b) > 0 {
-			return "", ErrInvalid
+			return nil, ErrInvalid
 		}
 	}
-	q, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil {
-		return "", ErrInvalid
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(query.Get("cursor")) > 20 {
+		return nil, ErrInvalid
 	}
-	if len(q) > 1 || len(q["cursor"]) > 1 {
-		return "", ErrInvalid
-	}
-	for k := range q {
-		if k != "cursor" {
-			err = ErrInvalid
+	for key, values := range query {
+		if len(values) != 1 || key != "cursor" && !(allowKind && key == "kind") {
+			return nil, ErrInvalid
 		}
 	}
-	c := q.Get("cursor")
-	if len(c) > 20 {
-		return "", ErrInvalid
-	}
-	return c, err
+	return query, nil
 }
 func decode(r *http.Request, out any) error {
 	if r.URL.RawQuery != "" || r.Body == nil {

@@ -1,3 +1,4 @@
+import { defaultBindingServices } from '../nativeServices';
 import { chatProjection, unboundCandidate } from '../../../test/fixtures/resourceScopes';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -756,4 +757,14 @@ describe('charity model wire', () => {
       0, 2,
     ]);
   });
+});
+
+it('selects only offered chat by default for new OpenAI-compatible bindings', () => {
+  const offered = ['chat_completions', 'responses', 'embeddings'] as const;
+  expect(defaultBindingServices('openai-compatible', offered)).toEqual(['chat_completions']);
+  expect(defaultBindingServices('openai-compatible', ['responses'])).toEqual([]);
+  expect(defaultBindingServices('anthropic-compatible', ['anthropic_messages'])).toEqual([
+    'anthropic_messages',
+  ]);
+  expect(offered).toEqual(['chat_completions', 'responses', 'embeddings']);
 });

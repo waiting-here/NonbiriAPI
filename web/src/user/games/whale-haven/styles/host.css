@@ -138,7 +138,8 @@
   font: inherit;
 }
 .whale-haven button.guest-actor:focus-visible {
-  outline: var(--nb-focus-ring);
+  outline: 2px solid var(--nb-color-accent);
+  outline-offset: 2px;
   outline-offset: 2px;
 }
 .whale-haven .wh-feedback {

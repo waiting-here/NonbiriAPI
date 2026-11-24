@@ -1,3 +1,4 @@
+import { Link, useLocation } from 'react-router';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { retainQueryScope } from '@shared/query/retain';
 import { useEffect, useRef, useState } from 'react';
@@ -33,6 +34,7 @@ import {
   getHistory,
   getOperation,
   getOperationItems,
+  historyFilterFields as filterFields,
   historyRoot,
   prepareCleanup,
   resumeCleanup,
@@ -46,24 +48,11 @@ import {
 } from './api';
 import './management-history.css';
 import { SnapshotChanges } from './SnapshotChanges';
+import { FeatureCopy } from '@shared/i18n/FeatureCopy';
+import { snapshotCopy } from '../../i18n/snapshotCopy';
 
 const sources = ['web', 'caller_key', 'mainstream_rule', 'ai_auto', 'ai_manual'];
 const outcomes = ['succeeded', 'partial', 'failed', 'rejected', 'no_change', 'accepted', 'unknown'];
-const filterFields = [
-  'time_from',
-  'time_to',
-  'source',
-  'actor_id',
-  'authorizer_id',
-  'domain',
-  'action',
-  'outcome',
-  'event_id',
-  'target_kind',
-  'target_id',
-  'group_key',
-  'search',
-] as const;
 const domains = [
   'users',
   'donations',
@@ -104,6 +93,7 @@ const domains = [
 function readFilter(params: URLSearchParams): Filter {
   const filter: Filter = {};
   for (const field of filterFields) {
+    if (field === 'search') continue;
     const value = params.get('mh_' + field);
     if (!value) continue;
     if (field === 'time_from' || field === 'time_to') {
@@ -140,14 +130,20 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
     </span>
   );
 }
+function targetLink(kind: string, id: string | undefined) {
+  if (!id) return undefined;
+  if (/^[1-9]\d{0,18}$/.test(id)) {
+    if (kind === 'user') return '/users?user=' + id;
+    if (kind === 'alert') return '/alerts?alert_id=' + id;
+    if (kind === 'donation') return '/charity?charity_section=donations&managed_donation=' + id;
+  }
+  if (kind === 'report' && /^rpc_[A-Za-z0-9_-]{22}$/.test(id)) return '/reports/' + id;
+  return undefined;
+}
 function Executor({
-  source,
-  actor,
-  authorizer,
+  value: { source, actor, authorizer },
 }: {
-  source: string;
-  actor: Subject;
-  authorizer: Subject;
+  value: Pick<Operation, 'source' | 'actor' | 'authorizer'>;
 }) {
   const { t } = useTranslation();
   const role = (subject: Subject) =>
@@ -165,7 +161,11 @@ function Executor({
     return <span>{t(`admin.managementHistory.sources.${source}`)}</span>;
   return (
     <span>
-      {actor.name || actor.id || t('admin.managementHistory.unidentified')}
+      {actor.id && targetLink('user', actor.id) ? (
+        <Link to={targetLink('user', actor.id)!}>{actor.name || actor.id}</Link>
+      ) : (
+        actor.name || actor.id || t('admin.managementHistory.unidentified')
+      )}
       {actor.role ? <small className="nb-muted"> · {role(actor)}</small> : null}
     </span>
   );
@@ -230,8 +230,16 @@ function textFields(filter: Filter): Record<string, string> {
       .map((key) => [key, filter[key] ?? '']),
   );
 }
-function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter) => void }) {
-  const { t } = useTranslation();
+function Filters({
+  filter,
+  onApply,
+  onDraftChange,
+}: {
+  filter: Filter;
+  onApply: (value: Filter) => void;
+  onDraftChange: (dirty: boolean) => void;
+}) {
+  const { t, i18n } = useTranslation();
   const [draft, setDraft] = useState<Record<string, string>>(() => textFields(filter));
   const [from, setFrom] = useState(() => timeFilterDraft(filter.time_from));
   const [to, setTo] = useState(() => timeFilterDraft(filter.time_to));
@@ -249,12 +257,24 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
     setFrom(timeFilterDraft(filter.time_from));
     setTo(timeFilterDraft(filter.time_to));
   }
+  const hasDraft =
+    from.invalidInput ||
+    to.invalidInput ||
+    timeFilterMillis(from, filter.time_from) !== (filter.time_from ?? null) ||
+    timeFilterMillis(to, filter.time_to) !== (filter.time_to ?? null) ||
+    filterFields.some(
+      (key) =>
+        !['time_from', 'time_to', 'source', 'outcome', 'domain', 'group_key'].includes(key) &&
+        (draft[key] ?? '').trim() !== (filter[key] ?? ''),
+    );
+  useEffect(() => onDraftChange(Boolean(hasDraft)), [hasDraft, onDraftChange]);
   const field = (name: string, type = 'text') => (
     <Field label={t(`admin.managementHistory.fields.${name}`)} key={name}>
       {(props) => (
         <input
           {...props}
           type={type}
+          list={name === 'action' || name === 'target_kind' ? `history-options-${name}` : undefined}
           value={draft[name] ?? ''}
           onChange={(event) => setDraft((old) => ({ ...old, [name]: event.target.value }))}
         />
@@ -358,6 +378,20 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
             {field('action')}
             {field('target_kind')}
             {field('target_id')}
+            <datalist id="history-options-action">
+              {Object.entries(actionTitles).map(([id, label]) => (
+                <option
+                  key={id}
+                  value={id.split('/').at(-1)}
+                  label={i18n.language.startsWith('zh') ? label.zh : label.en}
+                />
+              ))}
+            </datalist>
+            <datalist id="history-options-target_kind">
+              {['user', 'donation', 'donation_key', 'model', 'report', 'alert'].map((kind) => (
+                <option key={kind} value={kind} />
+              ))}
+            </datalist>
             {field('event_id')}
             <p className="management-history__filter-help nb-small nb-muted">
               {t('admin.managementHistory.filterHelp')}
@@ -374,13 +408,44 @@ export function ManagementHistory({ account }: { account: string }) {
   const { t } = useTranslation();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
+  const location = useLocation();
+  const legacySearch = params.get('mh_search');
+  const savedSearch = location.state?.managementHistorySearch;
   const filter = readFilter(params);
+  if (account && legacySearch) filter.search = legacySearch;
+  else if (account && savedSearch?.account === account && typeof savedSearch.value === 'string')
+    filter.search = savedSearch.value;
+  useEffect(() => {
+    if (!account || legacySearch === null) return;
+    setParams(
+      (previous) => {
+        previous.delete('mh_search');
+        return previous;
+      },
+      {
+        replace: true,
+        state: {
+          ...location.state,
+          managementHistorySearch: legacySearch ? { account, value: legacySearch } : undefined,
+        },
+      },
+    );
+  }, [account, legacySearch, location.state, setParams]);
   const filterKey = JSON.stringify(filter);
   const view = params.get('mh_view') === 'operations' ? 'operations' : 'groups';
   const selected = params.get('mh_detail') ?? '';
   const job = params.get('mh_job') ?? '';
   const root = historyRoot(account);
   const scope = filterKey + ':' + view;
+  const [unapplied, setUnapplied] = useState(false);
+  const detailPosition = useRef<HTMLDivElement>(null);
+  const progressPosition = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) detailPosition.current?.focus();
+  }, [selected]);
+  useEffect(() => {
+    if (job) progressPosition.current?.focus();
+  }, [job]);
   const snapshot = useRef<{ scope: string; id: string } | null>(null);
   const pager = useUrlPagePager({
     station: 'admin',
@@ -415,17 +480,26 @@ export function ManagementHistory({ account }: { account: string }) {
       return next;
     });
   const apply = (value: Filter) =>
-    setParams((old) => {
-      const next = new URLSearchParams(old);
-      for (const key of filterFields) {
-        next.delete('mh_' + key);
-        if (value[key] !== undefined) next.set('mh_' + key, String(value[key]));
-      }
-      next.delete('mh_page');
-      next.delete('mh_detail');
-      next.delete('mh_group_page');
-      return next;
-    });
+    setParams(
+      (old) => {
+        const next = new URLSearchParams(old);
+        for (const key of filterFields) {
+          next.delete('mh_' + key);
+          if (key !== 'search' && value[key] !== undefined)
+            next.set('mh_' + key, String(value[key]));
+        }
+        next.delete('mh_page');
+        next.delete('mh_detail');
+        next.delete('mh_group_page');
+        return next;
+      },
+      {
+        state: {
+          ...location.state,
+          managementHistorySearch: value.search ? { account, value: value.search } : undefined,
+        },
+      },
+    );
   const changeView = (value: string) =>
     setParams((old) => {
       const next = new URLSearchParams(old);
@@ -463,7 +537,7 @@ export function ManagementHistory({ account }: { account: string }) {
       header: t('admin.managementHistory.executor'),
       mobileLabel: t('admin.managementHistory.executor'),
       cell: 'meta' as const,
-      render: (row: Group) => <Executor {...row} />,
+      render: (row: Group) => <Executor value={row} />,
     },
     {
       key: 'source',
@@ -523,7 +597,7 @@ export function ManagementHistory({ account }: { account: string }) {
       />
       <Panel>
         <PanelBody>
-          <Filters filter={filter} onApply={apply} />
+          <Filters filter={filter} onApply={apply} onDraftChange={setUnapplied} />
         </PanelBody>
       </Panel>
       <Panel>
@@ -619,7 +693,7 @@ export function ManagementHistory({ account }: { account: string }) {
                         header: t('admin.managementHistory.executor'),
                         mobileLabel: t('admin.managementHistory.executor'),
                         cell: 'meta',
-                        render: (row) => <Executor {...row} />,
+                        render: (row) => <Executor value={row} />,
                       },
                       {
                         key: 'outcome',
@@ -665,22 +739,32 @@ export function ManagementHistory({ account }: { account: string }) {
         </PanelBody>
       </Panel>
       {selected ? (
-        <OperationDetail
-          key={selected}
-          id={selected}
-          account={account}
-          onClose={() => update('mh_detail', '')}
-          onJob={(value) => update('mh_job', value)}
-        />
+        <div tabIndex={-1} ref={detailPosition}>
+          <OperationDetail
+            key={selected}
+            id={selected}
+            account={account}
+            onClose={() => update('mh_detail', '')}
+            onJob={(value) => update('mh_job', value)}
+          />
+        </div>
       ) : null}
-      <CleanupPanel account={account} filter={filter} onJob={(value) => update('mh_job', value)} />
+      <CleanupPanel
+        key={filterKey}
+        account={account}
+        filter={filter}
+        unapplied={unapplied}
+        onJob={(value) => update('mh_job', value)}
+      />
       {job ? (
-        <CleanupProgress
-          key={job}
-          id={job}
-          account={account}
-          onClose={() => update('mh_job', '')}
-        />
+        <div ref={progressPosition} tabIndex={-1}>
+          <CleanupProgress
+            key={job}
+            id={job}
+            account={account}
+            onClose={() => update('mh_job', '')}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -733,7 +817,7 @@ function OperationDetail({
               <ActionTitle {...detail.data} /> · <OutcomeBadge outcome={detail.data.outcome} />
             </p>
             <p>
-              <Executor {...detail.data} /> · <AgentTime value={detail.data.created_at} />
+              <Executor value={detail.data} /> · <AgentTime value={detail.data.created_at} />
             </p>
             <dl className="management-history__facts">
               <dt>{t('admin.managementHistory.fields.source')}</dt>
@@ -789,45 +873,53 @@ function OperationDetail({
         ) : (
           <>
             {items.data.items.length ? (
-              <DataTable
-                caption={t('admin.managementHistory.targets')}
-                rows={items.data.items}
-                rowKey={(item) => item.ordinal}
-                columns={[
-                  {
-                    key: 'target',
-                    header: t('admin.managementHistory.target'),
-                    cell: 'title',
-                    render: (item) => (
-                      <span>
-                        {item.target_name || item.target_id || '—'}
-                        <small className="nb-muted management-history__target-kind">
-                          {item.target_kind}{' '}
-                          {item.target_name && item.target_id ? ' · ' + item.target_id : ''}
-                        </small>
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'outcome',
-                    header: t('admin.managementHistory.fields.outcome'),
-                    cell: 'status',
-                    render: (item) => <OutcomeBadge outcome={item.outcome} />,
-                  },
-                  {
-                    key: 'code',
-                    header: t('admin.managementHistory.resultCode'),
-                    cell: 'meta',
-                    render: (item) => <span>{item.code || '—'}</span>,
-                  },
-                  {
-                    key: 'changes',
-                    header: t('admin.managementHistory.changedFields'),
-                    cell: 'meta',
-                    render: (item) => <SnapshotChanges item={item} />,
-                  },
-                ]}
-              />
+              <FeatureCopy catalog={snapshotCopy}>
+                <DataTable
+                  caption={t('admin.managementHistory.targets')}
+                  rows={items.data.items}
+                  rowKey={(item) => item.ordinal}
+                  columns={[
+                    {
+                      key: 'target',
+                      header: t('admin.managementHistory.target'),
+                      cell: 'title',
+                      render: (item) => (
+                        <span>
+                          {targetLink(item.target_kind, item.target_id) ? (
+                            <Link to={targetLink(item.target_kind, item.target_id)!}>
+                              {item.target_name || item.target_id}
+                            </Link>
+                          ) : (
+                            item.target_name || item.target_id || '—'
+                          )}
+                          <small className="nb-muted management-history__target-kind">
+                            {item.target_kind}{' '}
+                            {item.target_name && item.target_id ? ' · ' + item.target_id : ''}
+                          </small>
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'outcome',
+                      header: t('admin.managementHistory.fields.outcome'),
+                      cell: 'status',
+                      render: (item) => <OutcomeBadge outcome={item.outcome} />,
+                    },
+                    {
+                      key: 'code',
+                      header: t('admin.managementHistory.resultCode'),
+                      cell: 'meta',
+                      render: (item) => <span>{item.code || '—'}</span>,
+                    },
+                    {
+                      key: 'changes',
+                      header: t('admin.managementHistory.changedFields'),
+                      cell: 'meta',
+                      render: (item) => <SnapshotChanges item={item} />,
+                    },
+                  ]}
+                />
+              </FeatureCopy>
             ) : (
               <p className="nb-muted">{t('admin.managementHistory.noTargets')}</p>
             )}
@@ -848,10 +940,12 @@ function OperationDetail({
 function CleanupPanel({
   account,
   filter,
+  unapplied,
   onJob,
 }: {
   account: string;
   filter: Filter;
+  unapplied: boolean;
   onJob: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -863,7 +957,14 @@ function CleanupPanel({
       const page =
         prepared.cutoff_max_id === '0'
           ? null
-          : await getHistory(input, 'operations', '1', 10, prepared.cutoff_max_id, context.signal);
+          : await getHistory(
+              prepared.filter,
+              'operations',
+              '1',
+              10,
+              prepared.cutoff_max_id,
+              context.signal,
+            );
       context.commit(() => setPreview({ prepared, total: page?.total ?? '0' }));
       return prepared;
     },
@@ -894,7 +995,9 @@ function CleanupPanel({
         <div className="nb-actions">
           <Button
             variant="danger-outline"
-            disabled={prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'}
+            disabled={
+              unapplied || prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'
+            }
             onClick={() => {
               cleanup.reset();
               prepare.mutate(filter);
@@ -905,6 +1008,7 @@ function CleanupPanel({
               : t('admin.managementHistory.cleanupAll')}
           </Button>
         </div>
+        {unapplied && <Note tone="warn">{t('admin.audit.cleanupDraft')}</Note>}
         {prepare.error ? <ErrorState error={prepare.error} /> : null}
         {cleanup.error && !preview ? <ErrorState error={cleanup.error} /> : null}
         {cleanup.outcome === 'unknown' && !preview ? (
@@ -933,7 +1037,7 @@ function CleanupPanel({
           confirmLabel={t('admin.managementHistory.cleanupStart')}
           danger
           busy={cleanup.isPending}
-          confirmDisabled={preview?.total === '0' || cleanup.outcome === 'unknown'}
+          confirmDisabled={unapplied || preview?.total === '0' || cleanup.outcome === 'unknown'}
           onConfirm={() => preview && cleanup.mutate(preview.prepared)}
           onCancel={() => setPreview(null)}
         >

@@ -22,7 +22,7 @@ func instant(t *testing.T, value string) int64 {
 }
 
 func schedule(zone string, fallback int, periods ...Period) Config {
-	return Config{Enabled: true, TimeZone: zone, DefaultPercent: fallback, Periods: periods}
+	return Config{Enabled: true, TimeZone: zone, DefaultPercent: Percent(fallback), Periods: periods}
 }
 
 func requireEffective(t *testing.T, fixed Fixed, recurring Config, at, source string, percent int, next string) {
@@ -36,11 +36,11 @@ func requireEffective(t *testing.T, fixed Fixed, recurring Config, at, source st
 	if next != "" {
 		expectedNext = new(instant(t, next))
 	}
-	if got.Source != source || got.Percent != percent || !reflect.DeepEqual(got.NextChangeAt, expectedNext) {
+	if got.Source != source || got.Percent != Percent(percent) || !reflect.DeepEqual(got.NextChangeAt, expectedNext) {
 		t.Fatalf("at %s: got %+v next=%v, want source=%s percent=%d next=%v", at, got, got.NextChangeAt, source, percent, expectedNext)
 	}
-	if value, err := PercentAt(fixed, recurring, now); err != nil || value != percent {
-		t.Fatalf("billing percent=%d error=%v, want %d", value, err, percent)
+	if value, err := PercentAt(fixed, recurring, now); err != nil || value != Percent(percent) {
+		t.Fatalf("billing percent=%v error=%v, want %d", value, err, percent)
 	}
 }
 

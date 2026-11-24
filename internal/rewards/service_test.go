@@ -198,6 +198,26 @@ func (f *fixture) balance(t *testing.T, user int64, asset ledger.Asset) string {
 	}
 	return a.Balance.Decimal()
 }
+func TestCampaignTypeFilterPrecedesPagination(t *testing.T) {
+	f := setup(t)
+	broadcast := f.create(t, input("broadcast"), "old-broadcast")
+	for i := range 51 {
+		f.create(t, input("code"), "many-codes-"+strconv.Itoa(i))
+	}
+	page, err := f.s.list(t.Context(), f.admin, "", "broadcast")
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != broadcast.ID || page.Next != "" {
+		t.Fatalf("wrong campaign page %+v err %v", page, err)
+	}
+	codes, err := f.s.list(t.Context(), f.admin, "", "code")
+	if err != nil || len(codes.Items) != 50 || codes.Next == "" {
+		t.Fatalf("wrong code page %+v err %v", codes, err)
+	}
+	next, err := f.s.list(t.Context(), f.admin, codes.Next, "code")
+	if err != nil || len(next.Items) != 1 || next.Items[0].Kind != "code" {
+		t.Fatalf("wrong last code page %+v err %v", next, err)
+	}
+}
+
 func TestBroadcastFreezesRecipientsAndRecoversExactlyOnce(t *testing.T) {
 	f := setup(t)
 	in := input("broadcast")

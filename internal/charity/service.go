@@ -86,7 +86,7 @@ func (s *Service) PrepareEndpointKeyDeletion(
 type frozenPricing struct {
 	contextPricing              string
 	mode                        string
-	discount                    int
+	discountBasisPoints         int
 	requestUser, requestReward  int64
 	uncachedUser, writeUser     int64
 	readUser, outputUser        int64
@@ -113,7 +113,7 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 	}
 	expectedReserve := pricing.tokenReserve
 	if pricing.mode == "per_request" {
-		expectedReserve, err = credits.ApplyDiscountPercent(pricing.requestUser, pricing.discount)
+		expectedReserve, err = credits.ApplyDiscountBasisPoints(pricing.requestUser, pricing.discountBasisPoints)
 		if err != nil {
 			return claim.ErrInvariant
 		}
@@ -134,15 +134,15 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 
 	zero := db.EncodeU128(db.U128{})
 	_, err = tx.ExecContext(ctx, `INSERT INTO charity_reservations(
-logical_request_id,user_id,charity_model_id,model_snapshot,state,pricing_mode,discount_percent,
+logical_request_id,user_id,charity_model_id,model_snapshot,state,pricing_mode,discount_percent,discount_basis_points,
 request_user_price_milli,request_donor_reward_milli,
 uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
 uncached_donor_reward_milli,cache_write_donor_reward_milli,cache_read_donor_reward_milli,output_donor_reward_milli,
 token_reserve_milli,user_reserved_milli,original_charge_milli,user_charge_milli,donor_reward_total_mag,
 created_at,updated_at,context_pricing)
-VALUES(?,?,?,?,'reserved',?,
+VALUES(?,?,?,?,'reserved',?,?,
 ?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)`,
-		input.RequestID, input.UserID, input.CharityModelID, input.ModelSnapshot, pricing.mode, pricing.discount,
+		input.RequestID, input.UserID, input.CharityModelID, input.ModelSnapshot, pricing.mode, pricing.discountBasisPoints/100, pricing.discountBasisPoints,
 		pricing.requestUser, pricing.requestReward,
 		pricing.uncachedUser, pricing.writeUser, pricing.readUser, pricing.outputUser,
 		pricing.uncachedReward, pricing.writeReward, pricing.readReward, pricing.outputReward,
@@ -165,7 +165,7 @@ func readAcceptancePricing(ctx context.Context, tx *sql.Tx, modelID, at int64) (
 	if gate == "0" {
 		return frozenPricing{}, claim.ErrNotFound
 	}
-	var enabled, discountEnabled int
+	var enabled, discountEnabled, fixedPercent int
 	var start, end sql.NullInt64
 	var recurringEncoded string
 	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,enabled,discount_percent,discount_enabled,
@@ -173,7 +173,7 @@ discount_start_at,discount_end_at,request_user_price,request_donor_reward,
 uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,context_pricing,recurring_discount
 FROM charity_models WHERE id=?`, modelID).Scan(
-		&p.mode, &enabled, &p.discount, &discountEnabled, &start, &end,
+		&p.mode, &enabled, &fixedPercent, &discountEnabled, &start, &end,
 		&p.requestUser, &p.requestReward, &p.uncachedUser, &p.writeUser, &p.readUser, &p.outputUser,
 		&p.uncachedReward, &p.writeReward, &p.readReward, &p.outputReward, &p.contextPricing, &recurringEncoded)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -182,7 +182,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 	if err != nil {
 		return frozenPricing{}, fmt.Errorf("charity: read model pricing: %w", err)
 	}
-	if enabled != 1 || (p.mode != "per_request" && p.mode != "per_token" && p.mode != "per_search_unit") || p.discount < 0 || p.discount > 100 {
+	if enabled != 1 || (p.mode != "per_request" && p.mode != "per_token" && p.mode != "per_search_unit") || fixedPercent < 0 || fixedPercent > 100 {
 		return frozenPricing{}, claim.ErrNotFound
 	}
 	if _, err := credits.DecodeContextPricing(p.contextPricing); err != nil {
@@ -192,14 +192,15 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 	if err != nil {
 		return frozenPricing{}, claim.ErrInvariant
 	}
-	fixed := charitydiscount.Fixed{Enabled: discountEnabled == 1, Percent: p.discount}
+	fixed := charitydiscount.Fixed{Enabled: discountEnabled == 1, Percent: fixedPercent}
 	if start.Valid {
 		fixed.StartAt = &start.Int64
 	}
 	if end.Valid {
 		fixed.EndAt = &end.Int64
 	}
-	p.discount, err = charitydiscount.PercentAt(fixed, recurring, at)
+	effective, err := charitydiscount.PercentAt(fixed, recurring, at)
+	p.discountBasisPoints = effective.BasisPoints()
 	if err != nil {
 		return frozenPricing{}, claim.ErrInvariant
 	}
@@ -448,7 +449,7 @@ dk.enabled,(dk.failure_disabled OR COALESCE(h.failure_disabled,0)),COALESCE(dk.e
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 dk.streak_generation,dk.next_claim_seq,dk.token_reserve,e.enabled,k.enabled,
 cr.charity_model_id,cm.enabled,cr.state,lr.state,lr.route_kind,
-cr.pricing_mode,cr.discount_percent,cr.request_user_price_milli,cr.request_donor_reward_milli,
+cr.pricing_mode,COALESCE(cr.discount_basis_points,cr.discount_percent*100),cr.request_user_price_milli,cr.request_donor_reward_milli,
 cr.uncached_user_price_milli,cr.cache_write_user_price_milli,cr.cache_read_user_price_milli,cr.output_user_price_milli,
 cr.uncached_donor_reward_milli,cr.cache_write_donor_reward_milli,cr.cache_read_donor_reward_milli,cr.output_donor_reward_milli,
 cr.token_reserve_milli,
@@ -479,7 +480,7 @@ LIMIT 1`, input.DonationKeyID, a.BindingID, a.TargetID, a.TargetRevision, input.
 		&row.callsUsed, &row.callsReserved, &row.tokensUsed, &row.tokensReserved,
 		&row.generation, &row.nextClaim, &row.tokenReserve, &row.endpointEnabled, &row.physicalKeyEnabled,
 		&row.modelID, &row.modelEnabled, &reservationState, &requestState, &requestRoute,
-		&row.pricing.mode, &row.pricing.discount, &row.pricing.requestUser, &row.pricing.requestReward,
+		&row.pricing.mode, &row.pricing.discountBasisPoints, &row.pricing.requestUser, &row.pricing.requestReward,
 		&row.pricing.uncachedUser, &row.pricing.writeUser, &row.pricing.readUser, &row.pricing.outputUser,
 		&row.pricing.uncachedReward, &row.pricing.writeReward, &row.pricing.readReward, &row.pricing.outputReward,
 		&row.pricing.tokenReserve, &suspended, &row.rateLimitedUntil, &row.modelRetryAt, &row.modelQuotaReason)

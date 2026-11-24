@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGE_STORAGE_KEY, prepareLanguage } from '@shared/i18n';
-import { ApiError, isForbidden } from '@shared/query/http';
+import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import { useTheme } from '@shared/theme/useTheme';
 import type { AppearanceIntensity, Density, FontSize, Theme } from '@shared/theme/context';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -281,6 +281,7 @@ export function AccountLifecyclePanel({
   const exportHeading = useRef<HTMLHeadingElement>(null);
   const [intent, setIntent] = useState<LifecycleIntent | null>(null);
   const [dialog, setDialog] = useState(false);
+  const [beforeElevation, setBeforeElevation] = useState(false);
   const clearCapability = () => {
     tokenRef.current = '';
     clearElevatedCapabilityCookie();
@@ -309,8 +310,8 @@ export function AccountLifecyclePanel({
         });
         return;
       }
-      tokenRef.current = '';
       if (action === 'export') {
+        tokenRef.current = '';
         const attachment = await adapter.exportAccount({
           accountId,
           elevatedToken: token,
@@ -318,13 +319,25 @@ export function AccountLifecyclePanel({
         });
         context.commit(() => downloadAccountExport(attachment));
       } else {
-        await adapter.deleteAccount({
-          accountId,
-          elevatedToken: token,
-          confirmation: 'DELETE',
-          signal: context.signal,
-        });
-        context.commit(completeDeletion);
+        try {
+          await adapter.deleteAccount({
+            accountId,
+            elevatedToken: token,
+            confirmation: 'DELETE',
+            signal: context.signal,
+          });
+          context.commit(() => {
+            clearCapability();
+            setDialog(false);
+            completeDeletion();
+          });
+        } catch (error) {
+          context.commit(() => {
+            if (isForbidden(error) || isUnauthorized(error)) clearCapability();
+            setDialog(false);
+          });
+          throw error;
+        }
       }
     },
     reconcile: () => undefined,
@@ -387,6 +400,7 @@ export function AccountLifecyclePanel({
     authority.cancel();
     clearCapability();
     setDialog(false);
+    setBeforeElevation(false);
   };
   const busy = execute.isPending || elevation.isPending || authority.isPending;
   const unknown = execute.outcome === 'unknown';
@@ -485,7 +499,7 @@ export function AccountLifecyclePanel({
               busy ||
               (intent === 'delete' && unknown && authority.data !== 'active')
             }
-            onClick={() => begin('delete')}
+            onClick={() => (tokenRef.current ? setDialog(true) : setBeforeElevation(true))}
           >
             {busy && intent === 'delete'
               ? t('common.working')
@@ -494,7 +508,7 @@ export function AccountLifecyclePanel({
         </div>
       </section>
       <ConfirmDialog
-        open={dialog}
+        open={dialog || beforeElevation}
         title={t('account.deleteTitle')}
         description={t('account.deleteBody')}
         confirmLabel={t('account.deleteConfirm')}
@@ -502,8 +516,11 @@ export function AccountLifecyclePanel({
         busy={execute.isPending}
         onCancel={cancel}
         onConfirm={() => {
-          setDialog(false);
-          void execute.run('delete', tokenRef.current).catch(() => undefined);
+          if (beforeElevation) {
+            setBeforeElevation(false);
+            begin('delete');
+          } else if (!execute.isPending)
+            void execute.run('delete', tokenRef.current).catch(() => undefined);
         }}
       />
     </>

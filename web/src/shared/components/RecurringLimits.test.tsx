@@ -350,11 +350,11 @@ describe('RecurringLimits', () => {
           for (const value of expected.slice(0, 3))
             expect(progress.getAttribute('aria-valuetext')).toContain(value);
           const toggle = within(card).getByRole('button');
-          for (const value of expected) expect(toggle).toHaveTextContent(value);
+          for (const value of [expected[0]!, expected[3]!]) expect(toggle).toHaveTextContent(value);
           fireEvent.click(toggle);
           expect(toggle).toHaveAttribute('aria-expanded', 'false');
           expect(card.querySelector('.recurring-limits__metrics')).toBeNull();
-          for (const value of expected) expect(toggle).toHaveTextContent(value);
+          for (const value of [expected[0]!, expected[3]!]) expect(toggle).toHaveTextContent(value);
         });
       });
     }
@@ -441,10 +441,10 @@ describe('RecurringLimits', () => {
         ).toEqual(expected),
       );
       const summaries = container.querySelectorAll('.recurring-limits__summary-text');
-      expect(summaries[0]).toHaveTextContent(expected[1]!);
-      expect(summaries[0]).toHaveTextContent(expected[2]!);
-      expect(summaries[1]).toHaveTextContent(expected[5]!);
-      expect(summaries[1]).toHaveTextContent(expected[6]!);
+      expect(summaries[0]).toHaveTextContent(expected[0]!);
+      expect(summaries[0]).toHaveTextContent(expected[3]!);
+      expect(summaries[1]).toHaveTextContent(expected[4]!);
+      expect(summaries[1]).toHaveTextContent(expected[7]!);
     });
 
     it(`renders the one-hour input-token rule before its first success in ${locale}`, async () => {
@@ -584,10 +584,15 @@ describe('RecurringLimits', () => {
 
     expect(await screen.findByRole('heading', { name: '公益循环限量' })).toBeVisible();
     expect(screen.getByText('当前密钥所有者只能查看。')).toBeVisible();
-    expect(screen.getByText(/上限: 100次/)).toBeVisible();
-    expect(screen.getByText(/已用: 90次/)).toBeVisible();
-    expect(screen.getByText(/在途预留: 5次/)).toBeVisible();
-    expect(screen.getByText(/剩余: 5次/)).toBeVisible();
+    expect(screen.getByText(/次 \/ 100次/)).toBeVisible();
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      expect.stringContaining('在途预留: 5次'),
+    );
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      expect.stringContaining('剩余: 5次'),
+    );
     expect(screen.getByText(/此周期从所选时区内首次成功公益调用开始/)).toBeVisible();
     expect(
       screen.queryByText('所选时区决定此规则的业务时间；同时显示浏览器当地时间供参考。'),
@@ -813,9 +818,7 @@ describe('RecurringLimits', () => {
     expect(
       screen.getByText('Changing a limit keeps recorded usage and in-flight reservations.'),
     ).toBeVisible();
-    expect(
-      screen.getByText('Calls already sent keep their original rules.'),
-    ).toBeVisible();
+    expect(screen.getByText('Calls already sent keep their original rules.')).toBeVisible();
   });
 
   it('retains the exact payload and idempotency key for an unknown-result retry', async () => {

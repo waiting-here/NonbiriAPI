@@ -1,5 +1,5 @@
 import { Button } from '@shared/components/ui/Button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
 
@@ -17,6 +17,11 @@ export function CopyValue({
 }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<{ value: string; ok: boolean }>();
+  useEffect(() => {
+    if (!result) return;
+    const timer = window.setTimeout(() => setResult(undefined), 2500);
+    return () => window.clearTimeout(timer);
+  }, [result]);
   return (
     <span className="nb-copy-value">
       {showValue ? <code>{value}</code> : null}
@@ -30,9 +35,9 @@ export function CopyValue({
       >
         {result?.value === value && result.ok ? t('common.copied') : t('common.copy')}
       </Button>
-      {result?.value === value && !result.ok ? (
-        <span role="status">{t('common.copyFailed')}</span>
-      ) : null}
+      <span role="status" className={result?.ok ? 'sr-only' : undefined}>
+        {result?.value === value ? t(result.ok ? 'common.copied' : 'common.copyFailed') : ''}
+      </span>
     </span>
   );
 }

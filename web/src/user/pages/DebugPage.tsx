@@ -1,3 +1,4 @@
+import { CopyValue } from '@shared/components/CopyValue';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { MessageField, MessagesView } from '@shared/components/MessagesView';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
@@ -135,6 +136,9 @@ const PRESENCE_LABEL_KEYS = {
 function RequestDetails({ trace }: { trace: DebugTrace }) {
   const { t } = useTranslation();
   const parsed = safeRequestJSON(trace);
+  const [formatted, setFormatted] = useState(false);
+  const raw = trace.request.body.text;
+  const displayed = formatted && parsed !== null ? JSON.stringify(parsed, null, 2) : raw;
   const root =
     parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
@@ -192,8 +196,27 @@ function RequestDetails({ trace }: { trace: DebugTrace }) {
           { bytes: trace.request.body.byte_count },
         )}
       >
+        {raw !== null && raw !== undefined ? (
+          <div className="nb-actions">
+            {parsed !== null ? (
+              <button
+                type="button"
+                aria-pressed={formatted}
+                className="nb-btn nb-btn--secondary"
+                onClick={() => setFormatted(!formatted)}
+              >
+                {t('common.diagnostics.formatJson')}
+              </button>
+            ) : null}
+            <CopyValue
+              value={displayed ?? ''}
+              showValue={false}
+              label={t('user.debug.request.title')}
+            />
+          </div>
+        ) : null}
         <pre className="ops-debug-json">
-          {trace.request.body.text ??
+          {displayed ??
             t('user.debug.request.base64Body', {
               characters: trace.request.body.base64?.length ?? 0,
             })}
@@ -205,12 +228,25 @@ function RequestDetails({ trace }: { trace: DebugTrace }) {
 
 function TraceCard({ trace }: { trace: DebugTrace }) {
   const { t } = useTranslation();
+  const status = trace.caller_result?.http_status ?? trace.upstream_result?.status_code;
+  const summary = [
+    formatDateTime(trace.created_at),
+    status == null ? null : `HTTP ${status}`,
+    trace.upstream_result
+      ? `${trace.upstream_result.usage.charge} ${t('common.creditsUnit')}`
+      : null,
+    trace.caller_result?.error_code ?? trace.upstream_result?.upstream_code,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const upstreamTitleId = trace.trace_id + '-upstream';
   const callerTitleId = trace.trace_id + '-caller';
   return (
     <Card className="ops-debug-trace">
       <Fold
         plain
+        lazy
+        summary={summary}
         title={`${t(ROUTE_LABEL_KEYS[trace.request.route_kind])} · ${trace.request.model} · ${t(TRACE_STATE_LABEL_KEYS[trace.state])}`}
       >
         <div className="ops-debug-sections">
@@ -381,6 +417,11 @@ export function DebugPage() {
           ) : null
         }
       />
+      {!session.active && debug.mutationError ? (
+        <p className="field-error" role="alert">
+          {mutationErrorMessage}
+        </p>
+      ) : null}
       {debug.authority.error ? (
         <ErrorState error={debug.authority.error} onRetry={() => void debug.authority.refetch()} />
       ) : null}
@@ -456,7 +497,9 @@ export function DebugPage() {
       {session.active ? (
         <Card>
           <h2>{t('user.debug.operations.title')}</h2>
-          <p className="nb-sub">{t('user.debug.confirm.liveBody')}</p>
+          {session.mode === 'dry' ? (
+            <p className="nb-sub">{t('user.debug.confirm.liveBody')}</p>
+          ) : null}
           <div className="ops-debug-actions">
             {debug.observer === 'disconnected' ? (
               <button className="nb-btn nb-btn--secondary" type="button" onClick={debug.connect}>
@@ -558,7 +601,7 @@ export function DebugPage() {
             </table>
           </div>
           <p>
-            {t('user.debug.fixedResults.callerKeyPrefix')} <code>&#36;NONBIRI_CALLER_KEY</code>{' '}
+            {t('user.debug.fixedResults.callerKeyPrefix')} <code>&#36;NONBIRI_KEY</code>{' '}
             {t('user.debug.fixedResults.callerKeySuffix')}
           </p>
         </div>

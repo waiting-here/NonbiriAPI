@@ -157,7 +157,7 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 		return RuntimePreflight{}, err
 	}
 	if pricingMode == "per_request" {
-		preflight.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
+		preflight.ReservedMilli, err = credits.ApplyDiscountBasisPoints(requestPrice, activeDiscount)
 		if err != nil {
 			return RuntimePreflight{}, ErrInvariant
 		}
@@ -410,7 +410,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 		return RuntimeSnapshot{}, err
 	}
 	if pricingMode == "per_request" {
-		snapshot.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
+		snapshot.ReservedMilli, err = credits.ApplyDiscountBasisPoints(requestPrice, activeDiscount)
 		if err != nil {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
@@ -743,12 +743,12 @@ WHERE enabled=1 ORDER BY id`)
 			_ = rows.Close()
 			return Capability{}, err
 		}
-		model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent, model.EffectiveDiscount.Percent)
+		model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent, model.EffectiveDiscount.Percent.BasisPoints())
 		if err != nil {
 			_ = rows.Close()
 			return Capability{}, err
 		}
-		if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent, model.EffectiveDiscount.Percent); err != nil {
+		if err := capabilityContextPricing(&model.Pricing, contextPricing, model.Discount.Percent, model.EffectiveDiscount.Percent.BasisPoints()); err != nil {
 			_ = rows.Close()
 			return Capability{}, err
 		}
@@ -813,7 +813,7 @@ WHERE enabled=1 ORDER BY id`)
 	return Capability{State: "available", Models: available, DonationIntake: donationIntake, ServerNow: decisionNow}, nil
 }
 
-func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, discountPercent, currentPercent int) (CapabilityPricing, error) {
+func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, discountPercent, currentBasisPoints int) (CapabilityPricing, error) {
 	pricing := CapabilityPricing{Mode: mode}
 	if mode == "per_request" || mode == "per_search_unit" {
 		discounted, err := credits.ApplyDiscountPercent(requestPrice, discountPercent)
@@ -823,7 +823,7 @@ func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, di
 		baseText, discountedText := strconv.FormatInt(requestPrice, 10), strconv.FormatInt(discounted, 10)
 		pricing.UserPriceMilli = &baseText
 		pricing.DiscountedUserPriceMilli = &discountedText
-		current, err := credits.ApplyDiscountPercent(requestPrice, currentPercent)
+		current, err := credits.ApplyDiscountBasisPoints(requestPrice, currentBasisPoints)
 		if err != nil {
 			return CapabilityPricing{}, ErrInvariant
 		}
@@ -841,7 +841,7 @@ func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, di
 			return CapabilityPricing{}, ErrInvariant
 		}
 		discounted[index] = projected
-		current[index], err = credits.ApplyDiscountPercent(value, currentPercent)
+		current[index], err = credits.ApplyDiscountBasisPoints(value, currentBasisPoints)
 		if err != nil {
 			return CapabilityPricing{}, ErrInvariant
 		}

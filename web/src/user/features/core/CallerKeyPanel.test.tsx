@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { assertNoSensitiveQueryCache, renderWithProviders } from '../../../../test/unit/support';
 import { CallerKeyPanel } from '../../pages/KeysPage';
@@ -81,6 +81,9 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
     ).not.toContain(secret);
 
     await rendered.user.click(screen.getByRole('button', { name: 'I have saved it' }));
+    const discard = await screen.findByRole('alertdialog');
+    expect(screen.getByText(secret)).toBeInTheDocument();
+    await rendered.user.click(within(discard).getByRole('button', { name: 'I have saved it' }));
     expect(screen.queryByText(secret)).not.toBeInTheDocument();
   });
 

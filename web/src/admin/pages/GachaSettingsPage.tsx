@@ -1,3 +1,6 @@
+import { PercentInput } from '../features/games/PercentInput';
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { cloneElement, useState, type ReactElement, type ReactNode } from 'react';
 import { ArtworkImage, ArtworkBadge, ArtworkUnavailable } from '@shared/artwork/ArtworkImage';
 import { ConfiguredArtworkPolicy } from '@shared/artwork/policy';
@@ -12,7 +15,6 @@ import {
   Field as SharedField,
   Fields,
   Fold,
-  FormActions,
   Note,
   Panel,
   PanelBody,
@@ -29,6 +31,7 @@ import { TimeInput } from '@shared/components/TimeInput';
 import { createTimeDraft, timeDraftValue } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { operationKey } from '@shared/operations/api';
+import { scaledAmount } from '@shared/inactivity/amounts';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useAdminSession } from '../data';
@@ -99,36 +102,28 @@ function RulesFields({
   t: Copy;
 }) {
   const rates = consolidatedRates(value);
+  const weightTotal = value.weights.reduce((sum, part) => sum + part, 0);
   return (
     <fieldset className="gacha-admin-fieldset" disabled={disabled}>
       <div className="gacha-admin-grid">
         {rarities.map((rarity, i) => (
           <Field key={rarity} label={rarity + t(' 基础概率（%）', ' base rate (%)')}>
-            <Affix
+            <PercentInput
               unit="%"
-              type="number"
-              min="0"
               max="100"
-              step="0.01"
-              value={value.weights[i] / 100}
-              onChange={(event) => {
+              basisPoints={value.weights[i]}
+              onBasisChange={(points) => {
                 const weights = [...value.weights] as Rules['weights'];
-                weights[i] = Math.round(Number(event.target.value) * 100);
+                weights[i] = points;
                 onChange({ ...value, weights });
               }}
             />
           </Field>
         ))}
       </div>
-      <p
-        className={
-          value.weights.reduce((a, b) => a + b, 0) === 10000
-            ? 'gacha-admin-help'
-            : 'gacha-admin-invalid'
-        }
-      >
+      <p className={weightTotal === 10000 ? 'gacha-admin-help' : 'gacha-admin-invalid'}>
         {t('基础概率合计：', 'Base rate total: ')}
-        {value.weights.reduce((a, b) => a + b, 0) / 100}%
+        {Number.isFinite(weightTotal) ? `${weightTotal / 100}%` : '—'}
       </p>
       <div className="gacha-admin-grid">
         <Field
@@ -140,8 +135,8 @@ function RulesFields({
             type="number"
             min="1"
             max="100"
-            value={value.sr_pity}
-            onChange={(e) => onChange({ ...value, sr_pity: Number(e.target.value) })}
+            value={Number.isNaN(value.sr_pity) ? '' : value.sr_pity}
+            onChange={(e) => onChange({ ...value, sr_pity: e.currentTarget.valueAsNumber })}
           />
         </Field>
         <Field
@@ -151,10 +146,10 @@ function RulesFields({
           <Affix
             unit={t('抽', 'pulls')}
             type="number"
-            min={value.sr_pity}
+            min={Number.isFinite(value.sr_pity) ? value.sr_pity : 1}
             max="1000"
-            value={value.ssr_pity}
-            onChange={(e) => onChange({ ...value, ssr_pity: Number(e.target.value) })}
+            value={Number.isNaN(value.ssr_pity) ? '' : value.ssr_pity}
+            onChange={(e) => onChange({ ...value, ssr_pity: e.currentTarget.valueAsNumber })}
           />
         </Field>
       </div>
@@ -163,19 +158,14 @@ function RulesFields({
           {(['sr', 'ssr'] as const).map((tier) => (
             <div key={tier} className="nb-stack nb-stack--sm">
               <Field label={tier.toUpperCase() + t(' 档限定占比（%）', ' featured share (%)')}>
-                <Affix
+                <PercentInput
                   unit="%"
-                  type="number"
-                  min="0"
                   max="100"
-                  step="0.01"
-                  value={value[tier === 'sr' ? 'sr_featured' : 'ssr_featured'] / 100}
-                  onChange={(e) =>
+                  basisPoints={value[tier === 'sr' ? 'sr_featured' : 'ssr_featured']}
+                  onBasisChange={(points) =>
                     onChange({
                       ...value,
-                      [tier === 'sr' ? 'sr_featured' : 'ssr_featured']: Math.round(
-                        Number(e.target.value) * 100,
-                      ),
+                      [tier === 'sr' ? 'sr_featured' : 'ssr_featured']: points,
                     })
                   }
                 />
@@ -228,6 +218,7 @@ function RulesFields({
 }
 function validRules(r: Rules) {
   return (
+    [r.sr_featured, r.ssr_featured].every((n) => Number.isInteger(n) && n >= 0 && n <= 10000) &&
     r.weights.every((n) => Number.isInteger(n) && n >= 0 && n <= 10000) &&
     r.weights.reduce((a, b) => a + b, 0) === 10000 &&
     Number.isInteger(r.sr_pity) &&
@@ -249,22 +240,49 @@ function SettingsForm({
   save: (input: AdminInput) => void;
   t: Copy;
 }) {
+  const [base, setBase] = useState(config);
   const [entryEnabled, setEntryEnabled] = useState(config.entry_enabled);
   const [rules, setRules] = useState(config.rules),
     [shop, setShop] = useState(config.shop);
   const dirty =
-    entryEnabled !== config.entry_enabled ||
-    JSON.stringify(rules) !== JSON.stringify(config.rules) ||
-    JSON.stringify(shop) !== JSON.stringify(config.shop);
+    entryEnabled !== base.entry_enabled ||
+    JSON.stringify(rules) !== JSON.stringify(base.rules) ||
+    JSON.stringify(shop) !== JSON.stringify(base.shop);
+  const stale = base.revision !== config.revision;
+  if (
+    stale &&
+    (!dirty ||
+      (entryEnabled === config.entry_enabled &&
+        JSON.stringify(rules) === JSON.stringify(config.rules) &&
+        JSON.stringify(shop) === JSON.stringify(config.shop)))
+  ) {
+    setBase(config);
+    setEntryEnabled(config.entry_enabled);
+    setRules(config.rules);
+    setShop(config.shop);
+  }
+  const shopValid = Object.entries(shop).every(([key, value]) => {
+    if (typeof value === 'string') {
+      const amount = scaledAmount(value, 3);
+      return amount !== null && BigInt(amount) > 0n && BigInt(amount) <= 9_000_000_000_000_000n;
+    }
+    return (
+      key === 'revision' || (Number.isSafeInteger(value) && value >= (key.endsWith('_cap') ? 0 : 1))
+    );
+  });
+  const settingsValid = validRules(rules) && shopValid;
   const commitSettings = () =>
+    !stale &&
+    settingsValid &&
     save({
       kind: 'settings',
-      expected_revision: config.revision,
+      expected_revision: base.revision,
       rules,
       shop,
       entry_enabled: entryEnabled,
     });
   const discardSettings = () => {
+    setBase(config);
     setEntryEnabled(config.entry_enabled);
     setRules(config.rules);
     setShop(config.shop);
@@ -334,9 +352,9 @@ function SettingsForm({
                   <Affix
                     unit={t('通用积分', 'general credits')}
                     required
-                    type="number"
-                    min="0.001"
-                    step="0.001"
+                    type="text"
+                    inputMode="decimal"
+                    maxLength={20}
                     value={shop[ticket === 'permanent' ? 'permanent_price' : 'limited_price']}
                     onChange={(e) =>
                       setShop({
@@ -378,8 +396,8 @@ function SettingsForm({
                         type="number"
                         min={key.endsWith('_cap') ? '0' : '1'}
                         step="1"
-                        value={shop[key]}
-                        onChange={(e) => setShop({ ...shop, [key]: Number(e.target.value) })}
+                        value={Number.isNaN(shop[key]) ? '' : shop[key]}
+                        onChange={(e) => setShop({ ...shop, [key]: e.currentTarget.valueAsNumber })}
                       />
                     </Field>
                   ))}
@@ -392,18 +410,30 @@ function SettingsForm({
               'A chibi card costs both N and R shards. Monthly limits count the number of tickets received.',
             )}
           </p>
-          <FormActions>
-            <Button variant="primary" type="submit" disabled={busy || !validRules(rules)}>
-              {t('保存规则与商店设置', 'Save rules and shop settings')}
-            </Button>
-          </FormActions>
         </PanelBody>
       </Panel>
+      <DraftLeaveGuard dirty={dirty} />
+      {dirty && !settingsValid && (
+        <Note tone="warn">
+          {t(
+            '请检查概率合计、保底、票价与商店数量。',
+            'Check the total probability, pity limits, ticket prices and shop quantities.',
+          )}
+        </Note>
+      )}
+      {stale && (
+        <Note tone="warn">
+          {t(
+            '服务器配置已更新。请放弃草稿以载入最新设置。',
+            'The server configuration changed. Discard this draft to load the latest settings.',
+          )}
+        </Note>
+      )}
       <SaveBar
         dirtyCount={dirty ? 1 : 0}
         scope={t('规则与商店', 'Rules and shop')}
         busy={busy}
-        saveDisabled={!validRules(rules)}
+        saveDisabled={stale || !settingsValid}
         onSave={commitSettings}
         onDiscard={discardSettings}
         saveLabel={t('保存规则与商店设置', 'Save rules and shop settings')}
@@ -431,6 +461,8 @@ function PoolEditor({
   t: Copy;
 }) {
   const [pool, setPool] = useState(draft.pool);
+  const [cardSearch, setCardSearch] = useState('');
+  const [discarding, setDiscarding] = useState(false);
   const artworkPolicy = useArtworkPolicy();
   const [presetName, setPresetName] = useState(draft.preset?.name ?? draft.pool.name);
   const [start, setStart] = useState(() => createTimeDraft(draft.pool.starts_at));
@@ -449,7 +481,36 @@ function PoolEditor({
       JSON.stringify(p.rules) === JSON.stringify(pool.rules),
   );
   const withTime = { ...pool, starts_at: startValue ?? null, ends_at: endValue ?? null };
+  const dirty =
+    JSON.stringify(pool) !== JSON.stringify(draft.pool) ||
+    presetName !== (draft.preset?.name ?? draft.pool.name) ||
+    startValue !== draft.pool.starts_at ||
+    endValue !== draft.pool.ends_at;
+  const currentRevision = draft.preset
+    ? config.presets.find((item) => item.id === draft.preset?.id)?.revision
+    : config.pools.find((item) => item.id === draft.pool.id)?.revision;
+  const stale =
+    (draft.preset?.revision ?? draft.pool.revision) > 0 &&
+    currentRevision !== (draft.preset?.revision ?? draft.pool.revision);
+  const term = cardSearch.toLocaleLowerCase().trim();
+  const matches = cards.filter(
+    (card) =>
+      card.source === 'limited' &&
+      [
+        card.id,
+        card.character,
+        card.theme,
+        ...themes
+          .filter((theme) => theme.id === card.theme)
+          .flatMap((theme) => [theme.name, theme.name_en]),
+      ].some((value) => value.toLocaleLowerCase().includes(term)),
+  );
   const valid =
+    !stale &&
+    (!draft.preset || Boolean(presetName.trim())) &&
+    startValue !== undefined &&
+    endValue !== undefined &&
+    (startValue == null || endValue == null || endValue > startValue) &&
     validRules(pool.rules) &&
     (artworkPolicy.allowed('cover:' + pool.cover) ||
       (pool.cover === draft.pool.cover &&
@@ -458,7 +519,7 @@ function PoolEditor({
     pool.featured.length > 0 &&
     (!pool.published || (startValue != null && endValue != null && endValue > startValue));
   const chooseTheme = (theme: string) => {
-    const ids = cards.filter((c) => c.theme === theme).map((c) => c.id);
+    const ids = matches.filter((c) => c.theme === theme).map((c) => c.id);
     const all = ids.every((id) => pool.featured.includes(id));
 
     setPool({
@@ -476,13 +537,34 @@ function PoolEditor({
           : t('限定奖池', 'Limited pool')
       }
       closeLabel={t('关闭', 'Close')}
-      onClose={() => !busy && close()}
+      onClose={() => {
+        if (!busy) {
+          if (dirty) setDiscarding(true);
+          else close();
+        }
+      }}
       className="gacha-admin-dialog"
     >
+      <DraftLeaveGuard dirty={dirty} />
+      {discarding && (
+        <ConfirmDialog
+          open
+          danger
+          title={t('放弃本次编辑？', 'Discard these edits?')}
+          description={t(
+            '未保存的选卡和配置将被丢弃。',
+            'Unsaved card selections and settings will be discarded.',
+          )}
+          confirmLabel={t('放弃改动', 'Discard')}
+          onCancel={() => setDiscarding(false)}
+          onConfirm={close}
+        />
+      )}
       {feedback}
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (!valid || busy) return;
           if (draft.preset)
             save({
               kind: 'preset',
@@ -592,6 +674,17 @@ function PoolEditor({
             </p>
           </Fold>
           <h3>{t('本期限定卡牌', 'Featured cards')}</h3>
+          <Field label={t('搜索卡牌或主题', 'Search cards or themes')}>
+            <input
+              type="search"
+              value={cardSearch}
+              onChange={(event) => setCardSearch(event.target.value)}
+            />
+          </Field>
+          <p role="status">
+            {t('已选', 'Selected')} {pool.featured.length} · {t('匹配', 'Matching')}{' '}
+            {matches.length}
+          </p>
           <p>
             {t(
               '所有奖池自动包含全部常驻卡牌。下方仅选择本期限定卡。',
@@ -600,7 +693,7 @@ function PoolEditor({
           </p>
           <fieldset disabled={locked || busy} className="gacha-admin-fieldset">
             {themes
-              .filter((theme) => theme.source === 'limited')
+              .filter((theme) => matches.some((card) => card.theme === theme.id))
               .map((theme) => (
                 <section key={theme.id} className="gacha-admin-roster">
                   <header>
@@ -612,7 +705,7 @@ function PoolEditor({
                     </Button>
                   </header>
                   <div>
-                    {cards
+                    {matches
                       .filter((card) => card.theme === theme.id)
                       .map((card) => (
                         <label key={card.id}>
@@ -640,6 +733,25 @@ function PoolEditor({
                 </section>
               ))}
           </fieldset>
+          {!valid && (
+            <Note tone="warn">
+              {stale
+                ? t(
+                    '版本已变化，请重新打开最新配置。',
+                    'The revision changed. Reopen the latest configuration.',
+                  )
+                : !pool.name.trim() || (draft.preset && !presetName.trim())
+                  ? t('请输入名称。', 'Enter a name.')
+                  : !pool.featured.length
+                    ? t('至少选择一张限定卡。', 'Select at least one featured card.')
+                    : !validRules(pool.rules)
+                      ? t(
+                          '请检查概率合计、限定占比与保底。',
+                          'Check the rate total, featured shares and pity limits.',
+                        )
+                      : t('请检查封面和开放时间。', 'Check the cover and opening times.')}
+            </Note>
+          )}
           <div className="gacha-admin-actions">
             <Button variant="primary" type="submit" disabled={busy || !valid}>
               {draft.preset
@@ -710,6 +822,12 @@ function GachaSettingsContent() {
       return next;
     });
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [remove, setRemove] = useState<{
+    kind: 'delete_pool' | 'delete_preset';
+    name: string;
+    id: string;
+    revision: number;
+  } | null>(null);
   const mutation = useRetainedOperation<AdminInput, Configuration>(
     async (input, key, context) => {
       const result = await saveGachaConfiguration(input, key, context.signal);
@@ -723,7 +841,13 @@ function GachaSettingsContent() {
     ['admin', 'gacha'],
   );
   const busy = mutation.isPending || mutation.outcome === 'unknown';
-  const save = (input: AdminInput) => mutation.mutate(input, { onSuccess: () => setDraft(null) });
+  const save = (input: AdminInput) =>
+    mutation.mutate(input, {
+      onSuccess: () => {
+        setRemove(null);
+        if (!(input.kind === 'preset' && draft && !draft.preset)) setDraft(null);
+      },
+    });
   const copyPool = (pool?: Pool) => {
     const blank = emptyPool(query.data?.server_time ?? Math.floor(Date.now() / 1000));
     setDraft({
@@ -796,13 +920,7 @@ function GachaSettingsContent() {
               />
             ) : null}
             {section === 'settings' && (
-              <SettingsForm
-                key={query.data.revision}
-                config={query.data}
-                busy={busy}
-                save={save}
-                t={t}
-              />
+              <SettingsForm config={query.data} busy={busy} save={save} t={t} />
             )}
             {section === 'pools' && (
               <Panel>
@@ -893,11 +1011,24 @@ function GachaSettingsContent() {
                                   >
                                     {t('编辑', 'Edit')}
                                   </Button>
-                                  <Button
-                                    size="sm"
-                                    disabled={busy}
-                                    onClick={() => copyPool(pool)}
-                                  >
+                                  {!pool.published && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      disabled={busy}
+                                      onClick={() =>
+                                        setRemove({
+                                          kind: 'delete_pool',
+                                          name: pool.name,
+                                          id: pool.id,
+                                          revision: pool.revision,
+                                        })
+                                      }
+                                    >
+                                      {t('删除草稿', 'Delete draft')}
+                                    </Button>
+                                  )}
+                                  <Button size="sm" disabled={busy} onClick={() => copyPool(pool)}>
                                     {t('复制为新一期', 'Create similar period')}
                                   </Button>
                                 </div>
@@ -937,6 +1068,22 @@ function GachaSettingsContent() {
                             {t('张限定卡', 'limited cards')}
                           </p>
                           <div className="gacha-admin-actions">
+                            {/^gt_[A-Za-z0-9_-]{22}$/.test(preset.id) && (
+                              <Button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  setRemove({
+                                    kind: 'delete_preset',
+                                    name: preset.name,
+                                    id: preset.id,
+                                    revision: preset.revision,
+                                  })
+                                }
+                              >
+                                {t('删除自建模板', 'Delete custom template')}
+                              </Button>
+                            )}
                             <Button disabled={busy} onClick={() => copyPool(preset.pool)}>
                               {t('读取并微调', 'Load and adjust')}
                             </Button>
@@ -956,6 +1103,36 @@ function GachaSettingsContent() {
                   </div>
                 </PanelBody>
               </Panel>
+            )}
+            {remove && (
+              <ConfirmDialog
+                open
+                danger
+                busy={mutation.isPending}
+                title={t('确认删除', 'Confirm deletion') + ' · ' + remove.name}
+                description={
+                  remove.kind === 'delete_pool'
+                    ? t(
+                        '只可删除从未发布、且没有抽取记录的草稿。',
+                        'Only never-published drafts without draw records can be removed.',
+                      )
+                    : t(
+                        '删除自建模板后，已按此模板创建的奖池继续使用保存的配置。',
+                        'Pools created from this template keep their saved configuration.',
+                      )
+                }
+                confirmLabel={t('删除', 'Delete')}
+                onCancel={() => setRemove(null)}
+                onConfirm={() =>
+                  save({
+                    kind: remove.kind,
+                    delete_id: remove.id,
+                    expected_revision: remove.revision,
+                  })
+                }
+              >
+                {feedback}
+              </ConfirmDialog>
             )}
             {draft && (
               <>

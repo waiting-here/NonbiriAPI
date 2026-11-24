@@ -26,6 +26,8 @@ export function StewardEndpointsPage() {
         account={account}
         scopeReady={Boolean(user)}
         canRead={!user?.is_banned && hasStewardPermission(user, 'endpoints.read')}
+        canReadUsers={!user?.is_banned && hasStewardPermission(user, 'users.read')}
+        canReadLogs={!user?.is_banned && hasStewardPermission(user, 'logs.read')}
         canTag={!user?.is_banned && hasStewardPermission(user, 'endpoints.tags')}
         back={
           <Link to={listReturnPath(location.state, '/steward')}>

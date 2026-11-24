@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { EndpointTagRules } from './EndpointTagRules';
@@ -75,6 +75,10 @@ describe('endpoint wildcard tag rules', () => {
       await waitFor(() => expect(writes).toHaveLength(2));
       expect(writes[1].body).toEqual({ pattern: '*.example.com', action: 'remove', tags: [] });
       await view.user.click(await screen.findByRole('button', { name: 'Delete rule' }));
+      const dialog = await screen.findByRole('alertdialog');
+      expect(dialog).toHaveTextContent('*.example.com');
+      expect(writes).toHaveLength(2);
+      await view.user.click(within(dialog).getByRole('button', { name: 'Delete rule' }));
       await screen.findByText('No matching rules');
       expect(writes[2]).toMatchObject({ method: 'DELETE', body: { pattern: '*.example.com' } });
       expect(writes.every((write) => !!write.key)).toBe(true);

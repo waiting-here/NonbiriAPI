@@ -92,7 +92,7 @@ describe('level-five user shell navigation', () => {
     expect(screen.queryAllByRole('link', { name: 'Steward' })).toHaveLength(0);
 
     await rendered.user.click(screen.getByRole('button', { name: 'Open navigation' }));
-    expect(within(screen.getByRole('dialog', { name: 'Main navigation' })).queryByRole('link', { name: 'Steward' })).toBeNull();
+    expect(within(screen.getByRole('dialog', { name: 'Main navigation' })).getByRole('link', { name: 'Steward center' })).toHaveAttribute('href', '/steward');
     const closeMenuButton = within(
       screen.getByRole('dialog', { name: 'Main navigation' }),
     ).getByRole('button', { name: 'Close navigation' });
@@ -157,6 +157,7 @@ test.each(['/endpoints', '/endpoints/42', '/models'])(
       '/activities',
       '/games',
       '/rewards',
+      '/steward',
     ]);
     expect(links[3]).toHaveAttribute('data-active', 'true');
     expect(links[4]).not.toHaveAttribute('data-active');

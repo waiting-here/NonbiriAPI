@@ -42,7 +42,7 @@ import {
   useModel,
 } from './queries';
 import { FilteredResourceEmpty, ResourceFilterBar } from './ResourceFilterControls';
-import type { Model, RouteStrategy, UserProfile } from './types';
+import type { Model, UserProfile } from './types';
 import { useResourceFilters, useResourceListScroll } from './useResourceFilters';
 
 import {
@@ -81,7 +81,6 @@ function ModelDetail({
   const { t: sharedText } = useTranslation();
   const textModel = useModelText();
   const [sourceFocusPending, setSourceFocusPending] = useState(focusSources);
-  const [requestedStrategy, setRequestedStrategy] = useState<RouteStrategy>();
   const queryClient = useQueryClient();
   const model = useModel(accountId, modelId);
   // ModelSources owns this complete query; observe its cache without another read.
@@ -228,41 +227,17 @@ function ModelDetail({
             accountId={accountId}
             key={editing.revision}
             initial={editing}
-            initialStrategy={requestedStrategy}
             onCancel={() => {
               setEditing(null);
-              setRequestedStrategy(undefined);
             }}
             onSaved={() => {
               setEditing(null);
-              setRequestedStrategy(undefined);
             }}
             onCapabilityLoss={(error) => setPermissionLost({ scope: permissionScope, error })}
-            sources={(strategy, onChange, locked) => (
-              <ModelSources
-                accountId={accountId}
-                model={model.data!}
-                strategy={strategy}
-                onStrategy={onChange}
-                locked={locked}
-              />
-            )}
           />
         ) : (
           <div className="model-detail-layout">
             <div className="model-detail-main">
-              <ModelSources
-                accountId={accountId}
-                model={model.data}
-                focusSearch={sourceFocusPending}
-                onSearchFocused={() => setSourceFocusPending(false)}
-                strategy={model.data.route_strategy}
-                locked={reconciliationRequired || Boolean(replayAttempt)}
-                onStrategy={(strategy) => {
-                  setRequestedStrategy(strategy);
-                  setEditing(model.data ?? null);
-                }}
-              />
               <Fold
                 lazy
                 title={sharedText('requestAdaptation.model.title')}
@@ -319,6 +294,13 @@ function ModelDetail({
             </div>
           </div>
         )}
+        <ModelSources
+          accountId={accountId}
+          model={model.data}
+          focusSearch={sourceFocusPending}
+          onSearchFocused={() => setSourceFocusPending(false)}
+          strategy={model.data.route_strategy}
+        />
       </div>
       <section className="core-card core-danger-zone">
         <div className="core-card__header">

@@ -11,6 +11,7 @@ export interface UsePagePagerOptions {
   scopeKey: string;
   /** A committed filter/sort identity. Draft input should not be used here. */
   resetKey?: string;
+  initialPage?: string;
 }
 
 export interface PagePager {
@@ -158,11 +159,12 @@ export function usePagePager({
   listType,
   scopeKey,
   resetKey,
+  initialPage,
 }: UsePagePagerOptions): PagePager {
   const currentIdentity = { station, listType, scopeKey, resetKey } satisfies PagerIdentity;
   const [state, setState] = useState<PagerState>(() => ({
     identity: currentIdentity,
-    page: DEFAULT_PAGE,
+    page: initialPage && isPageNumber(initialPage) ? initialPage : DEFAULT_PAGE,
     pageSize: readPageSizePreference(station, listType),
   }));
   const changed = identityChanged(state.identity, currentIdentity);

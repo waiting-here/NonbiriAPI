@@ -34,13 +34,24 @@ it('edits a paused schedule, preserves zero and makes all-day and 24:00 reversib
   fireEvent.change(screen.getByLabelText('Schedule time zone'), {
     target: { value: 'Asia/Tokyo' },
   });
-  fireEvent.change(screen.getByLabelText('Default payable percentage'), { target: { value: '0' } });
+  const percent = screen.getByLabelText('Default payable percentage');
+  await view.user.clear(percent);
+  expect(percent).toHaveValue('');
+  await view.user.type(percent, '0.05');
+  expect(percent).toHaveValue('0.05');
+  expect(JSON.parse(screen.getByLabelText('Draft').textContent!).default_percent).toBe(0.05);
+  fireEvent.change(percent, { target: { value: '0' } });
   await view.user.click(screen.getByRole('button', { name: 'Add period' }));
   const period = within(screen.getByRole('group', { name: 'Period 1' }));
   fireEvent.change(period.getByLabelText('Start time'), { target: { value: '22:30' } });
   fireEvent.change(period.getByLabelText('End time', { exact: true }), {
     target: { value: '02:00' },
   });
+  await view.user.click(period.getByRole('button', { name: 'Weekends' }));
+  expect(JSON.parse(screen.getByLabelText('Draft').textContent!).periods[0].weekdays).toEqual([
+    6, 7,
+  ]);
+  await view.user.click(period.getByRole('button', { name: 'Weekdays' }));
   await view.user.click(period.getByRole('checkbox', { name: 'Sun' }));
   await view.user.click(period.getByRole('checkbox', { name: 'All day (00:00–24:00)' }));
   expect(period.getByLabelText('Start time')).toHaveValue('00:00');

@@ -363,7 +363,7 @@ describe('shared UI patterns', () => {
     const count = within(table).getByRole('cell', { name: '12' });
     expect(count).toHaveAttribute('data-cell', 'meta');
     expect(count).toHaveAttribute('data-label', 'Calls');
-    expect(count.closest('tr')).toHaveAttribute('aria-selected', 'true');
+    expect(count.closest('tr')).toHaveAttribute('aria-current', 'true');
   });
 
   it('submits search and provides named filter removal actions', async () => {

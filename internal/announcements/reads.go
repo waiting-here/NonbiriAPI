@@ -2,6 +2,7 @@ package announcements
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -202,7 +203,7 @@ func (service *Service) listManaged(ctx context.Context, adminID int64, role man
 	empty := Page[AdminAnnouncement]{Data: []AdminAnnouncement{}}
 	if ctx == nil || service == nil || service.repository == nil || !validListWindow(query.Cursor, query.Limit, query.Numbered) ||
 		(query.State != "" && query.State != "draft" && query.State != "published" && query.State != "withdrawn" && query.State != "expired") ||
-		(query.Severity != "" && !validSeverity(query.Severity)) {
+		(query.Severity != "" && !validSeverity(query.Severity)) || len([]rune(query.Title)) > 160 {
 		return empty, ErrInvalidRequest
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -228,7 +229,16 @@ func (service *Service) listManaged(ctx context.Context, adminID int64, role man
 		where += " AND severity=?"
 		args = append(args, query.Severity)
 	}
+	query.Title = strings.TrimSpace(query.Title)
+	if query.Title != "" {
+		where += " AND (instr(lower(draft_title_zh),lower(?))>0 OR instr(lower(draft_title_en),lower(?))>0)"
+		args = append(args, query.Title, query.Title)
+	}
 	owner := role.actorKind() + ":" + strconv.FormatInt(adminID, 10) + ":" + query.State + ":" + query.Severity
+	if query.Title != "" {
+		sum := sha256.Sum256([]byte(query.Title))
+		owner += fmt.Sprintf(":%x", sum[:])
+	}
 	if query.Cursor != "" {
 		payload, err := repository.cursors.decode(query.Cursor, "announcements:admin", owner, now)
 		if err != nil || payload.Pinned != -1 || payload.ID == "" {

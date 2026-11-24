@@ -15,6 +15,7 @@ type OwnerDonationSummary struct {
 type DonationSummary struct {
 	UseSummary          UseSummary        `json:"use_summary"`
 	OwnerHiddenAt       *int64            `json:"-"`
+	ReviewSubmittedAt   *int64            `json:"review_submitted_at,omitempty"`
 	DiscordPublicThanks *bool             `json:"discord_public_thanks"`
 	ID                  string            `json:"id"`
 	Status              string            `json:"status"`

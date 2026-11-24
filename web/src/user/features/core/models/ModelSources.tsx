@@ -1,17 +1,10 @@
+import { defaultBindingServices } from '@shared/nativeServices';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import type { NativeService } from '@shared/nativeServices';
 import { BindingTargets } from '../connections/BindingTargets';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import {
-  FormActions,
-  Fold,
-  MoreMenu,
-  Panel,
-  PanelBody,
-  PanelHead,
-  Segmented,
-} from '@shared/components/ui';
+import { FormActions, Fold, MoreMenu, Panel, PanelBody, PanelHead } from '@shared/components/ui';
 import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
@@ -36,6 +29,7 @@ import type {
 } from '../types';
 import { useModelText } from './copy';
 import { PersonalBindingPicker } from './PersonalBindingPicker';
+import { useModelSourceVisit } from './modelSourceVisit';
 import { boundIdentities, candidateIdentity } from './bindingIdentity';
 import { useBindingCopy } from './bindingCopy';
 
@@ -56,15 +50,26 @@ function BindingSelector({
   const copy = useBindingCopy();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
-  const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
+  const visit = useModelSourceVisit(accountId, model.id);
+  const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>(
+    visit.restored?.details ?? {},
+  );
   const [invalidSelection, setInvalidSelection] = useState(false);
   const [readAccessError, setReadAccessError] = useState<Error | null>(null);
-  const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>({});
-  const servicesFor = (id: string) =>
-    nativeSelections[id] ?? selectionDetails[id]?.native_services ?? [];
-  const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () =>
-    initialBindingDraftState(accountId, model.id, model.binding_revision),
+  const [nativeSelections, setNativeSelections] = useState<Record<string, NativeService[]>>(
+    visit.restored?.nativeServices ?? {},
   );
+  const servicesFor = (id: string) => {
+    const candidate = selectionDetails[id];
+    return (
+      nativeSelections[id] ??
+      defaultBindingServices(candidate?.connector_type, candidate?.native_services ?? [])
+    );
+  };
+  const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () => ({
+    ...initialBindingDraftState(accountId, model.id, model.binding_revision),
+    selections: visit.restored?.selections ?? [],
+  }));
   const bindingsKnown = Boolean(bindings.data);
   useEffect(() => {
     const revision = bindings.data?.binding_revision;
@@ -241,6 +246,15 @@ function BindingSelector({
         focusSearch={focusSearch}
         onSearchFocused={onSearchFocused}
         onAccessLoss={setReadAccessError}
+        restoredView={visit.restored?.view}
+        endpointState={visit.endpointState}
+        onManage={(view) =>
+          visit.remember(view, {
+            selections: draft.selections,
+            details: selectionDetails,
+            nativeServices: nativeSelections,
+          })
+        }
       />
       <p className="nb-small nb-muted">{copy.selectedHelp}</p>
       <p className="core-muted">{t('models.selectedCount', { count: draft.selections.length })}</p>
@@ -395,7 +409,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
     scopeKey: `${accountId}\u0000${model.id}`,
     resetKey: model.binding_revision,
   });
-  const [order, setOrder] = useState<string[]>([]);
+  const [draftOrder, setDraftOrder] = useState<{ revision: string; ids: string[] } | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Binding | null>(null);
   type Intent =
@@ -424,6 +438,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
       context.commit(() => {
         applyBindingsResponse(queryClient, accountId, model.id, response);
         if (intent.kind === 'delete') setRemoving(null);
+        else setDraftOrder(null);
       });
       return response;
     },
@@ -432,7 +447,6 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
       context.commit(() => {
         applyBindingsResponse(queryClient, accountId, model.id, current);
         retryAllowed.current = current.binding_revision === intent.expectedRevision;
-        setOrder(current.bindings.map((binding) => binding.id));
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: coreKeys.model(accountId, model.id) }),
@@ -445,7 +459,11 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
           ? !current.bindings.some((binding) => binding.id === intent.bindingId)
           : current.bindings.length === intent.order.length &&
             current.bindings.every((binding, index) => binding.id === intent.order[index]);
-      if (confirmed && intent.kind === 'delete') context.commit(() => setRemoving(null));
+      if (confirmed)
+        context.commit(() => {
+          if (intent.kind === 'delete') setRemoving(null);
+          else setDraftOrder(null);
+        });
       if (error && confirmed) return { operationConfirmed: true };
     },
     ['user', 'core'],
@@ -466,22 +484,21 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
   const reconciliationRequired = operation.outcome === 'refresh-failed';
   const replayAttempt = operation.outcome === 'unknown' ? (operation.variables ?? null) : null;
 
-  useEffect(() => {
-    if (!bindings.data) return;
-    let active = true;
-    queueMicrotask(() => {
-      if (active) setOrder(bindings.data?.bindings.map((binding) => binding.id) ?? []);
-    });
-    return () => {
-      active = false;
-    };
-  }, [bindings.data]);
-
   const byId = useMemo(
     () => new Map((bindings.data?.bindings ?? []).map((binding) => [binding.id, binding])),
     [bindings.data?.bindings],
   );
   const authoritativeOrder = bindings.data?.bindings.map((binding) => binding.id) ?? [];
+  const order = draftOrder?.ids ?? authoritativeOrder;
+  const staleOrder = draftOrder !== null && draftOrder.revision !== bindings.data?.binding_revision;
+  const editOrder = (update: (current: string[]) => string[]) => {
+    if (!bindings.data || staleOrder) return;
+    const revision = bindings.data.binding_revision;
+    setDraftOrder((previous) => ({
+      revision: previous?.revision ?? revision,
+      ids: update(previous?.ids ?? authoritativeOrder),
+    }));
+  };
   const pagination = localBindingPagination(order.length, pager.page, pager.pageSize);
   const visiblePage = Number(BigInt(pagination.page));
   const visibleStart = (visiblePage - 1) * pager.pageSize;
@@ -512,7 +529,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
       return;
     await run({
       kind: 'order',
-      expectedRevision: bindings.data.binding_revision,
+      expectedRevision: draftOrder?.revision ?? bindings.data.binding_revision,
       order: [...order],
     });
   };
@@ -528,7 +545,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
   const drop = (event: DragEvent, targetId: string) => {
     event.preventDefault();
     if (!dragged) return;
-    setOrder((current) =>
+    editOrder((current) =>
       moveBinding(current, current.indexOf(dragged), current.indexOf(targetId)),
     );
     setDragged(null);
@@ -575,7 +592,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                   <li
                     key={binding.id}
                     className={`core-binding-row${dragged === binding.id ? ' is-dragging' : ''}`}
-                    draggable={!busy && !reconciliationRequired && !replayAttempt}
+                    draggable={!busy && !staleOrder && !reconciliationRequired && !replayAttempt}
                     onDragStart={() => setDragged(binding.id)}
                     onDragEnd={() => setDragged(null)}
                     onDragOver={(event) => event.preventDefault()}
@@ -621,12 +638,13 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                           disabled={
                             busy ||
                             reconciliationRequired ||
+                            staleOrder ||
                             Boolean(replayAttempt) ||
                             absoluteIndex + step < 0 ||
                             absoluteIndex + step >= order.length
                           }
                           onClick={() =>
-                            setOrder((current) =>
+                            editOrder((current) =>
                               moveBinding(current, absoluteIndex, absoluteIndex + step),
                             )
                           }
@@ -666,7 +684,24 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
         busy,
         operation.outcome === 'refresh-failed',
       )}
+      {staleOrder ? (
+        <p role="status" className="core-inline-warning">
+          {textModel('orderChanged')}
+        </p>
+      ) : null}
       <FormActions>
+        {draftOrder && !busy && !replayAttempt ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            onClick={() => {
+              setDraftOrder(null);
+              operation.reset();
+            }}
+          >
+            {textModel('discard')}
+          </button>
+        ) : null}
         {reconciliationRequired ? (
           <button
             type="button"
@@ -686,6 +721,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
             busy ||
             reconciliationRequired ||
             replayAttempt?.kind === 'delete' ||
+            staleOrder ||
             (!replayAttempt && !dirty)
           }
           onClick={() => void saveOrder()}
@@ -719,16 +755,12 @@ export function ModelSources({
   accountId,
   model,
   strategy,
-  onStrategy,
-  locked = false,
   focusSearch = false,
   onSearchFocused,
 }: {
   accountId: string;
   model: Model;
   strategy: RouteStrategy;
-  onStrategy: (value: RouteStrategy) => void;
-  locked?: boolean;
   focusSearch?: boolean;
   onSearchFocused?: () => void;
 }) {
@@ -739,17 +771,12 @@ export function ModelSources({
       <PanelHead
         title={text('sources')}
         actions={
-          <Segmented
-            label={t('models.strategy')}
-            value={strategy}
-            onChange={onStrategy}
-            disabled={locked}
-            options={[
-              { value: 'ordered', label: t('models.ordered') },
-              { value: 'random', label: t('models.random') },
-              { value: 'cache_balanced', label: text('balancedSummary') },
-            ]}
-          />
+          <span className="nb-small">
+            {t('models.strategy')} ·{' '}
+            {strategy === 'cache_balanced'
+              ? text('balancedSummary')
+              : t(strategy === 'ordered' ? 'models.ordered' : 'models.random')}
+          </span>
         }
       />
       <PanelBody>

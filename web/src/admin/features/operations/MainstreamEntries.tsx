@@ -206,7 +206,8 @@ export function MainstreamEntries({
         className="nb-btn nb-btn--secondary"
         disabled={disabled || !protocols.length}
         onClick={() => {
-          const first = protocols[0]!;
+          const first =
+            protocols.find((row) => row.connector_type === 'openai-compatible') ?? protocols[0]!;
           onChange({
             ...value,
             entries: [

@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { charityKeys, getManagedDonation, type CharityRole } from '@shared/operations/charity';
+import {
+  charityKeys,
+  getManagedDonation,
+  suggestedBindingServices,
+  type CharityRole,
+} from '@shared/operations/charity';
 import {
   getManagedCharityModel,
   validManagementSearch,
@@ -20,8 +25,14 @@ import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { CharityBindingPicker, type CharitySelection } from '../CharityBindingPicker';
+import { isManagementForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { getManagedBindingCandidatesPage } from '@shared/operations/charityPages';
+import { ConfirmDialog } from '../ConfirmDialog';
+import {
+  CharityBindingPicker,
+  type CandidateFilters,
+  type CharitySelection,
+} from '../CharityBindingPicker';
 import { BindingServiceEditor } from './BindingRouteGuide';
 import { DonationKeyModels } from '../DonationKeyModels';
 import { DraftLeaveGuard } from './DraftLeaveScope';
@@ -61,7 +72,13 @@ export function MultiTargetBindingWorkflow({
   const client = useQueryClient();
   const [, setParams] = useSearchState();
   const keyModels = useRef<HTMLDivElement>(null);
-  const initialApplied = useRef(false);
+  const initialApplied = useRef('');
+  const matching = useRef<AbortController | null>(null);
+  useEffect(() => () => matching.current?.abort(), []);
+  const [proposals, setProposals] = useState<Selection[]>([]);
+  const [checked, setChecked] = useState<string[]>([]);
+  const [matchedQuery, setMatchedQuery] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
   const [target, setTarget] = useState<BindingOption | null>(null);
   const [basket, setBasket] = useState<Record<string, Selection>>({});
   const [basketSearch, setBasketSearch] = useState('');
@@ -70,6 +87,7 @@ export function MultiTargetBindingWorkflow({
   const [q, setQ] = useState('');
   const [draft, setDraft] = useState('');
   const [pickerBlocked, setPickerBlocked] = useState(true);
+  const candidateFilters = useState<CandidateFilters>();
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<unknown>(null);
   const pager = usePagePager({
@@ -99,8 +117,8 @@ export function MultiTargetBindingWorkflow({
     retry: false,
   });
   useEffect(() => {
-    if (initial.data && !initialApplied.current) {
-      initialApplied.current = true;
+    if (initial.data && initialApplied.current !== initial.data.id) {
+      initialApplied.current = initial.data.id;
       setTarget({
         charity_model_id: initial.data.id,
         full_name: initial.data.full_name,
@@ -118,7 +136,7 @@ export function MultiTargetBindingWorkflow({
     charityKeys.root(role),
   );
   const lost = [models.error, initial.error, add.error, readError].some(
-    (error) => isForbidden(error) || isUnauthorized(error),
+    (error) => isManagementForbidden(error) || isUnauthorized(error),
   );
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -249,6 +267,103 @@ export function MultiTargetBindingWorkflow({
         );
       },
     });
+  const identityFor = (row: Selection) => row.target.charity_model_id + ':' + row.upstream_model_id;
+  const findMatches = async () => {
+    matching.current?.abort();
+    const controller = new AbortController();
+    matching.current = controller;
+    setReading(true);
+    setReadError(null);
+    setProposals([]);
+    setChecked([]);
+    setMatchedQuery(null);
+    const matches: Selection[] = [];
+    try {
+      for (let targetPage = 1; ; targetPage++) {
+        const options = await getBindingOptions(
+          role,
+          item.donation_id,
+          item.key_id,
+          q,
+          String(targetPage),
+          100,
+          controller.signal,
+        );
+        for (const model of options.data) {
+          const full = model.full_name.replace(/^\[公益\]/, '');
+          const short = full.slice(full.indexOf('/') + 1);
+          if (!short) continue;
+          let page = 1;
+          for (;;) {
+            const result = await getManagedBindingCandidatesPage(
+              role,
+              model.charity_model_id,
+              {
+                donation_id: item.donation_id,
+                donation_key_id: item.key_id,
+                q: short,
+                include_bound: false,
+                key_state: 'all',
+              },
+              String(page),
+              100,
+              controller.signal,
+            );
+            for (const row of result.data) {
+              if (
+                (row.upstream_model_id !== full && row.upstream_model_id !== short) ||
+                !row.capabilities.can_bind ||
+                row.current_binding_id
+              )
+                continue;
+              const candidate = {
+                ...row,
+                note: item.safe_note ?? '',
+                selected_native_services: suggestedBindingServices(row),
+              };
+              matches.push({
+                target: model,
+                candidate,
+                full_name: model.full_name,
+                upstream_model_id: row.upstream_model_id,
+              });
+            }
+            if (page >= Number(result.pagination.total_pages)) break;
+            page++;
+          }
+        }
+        if (targetPage >= Number(options.pagination.total_pages)) break;
+      }
+      if (!controller.signal.aborted) {
+        setProposals(matches);
+        setMatchedQuery(q);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) setReadError(error);
+    } finally {
+      if (!controller.signal.aborted) setReading(false);
+    }
+  };
+  const selectUnambiguous = () => {
+    const targets = new Map<string, number>();
+    const routes = new Map<string, number>();
+    for (const row of proposals) {
+      targets.set(row.target.charity_model_id, (targets.get(row.target.charity_model_id) ?? 0) + 1);
+      routes.set(row.upstream_model_id, (routes.get(row.upstream_model_id) ?? 0) + 1);
+    }
+    const eligible = proposals.filter(
+      (row) =>
+        !basket[identityFor(row)] &&
+        targets.get(row.target.charity_model_id) === 1 &&
+        routes.get(row.upstream_model_id) === 1,
+    );
+    setChecked(
+      [...new Set([...checked, ...eligible.map(identityFor)])].slice(
+        0,
+        MAX_MANUAL_BINDINGS - entries.length,
+      ),
+    );
+  };
   const submitBasket = () =>
     submit({
       body: {
@@ -284,6 +399,27 @@ export function MultiTargetBindingWorkflow({
           new URLSearchParams(nextLocation.search).get('donation_id') === item.donation_id
         }
       />
+      <ConfirmDialog
+        open={preview}
+        title={t('common.governance.reviewBindings')}
+        description={t('common.workflow.addCount', { count: entries.length })}
+        confirmLabel={t('common.workflow.addCount', { count: entries.length })}
+        onCancel={() => setPreview(false)}
+        confirmDisabled={submitDisabled}
+        onConfirm={() => {
+          setPreview(false);
+          submitBasket();
+        }}
+      >
+        <ul>
+          {entries.map(([id, row]) => (
+            <li key={id}>
+              {row.full_name} ← {row.upstream_model_id} ·{' '}
+              {row.candidate.selected_native_services?.join(', ')}
+            </li>
+          ))}
+        </ul>
+      </ConfirmDialog>
       <SectionHead
         title={t('common.workflow.addConnections')}
         description={t('common.bindingBatch.fixedKeyHelp', {
@@ -300,7 +436,7 @@ export function MultiTargetBindingWorkflow({
               type="button"
               variant="primary"
               disabled={submitDisabled}
-              onClick={submitBasket}
+              onClick={() => setPreview(true)}
             >
               {t('common.workflow.addCount', { count: entries.length })}
             </Button>
@@ -322,6 +458,7 @@ export function MultiTargetBindingWorkflow({
               role={role}
               modelId={target.charity_model_id}
               fixedKey={item}
+              retainedCandidateFilters={candidateFilters}
               showSelectionSummary={false}
               capacity={MAX_MANUAL_BINDINGS - entries.length + currentEntries.length}
               selected={selected}
@@ -398,6 +535,69 @@ export function MultiTargetBindingWorkflow({
               </>
             }
           />
+          <Button
+            type="button"
+            disabled={locked || !models.data?.data.length}
+            onClick={() => void findMatches()}
+          >
+            {t('common.governance.matchCandidates')}
+          </Button>
+          {matchedQuery === q && !proposals.length && (
+            <Note>{t('common.operations.charity.noCandidatesBody')}</Note>
+          )}
+          {matchedQuery === q && proposals.length > 0 && (
+            <fieldset>
+              <legend>{t('common.governance.reviewBindings')}</legend>
+              <Button
+                type="button"
+                disabled={locked || entries.length >= MAX_MANUAL_BINDINGS}
+                onClick={selectUnambiguous}
+              >
+                {t('common.governance.selectUnique')}
+              </Button>
+              {proposals.map((row) => {
+                const id = identityFor(row);
+                return (
+                  <label key={id}>
+                    <input
+                      type="checkbox"
+                      checked={checked.includes(id)}
+                      disabled={locked || !!basket[id]}
+                      onChange={(event) =>
+                        setChecked(
+                          event.target.checked
+                            ? [...checked, id]
+                            : checked.filter((value) => value !== id),
+                        )
+                      }
+                    />
+                    {row.full_name} ← {row.upstream_model_id}
+                  </label>
+                );
+              })}
+              <Button
+                type="button"
+                disabled={
+                  locked || !checked.length || entries.length + checked.length > MAX_MANUAL_BINDINGS
+                }
+                onClick={() => {
+                  setBasket((prior) => ({
+                    ...prior,
+                    ...Object.fromEntries(
+                      proposals
+                        .filter((row) => checked.includes(identityFor(row)))
+                        .map((row) => [identityFor(row), row]),
+                    ),
+                  }));
+                  setProposals([]);
+                  setChecked([]);
+                  setMatchedQuery(null);
+                }}
+              >
+                {t('common.governance.confirmCandidates')}
+              </Button>
+            </fieldset>
+          )}
           {models.isPending ? (
             <LoadingState />
           ) : models.error ? (

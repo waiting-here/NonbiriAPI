@@ -195,6 +195,13 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
     pageParam: 'ai_requests_page',
     pageSizeParam: 'ai_requests_page_size',
   });
+  const listScope = JSON.stringify([account, filters, pager.page, pager.pageSize]);
+  const [selectionScope, setSelectionScope] = useState(listScope);
+  if (selectionScope !== listScope) {
+    setSelectionScope(listScope);
+    setSelected(new Set());
+    setCleanup(null);
+  }
   const query = useQuery({
     queryKey: [...root, 'requests', filters, pager.page, pager.pageSize],
     placeholderData: retainQueryScope([...root, 'requests']),
@@ -247,6 +254,13 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
     });
   };
   const beginCleanup = (selection: boolean) => {
+    if (
+      locked ||
+      query.isPlaceholderData ||
+      !query.data ||
+      (selection ? !selected.size : !query.data.cutoff_id || query.data.cutoff_id === '0')
+    )
+      return;
     operation.reset();
     const filter = { ...filters, actor_id: filters.actor_id || undefined };
     setCleanup({
@@ -475,7 +489,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                           <TableCheckbox
                             aria-label={t('common.agent.selectRequest', { id: row.id })}
                             checked={selected.has(row.id)}
-                            disabled={locked}
+                            disabled={locked || query.isPlaceholderData}
                             onChange={(event) =>
                               setSelected((previous) => {
                                 const next = new Set(previous);
@@ -501,10 +515,38 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                         ),
                       },
                       {
+                        key: 'model',
+                        header: t('common.connections.model'),
+                        cell: 'meta',
+                        render: (row) => row.model || '—',
+                      },
+                      {
+                        key: 'usage',
+                        header: t('common.agent.usage'),
+                        cell: 'meta',
+                        render: ({ usage }) =>
+                          (['input_tokens', 'output_tokens'] as const)
+                            .map(
+                              (key) =>
+                                t(tokenLabels[key]) +
+                                ' ' +
+                                (usage.unknown && usage[key] === '0'
+                                  ? t('common.agent.unknownUsage')
+                                  : formatCount(usage[key]).display),
+                            )
+                            .join(' · '),
+                      },
+                      {
                         key: 'state',
                         header: t('common.agent.status'),
                         cell: 'status',
-                        render: (row) => <AgentState state={row.state} />,
+                        render: (row) => (
+                          <>
+                            <AgentState state={row.state} />
+                            {row.status_code > 0 ? <span> · HTTP {row.status_code}</span> : null}
+                            {row.error_code ? <span> · {row.error_code}</span> : null}
+                          </>
+                        ),
                       },
                       {
                         key: 'time',
@@ -538,7 +580,7 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                 <div className="nb-actions">
                   <Button
                     variant="danger-outline"
-                    disabled={locked || !selected.size}
+                    disabled={locked || query.isPlaceholderData || !selected.size}
                     onClick={() => beginCleanup(true)}
                   >
                     {t('common.agent.cleanupSelected', {
@@ -547,7 +589,12 @@ export function RequestsPanel({ account, active }: { account: string; active: bo
                   </Button>
                   <Button
                     variant="danger-outline"
-                    disabled={locked || !query.data.cutoff_id || query.data.cutoff_id === '0'}
+                    disabled={
+                      locked ||
+                      query.isPlaceholderData ||
+                      !query.data.cutoff_id ||
+                      query.data.cutoff_id === '0'
+                    }
                     onClick={() => beginCleanup(false)}
                   >
                     {t('common.agent.cleanupMatching')}

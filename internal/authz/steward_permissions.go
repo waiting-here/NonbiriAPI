@@ -31,6 +31,16 @@ type StewardPermissions struct {
 	Limits        map[string]string `json:"limits"`
 }
 
+// AllowsUserLimit checks both explicit values and effective site defaults for managed users.
+func (p StewardPermissions) AllowsUserLimit(ceiling string, value int64) bool {
+	max, err := strconv.ParseInt(p.Limits[ceiling], 10, 64)
+	if err != nil || value < 0 || value > max {
+		return false
+	}
+	// A zero endpoint limit is unlimited.
+	return ceiling != "users.endpoint_limit_max" || value != 0 || max >= 10000
+}
+
 var stewardDefaults = map[string]bool{
 	"users.read": true, "users.profile": false, "users.limits": true, "users.level": false,
 	"users.resources": false, "users.balance": false, "users.game_balance": false, "users.ban": true, "users.unban": false,

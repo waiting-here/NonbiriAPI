@@ -231,13 +231,13 @@ func TestGatewayResponsesProjectionBoundaries(t *testing.T) {
 	t.Run("limit", func(t *testing.T) {
 		limit := int64(httperr.MaxSSEErrorFrameBytes + 8192)
 		writer := &projectionCheckpoint{ResponseRecorder: httptest.NewRecorder()}
-		p, _ := NewGatewayResponsesChatProjection(context.Background(), writer, request, limit)
+		p, _ := NewGatewayResponsesChatProjection(context.Background(), httperr.WithLanguage(writer, "zh"), request, limit)
 		defer p.Clear()
 		if _, err := p.Write([]byte(chatResponseChunk(`{"content":"a"}`, "null", "null"))); err != nil {
 			t.Fatal(err)
 		}
 		_, err := p.Write([]byte(chatResponseChunk(`{"content":"`+strings.Repeat("x", 9000)+`"}`, "null", "null")))
-		if err == nil || !p.Rejected() || p.Complete() || int64(writer.Body.Len()) > limit || !strings.Contains(writer.Body.String(), `"error"`) {
+		if err == nil || !p.Rejected() || p.Complete() || int64(writer.Body.Len()) > limit || !strings.Contains(writer.Body.String(), "[NonbiriAPI] 响应格式转换失败") {
 			t.Fatal("bounded failure was lost")
 		}
 	})

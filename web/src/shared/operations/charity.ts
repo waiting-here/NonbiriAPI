@@ -1,3 +1,4 @@
+import { defaultBindingServices } from '../nativeServices';
 import {
   keyQueueFields,
   normalizeKeyQueue,
@@ -772,11 +773,13 @@ export interface CharityBindingCandidate extends BindingSource, ServiceProjectio
 }
 export function suggestedBindingServices(entry: CharityBindingCandidate) {
   if (!entry.capabilities.can_bind) return undefined;
-  if (!entry.binding_guide) return entry.native_services.slice();
-  const routes = entry.binding_guide.routes;
-  return entry.native_services.filter((service) =>
-    routes.some((route) => route.native_service === service),
-  );
+  const routes = entry.binding_guide?.routes;
+  const available = routes
+    ? entry.native_services.filter((service) =>
+        routes.some((route) => route.native_service === service),
+      )
+    : entry.native_services;
+  return defaultBindingServices(entry.source.connector_type, available);
 }
 
 export interface BindingDonation {

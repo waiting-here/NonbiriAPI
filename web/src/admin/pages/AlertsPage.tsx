@@ -1,5 +1,6 @@
 import { InspectionWorkspace } from '@shared/components/log/InspectionWorkspace';
 import { TableCheckbox } from '@shared/components/ui/TableCheckbox';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -85,7 +86,7 @@ export function validAlertReturnTo(value: string | null): string | null {
       '/reports',
       '/logs',
       '/settings',
-      '/risk-audit',
+      '/abuse-audit',
       '/games',
     ].includes(path)
   )
@@ -111,7 +112,7 @@ function targetPath(target: AlertTarget, targets: AlertTarget[]): string | null 
     case 'request_log':
       return `/logs?request_id=${target.id}`;
     case 'maintenance_event':
-      return '/settings';
+      return '/settings?group=maintenance';
     default:
       return null;
   }
@@ -291,10 +292,14 @@ export function AlertsPage() {
     result.data?.data.filter((alert) => !alert.resolved).map((alert) => alert.id) ?? [];
   const selected =
     selection.scope === selectionScope ? selection.ids.filter((id) => selectable.includes(id)) : [];
+  const [confirmBulk, setConfirmBulk] = useState<string[] | null>(null);
   const bulk = useMutation({
     mutationFn: resolveAdminAlerts,
     retry: false,
-    onSuccess: () => setSelection({ scope: '', ids: [] }),
+    onSuccess: () => {
+      setSelection({ scope: '', ids: [] });
+      setConfirmBulk(null);
+    },
     onError: (error) => {
       if (isAuthorityError(error)) {
         setAuthorityError(error);
@@ -455,6 +460,9 @@ export function AlertsPage() {
     </div>
   );
   const pageData = result.data;
+  const detailIndex = pageData?.data.findIndex((row) => row.id === focusedID) ?? -1;
+  const previousAlert = detailIndex > 0 ? pageData?.data[detailIndex - 1] : undefined;
+  const nextAlert = detailIndex >= 0 ? pageData?.data[detailIndex + 1] : undefined;
   const busy = session.isFetching || result.isFetching;
   const actionDisabled = busy || result.isPlaceholderData || mutation.isPending || bulk.isPending;
   const sessionError = session.error;
@@ -489,6 +497,20 @@ export function AlertsPage() {
   return (
     <div className="page ops-page alerts-page">
       <PageHeader title={t('admin.alerts.title')} description={t('admin.alerts.description')} />
+      {confirmBulk && (
+        <ConfirmDialog
+          open
+          title={t('admin.alerts.resolveSelected', { count: confirmBulk.length })}
+          description={t('admin.audit.alertBatchScope', { count: confirmBulk.length })}
+          confirmLabel={t('admin.alerts.resolve')}
+          busy={bulk.isPending}
+          confirmDisabled={actionDisabled || !confirmBulk.every((id) => selected.includes(id))}
+          onConfirm={() => bulk.mutate(confirmBulk)}
+          onCancel={() => setConfirmBulk(null)}
+        >
+          {bulk.error && <ErrorState error={bulk.error} />}
+        </ConfirmDialog>
+      )}
       <InspectionWorkspace
         selected={focusedID}
         title={copy.details + ' #' + focusedID}
@@ -507,6 +529,41 @@ export function AlertsPage() {
               <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
             ) : detail.data ? (
               <div className="ops-stack">
+                <div className="nb-actions">
+                  <button
+                    className="nb-btn nb-btn--secondary"
+                    type="button"
+                    disabled={actionDisabled || detail.isFetching}
+                    onClick={() =>
+                      detail.data &&
+                      mutation.mutate({
+                        id: detail.data.alert.id,
+                        value: !detail.data.alert.resolved,
+                      })
+                    }
+                  >
+                    {t(detail.data.alert.resolved ? 'admin.alerts.reopen' : 'admin.alerts.resolve')}
+                  </button>
+                  {previousAlert && (
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--secondary"
+                      onClick={() => focusAlert(previousAlert.id)}
+                    >
+                      {t('admin.audit.openPrevious')}
+                    </button>
+                  )}
+                  {nextAlert && (
+                    <button
+                      type="button"
+                      className="nb-btn nb-btn--secondary"
+                      onClick={() => focusAlert(nextAlert.id)}
+                    >
+                      {t('admin.audit.openNext')}
+                    </button>
+                  )}
+                </div>
+                {mutation.error && <ErrorState error={mutation.error} />}
                 <p>
                   {disablement
                     ? t(disablementDescriptionKey(disablement))
@@ -734,7 +791,6 @@ export function AlertsPage() {
           <FilterBar
             query={result}
             activeCount={Number(resolved !== 'false') + Number(kind !== 'all')}
-            onSubmit={() => {}}
             footer={
               resolved !== 'false' || kind !== 'all' ? (
                 <button className="nb-btn nb-btn--secondary" type="button" onClick={resetFilters}>
@@ -791,7 +847,7 @@ export function AlertsPage() {
                   className="nb-btn nb-btn--secondary nb-btn--sm"
                   type="button"
                   disabled={actionDisabled}
-                  onClick={() => bulk.mutate(selected)}
+                  onClick={() => setConfirmBulk([...selected])}
                 >
                   {t('admin.alerts.resolveSelected', { count: selected.length })}
                 </button>
@@ -871,6 +927,7 @@ export function AlertsPage() {
                       render: (alert) => (
                         <div>
                           <p className="alert-description">
+                            <span>{t('admin.audit.alertRecord', { id: alert.id })} · </span>
                             {alert.subtype === 'return_detected'
                               ? t('admin.alerts.kindDescription.returnDetected')
                               : kindDescriptions[alert.kind]}
@@ -918,9 +975,19 @@ export function AlertsPage() {
                       mobileLabel: t('admin.alerts.subject'),
                       cell: 'meta',
                       render: (alert) =>
-                        alert.subject_user_id === null
-                          ? '—'
-                          : t('admin.alerts.subjectUser', { id: alert.subject_user_id }),
+                        alert.subject_user_id === null ? (
+                          '—'
+                        ) : (
+                          <Link
+                            to={
+                              alert.account_deletion
+                                ? `/users?deleted=${alert.subject_user_id}`
+                                : `/users?user=${alert.subject_user_id}`
+                            }
+                          >
+                            {t('admin.alerts.subjectUser', { id: alert.subject_user_id })}
+                          </Link>
+                        ),
                     },
                     {
                       key: 'created',

@@ -175,6 +175,10 @@ export function isForbidden(error: unknown): boolean {
   return isApiError(error) && (error.code === 'forbidden' || error.code === 'elevated_required');
 }
 
+export function isManagementForbidden(error: unknown): boolean {
+  return isForbidden(error) || isStewardPermissionDenied(error);
+}
+
 export function isNotFoundError(error: unknown): boolean {
   return isApiError(error) && (error.status === 404 || error.code === 'not_found');
 }

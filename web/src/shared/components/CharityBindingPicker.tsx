@@ -13,12 +13,12 @@ import { FilterBar } from './ui/FilterBar';
 import { KeyStateFilter } from './charity/KeyStateFilter';
 import type { KeyStateFilter as KeyState } from '@shared/operations/keyState';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useManagementCapability } from '@shared/charityManagement';
 import { useBindingPage, sessionAccount } from './charity/useBindingPage';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import {
   getDonationSourceKeysPage,
   getDonationSourcesPage,
@@ -56,6 +56,12 @@ const candidatePageList = 'charity-binding-candidates';
 
 type SourceScope = 'active' | 'all';
 type CandidateSource = '' | 'automatic' | 'manual';
+export interface CandidateFilters {
+  draft: string;
+  query: string;
+  source: CandidateSource;
+}
+const emptyCandidateFilters: CandidateFilters = { draft: '', query: '', source: '' };
 
 const charitySelectionKey = (entry: CharityBindingCandidate) =>
   `${entry.donation_key_id}:${entry.upstream_model_id}`;
@@ -100,6 +106,7 @@ export interface CharityPickerKeyManagerProps {
 }
 
 interface CharityBindingPickerProps {
+  retainedCandidateFilters?: [CandidateFilters | undefined, (value: CandidateFilters) => void];
   showSelectionSummary?: boolean;
   fixedKey?: ManagedDonationKeySummary;
   capacity?: number;
@@ -124,12 +131,10 @@ type SessionProjection = {
 export function CharityBindingPicker(props: CharityBindingPickerProps) {
   const { onChange } = props;
   const management = useManagementCapability(props.role);
-  const session = useQuery<SessionProjection | null>({
-    queryKey: props.role === 'admin' ? ['admin', 'session'] : ['user', 'session'],
-    enabled: false,
-    retry: false,
-  });
-  const account = sessionAccount(props.role, session.data);
+  const session = useStationSessionSnapshot<SessionProjection | null>(
+    props.role === 'admin' ? 'admin' : 'user',
+  );
+  const account = sessionAccount(props.role, session?.data);
   const identity = `${props.role}:${props.modelId}:${props.fixedKey?.key_id ?? 'any-key'}:${account ?? 'none'}`;
   const [selectionScope, setSelectionScope] = useState<{
     identity: string;
@@ -151,12 +156,13 @@ export function CharityBindingPicker(props: CharityBindingPickerProps) {
       }
       account={account}
       management={management}
-      sessionError={session.error}
+      sessionError={session?.error}
     />
   );
 }
 
 function CharityBindingPickerBody({
+  retainedCandidateFilters,
   showSelectionSummary = true,
   role,
   modelId,
@@ -204,9 +210,15 @@ function CharityBindingPickerBody({
   const [selectedKeySnapshot, setSelectedKey] = useState<ManagedDonationKeySummary | null>(
     fixedKey ?? null,
   );
-  const [candidateQueryDraft, setCandidateQueryDraft] = useState('');
-  const [candidateQuery, setCandidateQuery] = useState('');
-  const [candidateSource, setCandidateSource] = useState<CandidateSource>('');
+  const localCandidateFilters = useState(emptyCandidateFilters);
+  const [savedCandidateFilters, setCandidateFilters] =
+    retainedCandidateFilters ?? localCandidateFilters;
+  const candidateFilters = savedCandidateFilters ?? emptyCandidateFilters;
+  const {
+    draft: candidateQueryDraft,
+    query: candidateQuery,
+    source: candidateSource,
+  } = candidateFilters;
   const lossNotified = useRef(false);
   const [managingKey, setManagingKey] = useState(false);
   const { listRef, detailRef, remember } = useDetailNavigation(
@@ -240,7 +252,7 @@ function CharityBindingPickerBody({
   });
 
   const sessionCapabilityLost = management.data === true;
-  const sessionErrorLost = isUnauthorized(sessionError) || isForbidden(sessionError);
+  const sessionErrorLost = isUnauthorized(sessionError) || isManagementForbidden(sessionError);
   const canRead =
     Boolean(account) && management.authorityReady && !sessionCapabilityLost && !sessionError;
   const readEnabled = canRead && !managingKey;
@@ -320,7 +332,7 @@ function CharityBindingPickerBody({
 
   const requestErrors = [sessionError, sources.error, sourceKeys.error, candidates.error];
   const requestCapabilityLost = requestErrors.some(
-    (error) => isUnauthorized(error) || isForbidden(error),
+    (error) => isUnauthorized(error) || isManagementForbidden(error),
   );
   useEffect(() => {
     if (!sessionCapabilityLost && !requestCapabilityLost) return;
@@ -355,9 +367,7 @@ function CharityBindingPickerBody({
     setSelectedKey(null);
     setKeyQueryDraft('');
     setKeyQuery('');
-    setCandidateQueryDraft('');
-    setCandidateQuery('');
-    setCandidateSource('');
+    setCandidateFilters(emptyCandidateFilters);
   };
   const chooseSource = (next: DonationSourceSummary | null) => {
     if (interactionBlocked) return;
@@ -369,9 +379,7 @@ function CharityBindingPickerBody({
     if (interactionBlocked || (next !== null && isTerminalKey(next))) return;
     pendingFocus.current = next ? {} : { restoreId: selectedKey?.key_id };
     setSelectedKey(next);
-    setCandidateQueryDraft('');
-    setCandidateQuery('');
-    setCandidateSource('');
+    setCandidateFilters(emptyCandidateFilters);
   };
   useEffect(() => {
     const requested = pendingFocus.current;
@@ -414,7 +422,7 @@ function CharityBindingPickerBody({
   };
   const submitCandidateQuery = () => {
     if (interactionBlocked || !candidateQueryValid) return;
-    setCandidateQuery(candidateQueryDraft.trim());
+    setCandidateFilters({ ...candidateFilters, query: candidateQueryDraft.trim() });
   };
   const clearSource = () => chooseSource(null);
   const clearKey = () => chooseKey(null);
@@ -561,7 +569,6 @@ function CharityBindingPickerBody({
                       disabled={interactionBlocked}
                       onChange={(state) => {
                         setKeyState(state);
-                        setScope('all');
                         setSelectedSource(null);
                         resetKeySelection();
                       }}
@@ -779,9 +786,7 @@ function CharityBindingPickerBody({
                     onSubmit={submitCandidateQuery}
                     onReset={() => {
                       if (interactionBlocked) return;
-                      setCandidateQueryDraft('');
-                      setCandidateQuery('');
-                      setCandidateSource('');
+                      setCandidateFilters(emptyCandidateFilters);
                     }}
                     search={
                       <>
@@ -802,7 +807,12 @@ function CharityBindingPickerBody({
                               maxLength={1024}
                               disabled={interactionBlocked}
                               aria-invalid={!candidateQueryValid}
-                              onChange={(event) => setCandidateQueryDraft(event.target.value)}
+                              onChange={(event) =>
+                                setCandidateFilters({
+                                  ...candidateFilters,
+                                  draft: event.target.value,
+                                })
+                              }
                             />
                           )}
                         </Field>
@@ -814,7 +824,10 @@ function CharityBindingPickerBody({
                               disabled={interactionBlocked}
                               onChange={(event) => {
                                 if (interactionBlocked) return;
-                                setCandidateSource(event.target.value as CandidateSource);
+                                setCandidateFilters({
+                                  ...candidateFilters,
+                                  source: event.target.value as CandidateSource,
+                                });
                               }}
                             >
                               <option value="">

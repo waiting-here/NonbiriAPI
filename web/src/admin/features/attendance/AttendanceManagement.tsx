@@ -1,3 +1,5 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -86,12 +88,18 @@ function keepStartedRules(saved: AttendanceInput, pending: AttendanceInput): Att
 
 function AttendanceEditor({
   period,
+  copy,
+  close,
+  open,
   siteDate,
   account,
   assets,
   assetsReady,
 }: {
   period?: AttendancePeriod;
+  copy?: AttendancePeriod;
+  close: (retain?: boolean) => void;
+  open: boolean;
   siteDate: string;
   account: string;
   assets: Asset[];
@@ -99,11 +107,27 @@ function AttendanceEditor({
 }) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [discard, setDiscard] = useState(false);
+  const [base, setBase] = useState(period);
   const [override, setOverride] = useState<AttendanceInput | null>(null);
   const editable = !period || period.config_editable;
-  const saved = initialDraft(siteDate, period);
+  const saved = initialDraft(siteDate, base);
+  if (copy) {
+    const origin = initialDraft(siteDate, copy);
+    Object.assign(saved, origin, {
+      published: false,
+      start_date: saved.start_date,
+      end_date: addDays(
+        saved.start_date,
+        Math.round((Date.parse(origin.end_date) - Date.parse(origin.start_date)) / 86400000),
+      ),
+    });
+  }
+  const stale = base?.revision !== period?.revision;
+  if (stale && !override) setBase(period);
   const draft = override ? (editable ? override : keepStartedRules(saved, override)) : saved;
+  const dirty = JSON.stringify(saved) !== JSON.stringify(draft);
+  const duplicate = new Set(draft.tiers.map((tier) => tier.days)).size !== draft.tiers.length;
   const root = attendanceKeys.root(true, account);
   const operation = useRetainedOperation(
     (
@@ -123,6 +147,7 @@ function AttendanceEditor({
     setOverride(next);
   };
   const save = () => {
+    if (!unknown && (stale || duplicate)) return;
     const cover = draft.cover;
     const input =
       cover?.kind === 'external'
@@ -138,28 +163,35 @@ function AttendanceEditor({
       {
         onSuccess: () => {
           setOverride(null);
-          setOpen(false);
+          close();
         },
       },
     );
   };
   return (
     <>
-      <Button
-        type="button"
-        size={period ? 'sm' : undefined}
-        variant={period ? 'secondary' : 'primary'}
-        onClick={() => setOpen(true)}
-      >
-        {t(period ? 'admin.attendance.edit' : 'admin.attendance.create')}
-      </Button>
+      <DraftLeaveGuard dirty={dirty} />
+      {discard && (
+        <ConfirmDialog
+          open
+          danger
+          title={t('admin.audit.discardEdits')}
+          description={t('admin.audit.discardBody')}
+          confirmLabel={t('admin.games.discardGameEdits', { game: '' })}
+          onCancel={() => setDiscard(false)}
+          onConfirm={() => close()}
+        />
+      )}
       <Sheet
         open={open}
-        keepMounted
         size="lg"
         title={t(period ? 'admin.attendance.edit' : 'admin.attendance.create')}
         closeLabel={t('common.close')}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          if (unknown) close(true);
+          else if (dirty) setDiscard(true);
+          else close();
+        }}
         busy={busy}
       >
         <form
@@ -169,6 +201,21 @@ function AttendanceEditor({
             save();
           }}
         >
+          {duplicate && <Note tone="bad">{t('admin.audit.duplicateDays')}</Note>}
+          {stale && (
+            <Note tone="warn">
+              {t('admin.games.validation.changedElsewhere')}{' '}
+              <Button
+                type="button"
+                onClick={() => {
+                  setBase(period);
+                  setOverride(null);
+                }}
+              >
+                {t('admin.games.restoreAuthorityValues')}
+              </Button>
+            </Note>
+          )}
           {operation.error && !unknown ? <ErrorState error={operation.error} /> : null}
           {unknown && (
             <OutcomeNote outcome={{ kind: 'unknown' }} body={t('admin.attendance.retryHelp')} />
@@ -389,7 +436,7 @@ function AttendanceEditor({
             <Button
               type="submit"
               variant="primary"
-              disabled={busy || (editable && !assetsReady && !unknown)}
+              disabled={busy || (!unknown && (stale || duplicate || (editable && !assetsReady)))}
             >
               {t(
                 busy
@@ -408,6 +455,19 @@ function AttendanceEditor({
 
 export function AttendanceManagement({ account, enabled }: { account: string; enabled: boolean }) {
   const { t } = useTranslation();
+  const [editor, setEditor] = useState<{
+    mode: 'new' | 'copy' | 'edit';
+    source?: AttendancePeriod;
+  } | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const pendingEditor = editorOpen ? null : editor;
+  const blockedEditor = (mode: NonNullable<typeof editor>['mode'], id?: string) =>
+    Boolean(pendingEditor && (pendingEditor.mode !== mode || pendingEditor.source?.id !== id));
+  const openEditor = (next: NonNullable<typeof editor>) => {
+    if (blockedEditor(next.mode, next.source?.id)) return;
+    if (!pendingEditor) setEditor(next);
+    setEditorOpen(true);
+  };
   const { query, pager } = useAttendancePage(true, account, enabled);
   const assets = useQuery({
     queryKey: [...rewardKeys.admin, account, 'assets'],
@@ -415,20 +475,58 @@ export function AttendanceManagement({ account, enabled }: { account: string; en
     enabled,
   });
   return (
-    <section className="attendance-management" aria-label={t('admin.attendance.title')}>
+    <section
+      id="attendance"
+      className="attendance-management"
+      aria-label={t('admin.attendance.title')}
+    >
       <SectionHead
         title={t('admin.attendance.title')}
         actions={
           query.data && (
-            <AttendanceEditor
-              account={account}
-              siteDate={query.data.site_date}
-              assets={assets.data ?? []}
-              assetsReady={!!assets.data && !assets.error}
-            />
+            <Button
+              type="button"
+              variant="primary"
+              disabled={blockedEditor('new')}
+              onClick={() => openEditor({ mode: 'new' })}
+            >
+              {t('admin.attendance.create')}
+            </Button>
           )
         }
       />
+      {pendingEditor && (
+        <div className="nb-cluster">
+          <span>
+            {t('admin.audit.attendancePending', {
+              title: pendingEditor.source?.title ?? t('admin.attendance.create'),
+            })}
+          </span>
+          <Button type="button" onClick={() => setEditorOpen(true)}>
+            {t('admin.audit.reopenAttendance')}
+          </Button>
+        </div>
+      )}
+      {editor && query.data && (
+        <AttendanceEditor
+          key={editor.mode + (editor.source?.id ?? '')}
+          account={account}
+          siteDate={query.data.site_date}
+          period={
+            editor.mode === 'edit'
+              ? (query.data.items.find((item) => item.id === editor.source?.id) ?? editor.source)
+              : undefined
+          }
+          copy={editor.mode === 'copy' ? editor.source : undefined}
+          open={editorOpen}
+          close={(retain) => {
+            setEditorOpen(false);
+            if (!retain) setEditor(null);
+          }}
+          assets={assets.data ?? []}
+          assetsReady={!!assets.data && !assets.error}
+        />
+      )}
       {query.isPending ? (
         <LoadingState />
       ) : query.error ? (
@@ -474,13 +572,22 @@ export function AttendanceManagement({ account, enabled }: { account: string; en
                   <StatusBadge tone={period.published ? 'ok' : 'neutral'}>
                     {t(period.published ? 'admin.attendance.published' : 'admin.attendance.draft')}
                   </StatusBadge>
-                  <AttendanceEditor
-                    period={period}
-                    account={account}
-                    siteDate={period.site_date}
-                    assets={assets.data ?? []}
-                    assetsReady={!!assets.data && !assets.error}
-                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={blockedEditor('edit', period.id)}
+                    onClick={() => openEditor({ mode: 'edit', source: period })}
+                  >
+                    {t('admin.attendance.edit')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={blockedEditor('copy', period.id)}
+                    onClick={() => openEditor({ mode: 'copy', source: period })}
+                  >
+                    {t('admin.audit.copyAttendance')}
+                  </Button>
                 </>
               }
             />

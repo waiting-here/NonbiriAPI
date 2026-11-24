@@ -1,4 +1,4 @@
-import { setControlChecked } from '../controls';
+import { setControlChecked, submitPendingReview } from '../controls';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -181,12 +181,13 @@ test('charity request and attempt shortcuts preserve the log window for administ
           .getByRole('link', { name: common.common.operations.logs.manageCharityKey })
           .nth(index);
         const target = data.shortcut_attempt_targets[index];
-        await expect(link).toHaveAttribute(
-          'href',
-          new RegExp(
-            `managed_donation=${target.donation_id}&managed_key=${target.donation_key_id}$`,
-          ),
-        );
+        const destination = new URL((await link.getAttribute('href'))!, origin);
+        expect(destination.searchParams.get('managed_donation')).toBe(target.donation_id);
+        expect(destination.searchParams.get('managed_key')).toBe(target.donation_key_id);
+        const returnContext = new URLSearchParams(destination.searchParams.get('log_context')!);
+        expect(returnContext.get('request_id')).toBe(data.shortcut_request_id);
+        expect(returnContext.get('page_size')).toBe('10');
+        expect(returnContext.has('charity_model')).toBe(false);
         const scopeRead =
           role === 5
             ? page.waitForResponse(
@@ -301,7 +302,7 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
         new URL(response.url()).pathname ===
           '/admin/api/donations/' + data.pending_donation_id + '/pending-review',
     );
-    await page.getByRole('button', { name: connections.approveAllUses, exact: true }).click();
+    await submitPendingReview(page, connections.approveAllUses);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const reviewResponse = await reviewed;
     expect(reviewResponse.status()).toBe(200);
@@ -421,10 +422,11 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
       name: common.common.nativeServices.title,
       exact: true,
     });
-    for (const service of bindingServices)
-      await expect(
-        services.getByRole('checkbox', { name: modelTypes[service], exact: true }),
-      ).toBeChecked();
+    for (const service of bindingServices) {
+      const checkbox = services.getByRole('checkbox', { name: modelTypes[service], exact: true });
+      await expect(checkbox).toBeChecked({ checked: service === 'chat_completions' });
+      await setControlChecked(checkbox, true);
+    }
     await idSearch.fill('');
     await idSearch.press('Enter');
     await page.getByLabel(batch.searchSelected, { exact: true }).fill('');
@@ -435,22 +437,36 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     await visuals(page, info, 'workflow-binding', () =>
       candidatePager.evaluate((node) => node.scrollIntoView({ block: 'center' })),
     );
+    await page.getByRole('button', { name: 'Add 144 connections', exact: true }).click();
+    const preview = page.getByRole('alertdialog', {
+      name: common.common.governance.reviewBindings,
+    });
+    await expect(preview.getByRole('listitem')).toHaveCount(144);
+    const editedPreview = preview
+      .getByRole('listitem')
+      .filter({ hasText: 'provider/model-144-2026-10' });
+    for (const service of bindingServices) await expect(editedPreview).toContainText(service);
     const receipt = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname ===
           `/admin/api/donations/${data.pending_donation_id}/keys/${data.pending_key_id}/bindings/batch`,
     );
-    await page.getByRole('button', { name: 'Add 144 connections', exact: true }).click();
+    await preview.getByRole('button', { name: 'Add 144 connections', exact: true }).click();
     const response = await receipt;
     expect(response.status()).toBe(200);
     const submitted = response.request().postDataJSON() as {
-      targets: { native_services: string[] }[];
+      targets: { upstream_model_id: string; native_services: string[] }[];
     };
     expect(submitted.targets).toHaveLength(144);
-    expect(submitted.targets.map((target) => target.native_services)).toEqual(
-      Array.from({ length: 144 }, () => availableServices),
-    );
+    const editedUpstream = 'provider/model-144-2026-10';
+    expect(
+      submitted.targets.filter((target) => target.upstream_model_id === editedUpstream),
+    ).toHaveLength(1);
+    const expectedServices = (upstream: string) =>
+      upstream === editedUpstream ? availableServices : ['chat_completions'];
+    for (const target of submitted.targets)
+      expect(target.native_services).toEqual(expectedServices(target.upstream_model_id));
     expect(await response.json()).toEqual({
       items: [
         {
@@ -472,7 +488,7 @@ test('approve pending content, page 240 targets and bind 144 cross-page selectio
     expect(saved.bindings).toHaveLength(144);
     for (const binding of saved.bindings)
       expect(binding.targets).toEqual([
-        expect.objectContaining({ native_services: availableServices }),
+        expect.objectContaining({ native_services: expectedServices(binding.upstream_model_id) }),
       ]);
     expect(
       new Set(saved.bindings.map((entry: { upstream_model_id: string }) => entry.upstream_model_id))
@@ -526,6 +542,10 @@ test('create with a carried key returns to its fixed binding target and preserve
       .first()
       .check();
     await page.getByRole('button', { name: 'Add 1 connections', exact: true }).click();
+    await page
+      .getByRole('alertdialog', { name: common.common.governance.reviewBindings })
+      .getByRole('button', { name: 'Add 1 connections', exact: true })
+      .click();
     await expect
       .poll(
         async () =>
@@ -1046,7 +1066,7 @@ test('level 5 with full donation scope handles four custom-source keys and edits
           new URL(response.url()).pathname ===
             '/api/steward/donations/' + data.processing_donation_id + '/pending-review',
       );
-      await page.getByRole('button', { name: connections.approveAllUses, exact: true }).click();
+      await submitPendingReview(page, connections.approveAllUses);
       const response = await approval;
       expect(response.status()).toBe(200);
       expect(response.request().headers()['idempotency-key']).toBeTruthy();
@@ -1668,12 +1688,10 @@ test('level 5 reviews independent pending sources, retains receipts after refres
         );
         await page.setViewportSize({ width: 1440, height: 900 });
       }
-      await page
-        .getByRole('button', {
-          name: decision === 'approve' ? connections.approveAllUses : connections.rejectAllUses,
-          exact: true,
-        })
-        .click();
+      await submitPendingReview(
+        page,
+        decision === 'approve' ? connections.approveAllUses : connections.rejectAllUses,
+      );
       const savedText = connections.reviewSaved;
       if (decision === 'reject') {
         await expect.poll(() => writes).toBe(2);

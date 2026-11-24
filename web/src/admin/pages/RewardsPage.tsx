@@ -72,6 +72,7 @@ function RewardsContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [created, setCreated] = useState<Campaign>();
+  const [disabling, setDisabling] = useState<Campaign>();
   const [editing, setEditing] = useState<Campaign>();
   const [kindFilter, setKindFilter] = useState<'all' | 'broadcast' | 'code'>('all');
   const [pending, setPending] = useState<{ input: Input; key: string; preview: Preview }>();
@@ -80,8 +81,8 @@ function RewardsContent() {
     queryFn: ({ signal }) => getAssets(true, signal),
   });
   const list = useQuery({
-    queryKey: [...rewardKeys.admin, 'list', cursor],
-    queryFn: ({ signal }) => listCampaigns(cursor, signal),
+    queryKey: [...rewardKeys.admin, 'list', kindFilter, cursor],
+    queryFn: ({ signal }) => listCampaigns(cursor, signal, kindFilter),
     refetchInterval: (q) => (q.state.data?.items.some((c) => c.pending > 0) ? 2000 : false),
   });
   const assets = assetsQuery.data ?? [];
@@ -128,9 +129,7 @@ function RewardsContent() {
       setCursor('');
       setPages([]);
     });
-  const visibleItems = (list.data?.items ?? []).filter(
-    (item) => kindFilter === 'all' || item.kind === kindFilter,
-  );
+  const visibleItems = list.data?.items ?? [];
   if (assetsQuery.isPending) return <LoadingState />;
   if (assetsQuery.error)
     return <ErrorState error={assetsQuery.error} onRetry={() => void assetsQuery.refetch()} />;
@@ -282,18 +281,20 @@ function RewardsContent() {
           }
         />
         <PanelBody>
-          {(list.data?.items.length ?? 0) > 0 ? (
-            <Segmented
-              label={t('common.rewards.kind')}
-              value={kindFilter}
-              options={[
-                { value: 'all', label: t('common.all') },
-                { value: 'broadcast', label: t('common.rewards.broadcast') },
-                { value: 'code', label: t('common.rewards.code') },
-              ]}
-              onChange={setKindFilter}
-            />
-          ) : null}
+          <Segmented
+            label={t('common.rewards.kind')}
+            value={kindFilter}
+            options={[
+              { value: 'all', label: t('common.all') },
+              { value: 'broadcast', label: t('common.rewards.broadcast') },
+              { value: 'code', label: t('common.rewards.code') },
+            ]}
+            onChange={(kind) => {
+              setKindFilter(kind);
+              setCursor('');
+              setPages([]);
+            }}
+          />
           {list.isPending ? (
             <LoadingState />
           ) : list.error ? (
@@ -321,10 +322,14 @@ function RewardsContent() {
                           {t(rewardLabels[c.enabled ? 'enabled' : 'disabled'])}
                         </StatusBadge>
                       ) : (
-                        <StatusBadge
-                          tone={c.failed > 0 ? 'bad' : c.pending > 0 ? 'warn' : 'ok'}
-                        >
-                          {t(rewardLabels[c.enabled ? 'enabled' : 'disabled'])}
+                        <StatusBadge tone={c.failed > 0 ? 'bad' : c.pending > 0 ? 'warn' : 'ok'}>
+                          {t(
+                            c.failed > 0
+                              ? 'common.rewards.deliveryFailed'
+                              : c.pending > 0
+                                ? 'common.rewards.delivering'
+                                : 'common.rewards.delivered',
+                          )}
                         </StatusBadge>
                       )}
                     </div>
@@ -380,7 +385,9 @@ function RewardsContent() {
                           size="sm"
                           disabled={busy}
                           onClick={() =>
-                            void run(() => updateReward({ ...c, enabled: !c.enabled }))
+                            c.enabled
+                              ? setDisabling(c)
+                              : void run(() => updateReward({ ...c, enabled: true }))
                           }
                         >
                           {t(rewardLabels[c.enabled ? 'disable' : 'enable'])}
@@ -444,6 +451,25 @@ function RewardsContent() {
           )}
         </PanelBody>
       </Panel>
+      {disabling && (
+        <ConfirmDialog
+          open
+          danger
+          busy={busy}
+          title={t('common.rewards.disable')}
+          confirmLabel={t('common.rewards.disable')}
+          description={t('common.rewards.disableExplanation', { title: disabling.title })}
+          onCancel={() => setDisabling(undefined)}
+          onConfirm={() =>
+            void run(async () => {
+              await updateReward({ ...disabling, enabled: false });
+              setDisabling(undefined);
+            })
+          }
+        >
+          {error ? <ErrorState error={error} /> : null}
+        </ConfirmDialog>
+      )}
       <ConfirmDialog
         open={!!pending}
         title={t('common.rewards.confirmTitle')}

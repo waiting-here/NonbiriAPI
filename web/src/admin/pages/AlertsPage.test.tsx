@@ -1042,6 +1042,12 @@ it('filters deletion alerts and resolves only selected unresolved rows', async (
   );
   await rendered.user.click(screen.getByRole('checkbox', { name: 'Select alert 7' }));
   await rendered.user.click(screen.getByRole('button', { name: 'Resolve selected (1)' }));
+  expect(bulkBody).toBeUndefined();
+  await rendered.user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: rendered.i18n.t('admin.alerts.resolve'),
+    }),
+  );
   await waitFor(() => expect(bulkBody).toEqual({ ids: ['7'] }));
   await waitFor(() => expect(screen.queryByText('123456789012345678')).not.toBeInTheDocument());
 });

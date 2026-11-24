@@ -309,7 +309,6 @@ export function AdminCharityGroupsPanel() {
       <FilterBar
         query={donations}
         activeCount={status ? 1 : 0}
-        onSubmit={() => {}}
         search={
           <Field label={t('admin.charity.statusFilter')} size="short">
             {(field) => (

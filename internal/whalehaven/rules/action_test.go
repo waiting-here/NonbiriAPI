@@ -54,8 +54,11 @@ func TestFurnitureOutfitsAndConversion(t *testing.T) {
 	s.Whale.EnergizedUntil = 10000
 	s.Home.Buffs.WardrobeDiscountCoupons = 1
 	s.Wallet.Pearls = 67
-	if _, err := s.Apply(Action{Type: "toggle_decor", DecorID: "jelly_lamp"}, 100, p); err == nil || s.Home.Buffs.WardrobeDiscountCoupons != 1 {
-		t.Fatal("insufficient balance consumed coupon")
+	if _, err := s.Apply(Action{Type: "toggle_decor", DecorID: "jelly_lamp"}, 100, p); err == nil {
+		t.Fatal("purchase with insufficient balance succeeded")
+	}
+	if s.Home.Buffs.WardrobeDiscountCoupons != 1 || s.Wallet.Pearls != 67 || len(s.Home.OwnedDecor) != 0 {
+		t.Fatal("failed purchase changed wallet, coupons or ownership", s.Wallet, s.Home)
 	}
 	s.Wallet.Pearls = 1000
 	for _, id := range decorIDs {
@@ -82,6 +85,53 @@ func TestFurnitureOutfitsAndConversion(t *testing.T) {
 	mustApply(t, s, p, Action{Type: "toggle_decor", DecorID: "golden_clam"})
 	if s.BankCapacity(p) != 25 {
 		t.Fatal(s.Home)
+	}
+}
+
+func TestTailorCouponSettlement(t *testing.T) {
+	items := []struct {
+		key    string
+		action Action
+	}{
+		{"decor_jelly_lamp_price_pearls", Action{Type: "toggle_decor", DecorID: "jelly_lamp"}},
+		{"outfit_knit_beret_price_pearls", Action{Type: "select_outfit", OutfitID: "knit_beret"}},
+	}
+	for _, item := range items {
+		for _, tc := range []struct {
+			name                           string
+			base, discountBP, coupons      int64
+			wantCost, wantRemainingCoupons int64
+		}{
+			{"standard", 85, 2000, 2, 68, 1},
+			{"round down", 168, 2000, 1, 134, 0},
+			{"one coin", 1, 2000, 1, 1, 1},
+			{"free", 0, 2000, 1, 0, 1},
+			{"zero discount", 85, 0, 1, 85, 1},
+			{"no coupons", 85, 2000, 0, 85, 0},
+			{"minimum paid price", 85, 10000, 1, 1, 0},
+		} {
+			t.Run(item.action.Type+"/"+tc.name, func(t *testing.T) {
+				p := basic()
+				p[item.key], p["coupon_discount_bp"] = tc.base, tc.discountBP
+				s := NewState(100, "today")
+				s.Wallet.Pearls = tc.base
+				s.Home.Buffs.WardrobeDiscountCoupons = tc.coupons
+				wantBalance := tc.base - tc.wantCost
+				got := mustApply(t, s, p, item.action)
+				if got.CostPearls != tc.wantCost || got.UsedCoupon != (tc.wantRemainingCoupons < tc.coupons) {
+					t.Fatalf("unexpected purchase result %+v", got)
+				}
+				if s.Wallet.Pearls != wantBalance || s.Home.Buffs.WardrobeDiscountCoupons != tc.wantRemainingCoupons {
+					t.Fatalf("got %d coins and %d coupons, want %d and %d",
+						s.Wallet.Pearls, s.Home.Buffs.WardrobeDiscountCoupons, wantBalance, tc.wantRemainingCoupons)
+				}
+				again := mustApply(t, s, p, item.action)
+				if again.CostPearls != 0 || again.UsedCoupon || s.Wallet.Pearls != wantBalance ||
+					s.Home.Buffs.WardrobeDiscountCoupons != tc.wantRemainingCoupons {
+					t.Fatal("using an owned item spent coins or coupons", again, s.Wallet, s.Home.Buffs)
+				}
+			})
+		}
 	}
 }
 

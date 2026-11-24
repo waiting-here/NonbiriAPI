@@ -158,8 +158,6 @@ export function DriverProfileEditor({
       parsed as Record<string, unknown>,
     );
     const secret = keyRef.current;
-    keyRef.current = undefined;
-    setKey(undefined);
     return save.run(
       {
         action: 'save',

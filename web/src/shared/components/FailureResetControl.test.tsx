@@ -1,13 +1,52 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { FailureResetControl } from './FailureResetControl';
+import { DonationDiscoveryControl } from './DonationDiscoveryControl';
 import type { FailureResetRef, FailureSelection } from '@shared/operations/failureReset';
 import { OwnerFailureReset } from '../../user/features/economy/OwnerFailureReset';
 
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 describe('failure reset controls', () => {
+  it.each(['discovery', 'reset'] as const)(
+    'protects the active %s batch when leaving',
+    async (kind) => {
+      let release!: (response: Response) => void;
+      const request = new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+      const fetch = vi.fn(() => request);
+      vi.stubGlobal('fetch', fetch);
+      const view = await renderWithProviders(
+        kind === 'discovery' ? (
+          <DonationDiscoveryControl role="admin" target={{ donation_id: null }} />
+        ) : (
+          <FailureResetControl role="admin" selection={{ view: 'donations' }} choices={[]} />
+        ),
+        { station: 'admin', locale: 'en' },
+      );
+      view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
+      if (kind === 'discovery') {
+        await view.user.click(
+          screen.getByRole('button', { name: 'Fetch models for all available donation keys' }),
+        );
+        await view.user.click(screen.getByRole('button', { name: 'Start fetching' }));
+      } else {
+        await view.user.click(screen.getByText('Reset failure count'));
+        await view.user.click(screen.getByRole('button', { name: 'Reset all matching keys' }));
+      }
+      const leaving = () => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      await waitFor(() => expect(leaving()).toBe(true));
+      release(json({ items: [], next_cursor: null }));
+      await waitFor(() => expect(leaving()).toBe(false));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
   it('selects everything before batching, and continues an unknown response with the same body and key', async () => {
     const calls: {
       path: string;
@@ -66,6 +105,11 @@ describe('failure reset controls', () => {
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture' } });
     await view.user.click(screen.getByText('Reset failure count'));
     await view.user.click(screen.getByRole('button', { name: 'Reset all matching keys' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Reset failure count',
+      }),
+    );
     await screen.findByRole('button', { name: 'Continue' });
     expect(calls.map((call) => call.path.endsWith('/selection'))).toEqual([true, true, false]);
     expect(calls[0].key).toBeNull();
@@ -118,6 +162,11 @@ describe('failure reset controls', () => {
     view.rerender(<FailureResetControl {...props} choices={[second]} />);
     await view.user.click(screen.getByLabelText('Second key'));
     await view.user.click(screen.getByRole('button', { name: 'Reset selected (2)' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Reset failure count',
+      }),
+    );
     await screen.findByText('Finished · 2 selected · 0 reset · 2 skipped');
     expect(writes).toEqual([[first.target, second.target]]);
     expect(screen.getAllByText(/Changed during selection or reset/)).toHaveLength(2);
@@ -143,7 +192,7 @@ describe('failure reset controls', () => {
     view.queryClient.setQueryData(['user', 'session'], {
       user: { id: '3', username: 'fixture', effective_level: 1 },
     });
-    await view.user.click(screen.getByRole('button', { name: 'Reset failure count' }));
+    await view.user.click(screen.getByRole('button', { name: 'Reset the entire donated key' }));
     await screen.findByRole('button', { name: 'Continue' });
     view.rerender(<OwnerFailureReset donationID="1" keyID="2" revision="8" disabled={false} />);
     await view.user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -223,6 +272,11 @@ describe('failure reset controls', () => {
     await view.user.click(screen.getByText('Reset failure count'));
     await view.user.click(screen.getByRole('button', { name: 'Select this page' }));
     await view.user.click(screen.getByRole('button', { name: 'Reset selected (3)' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Reset failure count',
+      }),
+    );
     await screen.findByText('Failures cleared: 1 · Already clear: 1');
     expect(screen.getByText(/Already clear; counters reset/)).toBeVisible();
     expect(screen.getByText('No eligible approved service', { exact: false })).toBeVisible();

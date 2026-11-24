@@ -23,7 +23,7 @@ import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLi
 import { PageHeader, SectionHead } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { RequestAdaptationEditor } from '@shared/components/RequestAdaptationEditor';
-import { listReturnPath } from '@shared/operations/listReturn';
+import { endpointReturnState, listReturnPath } from '@shared/operations/listReturn';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
@@ -138,10 +138,12 @@ function AddEndpointKeyForm({
   accountId,
   endpoint,
   onClose,
+  onSaved,
 }: {
   accountId: string;
   endpoint: Endpoint;
   onClose: () => void;
+  onSaved: (key: EndpointKey) => void;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
@@ -157,6 +159,7 @@ function AddEndpointKeyForm({
   const retryAllowed = useRef(false);
   const [needsSecret, setNeedsSecret] = useState(false);
   const { t: text } = useTranslation();
+  const savedKey = useRef<EndpointKey | null>(null);
   const operation = useOperation<Omit<EndpointKeyCreateInput, 'secret'>, string, EndpointKey>({
     authorityRoot: ['user', 'core'],
     clearSecrets: () => dispatch({ type: 'cancel', accountId, pageInstanceId: instance }),
@@ -170,7 +173,10 @@ function AddEndpointKeyForm({
         { idempotencyKey: key, actionId: key },
         context.signal,
       );
-      context.commit(() => dispatch({ type: 'success', accountId, pageInstanceId: instance }));
+      context.commit(() => {
+        savedKey.current = saved;
+        dispatch({ type: 'success', accountId, pageInstanceId: instance });
+      });
       return saved;
     },
     reconcile: async (input, error, context) => {
@@ -187,7 +193,10 @@ function AddEndpointKeyForm({
           context.signal,
         );
         if (result?.kind === 'key') {
-          context.commit(() => dispatch({ type: 'success', accountId, pageInstanceId: instance }));
+          context.commit(() => {
+            savedKey.current = result.key;
+            dispatch({ type: 'success', accountId, pageInstanceId: instance });
+          });
           confirmed = true;
         }
       }
@@ -196,7 +205,10 @@ function AddEndpointKeyForm({
         queryKeys: [coreKeys.endpoint(accountId, endpoint.id)],
       });
       context.assertCurrent();
-      if (!error || confirmed) context.commit(onClose);
+      if ((!error || confirmed) && savedKey.current) {
+        const saved = savedKey.current;
+        context.commit(() => onSaved(saved));
+      }
       if (confirmed) return { operationConfirmed: true };
     },
   });
@@ -963,8 +975,14 @@ function EndpointKeyCard({
   initialModelsOpen = false,
   summaryOnly = false,
   initialEditing = false,
+  autoRefresh = false,
+  onAutoRefreshStarted,
+  onDeleted,
   onModelsLockChange,
 }: {
+  autoRefresh?: boolean;
+  onAutoRefreshStarted?: () => void;
+  onDeleted?: () => void;
   initialModelsOpen?: boolean;
   summaryOnly?: boolean;
   initialEditing?: boolean;
@@ -1100,6 +1118,7 @@ function EndpointKeyCard({
           }
         }
       }
+      if (intent.kind === 'delete' && (!error || confirmed)) context.commit(() => onDeleted?.());
       await invalidateResourceDependents(queryClient, accountId, {
         endpointId: endpoint.id,
         queryKeys: [
@@ -1437,6 +1456,8 @@ function EndpointKeyCard({
               {modelsVisited || routesOpen ? (
                 <>
                   <ServiceModelSetup
+                    autoRefresh={autoRefresh}
+                    onAutoRefreshStarted={onAutoRefreshStarted}
                     onLockChange={setModelsLocked}
                     accountId={accountId}
                     entry={endpoint}
@@ -1465,6 +1486,11 @@ function EndpointKeyCard({
             >
               {editorVisited ? (
                 <KeyCredentialScope
+                  onBack={() => setEditing(false)}
+                  onDeleted={() => {
+                    setEditing(false);
+                    onDeleted?.();
+                  }}
                   accountId={accountId}
                   endpoint={endpoint}
                   entryKey={keyData}
@@ -1628,6 +1654,8 @@ export function EndpointDetail({
     }
   }, [focusKeyId, keys.data, keys.isFetching]);
   const [addingKey, setAddingKey] = useState(false);
+  const [discoverKey, setDiscoverKey] = useState<string | null>(null);
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const donorReturn = location.state?.donationReturnTo;
   const donationReturnTo =
@@ -1637,7 +1665,7 @@ export function EndpointDetail({
   const returnTo =
     donationReturnTo === '/charity'
       ? listReturnPath(location.state, '/charity')
-      : (donationReturnTo ?? listReturnPath(location.state, '/endpoints', '/issues'));
+      : (donationReturnTo ?? listReturnPath(location.state, '/endpoints', '/issues', '/models'));
   type Intent =
     { kind: 'patch'; input: EndpointPatchInput } | { kind: 'delete'; expectedRevision: string };
   const retryAllowed = useRef(false);
@@ -1684,7 +1712,7 @@ export function EndpointDetail({
       if (deleted) {
         context.commit(() => {
           queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpointId) });
-          navigate(returnTo);
+          navigate(returnTo, { state: endpointReturnState(location.state, returnTo) });
         });
       } else {
         const currentError = queryClient.getQueryState(
@@ -1787,6 +1815,47 @@ export function EndpointDetail({
     entryScopeRef.current?.querySelector('summary')?.focus();
   };
 
+  const showAddedKey = (key: EndpointKey) => {
+    queryClient.setQueryData(coreKeys.focusedEndpointKey(accountId, endpointId, key.id), key);
+    setAddingKey(false);
+    setDiscoverKey(key.id);
+    setLastAddedKey(key.id);
+    const next = new URLSearchParams(location.search);
+    next.delete('edit_key');
+    next.delete('key_id');
+    next.set('focus_key_id', key.id);
+    navigate(location.pathname + '?' + next.toString(), { state: location.state });
+  };
+  const keyActions = (
+    <>
+      <button
+        type="button"
+        className="nb-btn nb-btn--primary"
+        disabled={addingKey || reconciliationRequired || Boolean(replayAttempt)}
+        onClick={() => setAddingKey(true)}
+      >
+        ＋ {t('endpoints.addKey')}
+      </button>
+      <MoreMenu
+        label={ui('user.services.more')}
+        items={[
+          {
+            label: endpoint.data.enabled ? t('endpoints.toggleOff') : t('endpoints.toggleOn'),
+            disabled: busy || reconciliationRequired || Boolean(replayAttempt),
+            onSelect: () =>
+              void runEndpointAction({
+                kind: 'patch',
+                input: {
+                  enabled: !endpoint.data.enabled,
+                  expected_revision: endpoint.data.revision,
+                },
+              }),
+          },
+        ]}
+      />
+    </>
+  );
+
   return (
     <div
       className={`${embedded ? '' : 'page page--detail core-page'} core-stack services-page services-detail services-detail--${endpoint.data.enabled ? 'enabled' : 'disabled'}`}
@@ -1794,15 +1863,8 @@ export function EndpointDetail({
       {embedded ? (
         <SectionHead
           title={endpoint.data.note || endpoint.data.base_url}
-          actions={
-            <button
-              type="button"
-              className="nb-btn nb-btn--primary"
-              onClick={() => setAddingKey(true)}
-            >
-              {t('endpoints.addKey')}
-            </button>
-          }
+          description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
+          actions={keyActions}
         />
       ) : (
         <PageHeader
@@ -1814,16 +1876,18 @@ export function EndpointDetail({
           }
           description={endpoint.data.enabled ? t('common.enabled') : t('common.disabled')}
           back={
-            <Link to={returnTo} state={location.state}>
+            <Link to={returnTo} state={endpointReturnState(location.state, returnTo)}>
               {donationReturnTo
                 ? ui(
                     donationReturnTo === '/charity'
                       ? 'user.charity.backToDonations'
                       : 'user.charity.backToDonation',
                   )
-                : returnTo.split('?')[0] === '/issues'
-                  ? text('user.records.issues')
-                  : t('endpoints.title')}
+                : returnTo.split('?')[0] === '/models'
+                  ? text('user.services.backToModelSources')
+                  : returnTo.split('?')[0] === '/issues'
+                    ? text('user.records.issues')
+                    : t('endpoints.title')}
             </Link>
           }
           actions={
@@ -1836,33 +1900,7 @@ export function EndpointDetail({
               >
                 {ui('user.workflows.editService')}
               </button>
-              <button
-                type="button"
-                className="nb-btn nb-btn--primary"
-                disabled={addingKey || reconciliationRequired || Boolean(replayAttempt)}
-                onClick={() => setAddingKey(true)}
-              >
-                ＋ {t('endpoints.addKey')}
-              </button>
-              <MoreMenu
-                label={ui('user.services.more')}
-                items={[
-                  {
-                    label: endpoint.data.enabled
-                      ? t('endpoints.toggleOff')
-                      : t('endpoints.toggleOn'),
-                    disabled: busy || reconciliationRequired || Boolean(replayAttempt),
-                    onSelect: () =>
-                      void runEndpointAction({
-                        kind: 'patch',
-                        input: {
-                          enabled: !endpoint.data.enabled,
-                          expected_revision: endpoint.data.revision,
-                        },
-                      }),
-                  },
-                ]}
-              />
+              {keyActions}
             </div>
           }
         />
@@ -1982,8 +2020,38 @@ export function EndpointDetail({
           : null}
       </ExpandablePanel>
 
+      {addingKey ? (
+        endpoint.data.connection_id ? (
+          <ExpandablePanel
+            open
+            title={t('endpoints.addKey')}
+            closeLabel={t('common.close')}
+            onClose={() => setAddingKey(false)}
+          >
+            <CredentialGrantForm
+              accountId={accountId}
+              connectionId={endpoint.data.connection_id}
+              endpoint={endpoint.data}
+              onSaved={showAddedKey}
+            />
+          </ExpandablePanel>
+        ) : (
+          <AddEndpointKeyForm
+            onSaved={showAddedKey}
+            accountId={accountId}
+            endpoint={endpoint.data}
+            onClose={() => setAddingKey(false)}
+          />
+        )
+      ) : null}
+      {focusKeyId && lastAddedKey === focusKeyId ? (
+        <p role="status">{text('user.services.keyAdded')}</p>
+      ) : null}
       {focusKeyId ? (
         <FocusedEndpointKey
+          key={focusKeyId}
+          autoRefresh={discoverKey === focusKeyId}
+          onAutoRefreshStarted={() => setDiscoverKey(null)}
           accountId={accountId}
           endpoint={endpoint.data}
           keyId={focusKeyId}
@@ -1999,35 +2067,6 @@ export function EndpointDetail({
           </div>
           {BigInt(endpoint.data.key_count) > 10n || filters.active ? (
             <ResourceFilterBar control={filters} />
-          ) : null}
-          {addingKey ? (
-            endpoint.data.connection_id ? (
-              <ExpandablePanel
-                open
-                title={t('endpoints.addKey')}
-                closeLabel={t('common.close')}
-                onClose={() => setAddingKey(false)}
-              >
-                <CredentialGrantForm
-                  accountId={accountId}
-                  connectionId={endpoint.data.connection_id}
-                  endpoint={endpoint.data}
-                  onSaved={(key) => {
-                    setAddingKey(false);
-                    const next = new URLSearchParams(location.search);
-                    next.set('focus_key_id', key.id);
-                    navigate(location.pathname + '?' + next.toString(), { state: location.state });
-                    void keys.refetch();
-                  }}
-                />
-              </ExpandablePanel>
-            ) : (
-              <AddEndpointKeyForm
-                accountId={accountId}
-                endpoint={endpoint.data}
-                onClose={() => setAddingKey(false)}
-              />
-            )
           ) : null}
           {keys.error && keys.data ? (
             <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
@@ -2154,9 +2193,13 @@ function FocusedEndpointKey({
   accountId,
   endpoint,
   keyId,
+  autoRefresh,
+  onAutoRefreshStarted,
   onChooseConnection,
   onModelsLockChange,
 }: {
+  autoRefresh?: boolean;
+  onAutoRefreshStarted?: () => void;
   onModelsLockChange?: (locked: boolean) => void;
   accountId: string;
   endpoint: Endpoint;
@@ -2164,33 +2207,46 @@ function FocusedEndpointKey({
   onChooseConnection: () => void;
 }) {
   const { t } = useCoreCopy();
+  const { t: text } = useTranslation();
+  const { t: ui } = useRegisteredCopy(pageCopyKeys);
+  const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const editKey = params.get('edit_key') === '1';
   params.delete('focus_key_id');
   params.delete('key_id');
   params.delete('edit_key');
+  params.delete('routes_' + keyId + '_page');
+  const listPath = location.pathname + (params.size ? '?' + params.toString() : '');
   const current = useQuery({
-    queryKey: [...coreKeys.endpointKeysRoot(accountId, endpoint.id), 'focused', keyId],
+    queryKey: coreKeys.focusedEndpointKey(accountId, endpoint.id, keyId),
     queryFn: ({ signal }) => getEndpointKey(endpoint.id, keyId, signal),
   });
   return (
     <section className="core-card">
-      <Link
-        className="nb-btn nb-btn--secondary"
-        to={location.pathname + (params.size ? '?' + params.toString() : '')}
-        state={location.state}
-      >
-        {t('endpoints.key')}
+      <Link className="nb-btn nb-btn--secondary" to={listPath} state={location.state}>
+        {text('user.services.backToAllKeys')}
       </Link>
       {current.isPending ? (
         <CoreLoading />
       ) : current.error || !current.data ? (
         <CoreErrorPanel error={current.error} onRetry={() => void current.refetch()} />
       ) : (
-        <div className="nb-table-wrap">
+        <div className="nb-table-wrap services-key-table">
           <table className="nb-table">
             <caption className="nb-sr">{t('endpoints.key')}</caption>
+            <thead>
+              <tr>
+                <th>{t('endpoints.key')}</th>
+                <th>{t('endpoints.keyState')}</th>
+                <th>{t('endpoints.discovery')}</th>
+                <th>{ui('user.services.keyLimits')}</th>
+                <th>{ui('user.services.inUse')}</th>
+                <th>
+                  <span className="nb-sr">{ui('user.services.more')}</span>
+                </th>
+              </tr>
+            </thead>
             <tbody>
               <EndpointKeyCard
                 accountId={accountId}
@@ -2198,6 +2254,9 @@ function FocusedEndpointKey({
                 keyData={current.data}
                 onRefresh={() => void current.refetch()}
                 onChooseConnection={onChooseConnection}
+                autoRefresh={autoRefresh}
+                onAutoRefreshStarted={onAutoRefreshStarted}
+                onDeleted={() => navigate(listPath, { replace: true, state: location.state })}
                 initialModelsOpen={!editKey}
                 initialEditing={editKey}
                 onModelsLockChange={onModelsLockChange}

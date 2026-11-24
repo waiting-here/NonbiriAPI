@@ -1099,11 +1099,12 @@ describe('ModelsWorkspace numbered pagination', () => {
       );
       const candidate = await screen.findByRole('checkbox', { name: 'typed-model' });
       await waitFor(() => expect(candidate).toBeEnabled());
-      await view.user.click(candidate);
-      expect(candidate).toBeChecked();
+      await waitFor(() => expect(candidate).toBeChecked());
       await view.user.click(screen.getByText('Call types', { selector: 'strong' }));
       expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-      expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+      const responses = screen.getByRole('checkbox', { name: 'Responses' });
+      expect(responses).not.toBeChecked();
+      await view.user.click(responses);
       await view.user.click(screen.getByRole('checkbox', { name: 'Chat completions' }));
       await view.user.click(screen.getByRole('button', { name: 'Add 1 selected sources' }));
       await waitFor(() => expect(bindingWrites).toHaveLength(1));

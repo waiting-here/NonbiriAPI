@@ -1,6 +1,7 @@
 import permissionCopy from '../i18n/common/en.json';
 import { defaultStewardPermissions } from '@shared/operations/stewardPermissions';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { EndpointPolicies } from './EndpointPolicies';
@@ -118,6 +119,47 @@ async function open(
 }
 afterEach(() => vi.unstubAllGlobals());
 describe('endpoint policy management', () => {
+  it('restores the private outbound route filter and its page on browser back', async () => {
+    const data = fixture();
+    data.routeCount(21);
+    function RouteHistory() {
+      const location = useLocation();
+      const navigate = useNavigate();
+      if (location.pathname === '/other')
+        return <button onClick={() => navigate(-1)}>Return via history</button>;
+      return (
+        <>
+          <output aria-label="Current URL">{location.pathname + location.search}</output>
+          <button onClick={() => navigate('/other')}>Other page</button>
+          <EndpointPolicies role="admin" accountId="fixture-admin" />
+        </>
+      );
+    }
+    const view = await renderWithProviders(<RouteHistory />, {
+      station: 'admin',
+      route: '/endpoint-policies?view=routes',
+    });
+    act(() =>
+      view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'fixture-admin' } }),
+    );
+    let panel = within(screen.getByRole('tabpanel', { name: 'Outbound routes' }));
+    const search = await panel.findByRole('searchbox', { name: 'Search' });
+    await view.user.type(search, 'provider-');
+    fireEvent.change(panel.getByRole('combobox', { name: 'Items per page' }), {
+      target: { value: '10' },
+    });
+    const jump = panel.getByRole('textbox', { name: 'Go to page' });
+    fireEvent.change(jump, { target: { value: '2' } });
+    fireEvent.keyDown(jump, { key: 'Enter' });
+    await waitFor(() => expect(panel.getByText('https://provider-20.example/v1')).toBeVisible());
+    expect(screen.getByLabelText('Current URL')).not.toHaveTextContent('provider-');
+    await view.user.click(screen.getByRole('button', { name: 'Other page' }));
+    await view.user.click(screen.getByRole('button', { name: 'Return via history' }));
+    panel = within(await screen.findByRole('tabpanel', { name: 'Outbound routes' }));
+    expect(await panel.findByRole('searchbox', { name: 'Search' })).toHaveValue('provider-');
+    expect(panel.getByRole('textbox', { name: 'Go to page' })).toHaveValue('2');
+    expect(panel.getByText('https://provider-20.example/v1')).toBeVisible();
+  });
   it.each(['charity.backoff', 'egress.read'] as const)(
     'loads only the separately granted %s section',
     async (grant) => {

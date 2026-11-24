@@ -47,7 +47,7 @@ export function CredentialImpactPanel({
     queryFn: ({ signal }) => connectionAPI.impact(credentialId, kind, pager, signal),
   });
   useEffect(() => {
-    if (query.data && !query.error) onReady?.(revision);
+    onReady?.(query.data && !query.error ? revision : '');
   }, [query.data, query.error, revision, onReady]);
   return (
     <div className="nb-stack">

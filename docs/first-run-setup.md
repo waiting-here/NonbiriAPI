@@ -192,9 +192,9 @@ material.
 ## 6. Prepare a Generation 2 database path
 
 For a fresh start, the configured database and its exact `-wal` and `-shm` paths
-must all be absent. Fresh storage uses schema 56. For an existing instance, the
-v1.4.2 [standalone upgrader](database-upgrades.md#one-time-conversion) accepts
-the registered schema 54 and 55 layouts. Older registered sources first use the
+must all be absent. Fresh storage uses schema 57. For an existing instance, the
+v1.4.3 [standalone upgrader](database-upgrades.md#one-time-conversion) accepts
+the registered schema 54, 55 and 56 layouts. Older registered sources first use the
 v1.3.12 tool.
 Preserve a complete matching recovery set, stop the old service and deliberately
 invoke the tool before starting the target. The service, startup scripts and

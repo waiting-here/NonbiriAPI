@@ -1,5 +1,5 @@
 import { LogReadError, logAccessLost } from './logReadAccess';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold } from '@shared/components/ui/Fold';
 import { copyText } from '@shared/utils/clipboard';
@@ -42,7 +42,13 @@ function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; reques
     return () => controller.abort();
   }, [role, requestID, report]);
   if (error) return <p role="status">{t('common.diagnostics.sourceDetailsAreUnavailable')}</p>;
-  if (!source) return <p>{t('common.diagnostics.noSourceDetailsRecorded')}</p>;
+  if (source === undefined)
+    return (
+      <p role="status" aria-busy="true">
+        {t('common.loading')}
+      </p>
+    );
+  if (source === null) return <p>{t('common.diagnostics.noSourceDetailsRecorded')}</p>;
   return (
     <section className="request-diagnostics" aria-label={t('common.diagnostics.requestSource')}>
       <p>{t('common.diagnostics.clientHeadersAreSelfreportedClues')}</p>
@@ -70,7 +76,12 @@ function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; reques
   );
 }
 
-export function AttemptErrors(props: { role: DiagnosticRole; requestID: string; attempt: number }) {
+export function AttemptErrors(props: {
+  role: DiagnosticRole;
+  requestID: string;
+  attempt: number;
+  readMetadata?: boolean;
+}) {
   return (
     <ScopedAttemptErrors
       key={props.role + ':' + props.requestID + ':' + props.attempt}
@@ -83,7 +94,9 @@ function ScopedAttemptErrors({
   role,
   requestID,
   attempt,
+  readMetadata,
 }: {
+  readMetadata?: boolean;
   role: DiagnosticRole;
   requestID: string;
   attempt: number;
@@ -95,38 +108,51 @@ function ScopedAttemptErrors({
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  async function load(after = 0) {
-    controller.current?.abort();
-    const request = new AbortController();
-    controller.current = request;
+  const load = useCallback(
+    (after = 0) => {
+      controller.current?.abort();
+      const request = new AbortController();
+      controller.current = request;
+      return getErrorList(role, requestID, attempt, after, request.signal).then(
+        (result) => {
+          if (request.signal.aborted) return;
+          setPage(result);
+          setFailed(false);
+          setBusy(false);
+        },
+        (error) => {
+          if (request.signal.aborted) return;
+          if (logAccessLost(error)) report(error);
+          setFailed(true);
+          setBusy(false);
+        },
+      );
+    },
+    [role, requestID, attempt, report],
+  );
+  const startLoad = (after = 0) => {
     setBusy(true);
     setFailed(false);
-    try {
-      const result = await getErrorList(role, requestID, attempt, after, request.signal);
-      if (!request.signal.aborted) setPage(result);
-    } catch (error) {
-      if (!request.signal.aborted) {
-        if (logAccessLost(error)) report(error);
-        setFailed(true);
-      }
-    } finally {
-      if (!request.signal.aborted) setBusy(false);
-    }
-  }
+    void load(after);
+  };
+  const loading = busy || (readMetadata && !page && !failed);
+  useEffect(() => {
+    if (readMetadata) void load();
+  }, [readMetadata, load]);
   return (
     <section className="request-diagnostics">
       <button
         className="nb-btn nb-btn--secondary"
         type="button"
-        disabled={busy}
-        onClick={() => void load()}
+        disabled={loading}
+        onClick={() => startLoad()}
       >
         {t('common.diagnostics.upstreamErrorDetails')}
       </button>
       {failed && <p role="alert">{t('common.diagnostics.couldNotLoadDiagnostics')}</p>}
       {page && page.data.length === 0 && <p>{t('common.diagnostics.noErrorBodyWasRecorded')}</p>}
-      {page?.data.map((error) => (
-        <details key={error.event_seq}>
+      {page?.data.map((error, index) => (
+        <details key={error.event_seq} open={index === 0 || undefined}>
           <summary>
             {t('common.diagnostics.errorEvent')} {error.event_seq} · HTTP {error.http_status ?? '—'}{' '}
             · {error.bytes_saved} B {error.truncated ? t('common.diagnostics.truncated') : ''}
@@ -155,8 +181,8 @@ function ScopedAttemptErrors({
         <button
           className="nb-btn nb-btn--secondary"
           type="button"
-          disabled={busy}
-          onClick={() => void load(page.next_after!)}
+          disabled={loading}
+          onClick={() => startLoad(page.next_after!)}
         >
           {t('common.diagnostics.nextEvents')}
         </button>

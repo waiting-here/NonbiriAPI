@@ -50,6 +50,10 @@ func TestAnnouncementNumberedPagesRespectPublicationExpiryFiltersAndLanguage(t *
 			}
 		}
 	}
+	matched, err := env.service.ListAdmin(t.Context(), admin, AdminListQuery{Title: "公告 27", Numbered: &page})
+	if err != nil || matched.Pagination.TotalItems != "1" || len(matched.Data) != 1 {
+		t.Fatalf("title search %+v err=%v", matched, err)
+	}
 	env.authorizer.deny.Store(true)
 	if _, err := env.service.ListAdmin(context.Background(), admin, AdminListQuery{Numbered: &page}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("revoked administrator page=%v", err)

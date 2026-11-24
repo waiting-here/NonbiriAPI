@@ -271,12 +271,22 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await visuals(page, info, 'binding-service-choice', () =>
       serviceEditor.scrollIntoViewIfNeeded(),
     );
+    const candidateSearch = page.getByPlaceholder(common.common.workflow.upstreamSearch);
+    const candidateSource = page.getByRole('combobox', {
+      name: common.common.operations.charity.candidateSourceFilter,
+    });
+    await searchModels(page, 'binding-up-');
+    await candidateSource.selectOption('manual');
+    await candidateSearch.fill('draft for next target');
     await page.getByRole('button', { name: batch.backTargets }).click();
     await page
       .getByRole('row')
       .filter({ hasText: '[公益]binding-browser/target-1' })
       .getByRole('button', { name: batch.chooseUpstream })
       .click();
+    await expect(candidateSearch).toHaveValue('draft for next target');
+    await expect(candidateSource).toHaveValue('manual');
+    await candidateSource.selectOption('');
     await page.getByRole('checkbox', { name: /binding-up-2/ }).check();
     await page.getByRole('button', { name: batch.backTargets }).click();
     await expect(page.getByRole('region', { name: batch.selected })).toContainText(
@@ -309,6 +319,13 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await page
       .getByRole('button', { name: common.common.workflow.addCount.replace('{{count}}', '2') })
       .click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', {
+        name: common.common.workflow.addCount.replace('{{count}}', '2'),
+        exact: true,
+      })
+      .click();
     await expect(
       page.getByText(common.common.workflow.bindingConflict, { exact: true }),
     ).toBeVisible();
@@ -320,6 +337,13 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await page.getByRole('button', { name: common.common.workflow.refreshSelection }).click();
     await page
       .getByRole('button', { name: common.common.workflow.addCount.replace('{{count}}', '2') })
+      .click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', {
+        name: common.common.workflow.addCount.replace('{{count}}', '2'),
+        exact: true,
+      })
       .click();
     await expect(page.getByRole('region', { name: batch.results })).toContainText(
       batch.status.added,
@@ -397,6 +421,13 @@ test('completed key binding returns to the donation list and reopens a fresh rev
         .click();
       await page.getByRole('checkbox', { name: /binding-up-4/ }).check();
       await page
+        .getByRole('button', {
+          name: common.common.workflow.addCount.replace('{{count}}', '1'),
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole('alertdialog')
         .getByRole('button', {
           name: common.common.workflow.addCount.replace('{{count}}', '1'),
           exact: true,
@@ -776,7 +807,7 @@ test('level 5 keeps its allowed manual targets and cannot open channel presets',
         .getByText(batch.boundHere, { exact: true }),
     ).toBeVisible();
     await page.goto(state.user_url + '/steward?tab=charity');
-    await expect(page.getByRole('link', { name: presets.title })).toBeVisible();
+    await expect(page.getByRole('link', { name: presets.title })).toHaveCount(0);
     await page.goto(state.user_url + '/charity/channel-presets');
     await expect(
       page.getByText(common.management.permissions.denied, { exact: true }),

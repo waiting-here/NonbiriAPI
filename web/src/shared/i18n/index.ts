@@ -1,4 +1,5 @@
 import i18n from 'i18next';
+import { prepareActiveFeatures } from './featureCatalog';
 import { initReactI18next } from 'react-i18next';
 import type { BackendModule, i18n as I18nInstance, ResourceLanguage } from 'i18next';
 
@@ -39,9 +40,14 @@ let loadCatalog: ((language: SupportedLanguage) => Promise<ResourceLanguage>) | 
 
 // Forms that persist a language choice must know that its UI can actually render first.
 export async function prepareLanguage(instance: I18nInstance, language: SupportedLanguage) {
-  if (instance !== i18n || !loadCatalog || instance.hasResourceBundle(language, 'translation'))
-    return;
-  instance.addResourceBundle(language, 'translation', await loadCatalog(language));
+  if (
+    instance.store === i18n.store &&
+    loadCatalog &&
+    !instance.hasResourceBundle(language, 'translation')
+  ) {
+    instance.addResourceBundle(language, 'translation', await loadCatalog(language));
+  }
+  await prepareActiveFeatures(instance, language);
 }
 
 export async function configureI18n(station: CatalogLoaders): Promise<void> {

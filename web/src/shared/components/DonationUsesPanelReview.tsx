@@ -1,3 +1,4 @@
+import { ConfirmDialog } from './ConfirmDialog';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -25,6 +26,7 @@ export function DonationUsesReviewAll({
   role,
   donationId,
   donationRevision,
+  reviewable,
   onLockedChange,
   onReviewed,
   refresh,
@@ -32,12 +34,14 @@ export function DonationUsesReviewAll({
   role: 'admin' | 'steward';
   donationId: string;
   donationRevision: string;
+  reviewable: boolean;
   onLockedChange: (locked: boolean) => void;
   onReviewed: (results: UseReviewResult[], labels: ReviewedUseLabel[]) => void;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [note, setNote] = useState('');
+  const [confirmation, setConfirmation] = useState<ReviewPlan | null>(null);
   const [empty, setEmpty] = useState(false);
   const root = role === 'admin' ? ['admin', 'operations'] : ['user'];
   const prepare = useRetainedOperation<
@@ -84,16 +88,16 @@ export function DonationUsesReviewAll({
     },
     root,
   );
-  const locked =
-    prepare.isPending ||
-    review.isPending ||
-    review.outcome === 'unknown' ||
-    Boolean(review.refreshError);
+  const working = prepare.isPending || review.isPending;
+  const recovering = review.outcome === 'unknown' || Boolean(review.refreshError);
+  const currentPlan =
+    reviewable && confirmation?.body.expected_revision === donationRevision ? confirmation : null;
   useEffect(() => {
-    onLockedChange(locked);
+    onLockedChange(working);
     return () => onLockedChange(false);
-  }, [locked, onLockedChange]);
+  }, [working, onLockedChange]);
   const begin = async (decision: 'approve' | 'reject') => {
+    if (!reviewable || working || recovering) return;
     prepare.reset();
     review.reset();
     setEmpty(false);
@@ -103,45 +107,75 @@ export function DonationUsesReviewAll({
         setEmpty(true);
         return;
       }
-      await review.mutateAsync(plan);
+      setConfirmation(plan);
     } catch {
       /* Retained operations keep the original request for recovery. */
     }
   };
+  if (!reviewable && !working && !recovering) return null;
   return (
     <div className="nb-stack">
-      <Field
-        label={t('common.connections.reviewReason')}
-        help={t('common.connections.reviewReasonVisible')}
-      >
-        {(props) => (
-          <textarea
-            {...props}
-            rows={2}
-            value={note}
-            disabled={locked}
-            onChange={(event) => setNote(event.target.value)}
-          />
+      {reviewable && !recovering && (
+        <>
+          <Field
+            label={t('common.connections.reviewReason')}
+            help={t('common.connections.reviewReasonVisible')}
+          >
+            {(props) => (
+              <textarea
+                {...props}
+                rows={2}
+                value={note}
+                disabled={working}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            )}
+          </Field>
+          <div className="nb-actions">
+            <button
+              type="button"
+              className="nb-btn nb-btn--primary"
+              disabled={working}
+              onClick={() => void begin('approve')}
+            >
+              {t('common.connections.approveAllUses')}
+            </button>
+            <button
+              type="button"
+              className="nb-btn nb-btn--danger-outline"
+              disabled={working}
+              onClick={() => void begin('reject')}
+            >
+              {t('common.connections.rejectAllUses')}
+            </button>
+          </div>
+        </>
+      )}
+      <ConfirmDialog
+        open={currentPlan !== null}
+        title={t(
+          confirmation?.body.decision === 'reject'
+            ? 'common.connections.rejectAllUses'
+            : 'common.connections.approveAllUses',
         )}
-      </Field>
-      <div className="nb-actions">
-        <button
-          type="button"
-          className="nb-btn nb-btn--primary"
-          disabled={locked}
-          onClick={() => void begin('approve')}
-        >
-          {t('common.connections.approveAllUses')}
-        </button>
-        <button
-          type="button"
-          className="nb-btn nb-btn--danger-outline"
-          disabled={locked}
-          onClick={() => void begin('reject')}
-        >
-          {t('common.connections.rejectAllUses')}
-        </button>
-      </div>
+        description={t('common.governance.reviewScope', {
+          id: donationId,
+          count: confirmation?.rows.length ?? 0,
+        })}
+        confirmLabel={t(
+          confirmation?.body.decision === 'reject'
+            ? 'common.connections.rejectAllUses'
+            : 'common.connections.approveAllUses',
+        )}
+        danger={confirmation?.body.decision === 'reject'}
+        busy={review.isPending}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (!currentPlan || working || recovering) return;
+          review.mutate(currentPlan);
+          setConfirmation(null);
+        }}
+      />
       {prepare.isPending || review.isPending ? <LoadingState /> : null}
       {empty ? <Note>{t('common.connections.noPendingContent')}</Note> : null}
       {prepare.error ? <ErrorState error={prepare.error} /> : null}

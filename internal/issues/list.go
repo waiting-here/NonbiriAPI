@@ -140,6 +140,9 @@ func issueDTO(raw rawIssue) (Issue, error) {
 		switch ResourceKind(raw.deepLinkKind.String) {
 		case ResourceEndpoint, ResourceEndpointKey:
 			link.RouteID = "endpoint-detail"
+			if raw.resourceKind == ResourceEndpointKey && raw.state == "current" && validDecimalResource(raw.resourceRef) {
+				link.KeyID = raw.resourceRef
+			}
 		case ResourceModel:
 			link.RouteID = "models"
 		default:

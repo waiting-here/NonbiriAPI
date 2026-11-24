@@ -152,7 +152,6 @@ export function BlackjackHistoryPage() {
         <PanelBody>
           <FilterBar
             activeCount={dataset !== 'recent' ? 1 : 0}
-            onSubmit={() => {}}
             search={
               <Field size="short" label={t('资料范围', 'Dataset')}>
                 {(props) => (

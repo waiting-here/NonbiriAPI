@@ -1,4 +1,4 @@
-import { listReturnPath } from '@shared/operations/listReturn';
+import { endpointReturnState, listReturnPath } from '@shared/operations/listReturn';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { useId, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -208,40 +208,33 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
         ? listReturnPath(location.state, '/charity')
         : donationReturn
       : location.state?.returnTo
-        ? listReturnPath(location.state, '/endpoints', '/issues')
+        ? listReturnPath(location.state, '/endpoints', '/issues', '/models')
         : listBack;
   const backLabel = back.startsWith('/charity/donations/')
     ? t('user.charity.backToDonation')
     : back.startsWith('/charity')
       ? t('user.charity.backToDonations')
-      : back.startsWith('/issues')
-        ? t('user.records.issues')
-        : t('common.connections.backToConnections');
+      : back.split('?')[0] === '/models'
+        ? t('user.services.backToModelSources')
+        : back.startsWith('/issues')
+          ? t('user.records.issues')
+          : t('common.connections.backToConnections');
+  const returnLink = (
+    <Link to={back} state={endpointReturnState(location.state, back)}>
+      {backLabel}
+    </Link>
+  );
   if (connection.isPending)
     return (
       <div className="page page--detail core-page core-stack">
-        <PageHeader
-          title={t('common.connections.title')}
-          back={
-            <Link to={back} state={location.state}>
-              {backLabel}
-            </Link>
-          }
-        />
+        <PageHeader title={t('common.connections.title')} back={returnLink} />
         <CoreLoading />
       </div>
     );
   if (connection.error || !connection.data)
     return (
       <div className="page page--detail core-page core-stack">
-        <PageHeader
-          title={t('common.connections.title')}
-          back={
-            <Link to={back} state={location.state}>
-              {backLabel}
-            </Link>
-          }
-        />
+        <PageHeader title={t('common.connections.title')} back={returnLink} />
         <CoreErrorPanel error={connection.error} onRetry={() => void connection.refetch()} />
       </div>
     );
@@ -255,11 +248,7 @@ function ConnectionDetail({ accountId, id }: { accountId: string; id: string }) 
       <PageHeader
         title={connection.data.display_name}
         description={connection.data.note}
-        back={
-          <Link to={back} state={location.state}>
-            {backLabel}
-          </Link>
-        }
+        back={returnLink}
         actions={
           view === 'entries' ? (
             <button

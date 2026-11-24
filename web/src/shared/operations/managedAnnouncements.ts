@@ -72,7 +72,10 @@ function normalizePublishedLanguage(value: unknown, label: string): LanguagePubl
   const root = record(value, ['title', 'rendered_body'], label);
   return {
     title: string(root.title, `${label} title`, { min: 1 }),
-    rendered_body: string(root.rendered_body, `${label} rendered body`, { min: 1, multiline: true }),
+    rendered_body: string(root.rendered_body, `${label} rendered body`, {
+      min: 1,
+      multiline: true,
+    }),
   };
 }
 
@@ -204,9 +207,18 @@ export function normalizeAnnouncementPreview(value: unknown): AnnouncementPrevie
     'announcement preview',
   );
   const result = {
-    rendered_zh: nullableString(root.rendered_zh, 'Chinese announcement preview', { min: 1, multiline: true }),
-    rendered_en: nullableString(root.rendered_en, 'English announcement preview', { min: 1, multiline: true }),
-    render_profile_version: string(root.render_profile_version, 'announcement render profile', { min: 1, ascii: true }),
+    rendered_zh: nullableString(root.rendered_zh, 'Chinese announcement preview', {
+      min: 1,
+      multiline: true,
+    }),
+    rendered_en: nullableString(root.rendered_en, 'English announcement preview', {
+      min: 1,
+      multiline: true,
+    }),
+    render_profile_version: string(root.render_profile_version, 'announcement render profile', {
+      min: 1,
+      ascii: true,
+    }),
   };
   return result;
 }
@@ -220,8 +232,18 @@ export const managedAnnouncementKeys = {
     severity: string,
     page: string,
     size: PageSize,
+    title = '',
   ) =>
-    [...managementRoot(role), 'announcements-page', account, state, severity, page, size] as const,
+    [
+      ...managementRoot(role),
+      'announcements-page',
+      account,
+      state,
+      severity,
+      page,
+      size,
+      ...(title ? [title] : []),
+    ] as const,
   detail: (role: ManagementRole, account: string, id: string) =>
     [...managementRoot(role), 'announcement', account, id] as const,
 };
@@ -245,6 +267,7 @@ export async function getAdminAnnouncementsPage(
   pageSize: PageSize,
   signal?: AbortSignal,
   role: ManagementRole = 'admin',
+  title = '',
 ): Promise<AdminAnnouncementPage> {
   if (!isPageNumber(pageNumber)) {
     throw new ApiError('invalid_request', 'Invalid administrator announcement page.', 400);
@@ -254,6 +277,7 @@ export async function getAdminAnnouncementsPage(
   }
   const result = await decoded(
     queryPath(announcementBase(role), {
+      title: title || undefined,
       state: state || undefined,
       severity: severity || undefined,
       page: pageNumber,

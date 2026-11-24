@@ -360,7 +360,7 @@ export const CONCH_GACHA_POOL: readonly ConchGachaRewardItem[] = [
     emoji: '🎀',
     artwork: 'props/buff-tailor-coupon.webp',
 
-    description: '下次用小鲸币解锁任意衣橱新装或小屋家具时自动抵扣一部分小鲸币！',
+    description: '解锁新衣装或家具时，实付低于原价才会自动使用一张券。',
   },
   {
     id: 'affection_candy',

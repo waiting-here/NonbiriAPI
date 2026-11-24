@@ -89,11 +89,7 @@ func TestInputLengthFaultNativeJSONAndConversion(t *testing.T) {
 				r := inferenceRequestForTest(t, contract.OperationRerank, `{"model":"m","query":"hi","documents":["text"]}`)
 				result = adapter.AttemptInference(ctx, writer, target, r, contract.TypeCohereRerank, policy)
 			}
-			want := contract.StreakNeutral
-			if route == "multipart" || route == "cohere" {
-				want = contract.StreakUpstreamFailure
-			}
-			if result.StreakDisposition != want || result.Success || result.Committed || result.Failure != FailureUpstream || result.UpstreamStatus != 422 || result.ErrorDetail.CallerFault().Matches(422, "context_length_exceeded") != (want == contract.StreakNeutral) {
+			if result.StreakDisposition != contract.StreakNeutral || result.Success || result.Committed || result.Failure != FailureUpstream || result.UpstreamStatus != 422 || !result.ErrorDetail.CallerFault().Matches(422, "context_length_exceeded") {
 				t.Fatalf("result=%+v", result)
 			}
 		})
@@ -109,7 +105,7 @@ func TestInputLengthFaultAdaptationKeepsSecretsHidden(t *testing.T) {
 		{"input value", "invalid_value", "messages", true},
 		{"context limit", "context_length_exceeded", "input", true},
 		{"arbitrary code", secret, "messages", false},
-		{"ordinary parameter", "invalid_value", "temperature", false},
+		{"ordinary parameter", "invalid_value", "temperature", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -103,7 +103,7 @@ async function picture(page: Page, name: string, fullPage = true) {
   await mkdir(dir, { recursive: true });
   await page.screenshot({ path: resolve(dir, `${name}.png`), fullPage });
 }
-async function fixture(page: Page, empty: boolean) {
+async function fixture(page: Page, empty: boolean, standalone = false) {
   let model = { ...original, binding_count: empty ? '0' : '25' };
   let models: Model[] = empty
     ? []
@@ -141,7 +141,7 @@ async function fixture(page: Page, empty: boolean) {
   const endpoints = ['11', '12'].map((id) => ({
     ...endpointScope,
     id,
-    connection_id: id === '11' ? '51' : '52',
+    connection_id: id === '11' ? '51' : standalone ? null : '52',
     connector_type: 'openai-compatible',
     configuration_type: 'openai-compatible',
     native_services: serviceProjection().native_services,
@@ -155,6 +155,45 @@ async function fixture(page: Page, empty: boolean) {
     created_at: 1700000000,
     updated_at: 1700000001,
   }));
+  const connections = endpoints
+    .filter((row) => row.connection_id)
+    .map((row) => ({
+      id: row.connection_id,
+      name: row.note,
+      display_name: row.note,
+      primary_entry: { id: row.id, base_url: row.base_url, note: row.note },
+      note: '',
+      revision: '1',
+      entry_count: '1',
+      credential_count: '1',
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+  const removedKeys = new Set<string>();
+  const keysFor = (endpointId: string) =>
+    (endpointId === '12' ? ['112'] : ['111', '113'])
+      .filter((id) => !removedKeys.has(id))
+      .map((id) => ({
+        id,
+        endpoint_id: endpointId,
+        credential_id: id === '112' ? '212' : id === '113' ? '213' : '211',
+        credential_version: '1',
+        grant_revision: '1',
+        credential_available: true,
+        discovery_source_id: null,
+        native_services: serviceProjection().native_services,
+        display_head: 'sk-test',
+        display_tail: 'tail',
+        note: id === '113' ? 'Secondary key' : 'Primary key',
+        enabled: true,
+        force_store_false: false,
+        max_concurrency: 0,
+        max_rpm: 0,
+        suspension_state: 'none',
+        revision: '1',
+        created_at: 1700000000,
+        updated_at: 1700000001,
+      }));
   await page.route(USER_ORIGIN + '/api/**', async (route) => {
     const req = route.request(),
       url = new URL(req.url()),
@@ -236,22 +275,26 @@ async function fixture(page: Page, empty: boolean) {
       if (source)
         rows = rows.filter((row) => row.source_types.includes(source as 'manual' | 'automatic'));
       body = numberedPage(rows, url.searchParams);
+    } else if (/^\/api\/endpoints\/\d+\/keys\/\d+$/.test(path)) {
+      const id = path.split('/')[5]!;
+      if (req.method() === 'DELETE') {
+        removedKeys.add(id);
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      body = keysFor(path.split('/')[3]!).find((row) => row.id === id);
+    } else if (/^\/api\/endpoints\/\d+$/.test(path)) {
+      const endpoint = endpoints.find((row) => row.id === path.split('/')[3])!;
+      if (req.method() === 'PATCH') {
+        expect(input().expected_revision).toBe(endpoint.revision);
+        endpoint.enabled = Boolean(input().enabled);
+        endpoint.revision = String(Number(endpoint.revision) + 1);
+      }
+      body = endpoint;
+    } else if (/^\/api\/connections\/\d+$/.test(path)) {
+      body = connections.find((row) => row.id === path.split('/')[3]);
     } else if (path === '/api/connections') {
-      body = numberedPage(
-        endpoints.map((row) => ({
-          id: row.connection_id,
-          name: row.note,
-          display_name: row.note,
-          primary_entry: { id: row.id, base_url: row.base_url, note: row.note },
-          note: '',
-          revision: '1',
-          entry_count: '1',
-          credential_count: '1',
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-        })),
-        url.searchParams,
-      );
+      body = numberedPage(connections, url.searchParams);
     } else if (path === '/api/endpoints' || /^\/api\/connections\/[^/]+\/entries$/.test(path)) {
       const connectionId = path.split('/')[3];
       body = numberedPage(
@@ -263,30 +306,24 @@ async function fixture(page: Page, empty: boolean) {
     } else if (path.endsWith('/keys')) {
       const endpointId = path.split('/')[3]!;
       keyReads.push(endpointId);
-      body = numberedPage(
-        (endpointId === '12' ? ['112'] : ['111', '113']).map((id) => ({
-          id,
-          endpoint_id: endpointId,
-          credential_id: id === '112' ? '212' : id === '113' ? '213' : '211',
-          credential_version: '1',
-          grant_revision: '1',
-          credential_available: true,
-          discovery_source_id: null,
-          native_services: serviceProjection().native_services,
-          display_head: 'sk-test',
-          display_tail: 'tail',
-          note: id === '113' ? 'Secondary key' : 'Primary key',
-          enabled: true,
-          force_store_false: false,
-          max_concurrency: 0,
-          max_rpm: 0,
-          suspension_state: 'none',
+      body = numberedPage(keysFor(endpointId), url.searchParams);
+    } else if (/^\/api\/endpoints\/\d+\/keys\/\d+\/models$/.test(path)) {
+      body = {
+        evidence: {
+          state: 'unknown',
           revision: '1',
-          created_at: 1700000000,
-          updated_at: 1700000001,
-        })),
-        url.searchParams,
-      );
+          result: null,
+          safe_class: 'none',
+          observed_at: null,
+          count: null,
+        },
+        automatic_entries: [],
+        manual_entries: [],
+        next_cursor: null,
+        ...(url.searchParams.has('limit')
+          ? {}
+          : { pagination: numberedPage([], url.searchParams).pagination }),
+      };
     } else if (path.endsWith('/models/manual')) {
       identity();
       manual.push(input());
@@ -320,6 +357,142 @@ async function fixture(page: Page, empty: boolean) {
   });
   return { creates, patches, orders, manual, adds, reads, keyReads, bindingReads };
 }
+
+test('manages an embedded endpoint while a key is focused on a narrow screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+  await mockPublicConfig(page, 'user');
+  await mockRoleSession(page, 'user', 'user');
+  await fixture(page, true);
+  const focused = '/endpoints?connection_id=51&endpoint_id=11&focus_key_id=111';
+  await page.goto(USER_ORIGIN + focused);
+  const section = page
+    .locator(
+      '.services-detail.services-detail--enabled, .services-detail.services-detail--disabled',
+    )
+    .last();
+  const more = section.getByRole('button', { name: 'More actions', exact: true });
+  for (const enabled of [false, true]) {
+    await more.click();
+    const action = page.getByRole('menuitem', {
+      name: enabled ? 'Enable endpoint' : 'Disable endpoint',
+    });
+    const write = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/endpoints/11') && response.request().method() === 'PATCH',
+    );
+    await action.click();
+    expect((await write).request().postDataJSON()).toMatchObject({
+      enabled,
+      expected_revision: enabled ? '2' : '1',
+    });
+    await expect(section).toHaveClass(
+      new RegExp('services-detail--' + (enabled ? 'enabled' : 'disabled')),
+    );
+  }
+  await section.getByRole('button', { name: /Add key/ }).click();
+  const adding = section.getByRole('region', { name: 'Add key', exact: true });
+  await expect(adding).toBeVisible();
+  await adding.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(adding).toBeHidden();
+  await expect(page).toHaveURL(USER_ORIGIN + focused);
+  const row = section
+    .getByRole('row')
+    .filter({ has: page.getByText('Primary key', { exact: true }) });
+  await row.getByRole('button', { name: /More actions/ }).click();
+  await page.getByRole('menuitem', { name: /Remove.*key|Delete.*key/ }).click();
+  const dialog = page.getByRole('alertdialog');
+  const deletion = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/endpoints/11/keys/111') &&
+      response.request().method() === 'DELETE',
+  );
+  await dialog.getByRole('button', { name: /Remove.*key|Delete.*key/ }).click();
+  expect((await deletion).status()).toBe(204);
+  await expect(page).toHaveURL(USER_ORIGIN + '/endpoints?connection_id=51&endpoint_id=11');
+  await expect(section.getByText('Secondary key', { exact: true })).toBeVisible();
+  await expect(section.getByText('Primary key', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const kind of ['service', 'standalone'] as const) {
+  test(`restores the selected model sources after managing a ${kind} endpoint`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+    await mockPublicConfig(page, 'user');
+    await mockRoleSession(page, 'user', 'user');
+    const state = await fixture(page, true, kind === 'standalone');
+    const modelPath = '/models?model_id=101&page=2&q=assistant';
+    await page.goto(USER_ORIGIN + modelPath);
+    const picker = page.locator('.personal-binding-picker');
+    const browse = picker.locator('.personal-binding-picker__browse');
+    const modelList = picker.locator('.personal-binding-picker__models');
+    const modelSearch = modelList.getByRole('searchbox');
+    const serviceSearch = picker.getByRole('searchbox', {
+      name: 'Search service names',
+      exact: true,
+    });
+    await serviceSearch.fill('Service');
+    const serviceFilter = picker.getByRole('combobox', { name: 'Filter by service', exact: true });
+    if (kind === 'service') {
+      await serviceFilter.selectOption('52');
+    } else {
+      await browse.getByRole('searchbox').fill('Service B');
+      await browse.getByRole('button', { name: /Service B/ }).click();
+    }
+    await expect(modelSearch).toBeVisible();
+    await modelSearch.fill('gpt-source-22');
+    const manual = modelList.getByRole('radio', { name: 'Manually added', exact: true });
+    await manual.locator('xpath=ancestor::label[1]').click();
+    const candidate = modelList.getByRole('checkbox', { name: /gpt-source-22/ });
+    await candidate.check();
+    const selectedSources = page.locator('.core-selection-list');
+    await expect(selectedSources).toContainText('gpt-source-22');
+    const callTypes = selectedSources.locator('summary').filter({ hasText: 'Call types' });
+    await callTypes.click();
+    await selectedSources.getByRole('checkbox', { name: 'Responses', exact: true }).check();
+    await selectedSources
+      .getByRole('checkbox', { name: 'Chat completions', exact: true })
+      .uncheck();
+    await picker
+      .locator('.personal-binding-picker__path')
+      .getByRole('button', { name: /Endpoints/ })
+      .click();
+    const originalSearch = kind === 'standalone' ? 'Service B' : '';
+    const manage = modelList.getByRole('link', { name: "Manage this key's models" });
+    for (const returnBy of ['interface', 'history']) {
+      await manage.click();
+      const pairPath =
+        kind === 'standalone'
+          ? '/endpoints/12?focus_key_id=112'
+          : '/endpoints?connection_id=52&endpoint_id=12&focus_key_id=112';
+      await expect(page).toHaveURL(USER_ORIGIN + pairPath);
+      await expect(page.getByRole('link', { name: 'Back to all keys' })).toBeVisible();
+      const back = page.getByRole('link', { name: 'Back to model sources' });
+      await expect(back).toHaveAttribute('href', modelPath);
+      if (returnBy === 'history') await page.goBack();
+      else await back.click();
+      await expect(page).toHaveURL(USER_ORIGIN + modelPath);
+      await expect(serviceSearch).toHaveValue('Service');
+      await expect(browse.getByRole('searchbox')).toHaveValue(originalSearch);
+      await expect(modelSearch).toHaveValue('gpt-source-22');
+      await expect(manual).toBeChecked();
+      await expect(candidate).toBeChecked();
+      await expect(selectedSources).toContainText('gpt-source-22');
+      await callTypes.click();
+      await expect(
+        selectedSources.getByRole('checkbox', { name: 'Responses', exact: true }),
+      ).toBeChecked();
+      await expect(
+        selectedSources.getByRole('checkbox', { name: 'Chat completions', exact: true }),
+      ).not.toBeChecked();
+      if (kind === 'service') await expect(serviceFilter).toHaveValue('52');
+    }
+    expect(state.adds).toHaveLength(0);
+  });
+}
+
 for (const scenario of cases) {
   test(`model layout and source actions ${scenario.width} ${scenario.locale} ${scenario.theme}`, async ({
     page,
@@ -345,6 +518,10 @@ for (const scenario of cases) {
       ),
     ).common.modelTypes;
     const guard = collectConsoleViolations(page);
+    const failedRoutes: string[] = [];
+    page.on('response', (response) => {
+      if (response.status() >= 400) failedRoutes.push(new URL(response.url()).pathname);
+    });
     await page.setViewportSize({ width: scenario.width, height: 900 });
     await page.addInitScript(({ locale, theme }) => {
       localStorage.setItem('nb.lang', locale);
@@ -382,7 +559,7 @@ for (const scenario of cases) {
       expect(state.reads).toHaveLength(0);
       expect(state.keyReads).toHaveLength(0);
       expect(state.creates[0]).toMatchObject({
-        model_types: ['chat_completions', 'responses'],
+        model_types: ['chat_completions'],
         route_strategy: 'cache_balanced',
         silent_retry: false,
         flatten_tool_calls: false,
@@ -409,6 +586,11 @@ for (const scenario of cases) {
       await expect(results.locator('.personal-binding-picker__model')).toHaveCount(10);
       await results.getByRole('button', { name: /Next|下一页/ }).click();
       await results.getByRole('checkbox', { name: /gpt-source-11\b/ }).check();
+      await results.getByRole('link', { name: bindingCopy.managePair, exact: true }).click();
+      await page.getByRole('link', { name: 'Back to model sources' }).click();
+      await expect(results.getByRole('checkbox', { name: /gpt-source-11\b/ })).toBeChecked();
+      await expect(results.locator('.personal-binding-picker__model')).toHaveCount(10);
+      await expect(results.getByRole('checkbox', { name: /gpt-source-1\b/ })).toHaveCount(0);
       await results
         .getByRole('searchbox', { name: bindingCopy.searchModels, exact: true })
         .fill('gpt-source-1');
@@ -423,7 +605,7 @@ for (const scenario of cases) {
       await expect.poll(() => state.reads.at(-1)?.searchParams.get('source')).toBe('manual');
       await expect(
         results.getByRole('link', { name: bindingCopy.managePair, exact: true }),
-      ).toHaveAttribute('href', '/endpoints?connection_id=52&endpoint_id=12&key_id=112');
+      ).toHaveAttribute('href', '/endpoints?connection_id=52&endpoint_id=12&focus_key_id=112');
       expect(state.adds).toHaveLength(0);
       await results.getByRole('checkbox', { name: /gpt-source-22\b/ }).check();
       await serviceFilter.selectOption('51');
@@ -462,7 +644,7 @@ for (const scenario of cases) {
       expect(state.manual).toEqual([
         { entries: [{ upstream_model_id: 'typed-model', provider: '' }] },
       ]);
-      await results.getByRole('checkbox', { name: /typed-model/ }).check();
+      await expect(results.getByRole('checkbox', { name: /typed-model/ })).toBeChecked();
       const selections = page.locator('.core-selection-list > li');
       await expect(selections).toHaveCount(4);
       for (const selection of await selections.all()) {
@@ -476,14 +658,15 @@ for (const scenario of cases) {
       const firstSelection = selections.filter({ hasText: 'Primary key' }).filter({
         has: page.getByText('gpt-source-11', { exact: true }),
       });
-      for (const service of ['chat_completions', 'responses'] as const) {
-        const choice = firstSelection.getByRole('checkbox', {
-          name: nativeServices[service],
-          exact: true,
-        });
-        await expect(choice).toBeChecked();
-        await choice.uncheck();
-      }
+      const chatChoice = firstSelection.getByRole('checkbox', {
+        name: nativeServices.chat_completions,
+        exact: true,
+      });
+      await expect(chatChoice).toBeChecked();
+      await expect(
+        firstSelection.getByRole('checkbox', { name: nativeServices.responses, exact: true }),
+      ).not.toBeChecked();
+      await chatChoice.uncheck();
       await expect(addSelected).toBeDisabled();
       for (const selection of await selections.all()) {
         for (const service of ['chat_completions', 'responses'] as const) {
@@ -626,7 +809,7 @@ for (const scenario of cases) {
     const embeddings = types.getByRole('checkbox', { name: /Embeddings|向量化/ });
     const images = types.getByRole('checkbox', { name: /Image generation|图像生成/ });
     await expect(chat).toBeChecked();
-    await expect(responses).toBeChecked({ checked: Boolean(scenario.create) });
+    await expect(responses).not.toBeChecked();
     await expect(embeddings).toBeChecked({ checked: !scenario.create });
     await images.check();
     await editor.getByRole('button', { name: core('common.cancel'), exact: true }).click();
@@ -672,6 +855,7 @@ for (const scenario of cases) {
     await expect(
       page.getByRole('radio', { name: core('models.cacheBalanced'), exact: true }),
     ).toBeChecked();
+    expect(failedRoutes).toEqual([]);
     guard.assertNone();
   });
 }

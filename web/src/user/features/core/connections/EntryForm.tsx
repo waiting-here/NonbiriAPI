@@ -31,7 +31,7 @@ export function EntryForm({
   const client = useQueryClient();
   const options = useEndpointCreateOptions(accountId);
   const [mode, setMode] = useState<'custom' | 'mainstream'>('custom');
-  const [connector, setConnector] = useState('');
+  const [chosenConnector, setConnector] = useState<string>();
   const [baseURL, setBaseURL] = useState('');
   const [note, setNote] = useState('');
   const [format, setFormat] = useState<RerankFormat | null>(null);
@@ -48,6 +48,11 @@ export function EntryForm({
     (item, index, items) =>
       items.findIndex((other) => other.configuration_type === item.configuration_type) === index,
   );
+  const connector =
+    chosenConnector ??
+    (configurations.find((row) => row.connector_type === 'openai-compatible') ?? configurations[0])
+      ?.connector_type ??
+    '';
   const selectedOption = nativeOptions.find((item) => item.connector_type === connector);
   const services = selectedOption?.native_services ?? [];
   const protocolServices = (type: string) =>

@@ -1,8 +1,8 @@
 # Upgrade an existing database
 
-Use the v1.4.2 tool on a stopped database matching **schema 55** (v1.4.0 or
-v1.4.1) or the registered **schema 54** bridge. It converts the database to
-schema 56. For an earlier registered source, use the
+Use the v1.4.3 tool on a stopped database matching **schema 56** (v1.4.2),
+**schema 55** (v1.4.0 or v1.4.1) or the registered **schema 54** bridge.
+It converts the database to schema 57. For an earlier registered source, use the
 [v1.3.12 upgrade instructions](https://github.com/waiting-here/NonbiriAPI/blob/v1.3.12/docs/database-upgrades.md#one-time-conversion)
 first. The service initializes a new database on fresh deployments.
 

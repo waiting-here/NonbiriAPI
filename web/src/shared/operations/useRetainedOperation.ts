@@ -9,7 +9,7 @@ import {
   type CharityManagementFrame,
   type StationSessionSnapshot,
 } from '@shared/charityManagement';
-import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isForbidden, isStewardPermissionDenied, isUnauthorized } from '@shared/query/http';
 import { conflictOrUnknown, operationKey, responseOutcomeUnknown } from './api';
 
 export interface OperationContext {
@@ -250,6 +250,9 @@ export function useRetainedOperation<TVariables, TResult>(
       setOutcome(
         unknown ? 'unknown' : input.dispatched && conflictOrUnknown(error) ? 'conflict' : 'failed',
       );
+      if (input.frame === 'steward' && isStewardPermissionDenied(error)) {
+        void client.invalidateQueries({queryKey: ['user', 'session'], exact: true});
+      }
       if (isFinalAuthorityLoss(error)) {
         clearSecrets.current?.();
         if (input.frame && isUnauthorized(error)) clearStationSession(client, input.frame);

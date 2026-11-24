@@ -3,9 +3,19 @@ import { PageHeader } from '@shared/components/States';
 import { Note } from '@shared/components/ui';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { LegalLayout } from '../components/LegalLayout';
+import { FeatureCopy } from '@shared/i18n/FeatureCopy';
+import { privacyCopy } from '../i18n/legalCopy';
 import { LegalSections } from '../components/LegalSections';
 
 export function PrivacyPage() {
+  return (
+    <FeatureCopy catalog={privacyCopy}>
+      <PrivacyPageContent />
+    </FeatureCopy>
+  );
+}
+
+function PrivacyPageContent() {
   const { t, i18n } = useTranslation();
   const config = usePublicConfig();
   const locale = i18n.language.startsWith('en') ? 'en' : 'zh';

@@ -82,6 +82,7 @@ interface SearchPage {
   labelKey: CopyKey;
   routeId?: string;
   search?: string;
+  hash?: string;
   keywordKeys?: readonly CopyKey[];
 }
 
@@ -128,8 +129,46 @@ const SEARCH_PAGES: Partial<
   'admin-rewards': {
     keywordKeys: ['common.rewards.broadcast', 'admin.navigation.keywords.rewards'],
   },
+  'admin-settings': {
+    subpages: [
+      ...(
+        [
+          'identity',
+          'legal',
+          'limits',
+          'access',
+          'economy',
+          'charity',
+          'abuse',
+          'connector',
+          'games',
+          'announcements',
+          'activities',
+          'reports',
+          'alerts',
+        ] as const
+      ).map((group) => ({
+        labelKey: `admin.settings.groups.${group}` as const,
+        search: 'group=' + group,
+      })),
+      { labelKey: 'admin.settings.gatewayGroup', search: 'group=gateway' },
+      { labelKey: 'admin.settings.maintenanceGroup', search: 'group=maintenance' },
+      { labelKey: 'admin.settings.legalHoldGroup', search: 'group=legal-hold' },
+    ],
+  },
   'admin-activities': {
     subpages: [
+      { labelKey: 'admin.attendance.title', hash: 'attendance' },
+      {
+        labelKey: 'admin.audit.gachaStatistics',
+        routeId: 'admin-gacha',
+        search: 'gacha_view=statistics',
+      },
+      {
+        labelKey: 'admin.audit.gachaShopStatistics',
+        routeId: 'admin-gacha',
+        search: 'gacha_view=shop-statistics',
+      },
       {
         labelKey: 'admin.activities.gacha',
         routeId: 'admin-gacha',
@@ -156,6 +195,7 @@ const SEARCH_PAGES: Partial<
   },
   'admin-games': {
     subpages: [
+      { labelKey: 'admin.audit.gameHistory', routeId: 'admin-game-history' },
       { labelKey: 'admin.navigation.whaleHaven', routeId: 'admin-whale-haven' },
       { labelKey: 'admin.games.aiPlayersTitle', routeId: 'admin-game-ai' },
       { labelKey: 'admin.lakeNotes.title', routeId: 'admin-lake-notes' },
@@ -173,7 +213,10 @@ export const ADMIN_SEARCH_NAV: SearchNavItem[] = ADMIN_PRIMARY_NAV.flatMap((pare
   const page = SEARCH_PAGES[parent.key];
   const subpages = (page?.subpages ?? []).map<SearchNavItem>((subpage) => {
     const path = subpage.routeId ? requiredRouteById('admin', subpage.routeId).path : parent.to;
-    const to = subpage.search ? `${path}?${subpage.search}` : path;
+    const to =
+      path +
+      (subpage.search ? `?${subpage.search}` : '') +
+      (subpage.hash ? `#${subpage.hash}` : '');
     return {
       key: to,
       to,

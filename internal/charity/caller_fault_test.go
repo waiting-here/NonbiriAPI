@@ -10,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
 	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
@@ -50,10 +51,34 @@ func TestGatewayCallerFaultPreservesStreakAndFailureAccounting(t *testing.T) {
 		"Unable to submit request because it has a maxOutputTokens value of 100000 but the supported range is from 1 (inclusive) to 65537 (exclusive). Update the value and try again.",
 	} {
 		t.Run(message, func(t *testing.T) {
-			c := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, GatewayCallerInput: upstreamerror.GatewayCallerInput{EndsWithAssistant: true, MaxOutputTokens: 100000}}
+			c := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 			payload := fmt.Sprintf(`{"error":{"type":"AI_APICallError","message":%q,"param":{"type":"AI_APICallError","statusCode":400,"isRetryable":false,"message":%q}}}`, message, message)
 			testCallerFaultCompletion(t, "AI_APICallError", c, payload)
 		})
+	}
+}
+
+func TestGoogleInvalidArgumentKeepsKeyAtThreshold(t *testing.T) {
+	c := upstreamerror.Context{CharityCall: true, GoogleAPI: true, ContainsSecret: func([]byte) bool { return false }}
+	testCallerFaultCompletion(t, "400", c, `{"error":{"code":400,"message":"Requests ending with a model turn are not supported.","status":"INVALID_ARGUMENT"}}`)
+}
+
+func TestSchema56UpgradeRetainsExistingCallerReceipt(t *testing.T) {
+	e := newCharityTestEnv(t)
+	rail := e.billingRail(t)
+	request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
+	h := e.billingDispatch(t, rail, request.ID, 1)
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
+	payload := `{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input is too long."}}`
+	d := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
+	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: d.Code(), FailureOrigin: contract.OriginUpstreamResponse, StreakDisposition: contract.StreakNeutral, CallerFault: d.CallerFault()}
+	if _, err := rail.CompleteAttempt(t.Context(), h, outcome); err != nil {
+		t.Fatal(err)
+	}
+	reopenAfterOfflineUpgradeFrom(t, e, dbtest.RestoreSchema56Fixture)
+	var code string
+	if err := e.store.DB().QueryRow("SELECT error_code FROM dispatch_caller_parameter_errors WHERE claim_id=?", h.ClaimID()).Scan(&code); err != nil || code != "context_length_exceeded" {
+		t.Fatalf("upgraded receipt %q: %v", code, err)
 	}
 }
 
@@ -64,10 +89,7 @@ func testCallerParameterFaultAccounting(t *testing.T, kind, code, param string) 
 
 func testCallerFaultAccounting(t *testing.T, kind, code, param, message string, inputLength bool) {
 	t.Helper()
-	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }}
-	if !inputLength {
-		errorContext.UnchangedCallerParameter = func(name string) bool { return name == param }
-	}
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 	paramJSON := fmt.Sprintf("%q", param)
 	if inputLength && param == "" {
 		paramJSON = "null"
@@ -174,6 +196,7 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 		{500, "invalid_value"}, {400, "invalid_request_error"}, {422, "insufficient_quota"},
 		{422, "InvalidParameter"}, {400, "InvalidParameter.Unknown"},
 		{422, "AI_APICallError"}, {200, "AI_APICallError"}, {500, "AI_APICallError"},
+		{422, "400"}, {401, "400"}, {500, "400"},
 	} {
 		if _, err := tx.Exec(`INSERT INTO dispatch_caller_parameter_errors VALUES(?,?,?)`, handle.ClaimID(), tc.status, tc.code); err == nil {
 			t.Fatal("invalid caller receipt accepted", tc)
@@ -225,19 +248,19 @@ func TestCallerParameterReceiptConstraints(t *testing.T) {
 }
 
 func TestCallerParameterReceiptRollsBackWithCompletion(t *testing.T) {
-	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`, false)
+	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`)
 }
 
 func TestInputLengthReceiptRollsBackWithCompletion(t *testing.T) {
-	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input exceeds the context limit."}}`, true)
+	testCallerReceiptRollback(t, `{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input exceeds the context limit."}}`)
 }
 
 func TestGatewayCallerReceiptRollsBackWithCompletion(t *testing.T) {
 	const payload = `{"error":{"type":"AI_APICallError","message":"Requests ending with a model turn are not supported.","param":{"type":"AI_APICallError","statusCode":400,"isRetryable":false,"message":"Requests ending with a model turn are not supported."}}}`
-	testCallerReceiptRollback(t, payload, false, upstreamerror.GatewayCallerInput{EndsWithAssistant: true})
+	testCallerReceiptRollback(t, payload)
 }
 
-func testCallerReceiptRollback(t *testing.T, payload string, inputLength bool, gatewayProof ...upstreamerror.GatewayCallerInput) {
+func testCallerReceiptRollback(t *testing.T, payload string) {
 	t.Helper()
 	e := newCharityTestEnv(t)
 	rail := e.billingRail(t)
@@ -246,10 +269,7 @@ func testCallerReceiptRollback(t *testing.T, payload string, inputLength bool, g
 	if _, err := e.store.DB().Exec(`CREATE TRIGGER reject_caller_terminal BEFORE UPDATE ON dispatch_claims WHEN NEW.state='committed' BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END;`); err != nil {
 		t.Fatal(err)
 	}
-	errorContext := upstreamerror.Context{CharityCall: true, InputLengthErrors: inputLength, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
-	if len(gatewayProof) != 0 {
-		errorContext.GatewayCallerInput = gatewayProof[0]
-	}
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 	detail := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(payload))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse, CallerFault: detail.CallerFault()}
 	if _, err := rail.CompleteAttempt(t.Context(), handle, outcome); err == nil || !strings.Contains(err.Error(), "injected terminal failure") {
@@ -293,7 +313,7 @@ func TestCallerParameterEvidenceCannotExemptPersonalAttempt(t *testing.T) {
 	if _, err := e.store.DB().Exec(`INSERT INTO dispatch_caller_parameter_errors VALUES(?,400,'invalid_value')`, handle.ClaimID()); err == nil {
 		t.Fatal("personal claim accepted caller receipt")
 	}
-	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 	detail := errorContext.ReadResponse(ctx, &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse, CallerFault: detail.CallerFault()}
 	if _, err := rail.CompleteAttempt(ctx, handle, outcome); !errors.Is(err, claim.ErrInvalidInput) {
@@ -316,7 +336,7 @@ func TestCallerParameterEvidenceCannotOverrideAcceptedResponse(t *testing.T) {
 	if _, err := e.store.DB().Exec(`INSERT INTO dispatch_caller_parameter_errors VALUES(?,400,'invalid_value')`, handle.ClaimID()); err == nil {
 		t.Fatal("accepted response received caller-error evidence")
 	}
-	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
+	errorContext := upstreamerror.Context{CharityCall: true, ContainsSecret: func([]byte) bool { return false }}
 	detail := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
 	outcome := claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse, CallerFault: detail.CallerFault()}
 	if _, err := rail.CompleteAttempt(t.Context(), handle, outcome); !errors.Is(err, claim.ErrInvalidInput) {
@@ -328,7 +348,7 @@ func TestCallerParameterFaultPreservesConfiguredBackoff(t *testing.T) {
 	e := newBackoffEnv(t)
 	e.endpointPolicy(t, []smartbackoff.Rule{{Kind: "code", Value: "invalid_value", Period: "auto"}})
 	h, grant := e.dispatch(t)
-	errorContext := upstreamerror.Context{CharityCall: true, Rules: grant.BackoffRules(), ContainsSecret: func([]byte) bool { return false }, UnchangedCallerParameter: func(string) bool { return true }}
+	errorContext := upstreamerror.Context{CharityCall: true, Rules: grant.BackoffRules(), ContainsSecret: func([]byte) bool { return false }}
 	detail := errorContext.ReadResponse(t.Context(), &http.Response{StatusCode: 400, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"invalid_value","param":"temperature","message":"Invalid value."}}`))})
 	e.complete(t, h, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 400, UpstreamCode: detail.Code(), StreakDisposition: contract.StreakNeutral, FailureOrigin: contract.OriginUpstreamResponse, CallerFault: detail.CallerFault(), Backoff: detail.Backoff()})
 	e.wantWaiting(t, 900)

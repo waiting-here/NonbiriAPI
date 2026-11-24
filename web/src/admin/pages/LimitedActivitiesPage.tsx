@@ -1,3 +1,5 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
+import { useTranslation } from 'react-i18next';
 import './limited-activities.css';
 import { useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -40,6 +42,8 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
   const copy = usePictureBookText();
   const text = useActivityText(),
     client = useQueryClient();
+  const { t } = useTranslation();
+  const [base, setBase] = useState(detail);
   const [visible, setVisible] = useState(detail.visible),
     [paused, setPaused] = useState(detail.paused),
     [start, setStart] = useState(() => createTimeDraft(detail.starts_at, 'second')),
@@ -52,8 +56,28 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
   const save = useRetainedOperation(updateConfig, () => undefined, ['admin', 'limited-activities']);
   const uncertain = save.isError && responseOutcomeUnknown(save.error),
     locked = save.isPending || uncertain;
+  const dirty =
+    visible !== base.visible ||
+    paused !== base.paused ||
+    timeDraftValue(start) !== base.starts_at ||
+    timeDraftValue(end) !== base.ends_at ||
+    paper !== base.module_config.paper_price ||
+    brush !== base.module_config.brush_price ||
+    cap !== base.module_config.brush_cap;
+  const stale = base.revision !== detail.revision;
+  const loadDetail = (next: ActivityDetail) => {
+    setBase(next);
+    setVisible(next.visible);
+    setPaused(next.paused);
+    setStart(createTimeDraft(next.starts_at, 'second'));
+    setEnd(createTimeDraft(next.ends_at, 'second'));
+    setPaper(next.module_config.paper_price);
+    setBrush(next.module_config.brush_price);
+    setCap(next.module_config.brush_cap);
+  };
+  if (!dirty && stale) loadDetail(detail);
   const submit = () => {
-    if (save.isPending) return;
+    if (save.isPending || (stale && !uncertain)) return;
     setSaved(false);
     setFormError(null);
     try {
@@ -68,13 +92,9 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
           (starts_at === null) !== (ends_at === null) ||
           (starts_at !== null && ends_at !== null && starts_at >= ends_at)
         )
-          throw new ApiError(
-            'invalid_request',
-            'Set both times in the site time zone, with the end after the start.',
-            400,
-          );
+          throw new ApiError('invalid_request', t('admin.audit.invalidActivityTimes'), 400);
         input = {
-          expected_revision: detail.revision,
+          expected_revision: base.revision,
           visible,
           paused,
           starts_at,
@@ -84,6 +104,7 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
       }
       save.mutate(input, {
         onSuccess: (value) => {
+          loadDetail(value);
           client.setQueryData(configKey, value);
           setSaved(true);
         },
@@ -94,6 +115,7 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
   };
   return (
     <Panel>
+      <DraftLeaveGuard dirty={dirty} />
       <PanelHead title={text('common.availabilityAndExchangeSettings')} />
       <PanelBody>
         <Note>{text('common.hidingRemovesTheDirectoryEntryDirectLinks')}</Note>
@@ -185,17 +207,29 @@ function ConfigForm({ detail }: { readonly detail: ActivityDetail }) {
           </fieldset>
           <p className="nb-small nb-muted">
             {text('common.brushesAlreadyExchanged')}:{' '}
-            {formatCount(detail.module_config.brush_exchanged).display} ·{' '}
-            {text('common.remaining')}: {formatCount(detail.module_config.brush_remaining).display}
+            {formatCount(detail.module_config.brush_exchanged).display} · {text('common.remaining')}
+            : {formatCount(detail.module_config.brush_remaining).display}
           </p>
           <p className="nb-small nb-muted">{text('common.aCapBelowTheExchangedTotalStops')}</p>
           {uncertain ? (
             <Note tone="warn">{text('common.theSaveResultIsUnconfirmedRetryThe')}</Note>
           ) : null}
+          {stale && (
+            <Note tone="warn">
+              {t('admin.games.validation.changedElsewhere')}{' '}
+              <button type="button" onClick={() => loadDetail(detail)}>
+                {t('admin.games.restoreAuthorityValues')}
+              </button>
+            </Note>
+          )}
           {formError || save.error ? <ErrorState error={formError ?? save.error} /> : null}
           {saved ? <Note tone="ok">{text('common.settingsSaved')}</Note> : null}
           <FormActions>
-            <button className="nb-btn nb-btn--primary" type="submit" disabled={save.isPending}>
+            <button
+              className="nb-btn nb-btn--primary"
+              type="submit"
+              disabled={save.isPending || (stale && !uncertain)}
+            >
               {uncertain ? text('common.retrySave') : text('common.saveSettings')}
             </button>
           </FormActions>

@@ -22,11 +22,18 @@ export function Fields({
 }) {
   const grid = <div className="nb-fields__grid">{children}</div>;
   const classes = `nb-fields${columns ? ` nb-fields--columns-${columns}` : ''}${className ? ` ${className}` : ''}`;
-  if (!legend) return <div className={classes}>{grid}</div>;
+  const hintText = hint ? <p className="nb-fields__hint">{hint}</p> : null;
+  if (!legend)
+    return (
+      <div className={classes}>
+        {hintText}
+        {grid}
+      </div>
+    );
   return (
     <fieldset className={classes}>
       <legend className="nb-fields__legend">{legend}</legend>
-      {hint ? <p className="nb-fields__hint">{hint}</p> : null}
+      {hintText}
       {grid}
     </fieldset>
   );

@@ -158,7 +158,9 @@ describe('ReportDetailPage numbered nested pagination', () => {
       { station: 'admin', role: 'admin', route: `/reports/${caseId}` },
     );
     view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'operator' } });
-    await view.user.type(screen.getByLabelText('Reason'), 'Reviewed the evidence');
+    const reason = screen.getByRole('textbox', { name: 'Reason' });
+    expect(reason).toBeRequired();
+    await view.user.type(reason, 'Reviewed the evidence');
     await view.user.click(screen.getByRole('button', { name: 'Approve deletion' }));
     const dialog = screen.getByRole('alertdialog');
     expect(within(dialog).queryByRole('checkbox')).toBeNull();
@@ -281,18 +283,18 @@ describe('ReportDetailPage numbered nested pagination', () => {
     });
     const session = { admin: { username: 'operator' } };
     view.queryClient.setQueryData(['admin', 'session'], session);
-    await view.user.type(screen.getByLabelText('Reason'), 'Private review draft');
+    await view.user.type(screen.getByRole('textbox', { name: 'Reason' }), 'Private review draft');
     targetError = new ApiError('forbidden', 'Denied', 403);
     view.rerender(content());
     expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Reason')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Reason' })).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Retry' }));
     expect(screen.queryByText(summary.canonical_base_url)).not.toBeInTheDocument();
     await act(async () => release());
-    expect(await screen.findByLabelText('Reason')).toHaveValue('');
+    expect(await screen.findByRole('textbox', { name: 'Reason' })).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Approve deletion' })).toBeVisible();
     expect(view.queryClient.getQueryData(['admin', 'session'])).toEqual(session);
   });

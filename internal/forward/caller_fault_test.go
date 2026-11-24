@@ -21,20 +21,26 @@ import (
 )
 
 func TestForwardCallerParameterFailureKeepsErrorAndRetryContract(t *testing.T) {
-	for _, tc := range []struct{ charity, stream, adapted, inputLength, gateway bool }{
-		{false, false, false, false, false}, {false, true, false, false, false}, {true, false, false, false, false}, {true, true, false, false, false}, {true, false, true, false, false},
-		{false, false, false, true, false}, {true, false, false, true, false}, {true, true, false, true, false}, {true, false, true, true, false},
-		{true, false, false, false, true}, {true, true, false, false, true}, {false, false, false, false, true}, {true, false, true, false, true},
+	for _, tc := range []struct {
+		charity, stream, adapted, inputLength bool
+		upstream                              contract.Type
+	}{
+		{false, false, false, false, ""}, {false, true, false, false, ""}, {true, false, false, false, ""}, {true, true, false, false, ""}, {true, false, true, false, ""},
+		{false, false, false, true, ""}, {true, false, false, true, ""}, {true, true, false, true, ""}, {true, false, true, true, ""},
+		{true, false, false, false, contract.TypeAISDKGatewayV3}, {true, true, false, false, contract.TypeAISDKGatewayV3}, {false, false, false, false, contract.TypeAISDKGatewayV3}, {true, false, true, false, contract.TypeAISDKGatewayV3},
+		{true, false, false, false, contract.TypeGoogleGemini}, {true, true, false, false, contract.TypeGoogleGemini},
 	} {
 		charity, stream := tc.charity, tc.stream
-		t.Run(fmt.Sprintf("charity=%t/stream=%t/adapted=%t/inputLength=%t/gateway=%t", charity, stream, tc.adapted, tc.inputLength, tc.gateway), func(t *testing.T) {
+		t.Run(fmt.Sprintf("charity=%t/stream=%t/adapted=%t/inputLength=%t/upstream=%s", charity, stream, tc.adapted, tc.inputLength, tc.upstream), func(t *testing.T) {
 			code := "unsupported_parameter"
 			if tc.inputLength {
 				code = "invalid_value"
 			}
 			kind := contract.TypeOpenAICompatible
-			if tc.gateway {
+			if tc.upstream == contract.TypeAISDKGatewayV3 {
 				code, kind = "AI_APICallError", contract.TypeAISDKGatewayV3
+			} else if tc.upstream == contract.TypeGoogleGemini {
+				code, kind = "400", contract.TypeGoogleGemini
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var sent map[string]json.RawMessage
@@ -42,12 +48,25 @@ func TestForwardCallerParameterFailureKeepsErrorAndRetryContract(t *testing.T) {
 				if tc.adapted {
 					expected = "0.5"
 				}
-				if json.NewDecoder(r.Body).Decode(&sent) != nil || string(sent["temperature"]) != expected {
+				if err := json.NewDecoder(r.Body).Decode(&sent); err != nil {
+					t.Error(err)
+				}
+				sampling := sent
+				if kind == contract.TypeGoogleGemini {
+					var generation map[string]json.RawMessage
+					if err := json.Unmarshal(sent["generationConfig"], &generation); err != nil {
+						t.Error(err)
+					}
+					sampling = generation
+				}
+				if string(sampling["temperature"]) != expected {
 					t.Error("outbound override not exercised")
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(400)
-				if tc.gateway {
+				if kind == contract.TypeGoogleGemini {
+					_, _ = io.WriteString(w, `{"error":{"code":400,"message":"Requests ending with a model turn are not supported.","status":"INVALID_ARGUMENT"}}`)
+				} else if kind == contract.TypeAISDKGatewayV3 {
 					if string(sent["maxOutputTokens"]) != "100000" {
 						t.Error("caller output budget was not translated")
 					}
@@ -114,19 +133,28 @@ func TestForwardCallerParameterFailureKeepsErrorAndRetryContract(t *testing.T) {
 				})
 			}
 			f.charges.charge = 0
-			request := decodeChatForTest(t, fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hello"}],"temperature":0.25,"max_tokens":100000,"stream":%t}`, model, stream))
+			role := "user"
+			if kind == contract.TypeGoogleGemini {
+				role = "assistant"
+			}
+			request := decodeChatForTest(t, fmt.Sprintf(`{"model":%q,"messages":[{"role":%q,"content":"hello"}],"temperature":0.25,"max_tokens":100000,"stream":%t}`, model, role, stream))
 			writer := httptest.NewRecorder()
 			f.service.Chat(context.Background(), writer, 1, request, []byte(`{}`), "application/json", "en")
 			if writer.Code != 400 || !strings.Contains(writer.Body.String(), code) && !tc.adapted || len(f.claims.outcomes) != attempts || len(f.claims.requestResults) != 1 {
 				t.Fatalf("status=%d body=%s attempts=%d", writer.Code, writer.Body.String(), len(f.claims.outcomes))
 			}
-			outcome, terminal := f.claims.outcomes[0], f.claims.requestResults[0]
+			terminal := f.claims.requestResults[0]
 			want := contract.StreakUpstreamFailure
-			if charity && (!tc.adapted || tc.inputLength) {
+			if charity {
 				want = contract.StreakNeutral
 			}
-			if outcome.StreakDisposition != want || outcome.CallerFault.Matches(400, code) != (charity && (!tc.adapted || tc.inputLength)) || outcome.ProtocolSuccess || outcome.ResponseStarted || outcome.UpstreamStatus != 400 || terminal.Caller.Status != 400 || terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 0 {
-				t.Fatalf("outcome=%+v terminal=%+v", outcome, terminal)
+			for _, outcome := range f.claims.outcomes {
+				if outcome.StreakDisposition != want || outcome.CallerFault.Matches(400, code) != (want == contract.StreakNeutral) || outcome.ProtocolSuccess || outcome.ResponseStarted || outcome.UpstreamStatus != 400 {
+					t.Fatalf("outcome=%+v", outcome)
+				}
+			}
+			if terminal.Caller.Status != 400 || terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 0 {
+				t.Fatalf("terminal=%+v", terminal)
 			}
 		})
 	}

@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -174,6 +175,7 @@ export function WhaleEditor({
   if (draft && !changed.size && stale) setDraft(null);
   return (
     <>
+      <DraftLeaveGuard dirty={changed.size > 0} />
       <Panel>
         <PanelHead title={t('开放状态', 'Availability')} />
         <PanelBody>

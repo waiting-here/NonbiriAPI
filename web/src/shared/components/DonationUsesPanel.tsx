@@ -122,11 +122,12 @@ export function DonationUsesPanel({
   }, [locked, onPendingChange]);
   return (
     <div className="nb-stack">
-      {role !== 'owner' && !donationKeyId && (reviewable || locked) ? (
+      {role !== 'owner' && !donationKeyId ? (
         <DonationUsesReviewAll
           role={role}
           donationId={donationId}
           donationRevision={donationRevision}
+          reviewable={reviewable}
           onLockedChange={setLocked}
           onReviewed={(results, labels) => {
             setReceipt({ results, labels });
@@ -136,13 +137,19 @@ export function DonationUsesPanel({
         />
       ) : null}
       {role === 'owner' && donationKeyId ? (
-        <DonationKeyUseControls
-          role={role}
-          accountId={accountId}
-          donationId={donationId}
-          donationKeyId={donationKeyId}
-          uses={query.data ?? []}
-        />
+        query.isPending ? (
+          <LoadingState />
+        ) : query.error ? (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        ) : (
+          <DonationKeyUseControls
+            role={role}
+            accountId={accountId}
+            donationId={donationId}
+            donationKeyId={donationKeyId}
+            uses={query.data}
+          />
+        )
       ) : null}
       {!onReviewed ? (
         <DonationUseReviewResults results={receipt.results} labels={receipt.labels} />

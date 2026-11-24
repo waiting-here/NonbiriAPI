@@ -83,3 +83,63 @@ it('preserves hidden values while marking, editing nested selectors, and explici
     values: { 'X-Token': { action: 'clear' } },
   });
 });
+
+it('previews portable public rules without exporting or overwriting masked entries', async () => {
+  const current = {
+    revision: '1',
+    forward_headers: { mode: 'replace', values: [] },
+    native_extension_paths: { mode: 'replace', values: [] },
+    fixed_headers: {
+      mode: 'replace',
+      values: { 'x-client-version': { has_value: true, mask: '••••' } },
+    },
+    body_defaults: {
+      mode: 'replace',
+      values: {
+        '/temperature': { has_value: true, value: 0.7 },
+        '/seed': { has_value: true, mask: '••••' },
+      },
+    },
+    body_forced: { mode: 'replace', values: {} },
+  };
+  const sent: unknown[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options?: RequestInit) => {
+      if (options?.method === 'PUT') sent.push(JSON.parse(String(options.body)));
+      return new Response(JSON.stringify(current), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }),
+  );
+  const { user } = await renderWithProviders(
+    <RequestAdaptationEditor
+      url="/api/endpoints/11/request-adaptation"
+      scope="endpoint"
+      editable
+    />,
+    { station: 'user' },
+  );
+  await user.click(await screen.findByText('Transfer public rules'));
+  await user.click(screen.getByText('Export public rules'));
+  const field = screen.getByLabelText('Rule JSON');
+  expect(JSON.parse((field as HTMLTextAreaElement).value)).toEqual({
+    body_defaults: { '/temperature': 0.7 },
+  });
+  await user.clear(field);
+  await user.paste('{"body_defaults":{"/seed":8}}');
+  await user.click(screen.getByText('Preview import'));
+  expect(screen.getByText(/Check the rule names/)).toBeVisible();
+  await user.clear(field);
+  await user.paste('{"body_defaults":{"/temperature":0.2}}');
+  await user.click(screen.getByText('Preview import'));
+  await user.click(screen.getByText('Add to draft'));
+  expect(sent).toHaveLength(0);
+  await user.click(screen.getByText('Save request rewriting'));
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]).toMatchObject({
+    body_defaults: {
+      values: { '/seed': { action: 'keep' }, '/temperature': { action: 'replace', value: 0.2 } },
+    },
+  });
+});

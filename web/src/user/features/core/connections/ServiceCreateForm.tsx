@@ -205,7 +205,7 @@ export function ServiceCreateForm({
     mode === 'custom' && !started && !locked,
   );
   const ready = Boolean(
-    serviceName.trim() &&
+    ((connection && mode === 'mainstream') || serviceName.trim()) &&
     inputs.length &&
     (mode === 'mainstream' || (chosenProtocol && address.trim() && services.length)) &&
     inputs.every(({ input }) => input.native_services?.length) &&
@@ -482,6 +482,38 @@ export function ServiceCreateForm({
                 />
               )}
             </Field>
+            <Field label={t('common.connections.protocol')}>
+              {(props) => (
+                <select
+                  {...props}
+                  form={formID}
+                  value={connector}
+                  disabled={locked || started}
+                  required
+                  onChange={(event) => {
+                    setConnector(event.target.value);
+                    setFormat(null);
+                    setRerankPath('');
+                    setDiscoveryOverride(undefined);
+                  }}
+                >
+                  <option value="">{t('common.connections.selectProtocol')}</option>
+                  {nativeOptions
+                    .filter(
+                      (row, index, rows) =>
+                        rows.findIndex(
+                          (other) => other.configuration_type === row.configuration_type,
+                        ) === index,
+                    )
+                    .map((row) => (
+                      <option key={row.connector_type} value={row.connector_type}>
+                        {coreText(CONNECTOR_COPY_KEYS[row.configuration_type as ConnectorType])}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </Field>
+
             <MainstreamMatches
               options={suggestions}
               disabled={locked || started}
@@ -576,19 +608,21 @@ export function ServiceCreateForm({
             ) : null}
           </>
         )}
-        <Field label={t('user.workflows.serviceName')}>
-          {(props) => (
-            <input
-              {...props}
-              form={formID}
-              value={serviceName}
-              required
-              maxLength={128}
-              disabled={locked || started || (!connection && Boolean(saved.connection))}
-              onChange={(event) => setName(event.target.value)}
-            />
-          )}
-        </Field>
+        {(!connection || mode === 'custom') && (
+          <Field label={t('user.workflows.serviceName')}>
+            {(props) => (
+              <input
+                {...props}
+                form={formID}
+                value={serviceName}
+                required
+                maxLength={128}
+                disabled={locked || started || (!connection && Boolean(saved.connection))}
+                onChange={(event) => setName(event.target.value)}
+              />
+            )}
+          </Field>
+        )}
         {saved.credential ? (
           <Note>{credentialLabel(saved.credential)}</Note>
         ) : (
@@ -673,37 +707,6 @@ export function ServiceCreateForm({
             }
             lazy
           >
-            <Field label={t('common.connections.protocol')}>
-              {(props) => (
-                <select
-                  {...props}
-                  form={formID}
-                  value={connector}
-                  disabled={locked || started}
-                  required
-                  onChange={(event) => {
-                    setConnector(event.target.value);
-                    setFormat(null);
-                    setRerankPath('');
-                    setDiscoveryOverride(undefined);
-                  }}
-                >
-                  <option value="">{t('common.connections.selectProtocol')}</option>
-                  {nativeOptions
-                    .filter(
-                      (row, index, rows) =>
-                        rows.findIndex(
-                          (other) => other.configuration_type === row.configuration_type,
-                        ) === index,
-                    )
-                    .map((row) => (
-                      <option key={row.connector_type} value={row.connector_type}>
-                        {coreText(CONNECTOR_COPY_KEYS[row.configuration_type as ConnectorType])}
-                      </option>
-                    ))}
-                </select>
-              )}
-            </Field>
             <ProtocolRerankField
               formats={chosenProtocol?.rerank_formats}
               value={format}

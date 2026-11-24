@@ -89,10 +89,18 @@ func PriceTokenUsage(usage TokenUsage, prices TokenPrices) (int64, error) {
 // residual milli-credit) and 100 yields original unchanged. Intermediate
 // multiplication is exact; a result beyond int64 fails closed.
 func ApplyDiscountPercent(original int64, percent int) (int64, error) {
-	if original < 0 || percent < 0 || percent > 100 {
+	if percent < 0 || percent > 100 {
 		return 0, ErrInvalidAmount
 	}
-	v, err := ceilDivBig(new(big.Int).Mul(big.NewInt(original), big.NewInt(int64(percent))), hundred)
+	return ApplyDiscountBasisPoints(original, percent*100)
+}
+
+// ApplyDiscountBasisPoints rounds once to whole milli-credits.
+func ApplyDiscountBasisPoints(original int64, basisPoints int) (int64, error) {
+	if original < 0 || basisPoints < 0 || basisPoints > 10000 {
+		return 0, ErrInvalidAmount
+	}
+	v, err := ceilDivBig(new(big.Int).Mul(big.NewInt(original), big.NewInt(int64(basisPoints))), big.NewInt(10000))
 	if err != nil {
 		return 0, err
 	}

@@ -124,6 +124,7 @@ var chineseCodes = map[string]string{
 }
 
 var chineseMessages = map[string]string{
+	"response conversion failed":                                                                  "响应格式转换失败",
 	"expected a number from -2 to 2":                                                              "需要 -2 至 2 之间的数字（含两端）",
 	"Set the penalty to a number from -2 through 2.":                                              "将惩罚系数设为 -2 至 2 之间的数字，可取两端值。",
 	"expected 1 to 4096 messages":                                                                 "需要 1 至 4096 条消息",

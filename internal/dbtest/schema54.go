@@ -2,6 +2,7 @@ package dbtest
 
 import (
 	"database/sql"
+	_ "embed"
 	"testing"
 )
 
@@ -54,9 +55,21 @@ func RestoreSchema54Fixture(t *testing.T, source *sql.DB) {
 // RestoreSchema55Fixture removes only the optional attendance presentation.
 func RestoreSchema55Fixture(t *testing.T, source *sql.DB) {
 	t.Helper()
+	RestoreSchema56Fixture(t, source)
 	if _, err := source.ExecContext(t.Context(), `ALTER TABLE attendance_periods DROP COLUMN cover;
 ALTER TABLE attendance_tiers DROP COLUMN featured;
 UPDATE schema_state SET version=55`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+//go:embed testdata/schema56_caller_errors.sql.txt
+var schema56CallerErrors string
+
+// RestoreSchema56Fixture reinstates the caller-error receipt DDL from v1.4.2.
+func RestoreSchema56Fixture(t *testing.T, source *sql.DB) {
+	t.Helper()
+	if _, err := source.ExecContext(t.Context(), schema56CallerErrors+"ALTER TABLE charity_reservations DROP COLUMN discount_basis_points; UPDATE schema_state SET version=56"); err != nil {
 		t.Fatal(err)
 	}
 }

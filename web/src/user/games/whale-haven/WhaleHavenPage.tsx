@@ -1,21 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useWhaleText } from './copy';
+import { unlockPriceText, useWhaleText } from './copy';
 import { Link } from 'react-router';
 import { Amount } from '@shared/components/Amount';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { GameBackLink } from '../common/GameBackLink';
 import { UserPageGate } from '../../components/UserPageGate';
-import {
-  act,
-  exchange,
-  fetchProfile,
-  fetchNeighborHouse,
-  costWithCoupon,
-  type Action,
-  type Profile,
-} from './api';
+import { act, exchange, fetchProfile, fetchNeighborHouse, type Action, type Profile } from './api';
 import { soundEngine } from './audio/soundEngine';
 import { WhaleNamingModal } from './components/WhaleNamingModal';
 import {
@@ -40,6 +32,25 @@ import './styles/host.css';
 
 const profileKey = ['user', 'games', 'whale-haven', 'profile'] as const;
 const menuPreference = 'nonbiri:user:whale-haven:menu-position';
+
+function itemToUnlock(profile: Profile, command: Action) {
+  const { home } = profile.snapshot;
+  const { values } = profile.settings;
+  if (command.type === 'toggle_decor' && !home.ownedDecor.includes(command.decorId))
+    return {
+      name: DECOR_CATALOG[command.decorId].name,
+      basePrice: values['decor_' + command.decorId + '_price_pearls'],
+    };
+  if (
+    command.type === 'select_outfit' &&
+    command.outfitId !== 'maid_classic' &&
+    !home.ownedOutfits?.includes(command.outfitId)
+  )
+    return {
+      name: OUTFIT_CATALOG[command.outfitId].name,
+      basePrice: values['outfit_' + command.outfitId + '_price_pearls'],
+    };
+}
 
 function useSmallViewport() {
   const [small, setSmall] = useState(() => window.matchMedia('(max-width:860px)').matches);
@@ -169,6 +180,14 @@ function WhaleGame() {
     }
   }
   function receipt(command: Action, previous: Profile) {
+    const item = itemToUnlock(previous, command);
+    if (item) {
+      const unlocked =
+        command.type === 'toggle_decor'
+          ? t(`已解锁并布置${item.name}。`, `Unlocked and placed ${item.name}.`)
+          : t(`已解锁并换上${item.name}。`, `Unlocked and equipped ${item.name}.`);
+      return `${unlocked} ${unlockPriceText(previous, item.basePrice, t)}`;
+    }
     switch (command.type) {
       case 'buy_feed': {
         const count = command.quantity ?? 1;
@@ -177,21 +196,6 @@ function WhaleGame() {
       }
       case 'harvest_pearls':
         return t('本次收益已入账。', 'Earnings collected.');
-      case 'select_outfit':
-        if (
-          command.outfitId !== 'maid_classic' &&
-          !previous.snapshot.home.ownedOutfits?.includes(command.outfitId)
-        ) {
-          const name = OUTFIT_CATALOG[command.outfitId].name;
-          return t(`已解锁并换上${name}。`, `Unlocked and equipped ${name}.`);
-        }
-        break;
-      case 'toggle_decor':
-        if (!previous.snapshot.home.ownedDecor.includes(command.decorId)) {
-          const name = DECOR_CATALOG[command.decorId].name;
-          return t(`已解锁并布置${name}。`, `Unlocked and placed ${name}.`);
-        }
-        break;
       case 'set_open':
         if (!command.open)
           return t('小筑已关闭，本次来往已结算。', 'Haven closed and visits settled.');
@@ -219,7 +223,12 @@ function WhaleGame() {
     }
   }
   async function dispatch(command: Action, onError?: (reason: string) => void) {
-    if (!profile) return false;
+    if (!profile || lock.current) return false;
+    if (command.type === 'interact') {
+      const kind = command.zone === 'head' ? 'headpat' : 'poke';
+      setImpulse({ seq: ++nextImpulse.current, kind });
+      soundEngine.play(kind);
+    }
     const prev = profile;
     const message = receipt(command, prev);
     const updated = await commit(() => act(prev, command), message, onError);
@@ -237,31 +246,24 @@ function WhaleGame() {
       if (command.type === 'chat' || command.type === 'interact')
         setSpokenReply(updated.snapshot.whale.tempEmotion?.line ?? '');
       const anim =
-        command.type === 'interact'
-          ? command.zone === 'head'
-            ? 'headpat'
-            : 'poke'
-          : command.type === 'use_feed'
-            ? command.feedId === 'berry_teacake'
-              ? 'teacake'
-              : 'feed'
-            : command.type === 'harvest_pearls'
-              ? 'celebrate'
-              : null;
-      if (anim) setImpulse({ seq: ++nextImpulse.current, kind: anim });
-      soundEngine.play(
         command.type === 'use_feed'
-          ? 'feed_rice'
+          ? command.feedId === 'berry_teacake'
+            ? 'teacake'
+            : 'feed'
           : command.type === 'harvest_pearls'
-            ? 'coin_harvest'
-            : command.type === 'catch_guest'
-              ? (('catch_' + command.action) as 'catch_gentle')
-              : command.type === 'interact'
-                ? command.zone === 'head'
-                  ? 'headpat'
-                  : 'poke'
+            ? 'celebrate'
+            : null;
+      if (anim) setImpulse({ seq: ++nextImpulse.current, kind: anim });
+      if (command.type !== 'interact')
+        soundEngine.play(
+          command.type === 'use_feed'
+            ? 'feed_rice'
+            : command.type === 'harvest_pearls'
+              ? 'coin_harvest'
+              : command.type === 'catch_guest'
+                ? (('catch_' + command.action) as 'catch_gentle')
                 : 'ui_click',
-      );
+        );
       if (command.type === 'set_open' && !command.open) setView(null);
     }
     return !!updated;
@@ -303,27 +305,22 @@ function WhaleGame() {
       }
       return;
     }
-    let title: string,
-      price: number,
-      unit = t('小鲸币', 'whale coins');
+    const item = itemToUnlock(profile, command);
+    if (item) {
+      ask(
+        command,
+        t('解锁', 'Unlock ') + item.name,
+        unlockPriceText(profile, item.basePrice, t),
+        t('确认', 'Confirm'),
+      );
+      return;
+    }
+    let title: string, price: number, unit: string;
     if (command.type === 'buy_feed') {
       title =
         t('购入', 'Buy ') + FEED_CATALOG[command.feedId].name + ' ×' + (command.quantity ?? 1);
       price = values['feed_' + command.feedId + '_price_milli'];
       unit = t('游戏积分', 'game credits');
-    } else if (
-      command.type === 'select_outfit' &&
-      command.outfitId !== 'maid_classic' &&
-      !snapshot.home.ownedOutfits?.includes(command.outfitId)
-    ) {
-      title = t('解锁', 'Unlock ') + OUTFIT_CATALOG[command.outfitId].name;
-      price = costWithCoupon(profile, values['outfit_' + command.outfitId + '_price_pearls']);
-    } else if (
-      command.type === 'toggle_decor' &&
-      !snapshot.home.ownedDecor.includes(command.decorId)
-    ) {
-      title = t('解锁', 'Unlock ') + DECOR_CATALOG[command.decorId].name;
-      price = costWithCoupon(profile, values['decor_' + command.decorId + '_price_pearls']);
     } else if (command.type === 'spin_conch_gacha') {
       title = t('转动海螺扭蛋', 'Draw a conch reward');
       price = values.conch_cost_shards;

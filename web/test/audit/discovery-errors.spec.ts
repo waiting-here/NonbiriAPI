@@ -128,8 +128,7 @@ test('Google discovery explains server-region failures and recovers in setup and
         await page.getByRole('button', { name: copy.services.viewModels, exact: true }).click();
         const modelsPanel = page.locator('.nb-expandable-panel:not([hidden])');
         await modelsPanel
-          .locator('summary')
-          .filter({ hasText: copy.services.manualModels })
+          .getByRole('tab', { name: copy.services.manualModels, exact: true })
           .click();
         await modelsPanel
           .getByLabel(copy.core['endpoints.manualModel'], { exact: true })

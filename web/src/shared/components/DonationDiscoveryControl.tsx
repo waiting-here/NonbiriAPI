@@ -1,5 +1,6 @@
 import { Button } from '@shared/components/ui/Button';
 import { Fold } from '@shared/components/ui/Fold';
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -119,6 +120,7 @@ export function DonationDiscoveryControl({
   const label = single ? 'one' : target.donation_id === null ? 'all' : 'donation';
   return (
     <section className="donation-discovery" aria-label={t('common.donationDiscovery.title')}>
+      <DraftLeaveGuard dirty={working || job?.phase === 'paused'} />
       <Button
         type="button"
 

@@ -299,3 +299,10 @@
     min-height: 2.5rem;
   }
 }
+
+@media (prefers-reduced-transparency: reduce) {
+  .nb-user-header {
+    backdrop-filter: none;
+    background: var(--nb-color-surface-raised);
+  }
+}

@@ -174,6 +174,7 @@
       "modelName": "Service model name",
       "moreSource": "Source actions for {{name}}",
       "dirtyCount": "{{count}} changes",
+      "orderChanged": "The saved order has changed. Discard this draft to load the current order.",
       "discard": "Discard changes",
       "deleteHelp": "Clients will no longer be able to use {{name}}. Source services and keys remain unchanged.",
       "searchPlaceholder": "Model name or call name",
@@ -1889,6 +1890,7 @@
         "endpoint": "Service"
       },
       "resourceType": "Related",
+      "issueNumber": "Issue ID",
       "closedResourceUnavailable": "The related service or key was deleted. This issue is closed.",
       "detail": {
         "auth": "The service rejected the key.",
@@ -2820,7 +2822,7 @@
       "account.exportUnknown": "The export result could not be confirmed. Verify your Discord identity again to create a new export; the previous request will not run again.",
       "account.deleteUnknown": "The deletion response was unknown. Do not submit it again; check whether the account still exists.",
       "account.checkAuthority": "Check account status",
-      "account.deleteStillActive": "The account is still active. Verify your Discord identity again before another deletion attempt.",
+      "account.deleteStillActive": "The account is still active. You can confirm deletion again while your Discord verification is valid.",
       "account.authorityCheckFailed": "Account status could not be checked. The deletion request was not repeated.",
       "keys.clientTitle": "Enter these in your client",
       "keys.clientHelp": "Choose “OpenAI compatible” or “Custom OpenAI”, then enter these three items.",
@@ -3632,6 +3634,13 @@
       "statuses": "At least one success returns 200; all confirmed failures return 422; no success with unfinished items returns 504. Reusing the same key with different content returns 409."
     },
     "services": {
+      "backToAllKeys": "Back to all keys",
+      "backToModelSources": "Back to model sources",
+      "rotationRevisionChanged": "The credential changed while you were reviewing its impact. Review the updated list before replacing it.",
+      "chooseManualModels": "Choose manual models to bind",
+      "manageManualModels": "Manage manual models",
+      "mappingIncomplete": "Incomplete mapping",
+      "reviewIncompleteModels": "Review incomplete mappings ({{count}})",
       "emptyServices": "No services yet",
       "chooseCatalog": "Model list settings",
       "catalogRequired": "Choose a catalog for this key before reading available models. You can still add models manually.",
@@ -3690,8 +3699,6 @@
       "saveListSettings": "Save list settings",
       "manualBulkHelp": "One upstream model per line. Fetching the list keeps these manual entries.",
       "usageEndpoint": "Endpoint",
-      "protocolAccess": "Protocol access",
-      "protocolAccessHelp": "Enable all APIs supported by this endpoint protocol for this key. Existing model lists are kept.",
       "lastSuccessfulFetch": "Last successful fetch",
       "fetchChanges": "Added {{added}}, removed {{removed}}. Manual entries and existing bindings are kept.",
       "endpointSettings": "Endpoint settings",

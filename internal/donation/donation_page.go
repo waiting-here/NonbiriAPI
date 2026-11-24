@@ -93,7 +93,14 @@ func (s *Service) donationsPage(ctx context.Context, role reviewerRole, userID i
 	if err != nil {
 		return empty, err
 	}
-	query := `SELECT d.id AS id FROM donations d JOIN donation_handling h ON h.donation_id=d.id
+	queuedAt := "d.created_at"
+	if role != recurringOwner {
+		queuedAt = `COALESCE((SELECT MIN(pending.created_at) FROM donation_keys queue_key
+JOIN donation_uses queue_use ON queue_use.donation_key_id=queue_key.id
+JOIN donation_use_revisions pending ON pending.id=queue_use.current_pending_revision_id
+WHERE queue_key.donation_id=d.id),d.created_at)`
+	}
+	query := `SELECT d.id AS id,` + queuedAt + ` AS created_at FROM donations d JOIN donation_handling h ON h.donation_id=d.id
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now - terminalRetention}
 	predicate, values := access.predicate(now)
@@ -105,7 +112,11 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		query, args = appendOwnerView(query, args, filter.OwnerView, now)
 	}
 	query, args = appendManagementFilter(query, args, filter, now)
-	ids, metadata, err := browseIDs(ctx, tx, query, args, page)
+	sort := filter.Sort
+	if sort == "" {
+		sort = "oldest"
+	}
+	ids, metadata, err := browseOrderedIDs(ctx, tx, query, args, page, sort)
 	if err != nil {
 		return empty, err
 	}
@@ -132,6 +143,9 @@ WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 		}
 		header, summary := item.header, item.summary
 		summary.UseSummary = summaries[id]
+		if role != recurringOwner && (summary.Status == "approved" || summary.Status == "pending") {
+			summary.ReviewSubmittedAt = summary.UseSummary.firstPendingAt
+		}
 		if access.redact {
 			header = traineeReviewProjection(header)
 			summary.DiscordPublicThanks = header.DiscordPublicThanks

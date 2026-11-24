@@ -7,8 +7,8 @@ import {
 } from '../game/catalog';
 import { MessageCircle, Waves } from './Icons';
 import { UiSwitch } from './UiMotifs';
-import { costWithCoupon, type Action, type Profile } from '../api';
-import { useWhaleText } from '../copy';
+import type { Action, Profile } from '../api';
+import { unlockPriceText, useWhaleText } from '../copy';
 import { formatDateTime } from '@shared/utils/datetime';
 const OUTFITS = (Object.keys(OUTFIT_CATALOG) as WhaleOutfitId[]).filter(
   (id) => !OUTFIT_CATALOG[id].hidden,
@@ -53,8 +53,8 @@ export function WardrobePane({
               <span
                 className="deck-balance"
                 title={t(
-                  '下次解锁服装或家具时自动抵扣',
-                  'Applied to your next outfit or furnishing',
+                  '解锁服装或家具时，实付低于原价才用券',
+                  'Used when it lowers the price of a new outfit or furnishing',
                 )}
               >
                 <img src={getSceneAssetUrl('props/buff-tailor-coupon.webp')} alt="" />{' '}
@@ -72,10 +72,6 @@ export function WardrobePane({
             const item = OUTFIT_CATALOG[id];
             const isActive = id === currentOutfit;
             const owned = id === 'maid_classic' || snapshot.home.ownedOutfits?.includes(id);
-            const finalCost = costWithCoupon(
-              profile,
-              profile.settings.values['outfit_' + id + '_price_pearls'] ?? 0,
-            );
             return (
               <article className={`outfit-tile ${isActive ? 'is-equipped' : ''}`} key={id}>
                 <div className="outfit-tile__art">
@@ -86,7 +82,11 @@ export function WardrobePane({
                   <p title={item.description}>{item.badge}</p>
                   {!owned && (
                     <span className="wh-item-price">
-                      {finalCost} {t('小鲸币', 'whale coins')}
+                      {unlockPriceText(
+                        profile,
+                        profile.settings.values['outfit_' + id + '_price_pearls'],
+                        t,
+                      )}
                     </span>
                   )}
                   <button
@@ -158,10 +158,6 @@ export function DecorPane({
           const item = DECOR_CATALOG[id];
           const owned = snapshot.home.ownedDecor.includes(id);
           const equipped = snapshot.home.equippedDecor.includes(id);
-          const finalCost = costWithCoupon(
-            profile,
-            profile.settings.values['decor_' + id + '_price_pearls'],
-          );
           return (
             <li key={id}>
               <span className="decor-shelf__image">
@@ -184,7 +180,11 @@ export function DecorPane({
                 </p>
                 {!owned && (
                   <span className="wh-item-price">
-                    {finalCost} {t('小鲸币', 'whale coins')}
+                    {unlockPriceText(
+                      profile,
+                      profile.settings.values['decor_' + id + '_price_pearls'],
+                      t,
+                    )}
                   </span>
                 )}
               </div>

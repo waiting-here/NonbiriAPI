@@ -22,6 +22,15 @@ export const NATIVE_SERVICES = [
 
 export type NativeService = (typeof NATIVE_SERVICES)[number];
 
+/** Defaults for a new binding. The full advertised list stays available to edit. */
+export function defaultBindingServices(
+  connector: string | undefined,
+  available: readonly NativeService[],
+) {
+  if (connector !== 'openai-compatible') return [...available];
+  return available.filter((service) => service === 'chat_completions');
+}
+
 export const NATIVE_SERVICE_LABEL_KEYS: Record<NativeService, string> = {
   chat_completions: 'common.modelTypes.chat_completions',
   responses: 'common.modelTypes.responses',

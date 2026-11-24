@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { charityKeys } from '@shared/operations/charity';
 import { DonationPendingBadge } from './DonationPendingBadge';
+import { defaultStewardPermissions } from '@shared/operations/stewardPermissions';
+import * as donationPages from '@shared/operations/donationPages';
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -23,6 +25,43 @@ afterEach(() => {
 });
 
 describe('DonationPendingBadge', () => {
+  it('uses the same combined pending-review filter for the count and its destination after a grant revision', async () => {
+    const page = vi.spyOn(donationPages, 'getManagedDonationsPage').mockResolvedValue({
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 10, total_items: '2', total_pages: '1' },
+    });
+    const view = await renderWithProviders(<></>, { station: 'user', role: 'level5' });
+    const policy = defaultStewardPermissions(5);
+    policy.permissions['donations.handle'] = false;
+    policy.permissions['donations.review'] = true;
+    view.queryClient.setQueryData(['user', 'session'], {
+      user: { id: '17', effective_level: 5, steward_permissions: policy },
+    });
+    view.rerender(<DonationPendingBadge role="steward" accountID="17" />);
+    const link = await screen.findByRole('link', { name: /2 donations awaiting review/ });
+    expect(link).toHaveAttribute(
+      'href',
+      '/steward?tab=charity&charity_section=donations&donation_status=any_pending',
+    );
+    expect(page).toHaveBeenCalledWith(
+      'steward',
+      { review_status: 'any_pending' },
+      '1',
+      10,
+      expect.anything(),
+    );
+    act(() =>
+      view.queryClient.setQueryData(['user', 'session'], {
+        user: {
+          id: '17',
+          effective_level: 5,
+          steward_permissions: { ...policy, revision: '1', donation_scope: 'none' },
+        },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('link')).not.toBeInTheDocument());
+  });
   it.each([
     {
       role: 'admin' as const,
@@ -61,9 +100,13 @@ describe('DonationPendingBadge', () => {
       expect(link).toHaveAttribute('href', href);
       expect(within(link).getByText('Pending')).toBeVisible();
       expect(within(link).getByText('99+')).toBeVisible();
-      expect(view.queryClient.getQueryData(charityKeys.badge(role, 'account-a'))).toEqual(
-        badge(exactBadgeCount),
-      );
+      expect(
+        view.queryClient.getQueryData(
+          role === 'admin'
+            ? charityKeys.badge(role, 'account-a')
+            : [...charityKeys.badge(role, 'account-a'), '5:0'],
+        ),
+      ).toEqual(badge(exactBadgeCount));
     },
   );
 

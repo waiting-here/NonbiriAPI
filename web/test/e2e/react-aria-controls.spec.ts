@@ -1,4 +1,5 @@
 import { build } from 'vite';
+import { stationCopy } from '../../station-copy';
 import react from '@vitejs/plugin-react-swc';
 import { resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -18,7 +19,7 @@ test.beforeAll(async () => {
     output = await build({
       configFile: false,
       logLevel: 'error',
-      plugins: [react()],
+      plugins: [stationCopy(), react()],
       resolve: { alias: { '@shared': resolve('src/shared') } },
       define: { 'process.env.NODE_ENV': JSON.stringify(buildNodeEnv) },
       build: {
@@ -94,7 +95,7 @@ for (const width of [1440, 390])
                 .filter((key) => key.endsWith('.css'))
                 .map((key) => '<link rel="stylesheet" href="' + key + '">')
                 .join('') +
-              '<style>body{margin:0;background:var(--nb-color-bg);color:var(--nb-color-text)}.scene{padding:24px;background:var(--nb-color-bg)}.fixture-native{color:var(--nb-color-text);background:var(--nb-color-surface);border:1px solid var(--nb-color-border);padding:24px;width:min(400px,80vw)}button,input{font:inherit}</style></head><body><div id="root"></div><script type="module" src="controls.js"></script></body></html>',
+              '<style>body{margin:0;background:var(--nb-color-bg);color:var(--nb-color-text)}.scene{padding:24px;background:var(--nb-color-bg)}.fixture-native{color:var(--nb-color-text);background:var(--nb-color-surface);border:1px solid var(--nb-color-border);padding:24px;width:min(400px,80vw)}button,input{font:inherit}.nb-sheet__body::after{content:"";display:block;height:110vh}</style></head><body><div id="root"></div><script type="module" src="controls.js"></script></body></html>',
           });
         const asset = assets.get(name);
         return asset
@@ -135,8 +136,38 @@ for (const width of [1440, 390])
       const combo = sheet.getByRole('combobox', { name: 'Model' });
       await combo.fill('a');
       await combo.press('ArrowDown');
+      const suggestions = page.getByRole('listbox');
+      await expect(suggestions.getByRole('option')).toHaveCount(2);
+      const scroller = sheet.locator('.nb-sheet__body');
+      const initialScroll = await scroller.evaluate((node) => node.scrollTop);
+      await scroller.evaluate((node) => node.scrollBy(0, 32));
+      await expect
+        .poll(() => scroller.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(initialScroll);
+      await expect
+        .poll(async () => {
+          const anchor = await combo.boundingBox();
+          const surface = await page.locator('.nb-suggestions-popover').boundingBox();
+          if (!anchor || !surface) return Infinity;
+          return Math.min(
+            Math.abs(surface.y - anchor.y - anchor.height - 4),
+            Math.abs(anchor.y - surface.y - surface.height - 4),
+          );
+        })
+        .toBeLessThan(2);
+      await expect(combo).toBeFocused();
       await combo.press('Enter');
       await expect(combo).toHaveValue('alpha');
+      await combo.fill('');
+      await suggestions.getByRole('option', { name: 'beta' }).click();
+      await expect(combo).toHaveValue('beta');
+      await combo.press('ArrowDown');
+      await expect(suggestions).toBeVisible();
+      await scroller.evaluate((node) => node.scrollTo(0, node.scrollHeight));
+      await expect(suggestions).toHaveCount(0);
+      await expect(combo).toHaveValue('beta');
+      await scroller.evaluate((node, top) => node.scrollTo(0, top), initialScroll);
+      await expect.poll(() => scroller.evaluate((node) => node.scrollTop)).toBe(initialScroll);
       const settings = sheet.getByRole('tab', { name: 'Settings' });
       const history = sheet.getByRole('tab', { name: 'History' });
       await settings.click();

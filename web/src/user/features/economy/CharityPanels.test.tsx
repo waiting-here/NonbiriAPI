@@ -923,6 +923,70 @@ describe('donation composer recovery', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
+  it('batch fills only untouched expiry and threshold fields after the individual clocks hydrate', async () => {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const local = '2030-01-01T01:00:00';
+    const instant = Math.floor(new Date(2030, 0, 1, 1).getTime() / 1000);
+    installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: '/api/time-zones',
+        body: { version: 'go1.26.6-zoneinfo', zones: [...new Set([timeZone, 'UTC'])].sort() },
+      },
+      {
+        method: 'GET',
+        path: '/api/time/resolve?' + new URLSearchParams({ local, time_zone: timeZone }),
+        body: {
+          instant,
+          local,
+          time_zone: timeZone,
+          offset_seconds: Date.parse(local + 'Z') / 1000 - instant,
+          adjustment: 'none',
+        },
+      },
+    ]);
+    const second = { ...choices[0], key: { ...choices[0].key, id: '62' } };
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const view = await renderWithProviders(
+      withPickerChoices(<DonationComposer draftNamespace="bulk-choices" />, [choices[0], second]),
+      { station: 'user', role: 'user' },
+    );
+    for (const id of ['61', '62'])
+      await clickDonationCheckbox(view.user, screen.getByLabelText('Select resource key ' + id));
+    const keyRow = (id: string) =>
+      view.container.querySelector<HTMLElement>('[id$="-options-' + id + '"]')!;
+    const first = keyRow('61'),
+      next = keyRow('62');
+    await view.user.click(first.querySelector('summary')!);
+    const threshold = (element: HTMLElement) =>
+      within(element).getByRole('textbox', { name: 'Consecutive failure disable threshold' });
+    await view.user.clear(threshold(first));
+    await view.user.type(threshold(first), '4');
+    const bulk = screen.getByText('Fill selected keys').closest('details')!;
+    await view.user.click(bulk.querySelector('summary')!);
+    await view.user.clear(threshold(bulk));
+    await view.user.type(threshold(bulk), '7');
+    await view.user.click(within(bulk).getByRole('button', { name: 'Apply failure threshold' }));
+    const expiry = (element: Element) =>
+      element.querySelector<HTMLInputElement>('input[type="datetime-local"]')!;
+    await view.user.type(expiry(bulk), '2030-01-01T01:00');
+    await waitFor(() =>
+      expect(within(bulk).getByRole('button', { name: 'Apply expiry' })).toBeEnabled(),
+    );
+    await view.user.click(within(bulk).getByRole('button', { name: 'Apply expiry' }));
+    expect(expiry(first)).toHaveValue('2030-01-01T01:00');
+    expect(expiry(next)).toHaveValue('2030-01-01T01:00');
+    await view.user.clear(expiry(first));
+    await view.user.click(within(bulk).getByRole('button', { name: 'Apply expiry' }));
+    expect(expiry(first)).toHaveValue('');
+    expect(expiry(next)).toHaveValue('2030-01-01T01:00');
+    expect(threshold(first)).toHaveValue('4');
+    await view.user.click(next.querySelector('summary')!);
+    expect(threshold(next)).toHaveValue('7');
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+  });
+
   it('submits one local expiry per selected key using the server resolution', async () => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const local = '2030-01-01T00:00:00';

@@ -250,16 +250,18 @@ func (s *State) dress(a Action, now int64, p Parameters) (Result, error) {
 			return Result{}, nil
 		}
 	}
-	price := p.Value(priceKey)
-	withCoupon := s.Home.Buffs.WardrobeDiscountCoupons > 0 && price > 0 && p.Value("coupon_discount_bp") > 0
-	if withCoupon {
-		price = max(1, fraction(price, 10_000-p.Value("coupon_discount_bp")))
+	basePrice := p.Value(priceKey)
+	price := basePrice
+	discountBP := p.Value("coupon_discount_bp")
+	if s.Home.Buffs.WardrobeDiscountCoupons > 0 && basePrice > 0 && discountBP > 0 {
+		price = max(1, fraction(basePrice, 10_000-discountBP))
 	}
 	if s.Wallet.Pearls < price {
 		return Result{}, errors.New("小鲸币不足，先去存钱罐收币吧。")
 	}
 	s.Wallet.Pearls -= price
-	if withCoupon {
+	usedCoupon := price < basePrice
+	if usedCoupon {
 		s.Home.Buffs.WardrobeDiscountCoupons--
 	}
 	if isDecor {
@@ -272,7 +274,7 @@ func (s *State) dress(a Action, now int64, p Parameters) (Result, error) {
 		s.Whale.Outfit = id
 		s.say("cheerful", "新衣服暖乎乎的，谢谢饲养员～", now+9000)
 	}
-	return Result{CostPearls: price, UsedCoupon: withCoupon}, nil
+	return Result{CostPearls: price, UsedCoupon: usedCoupon}, nil
 }
 
 func (s *State) spin(now int64, p Parameters) (Result, error) {

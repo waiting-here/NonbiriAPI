@@ -139,9 +139,8 @@ export function formatMilliCredits(value: string | number) {
   return formatAmount(String(value));
 }
 export function costWithCoupon(profile: Profile, basePrice: number) {
-  if (!profile.snapshot.home.buffs?.wardrobeDiscountCoupons) return basePrice;
-  return Math.max(
-    1,
-    Math.floor((basePrice * (10000 - profile.settings.values.coupon_discount_bp)) / 10000),
-  );
+  const discountBP = profile.settings.values.coupon_discount_bp ?? 0;
+  if (!profile.snapshot.home.buffs?.wardrobeDiscountCoupons || basePrice <= 0 || discountBP <= 0)
+    return basePrice;
+  return Math.max(1, Math.floor((basePrice * (10_000 - discountBP)) / 10_000));
 }

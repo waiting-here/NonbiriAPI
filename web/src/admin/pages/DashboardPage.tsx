@@ -173,7 +173,7 @@ export function DashboardPage() {
             {t('admin.dashboard.unknownUsage')}：
             {!usage.data ? '—' : formatCount(usage.data.total_unknown_usage_requests).display}
           </p>
-          {usage.isPending || endpoints.isPending || reports.isPending ? <LoadingState /> : null}
+          {usage.isPending || endpoints.isPending ? <LoadingState /> : null}
           {usage.error ? (
             <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
           ) : null}
@@ -194,30 +194,32 @@ export function DashboardPage() {
       ) : (
         <Fold title={t('admin.dashboard.activityTitle')}>
           {activity.data?.data.length ? (
-            <dl className="nb-facts nb-facts--inline">
-              <dt>{t('admin.dashboard.latestDay')}</dt>
-              <dd>{formatSiteDay(activity.data.data[0]?.day, siteTimezone.data)}</dd>
-              <dt>{t('admin.dashboard.productActive')}</dt>
-              <dd>
-                {t(
-                  activity.data.data[0]?.product_active
-                    ? 'admin.dashboard.activeValue'
-                    : 'admin.dashboard.inactiveValue',
-                )}
-              </dd>
-              <dt>{t('admin.dashboard.generalCheckins')}</dt>
-              <dd>{formatCount(activity.data.data[0]?.checkins ?? 0).display}</dd>
-              <dt>{t('admin.dashboard.gameCheckins')}</dt>
-              <dd>{formatCount(activity.data.data[0]?.game_checkins ?? 0).display}</dd>
-              <dt>{t('admin.dashboard.gameActive')}</dt>
-              <dd>
-                {t(
-                  activity.data.data[0]?.game_active
-                    ? 'admin.dashboard.activeValue'
-                    : 'admin.dashboard.inactiveValue',
-                )}
-              </dd>
-            </dl>
+            activity.data.data.map((day) => (
+              <dl key={day.day} className="nb-facts nb-facts--inline">
+                <dt>{t('admin.dashboard.activityDay')}</dt>
+                <dd>{formatSiteDay(day.day, siteTimezone.data)}</dd>
+                <dt>{t('admin.dashboard.productActive')}</dt>
+                <dd>
+                  {t(
+                    day.product_active
+                      ? 'admin.dashboard.activeValue'
+                      : 'admin.dashboard.inactiveValue',
+                  )}
+                </dd>
+                <dt>{t('admin.dashboard.generalCheckins')}</dt>
+                <dd>{formatCount(day.checkins ?? 0).display}</dd>
+                <dt>{t('admin.dashboard.gameCheckins')}</dt>
+                <dd>{formatCount(day.game_checkins ?? 0).display}</dd>
+                <dt>{t('admin.dashboard.gameActive')}</dt>
+                <dd>
+                  {t(
+                    day.game_active
+                      ? 'admin.dashboard.activeValue'
+                      : 'admin.dashboard.inactiveValue',
+                  )}
+                </dd>
+              </dl>
+            ))
           ) : (
             <EmptyState
               title={t('admin.dashboard.noActivity')}

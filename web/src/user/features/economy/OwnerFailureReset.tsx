@@ -32,14 +32,16 @@ export function OwnerFailureReset({
   const unknown = responseOutcomeUnknown(reset.error);
   return (
     <div className="economy-failure-reset">
-      <p className="muted">{t('common.failureReset.help')}</p>
+      <p className="muted">
+        {t('common.connections.resetKeyFailures')} · {t('common.failureReset.help')}
+      </p>
       <button
         type="button"
         className="nb-btn nb-btn--secondary"
         disabled={reset.isPending || (disabled && !unknown)}
         onClick={() => reset.mutate(unknown && reset.variables ? reset.variables : { revision })}
       >
-        {unknown ? t('common.failureReset.resume') : t('common.failureReset.title')}
+        {unknown ? t('common.failureReset.resume') : t('common.governance.resetWholeKey')}
       </button>
       {reset.error ? <ErrorState error={reset.error} /> : null}
       {reset.isSuccess ? <FailureResetDetails services={reset.data?.services ?? []} /> : null}

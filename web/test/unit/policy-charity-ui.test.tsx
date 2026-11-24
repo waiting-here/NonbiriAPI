@@ -1,3 +1,4 @@
+import { QUERY_DEFAULTS } from '@shared/query/client';
 import { credentialGrant, endpointScope } from '../fixtures/resourceScopes';
 vi.mock('@shared/components/AsyncLeaveDialog', () => ({ AsyncLeaveDialog: () => null }));
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -870,7 +871,7 @@ describe('experimental policy and charity controls', () => {
     });
 
     await rendered.user.click(await screen.findByRole('button', { name: 'View models' }));
-    await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+    await rendered.user.click(await screen.findByRole('tab', { name: 'Manual models' }));
     const entryRow = (await screen.findByText('Vendor/Exact')).closest('li');
     if (!entryRow) throw new Error('Manual catalog row not found');
     await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
@@ -1205,6 +1206,8 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
       route: '/endpoints/1',
     });
+    // A freshly reconciled key is still current when the new focused panel mounts.
+    rendered.queryClient.setQueryDefaults(['user', 'core'], { staleTime: QUERY_DEFAULTS.staleTime });
     await screen.findByText('sk-a…tail');
     await rendered.user.click(screen.getByRole('button', { name: '＋ Add key' }));
     await rendered.user.type(screen.getByLabelText('Key'), marker);
@@ -2181,6 +2184,11 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('button', { name: 'Approve pending content' });
     expect(screen.queryByRole('button', { name: 'Models and bindings' })).toBeNull();
     await view.user.click(screen.getByRole('button', { name: 'Approve pending content' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Approve pending content',
+      }),
+    );
     const manage = await screen.findByRole('button', { name: 'Models and bindings' });
     expect(screen.getAllByRole('button', { name: 'Models and bindings' })).toHaveLength(1);
     expect(donation.status).toBe('approved');
@@ -2641,7 +2649,7 @@ describe('experimental policy and charity controls', () => {
       route: '/steward?tab=logs',
     });
     const load = async () => {
-      await rendered.user.click(await screen.findByRole('tab', { name: 'Discovery and activity' }));
+      await rendered.user.click(await screen.findByRole('tab', { name: 'Discovery and activity' }, { timeout: 6000 }));
       const diagnostics = await screen.findByRole('region', {
         name: 'Discovery and activity diagnostics',
       });
@@ -3481,7 +3489,9 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<UserLayout />, { station: 'user', role: 'user' });
     await screen.findByText('fixture-user');
     rendered.queryClient.setQueryData(userKeys.models, [model]);
-    await rendered.user.click(screen.getByRole('button', { name: 'Account actions · fixture-user' }));
+    await rendered.user.click(
+      screen.getByRole('button', { name: 'Account actions · fixture-user' }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Sign out' }));
     await expect(screen.findByText('logout refused')).resolves.toBeVisible();
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();

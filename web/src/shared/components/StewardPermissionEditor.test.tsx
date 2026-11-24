@@ -73,6 +73,9 @@ describe('steward permission editor', () => {
     expect(writes).toHaveLength(0);
     await user.click(within(pair).getByRole('radio', { name: copy.modes.read }));
     await user.click(screen.getByRole('button', { name: copy.save }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: copy.save }),
+    );
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].body.permissions).toEqual({
       ...initial.permissions,
@@ -101,6 +104,9 @@ describe('steward permission editor', () => {
     });
     fireEvent.change(amount, { target: { value: '12.345' } });
     await user.click(screen.getByRole('button', { name: copy.save }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: copy.save }),
+    );
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].key).toBeTruthy();
     expect(writes[0].body).toMatchObject({
@@ -122,6 +128,9 @@ describe('steward permission editor', () => {
     );
     await user.click(await screen.findByRole('button', { name: copy.none }));
     await user.click(screen.getByRole('button', { name: copy.save }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: copy.save }),
+    );
     await screen.findByText(en.common.outcome.unknownTitle);
     expect(screen.getByRole('button', { name: copy.all })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: en.common.outcome.recheck }));

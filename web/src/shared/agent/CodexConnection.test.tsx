@@ -32,7 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.get.mockResolvedValue(disconnected);
 });
-async function mount() {
+async function mount(connected = false) {
   const view = await renderWithProviders(
     <DisplayTimeContext.Provider value={{ mode: 'site', offset_minutes: 0 }}>
       <CodexConnection account="synthetic" active />
@@ -40,7 +40,8 @@ async function mount() {
     { station: 'admin', role: 'admin' },
   );
   view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'synthetic' } });
-  await screen.findByText(text.disconnected);
+  if (connected) await screen.findByRole('button', { name: text.disconnect });
+  else await screen.findByText(text.disconnected);
   return view;
 }
 describe('Codex connection', () => {
@@ -128,4 +129,31 @@ describe('Codex connection', () => {
         within(screen.getByLabelText(label)).getByRole('option', { name: 'Codex source' }),
       ).toBeInTheDocument();
   });
+});
+
+it('confirms the specific connected Codex account before disconnecting or cancels safely', async () => {
+  const status = {
+    ...disconnected,
+    connected: true,
+    revision: '4',
+    account_label: 'Studio account',
+  };
+  mocks.get.mockResolvedValue(status);
+  mocks.disconnect.mockImplementation(async () => {
+    mocks.get.mockResolvedValue(disconnected);
+    return disconnected;
+  });
+  const view = await mount(true);
+  const button = screen.getByRole('button', { name: text.disconnect });
+  await view.user.click(button);
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('Studio account');
+  await view.user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', { name: common.common.cancel }),
+  );
+  expect(mocks.disconnect).not.toHaveBeenCalled();
+  await view.user.click(button);
+  await view.user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', { name: text.disconnect }),
+  );
+  await waitFor(() => expect(mocks.disconnect).toHaveBeenCalledWith('4', expect.any(AbortSignal)));
 });

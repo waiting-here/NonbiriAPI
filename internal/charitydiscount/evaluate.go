@@ -20,13 +20,13 @@ type Fixed struct {
 }
 
 type Effective struct {
-	Source       string `json:"source"`
-	Percent      int    `json:"percent"`
-	NextChangeAt *int64 `json:"next_change_at"`
+	Source       string  `json:"source"`
+	Percent      Percent `json:"percent"`
+	NextChangeAt *int64  `json:"next_change_at"`
 }
 
 // PercentAt is the admission and billing path. It performs no future search.
-func PercentAt(fixed Fixed, recurring Config, at int64) (int, error) {
+func PercentAt(fixed Fixed, recurring Config, at int64) (Percent, error) {
 	recurring, spans, err := prepareInputs(fixed, recurring, at)
 	if err != nil {
 		return 0, err
@@ -94,11 +94,11 @@ func prepareInputs(fixed Fixed, recurring Config, at int64) (Config, []span, err
 	return prepare(recurring)
 }
 
-func fixedPercent(fixed Fixed, at int64) int {
+func fixedPercent(fixed Fixed, at int64) Percent {
 	if fixed.StartAt != nil && at < *fixed.StartAt || fixed.EndAt != nil && at >= *fixed.EndAt {
 		return 100
 	}
-	return fixed.Percent
+	return Percent(fixed.Percent)
 }
 
 func weekSecond(local time.Time) int {
@@ -106,7 +106,7 @@ func weekSecond(local time.Time) int {
 	return day*daySeconds + local.Hour()*3600 + local.Minute()*60 + local.Second()
 }
 
-func periodPercent(spans []span, fallback, second int) int {
+func periodPercent(spans []span, fallback Percent, second int) Percent {
 	index := sort.Search(len(spans), func(index int) bool { return spans[index].start > second }) - 1
 	if index >= 0 && second < spans[index].end {
 		return spans[index].percent
@@ -114,7 +114,7 @@ func periodPercent(spans []span, fallback, second int) int {
 	return fallback
 }
 
-func effectiveBoundaries(spans []span, fallback int) []int {
+func effectiveBoundaries(spans []span, fallback Percent) []int {
 	candidates := make([]int, 0, len(spans)*2)
 	for _, period := range spans {
 		candidates = append(candidates, period.start, period.end%weekSeconds)
@@ -136,7 +136,7 @@ func effectiveBoundaries(spans []span, fallback int) []int {
 // In a fixed-offset interval the next weekly boundary is an exact duration
 // away. Offset changes compete with that candidate, including gaps, folds and
 // skipped dates; reevaluating each side avoids ambiguous wall-clock resolution.
-func nextChange(zone string, spans []span, fallback int, boundaries []int, after int64) (*int64, error) {
+func nextChange(zone string, spans []span, fallback Percent, boundaries []int, after int64) (*int64, error) {
 	cursor := after
 	transitions := 0
 	for {
