@@ -5,8 +5,6 @@ import { Button, DataTable, Panel, PanelBody, PanelHead } from '@shared/componen
 import { LoadingState } from '@shared/components/States';
 import { agentRoot } from './api';
 import { AgentError } from './AgentParts';
-import { CodexConnection } from './CodexConnection';
-import { ChatGPTConnection } from './ChatGPTConnection';
 import { DriverBindings } from './DriverBindings';
 import { DriverProfileEditor } from './DriverProfileEditor';
 import { getDrivers, newProfile, type DriverConfiguration } from './driversApi';
@@ -29,8 +27,6 @@ export function DriverPanel({ account, active }: { account: string; active: bool
       : config.data?.profiles.find((profile) => profile.id === selected);
   return (
     <div className="nb-stack">
-      <ChatGPTConnection account={account} active={active} />
-      <CodexConnection account={account} active={active} />
       <Panel aria-label={t('common.agent.drivers.sources')}>
         <PanelHead
           title={t('common.agent.drivers.sources')}

@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { ApiError } from '@shared/query/http';
@@ -632,4 +632,62 @@ describe('Agent conversation and plans', () => {
     );
     expect(mocks.decide).not.toHaveBeenCalled();
   });
+});
+
+it('protects composition and supports modifier+Enter without clicking Send', async () => {
+  const { user, messageInput } = await mount();
+  await user.type(messageInput, '待发送');
+  fireEvent.keyDown(messageInput, { key: 'Enter', ctrlKey: true, isComposing: true });
+  fireEvent.keyDown(messageInput, { key: 'Enter', metaKey: true, keyCode: 229 });
+  expect(mocks.send).not.toHaveBeenCalled();
+  fireEvent.keyDown(messageInput, { key: 'Enter', metaKey: true });
+  await waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
+  expect(mocks.send.mock.calls[0]?.[1]).toMatchObject({ content: '待发送' });
+});
+it('retains an unsent draft on cancelled edit and clear, focuses a confirmed edit and offers the compact shortcut', async () => {
+  mocks.get.mockResolvedValue(conversation([message('1', 'assistant', 'A saved answer')]));
+  const { user, messageInput } = await mount();
+  expect(screen.getByRole('button', { name: /copy.*assistant/i })).toBeVisible();
+  await user.type(messageInput, 'Keep the important facts');
+  await user.click(screen.getByRole('button', { name: '/compact' }));
+  expect(messageInput).toHaveValue('/compact Keep the important facts');
+  const edit = screen.getByRole('button', { name: 'Edit and regenerate' });
+  await user.click(edit);
+  await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+  expect(messageInput).toHaveValue('/compact Keep the important facts');
+  await user.click(screen.getByRole('button', { name: 'Clear current chat' }));
+  const clear = screen.getByRole('alertdialog');
+  expect(clear).toHaveTextContent('This also discards your unsent draft.');
+  await user.click(within(clear).getByRole('button', { name: 'Cancel' }));
+  await user.click(edit);
+  await user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Edit and regenerate' }),
+  );
+  expect(messageInput).toHaveValue('A saved answer');
+  await waitFor(() => expect(messageInput).toHaveFocus());
+});
+
+it('follows a delivered reply near the composer and preserves position while reading older messages', async () => {
+  const { messageInput, queryClient } = await mount();
+  const scroll = vi.fn();
+  Object.defineProperty(messageInput, 'scrollIntoView', { configurable: true, value: scroll });
+  const box = vi.spyOn(messageInput, 'getBoundingClientRect');
+  box.mockReturnValue(new DOMRect(0, window.innerHeight + 300, 100, 70));
+  fireEvent.scroll(window);
+  const publish = (content: string) =>
+    queryClient.setQueryData(
+      ['admin', 'ai', 'synthetic-operator', 'chat'],
+      conversation([message('1', 'assistant', content)]),
+    );
+  await act(async () => {
+    publish('First reply');
+  });
+  expect(await screen.findByText('First reply')).toBeVisible();
+  expect(scroll).not.toHaveBeenCalled();
+  box.mockReturnValue(new DOMRect(0, window.innerHeight - 90, 100, 70));
+  fireEvent.scroll(window);
+  await act(async () => {
+    publish('Updated reply');
+  });
+  await waitFor(() => expect(scroll).toHaveBeenCalledOnce());
 });

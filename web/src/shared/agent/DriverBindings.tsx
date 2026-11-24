@@ -40,6 +40,15 @@ export function BindingEditor({
   const [base, setBase] = useState<DriverBinding | undefined>(saved);
   const [value, setValue] = useState(saved?.driver_id ?? '');
   const [current, setCurrent] = useState<{ binding?: DriverBinding } | null>(null);
+  const [observed, setObserved] = useState(saved?.revision);
+  if (observed !== saved?.revision) {
+    setObserved(saved?.revision);
+    if (value === (base?.driver_id ?? '')) {
+      setBase(saved);
+      setValue(saved?.driver_id ?? '');
+      setCurrent(null);
+    } else if (base?.revision !== saved?.revision) setCurrent({ binding: saved });
+  }
   const effective = effectiveBinding(config, scope, actor);
   const name =
     config.profiles.find((profile) => profile.id === effective.driver_id)?.name ??
@@ -77,6 +86,8 @@ export function BindingEditor({
       className="nb-stack"
       onSubmit={(event) => {
         event.preventDefault();
+        if (current || unresolved || operation.isPending || value === (base?.driver_id ?? ''))
+          return;
         void operation
           .run({
             scope,
@@ -130,7 +141,12 @@ export function BindingEditor({
           type="submit"
           variant="primary"
           size="sm"
-          disabled={operation.isPending || unresolved || value === (base?.driver_id ?? '')}
+          disabled={
+            operation.isPending ||
+            unresolved ||
+            Boolean(current) ||
+            value === (base?.driver_id ?? '')
+          }
         >
           {t('common.save')}
         </Button>

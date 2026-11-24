@@ -126,3 +126,36 @@ it('shows AI failure evidence only after opening request details', async () => {
   await view.user.click(screen.getByRole('button', { name: 'Back to list' }));
   expect(screen.queryByText('The peer reset the connection')).toBeNull();
 });
+
+it('clears selection when changing pages and shows model, HTTP status and reported tokens on each row', async () => {
+  mocks.get.mockImplementation(async (_filters, requested, pageSize) => ({
+    items: [
+      {
+        ...request,
+        id: String(requested),
+        model: 'source-model',
+        state: 'failed',
+        status_code: 429,
+        error_code: 'rate_limit',
+        created_at: Number.MAX_VALUE,
+      },
+    ],
+    total: '50',
+    page: requested,
+    page_size: pageSize,
+    cutoff_id: '50',
+  }));
+  const view = await renderWithProviders(<RequestsPanel account="synthetic" active />, {
+    station: 'admin',
+    role: 'admin',
+  });
+  view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'synthetic' } });
+  await view.user.click(await screen.findByRole('checkbox', { name: 'Select request 1' }));
+  expect(screen.getByText('source-model')).toBeVisible();
+  expect(screen.getByText(/HTTP 429/)).toBeVisible();
+  expect(screen.getByText(/9,007,199,254,740,993/)).toHaveTextContent('Unknown');
+  expect(screen.getByRole('button', { name: 'Clear selected (1)' })).toBeEnabled();
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  expect(await screen.findByRole('checkbox', { name: 'Select request 2' })).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Clear selected (0)' })).toBeDisabled();
+});
