@@ -2527,7 +2527,7 @@ test('a key without a catalog can recover, show a readable failure and load mode
     await expect(page.getByRole('button', { name: services.fetchModels, exact: true })).toHaveCount(
       0,
     );
-    await openFold(page, services.manualModels);
+    await page.getByRole('tab', { name: services.manualModels, exact: true }).click();
     await page
       .getByLabel(core['endpoints.manualModel'], { exact: true })
       .fill('vendor/manual-before-discovery');
@@ -2609,10 +2609,14 @@ test('a key without a catalog can recover, show a readable failure and load mode
     expect(catalog.manual_entries.map((row) => row.upstream_model_id)).toContain(
       'vendor/manual-before-discovery',
     );
+    await page.getByRole('tab', { name: services.pulledModels, exact: true }).click();
     await expect(
-      page.getByText(catalog.automatic_entries[0]!.upstream_model_id, { exact: true }),
+      page.getByRole('checkbox', {
+        name: catalog.automatic_entries[0]!.upstream_model_id,
+        exact: true,
+      }),
     ).toBeVisible();
-    await openFold(page, services.manualModels);
+    await page.getByRole('tab', { name: services.manualModels, exact: true }).click();
     await page.getByLabel(core['endpoints.manualModel'], { exact: true }).fill('vendor/recovered');
     await page.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
     await expect(page.getByText('vendor/recovered', { exact: true })).toBeVisible();
@@ -2666,6 +2670,7 @@ test('the authorized directory keeps cross-page choices and rejects a changed 20
     );
     const directory = page.locator('.service-key-models');
     await directory.getByRole('tab', { name: services.manualModels, exact: true }).click();
+    await directory.getByRole('button', { name: services.chooseManualModels, exact: true }).click();
     await directory
       .getByRole('button', { name: services.selectPage.replace('{{count}}', '20') })
       .click();
@@ -2809,6 +2814,9 @@ test('model imports reuse manual support after reopening and resume after a mode
       const pairModels = page.locator('.service-key-models');
       await expect(pairModels).toHaveCount(1);
       await pairModels.getByRole('tab', { name: services.manualModels, exact: true }).click();
+      await pairModels
+        .getByRole('button', { name: services.chooseManualModels, exact: true })
+        .click();
       await pairModels.getByRole('checkbox', { name: upstream, exact: true }).check();
       const row = await openFold(page.locator('.connection-model-batch'), upstream);
       await row.getByRole('checkbox', { name: tag + ' · ' + upstream, exact: true }).check();

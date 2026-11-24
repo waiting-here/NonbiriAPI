@@ -108,6 +108,7 @@ test('owner pages size the workspace to the task and center their state illustra
       await page.setViewportSize({ width, height: 900 });
       const contentWidths: number[] = [];
       for (const path of [
+        '/charity?tab=models',
         '/charity?tab=donations',
         '/models',
         '/endpoints',
@@ -119,7 +120,9 @@ test('owner pages size the workspace to the task and center their state illustra
         const box = (await content.boundingBox())!;
         expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThanOrEqual(1);
         contentWidths.push(box.width);
-        if (path.startsWith('/charity?')) {
+        if (path === '/charity?tab=donations')
+          await expect(page.locator('.economy-charity-sidebar')).toHaveCount(0);
+        if (path === '/charity?tab=models') {
           const ranking = page.locator('.rank-empty');
           await expect(ranking.locator('svg')).toBeVisible();
           const cloud = (await ranking.locator('svg').boundingBox())!;
@@ -129,7 +132,8 @@ test('owner pages size the workspace to the task and center their state illustra
           );
         }
       }
-      const [overview, models, services, detail] = contentWidths;
+      const [overview, donations, models, services, detail] = contentWidths;
+      expect(donations).toBe(overview);
       expect(models).toBe(services);
       if (width === 1440) {
         expect(overview!).toBeGreaterThan(models!);

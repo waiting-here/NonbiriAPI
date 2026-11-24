@@ -760,13 +760,17 @@ test('administrator applies log filters, exports them and downloads retained dia
     await expect(filters.getByLabel(commonEn.logs.httpStatus, { exact: true })).toHaveValue('');
     await page.goto(state.admin_url + '/logs?request_id=' + state.request_ids[0]);
     const detail = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
-    await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();
-    await detail.getByRole('button', { name: 'Upstream error details', exact: true }).click();
+    const failure = detail
+      .getByRole('list', { name: commonEn.logs.attemptSummary })
+      .getByRole('button')
+      .first();
+    await failure.click();
     const event = detail
       .locator('details')
       .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
       .first();
-    await event.locator('summary').first().click();
+    await expect(event).toHaveAttribute('open', '');
+    await expect(event.locator('pre')).toHaveCount(0);
     await event.getByRole('button', { name: 'Load error body', exact: true }).click();
     await expect(event.locator('pre')).toHaveText(state.json_body);
     const rawDownload = page.waitForEvent('download');

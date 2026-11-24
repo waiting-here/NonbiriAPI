@@ -223,13 +223,17 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, 
   await expect(dialog.getByRole('region', { name: 'Request source' })).not.toContainText(
     'discard=this',
   );
-  await dialog.locator('summary').filter({ hasText: 'Service call attempts' }).click();
-  await dialog.getByRole('button', { name: 'Upstream error details' }).click();
+  const failure = dialog
+    .getByRole('list', { name: common.logs.attemptSummary })
+    .getByRole('button')
+    .first();
+  await failure.click();
   const event = dialog
     .locator('details')
     .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
     .first();
-  await event.locator('summary').first().click();
+  await expect(event).toHaveAttribute('open', '');
+  await expect(event.locator('pre')).toHaveCount(0);
   const load = event.getByRole('button', { name: 'Load error body' });
   if (keyboard) {
     await load.focus();
