@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
 import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -89,7 +90,14 @@ function GatewayCapabilitiesEditor() {
     operation.reset();
     setDraft((value) => ({ ...value, ...patch }));
   };
+  const editorHeading = useRef<HTMLHeadingElement>(null);
+  const revealEditor = () =>
+    requestAnimationFrame(() => {
+      editorHeading.current?.focus({ preventScroll: true });
+      editorHeading.current?.scrollIntoView?.({ block: 'center' });
+    });
   const open = (row: GatewayCapabilityRecord | null) => {
+    revealEditor();
     const target = row?.id ?? 'new';
     if (editor !== undefined) {
       const current = editor?.id ?? 'new';
@@ -117,14 +125,19 @@ function GatewayCapabilitiesEditor() {
     setDraft(entryFor(result));
     setOutputText(String(result.max_output_tokens));
   };
+  const anthropic = draft.adapter.startsWith('anthropic_');
+  const validOutput =
+    /^\d+$/.test(outputText) &&
+    Number(outputText) >= (anthropic ? 1 : 0) &&
+    Number(outputText) <= 2147483647;
   const save = () => {
+    if (!validOutput) return;
     const entry = { ...draft, max_output_tokens: Number(outputText) };
     const intent: GatewayCapabilityIntent = editor
       ? { action: 'update', id: editor.id, expected_revision: editor.revision, entry }
       : { action: 'create', expected_revision: '0', entry };
     operation.mutate(intent, { onSuccess: complete });
   };
-  const anthropic = draft.adapter.startsWith('anthropic_');
   const feedback = (
     <OperationFeedback
       outcome={operation.outcome}
@@ -212,7 +225,10 @@ function GatewayCapabilitiesEditor() {
             save();
           }}
         >
-          <h3>{t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}</h3>
+          <DraftLeaveGuard dirty={dirty || retainedDrafts.current.size > 0} />
+          <h3 ref={editorHeading} tabIndex={-1}>
+            {t(editor ? 'gatewayCapabilities.edit' : 'gatewayCapabilities.add')}
+          </h3>
           <Fields columns={1}>
             <fieldset className="gateway-capability-group" disabled={operation.isPending}>
               <legend>{t('gatewayCapabilities.target')}</legend>
@@ -260,6 +276,8 @@ function GatewayCapabilitiesEditor() {
                     disabled={operation.isPending}
                     onChange={(event) => {
                       const adapter = event.target.value as GatewayAdapter;
+                      if (adapter.startsWith('anthropic_') && Number(outputText) === 0)
+                        setOutputText('1');
                       const efforts = draft.efforts.filter((value) =>
                         gatewayAdapterEfforts(adapter).includes(value),
                       );
@@ -323,6 +341,7 @@ function GatewayCapabilitiesEditor() {
                     {...props}
                     required
                     type="number"
+                    aria-invalid={!validOutput}
                     min={anthropic ? 1 : 0}
                     max={2147483647}
                     step={1}
@@ -413,7 +432,11 @@ function GatewayCapabilitiesEditor() {
           </Fields>
           {!deleteTarget ? feedback : null}
           <FormActions>
-            <button className="nb-btn nb-btn--primary" type="submit" disabled={operation.isPending}>
+            <button
+              className="nb-btn nb-btn--primary"
+              type="submit"
+              disabled={operation.isPending || !validOutput}
+            >
               {t(operation.isPending ? 'common.working' : 'common.save')}
             </button>
             <button

@@ -104,7 +104,7 @@ export function StewardPage() {
     sections.find((value) => value === requestedTab) ??
     sections.find((value) => access[value]) ??
     'logs';
-  const logReturnTo = logManagementReturnPath(location.state, 'steward');
+  const logReturnTo = logManagementReturnPath(location.state, 'steward', location.search);
   const announcement = searchParams.get('announcement') ?? '';
   const tabQueries = useRef<Partial<Record<Section, string>>>({});
   function setSection(value: Section) {
@@ -293,7 +293,7 @@ export function StewardPage() {
           </dl>
         </details>
         {section === 'users' && logReturnTo && (
-          <Link to={logReturnTo}>{t('common.operations.logs.returnToLogs')}</Link>
+          <Link to={logReturnTo} state={{logPrivate:location.state?.logPrivate}}>{t('common.operations.logs.returnToLogs')}</Link>
         )}
         <Tabs
           label={t('user.steward.sectionsLabel')}

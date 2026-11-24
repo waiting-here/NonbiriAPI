@@ -22,6 +22,7 @@ export function InspectionWorkspace({
 }: Props) {
   const list = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const sheetBody = useRef<HTMLDivElement>(null);
   const origin = useRef<HTMLElement | null>(null);
   const previous = useRef<string | null>(null);
   const [docked, setDocked] = useState<boolean | null>(null);
@@ -55,6 +56,15 @@ export function InspectionWorkspace({
   }, [selected]);
   useEffect(() => {
     const target = heading.current;
+    if (selected && docked === false && sheetBody.current) {
+      const surface = sheetBody.current.closest('[role="dialog"]');
+      const scroll = sheetBody.current.closest('.nb-sheet__body');
+      if (scroll) scroll.scrollTop = 0;
+      const frame = requestAnimationFrame(() =>
+        surface?.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true }),
+      );
+      return () => cancelAnimationFrame(frame);
+    }
     if (selected && docked && target) {
       if (target?.parentElement?.parentElement) target.parentElement.parentElement.scrollTop = 0;
       const frame = requestAnimationFrame(() => target.focus({ preventScroll: true }));
@@ -99,7 +109,7 @@ export function InspectionWorkspace({
             </section>
           ) : (
             <Sheet open title={title} size="lg" closeLabel={closeLabel} onClose={onClose}>
-              {detail}
+              <div ref={sheetBody}>{detail}</div>
             </Sheet>
           )}
         </div>

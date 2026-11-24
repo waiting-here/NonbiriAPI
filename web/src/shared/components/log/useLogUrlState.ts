@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router';
 import { useCallback, useMemo } from 'react';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { isLogOperation, validLogDiscordID, validLogResourceID } from './data';
@@ -9,7 +10,10 @@ import { ATTEMPT_SEQ_PARAM } from './managementFailures';
 // URL are parsed defensively: anything malformed falls back to the default
 // instead of reaching the API.
 
+export const relativeLogSeconds = { '15m': 900, '1h': 3600, '24h': 86400, '7d': 604800 } as const;
+export type RelativeLogRange = keyof typeof relativeLogSeconds;
 export interface LogUrlState {
+  range?: RelativeLogRange;
   page: number;
   pageSize: number;
   /** Raw single-valued text filters keyed by query parameter name. */
@@ -67,11 +71,20 @@ function parseState(
   const from =
     params.getAll('from').length === 1 ? parsePositiveInt(params.get('from')) : undefined;
   const to = params.getAll('to').length === 1 ? parsePositiveInt(params.get('to')) : undefined;
+  const rawRange = params.getAll('range');
+  const range =
+    rawRange.length === 1 &&
+    Object.hasOwn(relativeLogSeconds, rawRange[0]) &&
+    from === undefined &&
+    to === undefined
+      ? (rawRange[0] as RelativeLogRange)
+      : undefined;
   const reversed = from !== undefined && to !== undefined && from >= to;
   return {
     page: Math.max(1, page),
     pageSize: Math.min(100, Math.max(1, pageSize)),
     filters,
+    ...(range && { range }),
     fromUnix: reversed ? undefined : from,
     toUnix: reversed ? undefined : to,
   };
@@ -85,18 +98,37 @@ function parseState(
 export function useLogUrlState(
   textParams: readonly string[],
   defaultPageSize: number,
+  scopeKey = '',
 ): {
   state: LogUrlState;
   patch: (partial: Partial<LogUrlState>, options?: LogPatchOptions) => void;
 } {
   const [searchParams, setSearchParams] = useSearchState();
-  const state = useMemo(
-    () => parseState(searchParams, textParams, defaultPageSize),
-    [searchParams, textParams, defaultPageSize],
-  );
+  const location = useLocation();
+  const privateField = (name: string) =>
+    Boolean(scopeKey) &&
+    ['endpoint_base_url', 'upstream_model', 'model', 'error_code'].includes(name);
+  const state = useMemo(() => {
+    const source = new URLSearchParams(searchParams);
+    const saved = location.state?.logPrivate;
+    if (
+      scopeKey &&
+      saved?.scope === scopeKey &&
+      saved.filters &&
+      typeof saved.filters === 'object'
+    ) {
+      for (const [key, value] of Object.entries(saved.filters)) {
+        if (privateField(key) && typeof value === 'string') source.set(key, value);
+      }
+    }
+    return parseState(source, textParams, defaultPageSize);
+  }, [searchParams, textParams, defaultPageSize, location.state, scopeKey]);
 
   const patch = useCallback(
     (partial: Partial<LogUrlState>, options?: LogPatchOptions) => {
+      const localFilters = Object.fromEntries(
+        Object.entries(partial.filters ?? state.filters).filter(([key]) => privateField(key)),
+      );
       setSearchParams(
         (prev) => {
           const next = { ...parseState(prev, textParams, defaultPageSize), ...partial };
@@ -105,8 +137,11 @@ export function useLogUrlState(
             if (options?.keepFilters?.includes(name)) continue;
             params.delete(name);
             const value = next.filters?.[name];
-            if (value) params.set(name, value);
+            if (value && !privateField(name)) params.set(name, value);
           }
+          params.delete('range');
+          if (next.range && next.fromUnix === undefined && next.toUnix === undefined)
+            params.set('range', next.range);
           params.delete('from');
           if (next.fromUnix !== undefined && next.fromUnix >= 0) {
             params.set('from', String(next.fromUnix));
@@ -131,10 +166,20 @@ export function useLogUrlState(
           }
           return params;
         },
-        { replace: options?.replace ?? false },
+        {
+          replace: options?.replace ?? false,
+          ...(scopeKey
+            ? {
+                state: {
+                  ...location.state,
+                  logPrivate: { scope: scopeKey, filters: localFilters },
+                },
+              }
+            : {}),
+        },
       );
     },
-    [setSearchParams, textParams, defaultPageSize],
+    [setSearchParams, textParams, defaultPageSize, state.filters, scopeKey, location.state],
   );
 
   return { state, patch };

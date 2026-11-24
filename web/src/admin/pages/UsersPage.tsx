@@ -12,7 +12,8 @@ export function UsersPage() {
   const [, setSearchParams] = useSearchState();
   const session = useAdminSession();
   const { t } = useTranslation();
-  const logReturnTo = logManagementReturnPath(useLocation().state, 'admin');
+  const location = useLocation();
+  const logReturnTo = logManagementReturnPath(location.state, 'admin', location.search);
   const account = session.data?.admin.username;
   const scopeReady = Boolean(account) && !session.error;
   const previousAccount = useRef<string | undefined>(undefined);
@@ -32,7 +33,11 @@ export function UsersPage() {
   }, [account, setSearchParams]);
   return (
     <>
-      {logReturnTo && <Link to={logReturnTo}>{t('common.operations.logs.returnToLogs')}</Link>}
+      {logReturnTo && (
+        <Link to={logReturnTo} state={{ logPrivate: location.state?.logPrivate }}>
+          {t('common.operations.logs.returnToLogs')}
+        </Link>
+      )}
       <UserManagement
         role="admin"
         renderSecurity={(user) =>

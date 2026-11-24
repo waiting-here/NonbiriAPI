@@ -1,8 +1,10 @@
+import { useSearchState } from '@shared/operations/useSearchState';
+import { Link, useLocation } from 'react-router';
 import { useRetainedQueryData } from '@shared/query/useRetainedQueryData';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { CreditNumber } from '@shared/components/CreditNumber';
 import { SimplePager } from '@shared/operations/SimplePager';
-import { useState } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold, DataTable, Field, FilterBar, Tabs } from '@shared/components/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -461,6 +463,7 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
   const t = useEconomyText(),
     session = useAdminSession();
   const [cursors, setCursors] = useState<string[]>([]);
+  const ledgerRows = useRef<HTMLDivElement>(null);
   const cursor = cursors.at(-1);
   const q = useQuery<Awaited<ReturnType<typeof getOperations>>>({
     queryKey: ['admin', session.data?.admin.username, 'economy-operations', filter, cursor],
@@ -488,9 +491,29 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
   return (
     <>
       <QueryFeedback query={{ ...q, data, retained: q.data === undefined }} />
-      <div className="nb-stack" aria-busy={q.isFetching}>
+      <div className="nb-stack" aria-busy={q.isFetching} ref={ledgerRows}>
         {q.error ? <AuditErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
         <Coverage meta={data.metadata} compact />
+        {data.data.length > 0 && (
+          <div className="nb-actions">
+            {[true, false].map((open) => (
+              <button
+                key={String(open)}
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                onClick={() =>
+                  ledgerRows.current
+                    ?.querySelectorAll<HTMLDetailsElement>('details.audit-operation')
+                    .forEach((row) => {
+                      row.open = open;
+                    })
+                }
+              >
+                {open ? t('展开本页', 'Expand this page') : t('收起本页', 'Collapse this page')}
+              </button>
+            ))}
+          </div>
+        )}
         <p>
           {t(
             '每页最多100笔；每个币种的分录独立展示。',
@@ -504,6 +527,23 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
             <summary>
               {time(o.created_at, data.metadata.offset_minutes)} ·{' '}
               {channelLabel(o.classification.channel, t)} · <code>{o.kind}</code> · #{o.ledger_seq}
+              {' · '}
+              {t('用户', 'Users')}{' '}
+              {Array.from(
+                new Set(o.entries.flatMap((entry) => (entry.user_id ? [entry.user_id] : []))),
+              ).join(', ') || '—'}
+              {' · '}
+              {t('用户净变动', 'Net user change')}{' '}
+              {displayAmount(
+                String(
+                  o.entries
+                    .filter(
+                      (entry) => entry.account_kind === 'user' && entry.asset === filter.asset,
+                    )
+                    .reduce((sum, entry) => sum + BigInt(entry.delta), 0n),
+                ),
+              )}{' '}
+              {assetLabel(filter.asset, t)}
             </summary>
             <p>
               <code>{o.id}</code> · {o.source_type}: <code>{o.source_id}</code>
@@ -532,8 +572,13 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
                   mobileLabel: t('用户', 'User'),
                   cell: 'meta',
                   render: (entry) =>
-                    entry.user_id ??
-                    (entry.account_kind === 'user' ? t('已去身份', 'Deidentified') : '—'),
+                    entry.user_id ? (
+                      <Link to={'/users?user=' + entry.user_id}>{entry.user_id}</Link>
+                    ) : entry.account_kind === 'user' ? (
+                      t('已去身份', 'Deidentified')
+                    ) : (
+                      '—'
+                    ),
                 },
                 {
                   key: 'delta',
@@ -571,19 +616,163 @@ function LedgerDetails({ filter }: { readonly filter: AuditFilter }) {
   );
 }
 
+const linkableChannels: Readonly<Record<string, string>> = {
+  reward_grant: 'admin',
+  admin_user_adjustment: 'admin',
+  admin_pool_adjustment: 'admin',
+  account_delete_zero: 'account',
+  checkin_award: 'checkin',
+  anti_abuse_penalty: 'penalty',
+  welfare_claim: 'welfare',
+  thursday_contribution: 'thursday',
+  thursday_payout: 'thursday',
+  thursday_finalize: 'thursday',
+  forward_reserve: 'api',
+  forward_settle: 'api',
+  forward_release: 'api',
+  charity_reserve: 'charity',
+  charity_settle: 'charity',
+  charity_release: 'charity',
+  donor_reward: 'donation',
+  fishing_reserve: 'fishing',
+  fishing_settle: 'fishing',
+  fishing_release: 'fishing',
+  linklink_entry: 'linklink',
+  rps_queue_reserve: 'rps',
+  rps_queue_release: 'rps',
+  rps_session_start: 'rps',
+  rps_round_cut: 'rps',
+  rps_terminal: 'rps',
+  blackjack_reserve: 'blackjack',
+  blackjack_settle: 'blackjack',
+  blackjack_release: 'blackjack',
+  catch_ticket: 'steadycatch',
+  catch_refund: 'steadycatch',
+  catch_reward: 'steadycatch',
+  game_onboarding_reward: 'onboarding',
+  activity_loan: 'loan',
+  activity_exchange: 'picture_book',
+  image_reserve: 'picture_book',
+  image_settle: 'picture_book',
+  image_refund: 'picture_book',
+  image_delete_finalize: 'picture_book',
+  inactivity_decay: 'inactivity',
+  fatfish_unlock: 'fat_fish',
+  fatfish_ticket: 'fat_fish',
+  fatfish_reward: 'fat_fish',
+  fatfish_refund: 'fat_fish',
+  whale_haven_feed_purchase: 'whale_haven',
+  whale_haven_exchange: 'whale_haven',
+  lake_entry: 'lake_notes',
+  lake_exchange: 'lake_notes',
+  lake_collection_reward: 'lake_notes',
+  gacha_ticket_purchase: 'gacha',
+  gacha_theme_reward: 'gacha',
+};
+const duelAuditKinds = new Set([
+  'duel_queue_reserve',
+  'duel_queue_release',
+  'duel_session_start',
+  'duel_terminal',
+  'ai_ticket',
+  'ai_terminal',
+]);
+function publicDrill(kind: string, channel: string) {
+  return (
+    (Object.hasOwn(linkableChannels, kind) && linkableChannels[kind] === channel) ||
+    (duelAuditKinds.has(kind) &&
+      ['rps', 'bidding', 'likes', 'gwent', 'unclassified'].includes(channel))
+  );
+}
+function readAuditFilter(params: URLSearchParams, defaults: AuditFilter): AuditFilter {
+  const one = (key: string) => (params.getAll(key).length === 1 ? params.get(key) : null);
+  const asset = assets.find((asset) => asset === one('asset')) ?? defaults.asset;
+  const bucket = one('bucket') === 'day' ? 'day' : 'hour';
+  const bounds = [one('from'), one('to')].map((value) =>
+    value && /^\d{1,12}$/.test(value) ? Number(value) : NaN,
+  );
+  const [from, to] = bounds;
+  const valid =
+    from >= 0 &&
+    to > from &&
+    to <= 253402300799 &&
+    to - from <= (bucket === 'day' ? 366 : 31) * 86400;
+  const kind = one('kind'),
+    channel = one('channel');
+  return {
+    asset,
+    bucket,
+    from: valid ? from : defaults.from,
+    to: valid ? to : defaults.to,
+    ...(kind && channel && publicDrill(kind, channel) ? { kind, channel } : {}),
+  };
+}
 export function EconomyAuditPage() {
   const t = useEconomyText(),
     session = useAdminSession();
-  const [filter, setFilter] = useState<AuditFilter>(() => {
+  const [params, setParams] = useSearchState();
+  const [defaults] = useState<AuditFilter>(() => {
     const to = Math.floor(Date.now() / 1000) + 1;
     return { asset: 'general', from: to - 86400, to, bucket: 'hour' };
   });
+  const location = useLocation();
+  const account = session.data?.admin.username;
+  const filter = useMemo(() => {
+    const parsed = readAuditFilter(params, defaults);
+    const drill = location.state?.economyDrill;
+    if (
+      !parsed.kind &&
+      account &&
+      drill?.account === account &&
+      typeof drill.kind === 'string' &&
+      typeof drill.channel === 'string'
+    )
+      return { ...parsed, kind: drill.kind, channel: drill.channel };
+    return parsed;
+  }, [params, defaults, account, location.state]);
+  const rawView = params.getAll('view').length === 1 ? params.get('view') : null;
+  const view: View = rawView === 'channels' || rawView === 'operations' ? rawView : 'series';
+  const setView = (value: View) =>
+    setParams((previous) => {
+      previous.set('view', value);
+      return previous;
+    });
+  const setFilter = (value: AuditFilter | ((current: AuditFilter) => AuditFilter)) => {
+    const next = typeof value === 'function' ? value(filter) : value;
+    const linkable = Boolean(next.kind && next.channel && publicDrill(next.kind, next.channel));
+    const economyDrill =
+      next.kind && next.channel && !linkable
+        ? { account, kind: next.kind, channel: next.channel }
+        : undefined;
+    setParams(
+      (previous) => {
+        for (const key of ['asset', 'bucket', 'from', 'to'] as const)
+          previous.set(key, String(next[key]));
+        previous.delete('kind');
+        previous.delete('channel');
+        if (linkable) {
+          previous.set('kind', next.kind!);
+          previous.set('channel', next.channel!);
+        }
+        return previous;
+      },
+      { state: { ...location.state, economyDrill } },
+    );
+  };
   const [draft, setDraft] = useState(filter),
-    [view, setView] = useState<View>('series'),
     [invalid, setInvalid] = useState(false),
     [refreshing, setRefreshing] = useState(false);
   const [fromInput, setFromInput] = useState(() => createTimeDraft(filter.from, 'second'));
   const [toInput, setToInput] = useState(() => createTimeDraft(filter.to, 'second'));
+  const filterSeed = JSON.stringify(filter);
+  const [seed, setSeed] = useState(filterSeed);
+  if (seed !== filterSeed) {
+    setSeed(filterSeed);
+    setDraft(filter);
+    setFromInput(createTimeDraft(filter.from, 'second'));
+    setToInput(createTimeDraft(filter.to, 'second'));
+    setInvalid(false);
+  }
   const summary = useQuery<Awaited<ReturnType<typeof getSummary>>>({
     queryKey: ['admin', session.data?.admin.username, 'economy-summary', filter],
     placeholderData: (previous, query) =>
@@ -621,7 +810,7 @@ export function EconomyAuditPage() {
       return;
     }
     setInvalid(false);
-    setFilter({ ...next, from, to, kind: undefined, channel: undefined });
+    setFilter({ ...filter, ...next, from, to });
   }
   return (
     <div className="economy-audit">
@@ -634,6 +823,26 @@ export function EconomyAuditPage() {
       />
       <Card>
         <TimeContextNotice station="admin" />
+        <div className="nb-actions">
+          {[1, 7, 30].map((days) => (
+            <button
+              key={days}
+              className="nb-btn nb-btn--secondary"
+              type="button"
+              onClick={() => {
+                const to = Math.floor(Date.now() / 1000) + 1;
+                setFilter({
+                  ...filter,
+                  from: to - days * 86400,
+                  to,
+                  bucket: days === 1 ? 'hour' : 'day',
+                });
+              }}
+            >
+              {t('最近 ' + days + ' 天', 'Last ' + days + ' days')}
+            </button>
+          ))}
+        </div>
         <FilterBar
           query={{
             data: summaryData,
@@ -779,7 +988,8 @@ export function EconomyAuditPage() {
                 className="nb-btn nb-btn--secondary"
                 onClick={() => setFilter((v) => ({ ...v, kind: undefined, channel: undefined }))}
               >
-                {t('清除操作筛选', 'Clear operation filter')}: {filter.kind}
+                {t('清除操作筛选', 'Clear operation filter')}:{' '}
+                {channelLabel(filter.channel ?? filter.kind, t)}
               </button>
             )}
           </div>

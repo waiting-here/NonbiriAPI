@@ -1,5 +1,5 @@
 import { LogReadError, logAccessLost } from './logReadAccess';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fold } from '@shared/components/ui/Fold';
 import { copyText } from '@shared/utils/clipboard';
@@ -42,7 +42,13 @@ function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; reques
     return () => controller.abort();
   }, [role, requestID, report]);
   if (error) return <p role="status">{t('common.diagnostics.sourceDetailsAreUnavailable')}</p>;
-  if (!source) return <p>{t('common.diagnostics.noSourceDetailsRecorded')}</p>;
+  if (source === undefined)
+    return (
+      <p role="status" aria-busy="true">
+        {t('common.loading')}
+      </p>
+    );
+  if (source === null) return <p>{t('common.diagnostics.noSourceDetailsRecorded')}</p>;
   return (
     <section className="request-diagnostics" aria-label={t('common.diagnostics.requestSource')}>
       <p>{t('common.diagnostics.clientHeadersAreSelfreportedClues')}</p>
@@ -70,7 +76,12 @@ function ScopedRequestSource({ role, requestID }: { role: DiagnosticRole; reques
   );
 }
 
-export function AttemptErrors(props: { role: DiagnosticRole; requestID: string; attempt: number }) {
+export function AttemptErrors(props: {
+  role: DiagnosticRole;
+  requestID: string;
+  attempt: number;
+  readMetadata?: boolean;
+}) {
   return (
     <ScopedAttemptErrors
       key={props.role + ':' + props.requestID + ':' + props.attempt}
@@ -83,7 +94,9 @@ function ScopedAttemptErrors({
   role,
   requestID,
   attempt,
+  readMetadata,
 }: {
+  readMetadata?: boolean;
   role: DiagnosticRole;
   requestID: string;
   attempt: number;
@@ -95,24 +108,30 @@ function ScopedAttemptErrors({
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  async function load(after = 0) {
-    controller.current?.abort();
-    const request = new AbortController();
-    controller.current = request;
-    setBusy(true);
-    setFailed(false);
-    try {
-      const result = await getErrorList(role, requestID, attempt, after, request.signal);
-      if (!request.signal.aborted) setPage(result);
-    } catch (error) {
-      if (!request.signal.aborted) {
-        if (logAccessLost(error)) report(error);
-        setFailed(true);
+  const load = useCallback(
+    async (after = 0) => {
+      controller.current?.abort();
+      const request = new AbortController();
+      controller.current = request;
+      setBusy(true);
+      setFailed(false);
+      try {
+        const result = await getErrorList(role, requestID, attempt, after, request.signal);
+        if (!request.signal.aborted) setPage(result);
+      } catch (error) {
+        if (!request.signal.aborted) {
+          if (logAccessLost(error)) report(error);
+          setFailed(true);
+        }
+      } finally {
+        if (!request.signal.aborted) setBusy(false);
       }
-    } finally {
-      if (!request.signal.aborted) setBusy(false);
-    }
-  }
+    },
+    [role, requestID, attempt, report],
+  );
+  useEffect(() => {
+    if (readMetadata) void load();
+  }, [readMetadata, load]);
   return (
     <section className="request-diagnostics">
       <button
@@ -125,8 +144,8 @@ function ScopedAttemptErrors({
       </button>
       {failed && <p role="alert">{t('common.diagnostics.couldNotLoadDiagnostics')}</p>}
       {page && page.data.length === 0 && <p>{t('common.diagnostics.noErrorBodyWasRecorded')}</p>}
-      {page?.data.map((error) => (
-        <details key={error.event_seq}>
+      {page?.data.map((error, index) => (
+        <details key={error.event_seq} open={index === 0 || undefined}>
           <summary>
             {t('common.diagnostics.errorEvent')} {error.event_seq} · HTTP {error.http_status ?? '—'}{' '}
             · {error.bytes_saved} B {error.truncated ? t('common.diagnostics.truncated') : ''}

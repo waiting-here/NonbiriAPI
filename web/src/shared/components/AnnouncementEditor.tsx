@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
 import { Field } from '@shared/components/ui/Field';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { Button } from '@shared/components/ui/Button';
@@ -84,6 +85,7 @@ export function AnnouncementEditor({
   const [mergedRevision, setMergedRevision] = useState('');
   const previewHeading = useRef<HTMLHeadingElement>(null);
   const [reason, setReason] = useState('');
+  const [reviewContent, setReviewContent] = useState(false);
   const [confirmation, setConfirmation] = useState<LifecycleInput | null>(null);
   const preview = useMutation({
     retry: false,
@@ -344,6 +346,7 @@ export function AnnouncementEditor({
     preview.variables?.body_en === draft.body_en;
   return (
     <div className={pageClassName}>
+      <DraftLeaveGuard dirty={draftDirty} />
       {header}
       <Card>
         <div className="ops-toolbar announcement-editor-head">
@@ -408,7 +411,7 @@ export function AnnouncementEditor({
             </dl>
           </section>
         ))}
-        <fieldset disabled={writeLocked}>
+        <fieldset disabled={writeLocked} onBlur={() => setReviewContent(true)}>
           <Fields>
             <Field label={t('management.announcements.chineseTitle')} size="medium">
               {(field) => (
@@ -432,7 +435,7 @@ export function AnnouncementEditor({
             </Field>
           </Fields>
         </fieldset>
-        <fieldset disabled={writeLocked}>
+        <fieldset disabled={writeLocked} onBlur={() => setReviewContent(true)}>
           <Fields>
             <Field
               label={t('management.announcements.chineseMarkdown', { bytes: zhBodyBytes })}
@@ -462,7 +465,7 @@ export function AnnouncementEditor({
             </Field>
           </Fields>
         </fieldset>
-        {!draftValid ? (
+        {reviewContent && !draftValid ? (
           <p className="field-error" role="alert">
             {t('management.announcements.validation')}
           </p>
@@ -633,6 +636,7 @@ export function AnnouncementEditor({
             }
           />
         ) : null}
+        {draftDirty && <p className="inline-notice">{t('common.managementDraftBeforePublish')}</p>}
         {lifecycle.outcome === 'conflict' ? (
           <p className="inline-notice">{t('management.announcements.detail.lifecycleConflict')}</p>
         ) : null}

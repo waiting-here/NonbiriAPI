@@ -212,11 +212,11 @@ describe('automatic activity schedules', () => {
     await view.user.type(screen.getByLabelText('Literature'), 'Next announcement');
     const fee = screen.getByLabelText('Platform fee (%)');
     await view.user.clear(fee);
-    await view.user.type(fee, '1.25');
-    expect(fee).toHaveValue(1.25);
+    await view.user.type(fee, '0.05');
+    expect(fee).toHaveValue('0.05');
     await view.user.click(screen.getByRole('button', { name: 'Save and schedule' }));
     await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].pumps_bp).toEqual({ platform: 125, welfare: 0, next_pool: 0 });
+    expect(writes[0].pumps_bp).toEqual({ platform: 5, welfare: 0, next_pool: 0 });
   });
 
   it('refreshes a new schedule across the Thursday boundary without losing edits, and allows cancel', async () => {

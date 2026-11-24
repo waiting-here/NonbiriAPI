@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
 import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import { DataTable } from '@shared/components/ui/DataTable';
 import { Field } from '@shared/components/ui/Field';
@@ -5,7 +6,7 @@ import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Button } from '@shared/components/ui/Button';
 import { managementRoot, type ManagementRole } from '@shared/operations/managedUsers';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -95,13 +96,17 @@ export function AnnouncementManagement({
     role === 'admin'
       ? `/announcements/${encodeURIComponent(id)}`
       : `/steward?tab=announcements&announcement=${encodeURIComponent(id)}`;
+  const [titleSearch, setTitleSearch] = useState('');
+  const [titleQuery, setTitleQuery] = useState('');
+  const [reviewed, setReviewed] = useState(false);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'announcements',
     scopeKey: accountID ?? 'anonymous',
     scopeReady: Boolean(accountID) && !sessionError,
-    resetKey: `${state}\u0000${severity}`,
+    resetKey: `${state}\u0000${severity}\u0000${titleQuery}`,
   });
+  const savedDestination = useRef<string | undefined>(undefined);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<AnnouncementDraft>(() => ({
     title_zh: '',
@@ -121,12 +126,26 @@ export function AnnouncementManagement({
       severity,
       pager.page,
       pager.pageSize,
+      titleQuery,
     ),
     queryFn: ({ signal }) =>
-      getAdminAnnouncementsPage(state, severity, pager.page, pager.pageSize, signal, role),
+      getAdminAnnouncementsPage(
+        state,
+        severity,
+        pager.page,
+        pager.pageSize,
+        signal,
+        role,
+        titleQuery,
+      ),
     enabled: Boolean(accountID) && !sessionError,
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[3] === accountID ? previous : undefined,
+      previousQuery?.queryKey[3] === accountID &&
+      previousQuery?.queryKey[4] === state &&
+      previousQuery?.queryKey[5] === severity &&
+      (previousQuery?.queryKey[8] ?? '') === titleQuery
+        ? previous
+        : undefined,
     retry: false,
   });
   const create = useRetainedOperation(
@@ -160,10 +179,14 @@ export function AnnouncementManagement({
     Boolean(draft.title_zh.trim()) === Boolean(draft.body_zh.trim()) &&
     Boolean(draft.title_en.trim()) === Boolean(draft.body_en.trim());
   const draftValid =
-    languagePairsValid && zhBodyBytes <= 65_536 && enBodyBytes <= 65_536 && expiry !== undefined;
+    Boolean(draft.title_zh.trim() || draft.title_en.trim()) &&
+    languagePairsValid &&
+    zhBodyBytes <= 65_536 &&
+    enBodyBytes <= 65_536 &&
+    expiry !== undefined;
   const submitCreate = () => {
     const expiresAt = timeDraftValue(draft.expires);
-    if (expiresAt === undefined) return;
+    if (expiresAt === undefined || !draftValid) return;
     create.mutate(
       {
         title_zh: draft.title_zh,
@@ -176,7 +199,11 @@ export function AnnouncementManagement({
         expires_at: expiresAt,
       },
       {
-        onSuccess: (receipt) => navigate(detailPath(receipt.id), { state: { returnTo } }),
+        onSuccess: (receipt) => {
+          const destination = detailPath(receipt.id);
+          savedDestination.current = destination;
+          navigate(destination, { state: { returnTo } });
+        },
       },
     );
   };
@@ -214,6 +241,24 @@ export function AnnouncementManagement({
   );
   return (
     <div className="page ops-page">
+      <DraftLeaveGuard
+        dirty={Boolean(
+          !create.isSuccess &&
+          (draft.title_zh ||
+            draft.title_en ||
+            draft.body_zh ||
+            draft.body_en ||
+            draft.pinned ||
+            !draft.dismissible ||
+            draft.severity !== 'info' ||
+            expiry !== null),
+        )}
+        allowNavigation={({ nextLocation }) =>
+          nextLocation.pathname + nextLocation.search === savedDestination.current ||
+          create.isSuccess ||
+          (nextLocation.pathname === location.pathname && nextLocation.search === location.search)
+        }
+      />
       {embedded ? (
         <SectionHead
           title={t('management.announcements.title')}
@@ -237,6 +282,7 @@ export function AnnouncementManagement({
                 <input
                   {...field}
                   value={draft.title_zh}
+                  onBlur={() => setReviewed(true)}
                   maxLength={160}
                   onChange={(event) => setDraft({ ...draft, title_zh: event.target.value })}
                 />
@@ -247,6 +293,7 @@ export function AnnouncementManagement({
                 <input
                   {...field}
                   value={draft.title_en}
+                  onBlur={() => setReviewed(true)}
                   maxLength={160}
                   onChange={(event) => setDraft({ ...draft, title_en: event.target.value })}
                 />
@@ -263,6 +310,7 @@ export function AnnouncementManagement({
                   {...field}
                   rows={5}
                   value={draft.body_zh}
+                  onBlur={() => setReviewed(true)}
                   onChange={(event) => setDraft({ ...draft, body_zh: event.target.value })}
                 />
               )}
@@ -276,12 +324,13 @@ export function AnnouncementManagement({
                   {...field}
                   rows={5}
                   value={draft.body_en}
+                  onBlur={() => setReviewed(true)}
                   onChange={(event) => setDraft({ ...draft, body_en: event.target.value })}
                 />
               )}
             </Field>
           </Fields>
-          {!draftValid ? (
+          {reviewed && !draftValid ? (
             <p className="field-error" role="alert">
               {t('management.announcements.validation')}
             </p>
@@ -349,8 +398,23 @@ export function AnnouncementManagement({
         <FilterBar
           query={list}
           activeCount={[state, severity].filter(Boolean).length}
+          onSubmit={() => {
+            setTitleQuery(titleSearch.trim());
+            pager.setPage('1');
+          }}
           search={
             <>
+              <Field label={t('common.announcementTitleSearch')}>
+                {(field) => (
+                  <input
+                    {...field}
+                    type="search"
+                    maxLength={160}
+                    value={titleSearch}
+                    onChange={(event) => setTitleSearch(event.target.value)}
+                  />
+                )}
+              </Field>
               <Field label={t('management.announcements.stateLabel')} size="short">
                 {(field) => (
                   <select
@@ -442,9 +506,7 @@ export function AnnouncementManagement({
                       render: (item) => {
                         const zhTitle = item.draft.zh?.title?.trim() || '';
                         const enTitle = item.draft.en?.title?.trim() || '';
-                        const primary = preferZh
-                          ? zhTitle || enTitle
-                          : enTitle || zhTitle;
+                        const primary = preferZh ? zhTitle || enTitle : enTitle || zhTitle;
                         const secondary = preferZh
                           ? zhTitle && enTitle && zhTitle !== enTitle
                             ? enTitle
@@ -514,7 +576,9 @@ export function AnnouncementManagement({
                           id={`edit-${item.id}`}
                           onClick={(event) => {
                             remember(event.currentTarget);
-                            navigate(detailPath(item.id), { state: { returnTo, announcementSource } });
+                            navigate(detailPath(item.id), {
+                              state: { returnTo, announcementSource },
+                            });
                           }}
                         >
                           {t('management.announcements.edit')}

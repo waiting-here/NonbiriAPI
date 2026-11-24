@@ -344,7 +344,7 @@ func (repository *Repository) casesHTTP(writer http.ResponseWriter, request *htt
 		writeReportError(writer, ErrInvalidRequest)
 		return
 	}
-	values, err := parseReportQuery(request, "status", "cursor", "limit", "page", "page_size")
+	values, err := parseReportQuery(request, "status", "search", "pending", "cursor", "limit", "page", "page_size")
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -359,7 +359,11 @@ func (repository *Repository) casesHTTP(writer http.ResponseWriter, request *htt
 		writeReportError(writer, err)
 		return
 	}
-	response, err := repository.listCases(request.Context(), actor, values.Get("status"), values.Get("cursor"), limit, requested)
+	if v := values.Get("pending"); v != "" && v != "true" {
+		writeReportError(writer, ErrInvalidRequest)
+		return
+	}
+	response, err := repository.searchCases(request.Context(), actor, values.Get("status"), values.Get("cursor"), limit, requested, values.Get("search"), values.Get("pending") == "true")
 	if err != nil {
 		writeReportError(writer, err)
 		return

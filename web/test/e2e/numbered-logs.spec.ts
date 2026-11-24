@@ -174,6 +174,75 @@ async function prepare(page: Page, role: Role, locale: 'en' | 'zh', width: numbe
   return { origin, guard };
 }
 
+for (const role of ['admin', 'steward'] as const) {
+  test(
+    role + ' log inspector measures its content area and restores row focus',
+    async ({ page }) => {
+      const { origin } = await prepare(page, role, 'en', 3840);
+      const path = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+      const rows = [1, 2].map((v) => row(role, v, role === 'steward'));
+      await page.route('**' + path + '**', async (route) => {
+        const url = new URL(route.request().url());
+        if (url.pathname === path)
+          return route.fulfill({
+            json: { data: rows, next_cursor: null, pagination: windowFor(2, 1, 20) },
+          });
+        const selected = rows.find((entry) => path + '/' + entry.id === url.pathname);
+        if (selected)
+          return route.fulfill({
+            json: {
+              request: selected,
+              attempts: { data: [attempt(role, 1)], next_cursor: null },
+              attempt_pagination: windowFor(1, 1, 20),
+            },
+          });
+        return route.fallback();
+      });
+      await page.goto(origin + (role === 'admin' ? '/logs' : '/steward?tab=logs'));
+      const first = page.locator('[data-inspect-id="' + rows[0].id + '"]');
+      await first.focus();
+      await page.keyboard.press('Enter');
+      const measurements: unknown[] = [];
+      for (const [width, zoom] of [
+        [3840, 1],
+        [1920, 1],
+        [1440, 1],
+        [1440, 2],
+        [390, 1],
+      ]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate((value) => {
+          document.documentElement.style.zoom = String(value);
+        }, zoom);
+        const workspace = page.locator('.log-panel .inspection-workspace');
+        await expect(workspace.locator('.inspection-slot')).toHaveCount(1);
+        const expected = await workspace.evaluate((node) => {
+          const list = node.querySelector('.inspection-list')!,
+            slot = node.querySelector('.inspection-slot')!;
+          return (
+            Math.abs(slot.getBoundingClientRect().left - list.getBoundingClientRect().left) > 1
+          );
+        });
+        await expect(
+          page.locator(expected ? '.inspection-dock' : '.nb-sheet').first(),
+        ).toBeVisible();
+        const available = await workspace.evaluate((node) =>
+          Math.round(node.getBoundingClientRect().width),
+        );
+        measurements.push({ width, zoom, available, docked: expected });
+        if (width === 3840 || (width === 1440 && zoom === 1)) expect(expected).toBe(true);
+        if (width === 390) expect(expected).toBe(false);
+      }
+      console.log(role + ' inspector ' + JSON.stringify(measurements));
+      await page.getByRole('button', { name: 'Next record' }).click();
+      await expect(page.getByRole('dialog')).toContainText(rows[1].id);
+      await page.getByRole('button', { name: 'Previous record' }).click();
+      await page.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(first).toBeFocused();
+    },
+  );
+}
+
 test('complete header lists fetch lazily and remain usable in light and dark desktop and mobile views', async ({
   page,
 }) => {

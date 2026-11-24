@@ -3,7 +3,7 @@ import { FocusScope } from 'react-aria';
 import { useDrawerOverlay } from '@shared/components/OverlaySurface';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Outlet } from 'react-router';
+import { Link, Outlet } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Brand, useBrandFavicon } from '@shared/components/Brand';
 import { AccountMenu } from '@shared/components/AccountMenu';
@@ -45,12 +45,12 @@ function AdminLogin({
     event.preventDefault();
     setError(null);
     setValidationError('');
-    const submittedPassword = password;
-    setPassword('');
-    if (!username.trim() || !submittedPassword) {
+    if (!username.trim() || !password) {
       setValidationError(t('common.formInvalid'));
       return;
     }
+    const submittedPassword = password;
+    setPassword('');
     setBusy(true);
     try {
       await apiFetch<unknown>('/admin/api/login', {
@@ -371,6 +371,11 @@ export function AdminLayout() {
           </aside>
         </FocusScope>
         <main id="main" className="nb-admin-content" tabIndex={-1}>
+          {config.data?.maintenanceMode && (
+            <p className="nb-note nb-note--warn" role="status">
+              <Link to="/settings?group=maintenance">{t('admin.audit.stationMaintenance')}</Link>
+            </p>
+          )}
           {logoutError ? <ErrorState error={logoutError} /> : null}
           {/* Keep route-local mutation and form state scoped to one admin. */}
           <TimeContextProvider station="admin">

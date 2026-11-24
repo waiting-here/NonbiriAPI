@@ -244,10 +244,12 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   const master = page.getByLabel('Games master switch');
   await master.focus();
   await page.keyboard.press('Space');
-  await expect(master).not.toBeChecked();
-  await expect(page.getByRole('button', { name: 'Save game configuration' })).toBeDisabled();
-  await master.press('Space');
+  const pause = page.getByRole('alertdialog');
+  await expect(pause).toContainText('Fishing');
+  await expect(pause).toContainText('Link');
+  await pause.getByRole('button', { name: 'Cancel' }).click();
   await expect(master).toBeChecked();
+  expect(config.patches).toHaveLength(0);
 
   await page.getByRole('button', { name: 'Fishing Game settings', exact: true }).click();
   const worm = page.getByLabel('Worm bait', { exact: true });
@@ -336,6 +338,38 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   consoleGuard.assertNone();
 });
 import { duelConfigFixture } from '../duelConfigFixture';
+
+test('pausing games preserves unrelated edits and remembers the previous modules after reload', async ({
+  context,
+  page,
+}) => {
+  const config = {
+    current: structuredClone(INITIAL_CONFIG),
+    patches: [] as Record<string, unknown>[],
+  };
+  await prepare(context, page, config);
+  await page.goto(`${ADMIN_ORIGIN}/games`);
+  const fishing = page.getByRole('button', { name: 'Fishing Game settings', exact: true });
+  await fishing.click();
+  await page.getByLabel('Worm bait', { exact: true }).fill('4.25');
+  await page.getByRole('button', { name: 'Done, keep draft', exact: true }).click();
+  await page.getByLabel('Games master switch').click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Disable and save' }).click();
+  await expect.poll(() => config.patches.length).toBe(1);
+  expect(config.patches[0]).toMatchObject({
+    expected_revision: '7',
+    master_enabled: false,
+    fishing: { enabled: false, bait_prices: { worm: '2.5' } },
+    linklink: { enabled: false },
+    rps: { enabled: false },
+  });
+  await expect(page.getByText(/Enabled before the last pause/)).toContainText('Fishing');
+  await fishing.click();
+  await expect(page.getByLabel('Worm bait', { exact: true })).toHaveValue('4.25');
+  await page.getByRole('button', { name: 'Done, keep draft', exact: true }).click();
+  await page.reload();
+  await expect(page.getByText(/Enabled before the last pause/)).toContainText('Fishing');
+});
 
 test('admin validates quick amount count, duplicates and limits before saving the complete list', async ({
   context,

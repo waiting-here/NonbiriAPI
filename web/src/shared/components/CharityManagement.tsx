@@ -2869,7 +2869,7 @@ function PickerKeyManager({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const logReturnTo = logManagementReturnPath(location.state, role);
+  const logReturnTo = logManagementReturnPath(location.state, role, location.search);
   const client = useQueryClient();
   const detailKey = [
     ...charityKeys.root(role),

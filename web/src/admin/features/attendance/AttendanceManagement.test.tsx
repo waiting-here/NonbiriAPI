@@ -230,6 +230,8 @@ it('keeps an existing restricted cover and its featured milestone when saving an
   await view.user.selectOptions(create.getByLabelText('Image source'), kind);
   expect(create.getByRole('option', { name: rated.label })).toBeDisabled();
   await view.user.click(create.getByRole('button', { name: 'Close' }));
+  const discard = screen.queryByRole('alertdialog');
+  if (discard) await view.user.click(within(discard).getByRole('button', { name: /Discard/ }));
   await view.user.click(screen.getByRole('button', { name: 'Edit activity' }));
   const edit = within(await screen.findByRole('dialog'));
   expect(edit.getByLabelText('Image')).toHaveValue(rated.value);

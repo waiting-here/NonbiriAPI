@@ -7,18 +7,24 @@
   min-width: 0;
 }
 .inspection-list {
-  flex: 2 1 56rem;
+  flex: 2 1 43rem;
   display: grid;
   align-content: start;
   gap: var(--nb-space-4);
   min-width: 0;
   container: inspection-list / inline-size;
 }
+.log-panel--admin .inspection-list {
+  flex-basis: 39rem;
+}
+.log-panel--admin .inspection-slot {
+  flex-basis: 24rem;
+}
 .log-panel--user .inspection-list {
   flex-basis: 44rem;
 }
 .alerts-page .inspection-list {
-  flex-basis: 52rem;
+  flex-basis: 42rem;
 }
 .inspection-slot {
   flex: 1 1 26rem;

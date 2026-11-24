@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { retainQueryScope } from '@shared/query/retain';
 import { useEffect, useRef, useState } from 'react';
@@ -140,6 +141,16 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
     </span>
   );
 }
+function targetLink(kind: string, id: string | undefined) {
+  if (!id) return undefined;
+  if (/^[1-9]\d{0,18}$/.test(id)) {
+    if (kind === 'user') return '/users?user=' + id;
+    if (kind === 'alert') return '/alerts?alert_id=' + id;
+    if (kind === 'donation') return '/charity?charity_section=donations&managed_donation=' + id;
+  }
+  if (kind === 'report' && /^rpc_[A-Za-z0-9_-]{22}$/.test(id)) return '/reports/' + id;
+  return undefined;
+}
 function Executor({
   source,
   actor,
@@ -165,7 +176,11 @@ function Executor({
     return <span>{t(`admin.managementHistory.sources.${source}`)}</span>;
   return (
     <span>
-      {actor.name || actor.id || t('admin.managementHistory.unidentified')}
+      {actor.id && targetLink('user', actor.id) ? (
+        <Link to={targetLink('user', actor.id)!}>{actor.name || actor.id}</Link>
+      ) : (
+        actor.name || actor.id || t('admin.managementHistory.unidentified')
+      )}
       {actor.role ? <small className="nb-muted"> · {role(actor)}</small> : null}
     </span>
   );
@@ -230,8 +245,16 @@ function textFields(filter: Filter): Record<string, string> {
       .map((key) => [key, filter[key] ?? '']),
   );
 }
-function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter) => void }) {
-  const { t } = useTranslation();
+function Filters({
+  filter,
+  onApply,
+  onDraftChange,
+}: {
+  filter: Filter;
+  onApply: (value: Filter) => void;
+  onDraftChange: (dirty: boolean) => void;
+}) {
+  const { t, i18n } = useTranslation();
   const [draft, setDraft] = useState<Record<string, string>>(() => textFields(filter));
   const [from, setFrom] = useState(() => timeFilterDraft(filter.time_from));
   const [to, setTo] = useState(() => timeFilterDraft(filter.time_to));
@@ -249,12 +272,24 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
     setFrom(timeFilterDraft(filter.time_from));
     setTo(timeFilterDraft(filter.time_to));
   }
+  const hasDraft =
+    from.invalidInput ||
+    to.invalidInput ||
+    timeFilterMillis(from, filter.time_from) !== (filter.time_from ?? null) ||
+    timeFilterMillis(to, filter.time_to) !== (filter.time_to ?? null) ||
+    filterFields.some(
+      (key) =>
+        !['time_from', 'time_to', 'source', 'outcome', 'domain', 'group_key'].includes(key) &&
+        (draft[key] ?? '').trim() !== (filter[key] ?? ''),
+    );
+  useEffect(() => onDraftChange(Boolean(hasDraft)), [hasDraft, onDraftChange]);
   const field = (name: string, type = 'text') => (
     <Field label={t(`admin.managementHistory.fields.${name}`)} key={name}>
       {(props) => (
         <input
           {...props}
           type={type}
+          list={name === 'action' || name === 'target_kind' ? `history-options-${name}` : undefined}
           value={draft[name] ?? ''}
           onChange={(event) => setDraft((old) => ({ ...old, [name]: event.target.value }))}
         />
@@ -358,6 +393,20 @@ function Filters({ filter, onApply }: { filter: Filter; onApply: (value: Filter)
             {field('action')}
             {field('target_kind')}
             {field('target_id')}
+            <datalist id="history-options-action">
+              {Object.entries(actionTitles).map(([id, label]) => (
+                <option
+                  key={id}
+                  value={id.split('/').at(-1)}
+                  label={i18n.language.startsWith('zh') ? label.zh : label.en}
+                />
+              ))}
+            </datalist>
+            <datalist id="history-options-target_kind">
+              {['user', 'donation', 'donation_key', 'model', 'report', 'alert'].map((kind) => (
+                <option key={kind} value={kind} />
+              ))}
+            </datalist>
             {field('event_id')}
             <p className="management-history__filter-help nb-small nb-muted">
               {t('admin.managementHistory.filterHelp')}
@@ -381,6 +430,15 @@ export function ManagementHistory({ account }: { account: string }) {
   const job = params.get('mh_job') ?? '';
   const root = historyRoot(account);
   const scope = filterKey + ':' + view;
+  const [unapplied, setUnapplied] = useState(false);
+  const detailPosition = useRef<HTMLDivElement>(null);
+  const progressPosition = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) detailPosition.current?.focus();
+  }, [selected]);
+  useEffect(() => {
+    if (job) progressPosition.current?.focus();
+  }, [job]);
   const snapshot = useRef<{ scope: string; id: string } | null>(null);
   const pager = useUrlPagePager({
     station: 'admin',
@@ -523,7 +581,7 @@ export function ManagementHistory({ account }: { account: string }) {
       />
       <Panel>
         <PanelBody>
-          <Filters filter={filter} onApply={apply} />
+          <Filters filter={filter} onApply={apply} onDraftChange={setUnapplied} />
         </PanelBody>
       </Panel>
       <Panel>
@@ -665,22 +723,32 @@ export function ManagementHistory({ account }: { account: string }) {
         </PanelBody>
       </Panel>
       {selected ? (
-        <OperationDetail
-          key={selected}
-          id={selected}
-          account={account}
-          onClose={() => update('mh_detail', '')}
-          onJob={(value) => update('mh_job', value)}
-        />
+        <div tabIndex={-1} ref={detailPosition}>
+          <OperationDetail
+            key={selected}
+            id={selected}
+            account={account}
+            onClose={() => update('mh_detail', '')}
+            onJob={(value) => update('mh_job', value)}
+          />
+        </div>
       ) : null}
-      <CleanupPanel account={account} filter={filter} onJob={(value) => update('mh_job', value)} />
+      <CleanupPanel
+        key={filterKey}
+        account={account}
+        filter={filter}
+        unapplied={unapplied}
+        onJob={(value) => update('mh_job', value)}
+      />
       {job ? (
-        <CleanupProgress
-          key={job}
-          id={job}
-          account={account}
-          onClose={() => update('mh_job', '')}
-        />
+        <div ref={progressPosition} tabIndex={-1}>
+          <CleanupProgress
+            key={job}
+            id={job}
+            account={account}
+            onClose={() => update('mh_job', '')}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -800,7 +868,13 @@ function OperationDetail({
                     cell: 'title',
                     render: (item) => (
                       <span>
-                        {item.target_name || item.target_id || '—'}
+                        {targetLink(item.target_kind, item.target_id) ? (
+                          <Link to={targetLink(item.target_kind, item.target_id)!}>
+                            {item.target_name || item.target_id}
+                          </Link>
+                        ) : (
+                          item.target_name || item.target_id || '—'
+                        )}
                         <small className="nb-muted management-history__target-kind">
                           {item.target_kind}{' '}
                           {item.target_name && item.target_id ? ' · ' + item.target_id : ''}
@@ -848,10 +922,12 @@ function OperationDetail({
 function CleanupPanel({
   account,
   filter,
+  unapplied,
   onJob,
 }: {
   account: string;
   filter: Filter;
+  unapplied: boolean;
   onJob: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -894,7 +970,9 @@ function CleanupPanel({
         <div className="nb-actions">
           <Button
             variant="danger-outline"
-            disabled={prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'}
+            disabled={
+              unapplied || prepare.isPending || cleanup.isPending || cleanup.outcome === 'unknown'
+            }
             onClick={() => {
               cleanup.reset();
               prepare.mutate(filter);
@@ -905,6 +983,7 @@ function CleanupPanel({
               : t('admin.managementHistory.cleanupAll')}
           </Button>
         </div>
+        {unapplied && <Note tone="warn">{t('admin.audit.cleanupDraft')}</Note>}
         {prepare.error ? <ErrorState error={prepare.error} /> : null}
         {cleanup.error && !preview ? <ErrorState error={cleanup.error} /> : null}
         {cleanup.outcome === 'unknown' && !preview ? (
@@ -933,7 +1012,7 @@ function CleanupPanel({
           confirmLabel={t('admin.managementHistory.cleanupStart')}
           danger
           busy={cleanup.isPending}
-          confirmDisabled={preview?.total === '0' || cleanup.outcome === 'unknown'}
+          confirmDisabled={unapplied || preview?.total === '0' || cleanup.outcome === 'unknown'}
           onConfirm={() => preview && cleanup.mutate(preview.prepared)}
           onCancel={() => setPreview(null)}
         >

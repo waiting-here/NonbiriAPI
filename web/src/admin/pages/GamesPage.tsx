@@ -1,3 +1,6 @@
+import { useAdminSession } from '../data';
+import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { LakeFields, lakeWire } from '../features/lakenotes/LakeFields';
 import './games.css';
 import { useRef, useState } from 'react';
@@ -120,6 +123,47 @@ const validInteger = (value: number, minimum: number, maximum: number) =>
 
 type ConfigGame =
   GameName | 'bidding' | 'likes' | 'blackjack' | 'gwent' | 'steadycatch' | 'lakenotes';
+const moduleNames: readonly ConfigGame[] = [
+  'fishing',
+  'linklink',
+  'rps',
+  'bidding',
+  'likes',
+  'blackjack',
+  'gwent',
+  'steadycatch',
+  'lakenotes',
+];
+const previousModulesKey = 'nonbiri.admin.games.previous-modules';
+function readPreviousModules(revision: string, storageKey: string): ConfigGame[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
+    if (
+      !saved ||
+      typeof saved !== 'object' ||
+      !('revision' in saved) ||
+      typeof saved.revision !== 'string' ||
+      !/^\d+$/.test(saved.revision) ||
+      BigInt(saved.revision) > BigInt(revision) ||
+      !('names' in saved) ||
+      !Array.isArray(saved.names)
+    )
+      return [];
+    const names = saved.names;
+    return moduleNames.filter((name) => names.includes(name));
+  } catch {
+    return [];
+  }
+}
+function pauseModules(config: GamesConfig): GamesConfig {
+  const paused = structuredClone(config);
+  paused.master_enabled = false;
+  for (const name of moduleNames) {
+    const module = paused[name];
+    if (module) module.enabled = false;
+  }
+  return paused;
+}
 type GameProblem = { game: ConfigGame | null; message: string; field?: string };
 
 function validateGamesDraft(draft: GamesConfig, t: TFunction): GameProblem | null {
@@ -325,6 +369,19 @@ function GamesEditor({
   const text = useGameAdminText();
   const toast = useOptionalToast();
   const [draft, setDraft] = useState(authority);
+  const [base, setBase] = useState(authority);
+  const [confirmPause, setConfirmPause] = useState(false);
+  const session = useAdminSession(false);
+  const storageKey = previousModulesKey + ':' + (session.data?.admin.username ?? 'current');
+  const [previousModules, setPreviousModules] = useState(() =>
+    readPreviousModules(authority.revision, storageKey),
+  );
+  const activeModules = moduleNames.filter((name) => authority[name]?.enabled);
+  if (base.revision !== authority.revision && JSON.stringify(draft) === JSON.stringify(base)) {
+    setBase(authority);
+    setDraft(authority);
+    setPreviousModules(readPreviousModules(authority.revision, storageKey));
+  }
   const [active, setActive] = useState<ConfigGame | null>(null);
   const opening = useRef<GamesConfig | null>(null);
   const save = useRetainedOperation<GamesConfig, GamesConfig>(
@@ -412,6 +469,7 @@ function GamesEditor({
     void save
       .mutateAsync(draft)
       .then((result) => {
+        setBase(result);
         setDraft(result);
         setActive(null);
         toast?.push({ message: t('admin.games.saved'), tone: 'success' });
@@ -420,7 +478,29 @@ function GamesEditor({
   };
   const restore = () => {
     save.reset();
+    setBase(authority);
     setDraft(authority);
+  };
+  const pause = async () => {
+    if (stale || save.isPending || !confirmPause) return;
+    try {
+      const latest = await save.mutateAsync(pauseModules(authority));
+      setBase(latest);
+      setDraft((current) => ({ ...pauseModules(current), revision: latest.revision }));
+      setPreviousModules(activeModules);
+      try {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({ revision: latest.revision, names: activeModules }),
+        );
+      } catch {
+        /* The receipt remains visible in this editor. */
+      }
+      setConfirmPause(false);
+      toast?.push({ message: t('admin.games.saved'), tone: 'success' });
+    } catch {
+      /* The confirmation keeps the server error and retry action visible. */
+    }
   };
   const close = () => {
     if (!save.isPending) setActive(null);
@@ -488,34 +568,38 @@ function GamesEditor({
         submit();
       }}
     >
+      <DraftLeaveGuard dirty={changed} />
       <Panel>
         <PanelBody>
           <Toggle
             label={t('admin.games.masterEnabled')}
             checked={draft.master_enabled}
             disabled={save.isPending}
-            onChange={(master_enabled) => edit((current) => ({ ...current, master_enabled }))}
+            onChange={(master_enabled) => {
+              if (
+                !master_enabled &&
+                moduleNames.some((name) => authority[name]?.enabled || draft[name]?.enabled)
+              )
+                setConfirmPause(true);
+              else edit((current) => ({ ...current, master_enabled }));
+            }}
           />
+          {previousModules.length > 0 && !authority.master_enabled && (
+            <Note>
+              {t('admin.audit.previousModules', { names: previousModules.map(label).join(', ') })}
+            </Note>
+          )}
           <div className="admin-game-list">
-            {(
-              [
-                'fishing',
-                'linklink',
-                'rps',
-                'bidding',
-                'likes',
-                'blackjack',
-                'gwent',
-                'steadycatch',
-                'lakenotes',
-              ] as const
-            )
+            {moduleNames
               .filter((game) => draft[game])
               .map((game) => (
                 <div className="admin-game-row" key={game}>
                   <div>
                     <h2>{label(game)}</h2>
                     <p>{summary(game)}</p>
+                    {JSON.stringify(draft[game]) !== JSON.stringify(authority[game]) && (
+                      <span className="nb-badge">{t('admin.audit.unsavedModule')}</span>
+                    )}
                     {formError?.game === game ? (
                       <span className="nb-badge nb-badge--bad">
                         {text('请检查设置', 'Check settings')}
@@ -562,6 +646,29 @@ function GamesEditor({
         discardLabel={t('admin.games.restoreAuthorityValues')}
         dirtyLabel={(count) => text(`${count} 项未保存`, `${count} unsaved changes`)}
       />
+      {confirmPause && (
+        <ConfirmDialog
+          open
+          danger
+          busy={save.isPending}
+          title={t('admin.audit.pauseGames')}
+          description={t('admin.audit.pauseModules', {
+            names: moduleNames
+              .filter((name) => draft[name]?.enabled || authority[name]?.enabled)
+              .map(label)
+              .join(', '),
+          })}
+          confirmLabel={t('admin.audit.pauseAndSave')}
+          cancelLabel={t('common.cancel')}
+          onCancel={() => setConfirmPause(false)}
+          onConfirm={() => {
+            void pause();
+          }}
+          confirmDisabled={stale}
+        >
+          {save.error && <ErrorState error={save.error} />}
+        </ConfirmDialog>
+      )}
       <ExpandablePanel
         open={active !== null}
         title={active ? label(active) : ''}
@@ -577,6 +684,14 @@ function GamesEditor({
               onClick={discardGame}
             >
               {t('admin.games.discardGameEdits', { game: active ? label(active) : '' })}
+            </button>
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={save.isPending}
+              onClick={close}
+            >
+              {t('admin.audit.keepGameDraft')}
             </button>
             <button
               type="button"
@@ -655,6 +770,9 @@ export function GamesPage() {
         <div className="nb-actions">
           <Link className="nb-btn nb-btn--secondary" to="/games/whale-haven">
             {duelText('鲸鱼湾小筑', 'Whale Haven')}
+          </Link>
+          <Link className="nb-btn nb-btn--secondary" to="/games/lake-notes/periods">
+            {t('admin.lakeNotes.title')}
           </Link>
           <Link className="nb-btn nb-btn--secondary" to="/games/ai">
             {t('admin.games.aiPlayersTitle')}

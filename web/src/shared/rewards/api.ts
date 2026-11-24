@@ -77,8 +77,15 @@ export const rewardKeys = {
 };
 export const getAssets = (admin = false, signal?: AbortSignal) =>
   apiFetch<Asset[]>((admin ? '/admin' : '') + '/api/rewards/assets', { signal });
-export const listCampaigns = (cursor: string, signal?: AbortSignal) =>
-  apiFetch<Page<Campaign>>(queryPath('/admin/api/rewards', { cursor }), { signal });
+export const listCampaigns = (
+  cursor: string,
+  signal?: AbortSignal,
+  kind: Campaign['kind'] | 'all' = 'all',
+) =>
+  apiFetch<Page<Campaign>>(
+    queryPath('/admin/api/rewards', { cursor, kind: kind === 'all' ? '' : kind }),
+    { signal },
+  );
 export const previewReward = (input: Input) =>
   apiFetch<Preview>('/admin/api/rewards/preview', { method: 'POST', json: input });
 export const createReward = (input: Input, key: string) =>

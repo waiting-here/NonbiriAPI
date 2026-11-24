@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StatusBadge } from '@shared/components/ui/StatusBadge';
 import { reportStatusTone } from '../features/operations/reports';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
@@ -44,13 +45,16 @@ export function ReportsPage() {
   const session = useAdminSession();
   const accountId = session.data?.admin.username ?? '';
   const scopeReady = !session.isPending && !session.error && Boolean(accountId);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [search, setSearch] = useState('');
+  const pending = searchParams.get('pending') === 'true' && !searchParams.has('status');
   const status = selectedStatus(searchParams.getAll('status'));
   const pager = useUrlPagePager({
     station: 'admin',
     listType: 'reports',
     scopeKey: accountId || 'anonymous',
     scopeReady,
-    resetKey: status,
+    resetKey: JSON.stringify([status, search, pending]),
   });
   const badge = useQuery({
     queryKey: reportPageKeys.badge(accountId || 'anonymous'),
@@ -59,7 +63,15 @@ export function ReportsPage() {
     retry: false,
     refetchInterval: 30_000,
   });
-  const reports = useReportsPage(accountId, status, pager.page, pager.pageSize, scopeReady);
+  const reports = useReportsPage(
+    accountId,
+    status,
+    pager.page,
+    pager.pageSize,
+    scopeReady,
+    search,
+    pending,
+  );
   const badgeVisual = badge.data
     ? BigInt(badge.data.total) > 99n
       ? '99+'
@@ -98,7 +110,9 @@ export function ReportsPage() {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.delete('status');
-      if (nextStatus) next.set('status', nextStatus);
+      next.delete('pending');
+      if (nextStatus === 'pending') next.set('pending', 'true');
+      else if (nextStatus) next.set('status', nextStatus);
       next.delete('page');
       next.set('page', '1');
       next.delete('page_size');
@@ -126,7 +140,12 @@ export function ReportsPage() {
             <ErrorState error={badge.error} onRetry={() => void badge.refetch()} />
           ) : (
             <div className="nb-stats reports-stats">
-              <div className="nb-stat">
+              <button
+                type="button"
+                className="nb-stat"
+                onClick={() => updateStatus('pending')}
+                aria-pressed={pending}
+              >
                 <span>{t('admin.reports.badge.title')}</span>
                 <strong
                   className="nb-amount"
@@ -134,25 +153,40 @@ export function ReportsPage() {
                 >
                   {badgeVisual}
                 </strong>
-              </div>
-              <div className="nb-stat">
+              </button>
+              <button
+                type="button"
+                className="nb-stat"
+                onClick={() => updateStatus('pending_indexing')}
+                aria-pressed={status === 'pending_indexing'}
+              >
                 <span>{t('admin.reports.badge.indexing')}</span>
                 <strong className="nb-amount">
                   {formatCount(badge.data?.by_status.pending_indexing ?? 0).display}
                 </strong>
-              </div>
-              <div className="nb-stat">
+              </button>
+              <button
+                type="button"
+                className="nb-stat"
+                onClick={() => updateStatus('pending_review')}
+                aria-pressed={status === 'pending_review'}
+              >
                 <span>{t('admin.reports.badge.review')}</span>
                 <strong className="nb-amount">
                   {formatCount(badge.data?.by_status.pending_review ?? 0).display}
                 </strong>
-              </div>
-              <div className="nb-stat">
+              </button>
+              <button
+                type="button"
+                className="nb-stat"
+                onClick={() => updateStatus('approved_processing')}
+                aria-pressed={status === 'approved_processing'}
+              >
                 <span>{t('admin.reports.badge.processing')}</span>
                 <strong className="nb-amount">
                   {formatCount(badge.data?.by_status.approved_processing ?? 0).display}
                 </strong>
-              </div>
+              </button>
             </div>
           )}
           <Note tone="info" title={t('admin.reports.privacy.title')}>
@@ -163,17 +197,33 @@ export function ReportsPage() {
       <Panel>
         <PanelBody>
           <FilterBar
-            activeCount={status ? 1 : 0}
+            activeCount={Number(Boolean(status || pending)) + Number(Boolean(search))}
+            onSubmit={() => {
+              setSearch(searchDraft.trim());
+              pager.setPage('1');
+            }}
             search={
               <>
+                <Field label={t('admin.audit.searchReports')}>
+                  {(props) => (
+                    <input
+                      {...props}
+                      type="search"
+                      maxLength={160}
+                      value={searchDraft}
+                      onChange={(event) => setSearchDraft(event.target.value)}
+                    />
+                  )}
+                </Field>
                 <Field size="short" label={t('admin.reports.filter.status')}>
                   {(field) => (
                     <select
                       {...field}
-                      value={status}
+                      value={pending ? 'pending' : status}
                       onChange={(event) => updateStatus(event.target.value)}
                     >
                       <option value="">{t('admin.reports.filter.all')}</option>
+                      <option value="pending">{t('admin.reports.badge.title')}</option>
                       {REPORT_STATUSES.map((item) => (
                         <option key={item} value={item}>
                           {statusLabels[item]}
@@ -182,11 +232,15 @@ export function ReportsPage() {
                     </select>
                   )}
                 </Field>
-                {status ? (
+                {status || pending || search ? (
                   <button
                     type="button"
                     className="nb-btn nb-btn--ghost"
-                    onClick={() => updateStatus('')}
+                    onClick={() => {
+                      setSearch('');
+                      setSearchDraft('');
+                      updateStatus('');
+                    }}
                   >
                     {t('common.resetFilter')}
                   </button>

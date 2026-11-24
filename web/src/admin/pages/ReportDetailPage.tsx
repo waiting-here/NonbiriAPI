@@ -4,7 +4,7 @@ import { DataTable } from '@shared/components/ui/DataTable';
 import { FormActions } from '@shared/components/ui/Fields';
 import { Field } from '@shared/components/ui/Field';
 import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useQueryClient } from '@tanstack/react-query';
@@ -96,8 +96,18 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
     pageParam: 'lineage_page',
     pageSizeParam: 'lineage_page_size',
   });
+  const [confirmResume, setConfirmResume] = useState(false);
   const [reason, setReason] = useState('');
   const [decision, setDecision] = useState<Decision>(null);
+  const revealLineage = useCallback(
+    (node: HTMLHeadingElement | null) => {
+      if (node) {
+        node.focus({ preventScroll: true });
+        node.scrollIntoView?.({ block: 'nearest' });
+      }
+    },
+    [urlLineageTargetId],
+  );
   const [lineageTarget, setLineageTarget] = useState<ReportTarget | null>(null);
   const detail = useReportDetailPage(
     accountId,
@@ -396,9 +406,13 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
                       <dl className="nb-facts nb-facts--inline">
                         <dt>{t('admin.reports.detail.reporter')}</dt>
                         <dd>
-                          {item.reporter
-                            ? `${item.reporter.user_id} / ${item.reporter.discord_id}`
-                            : t('admin.reports.detail.anonymous')}
+                          {item.reporter ? (
+                            <Link to={`/users?user=${item.reporter.user_id}`}>
+                              {item.reporter.user_id} / {item.reporter.discord_id}
+                            </Link>
+                          ) : (
+                            t('admin.reports.detail.anonymous')
+                          )}
                         </dd>
                         <dt>{t('admin.reports.detail.sourceIp')}</dt>
                         <dd className="mono">{item.source_ip}</dd>
@@ -475,9 +489,14 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
                     header: t('common.userId'),
                     mobileLabel: t('common.userId'),
                     cell: 'meta',
-                    render: (target) => (
-                      <span className="mono">{target.owner?.user_id ?? '—'}</span>
-                    ),
+                    render: (target) =>
+                      target.owner?.user_id ? (
+                        <Link className="mono" to={`/users?user=${target.owner.user_id}`}>
+                          {target.owner.user_id}
+                        </Link>
+                      ) : (
+                        '—'
+                      ),
                   },
                   {
                     key: 'endpoint',
@@ -562,7 +581,9 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
       {effectiveLineageTargetId ? (
         <Card>
           <div className="ops-toolbar">
-            <h2>{t('admin.reports.detail.lineageTitle')}</h2>
+            <h2 tabIndex={-1} ref={revealLineage}>
+              {t('admin.reports.detail.lineageTitle')}
+            </h2>
             <button
               className="nb-btn nb-btn--secondary"
               type="button"
@@ -618,7 +639,11 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
                       key: 'donation',
                       header: t('admin.reports.detail.lineage.donation'),
                       cell: 'title',
-                      render: (match) => <span className="mono">{match.donation_id}</span>,
+                      render: (match) => (
+                        <Link className="mono" to={`/charity?donation_id=${match.donation_id}`}>
+                          {match.donation_id}
+                        </Link>
+                      ),
                     },
                     {
                       key: 'key',
@@ -678,10 +703,18 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
         <Card className="ops-danger">
           <h2>{t('admin.reports.detail.decisionTitle')}</h2>
           <p>{t('admin.reports.detail.decisionBody')}</p>
-          <Field label={t('admin.reports.detail.reason')} size="long">
+          <Field
+            label={
+              <>
+                {t('admin.reports.detail.reason')} <span aria-hidden="true">*</span>
+              </>
+            }
+            size="long"
+          >
             {(field) => (
               <textarea
                 {...field}
+                required
                 value={reason}
                 maxLength={1024}
                 onChange={(event) => setReason(event.target.value)}
@@ -720,15 +753,33 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
             className="nb-btn nb-btn--danger"
             type="button"
             disabled={resume.isPending || decide.isPending || !detail.data.retry}
-            onClick={() => {
-              const report = detail.data;
-              if (report) resume.mutate({ target: report.target_version });
-            }}
+            onClick={() => setConfirmResume(true)}
           >
             {t('admin.reports.detail.resumeCheckpoint')}
           </button>
         </Card>
       ) : null}
+      {confirmResume && detail.data && !authorityBlocked && (
+        <ConfirmDialog
+          open
+          danger
+          title={t('admin.reports.detail.resumeCheckpoint')}
+          description={t('admin.audit.resumeReport', { id: detail.data.id })}
+          confirmLabel={t('admin.reports.detail.resumeCheckpoint')}
+          busy={resume.isPending}
+          confirmDisabled={!detail.data.retry}
+          onCancel={() => setConfirmResume(false)}
+          onConfirm={() => {
+            if (detail.data)
+              resume.mutate(
+                { target: detail.data.target_version },
+                { onSuccess: () => setConfirmResume(false) },
+              );
+          }}
+        >
+          {resume.error && <ErrorState error={resume.error} />}
+        </ConfirmDialog>
+      )}
       {decision && detail.data && !authorityBlocked ? (
         <ConfirmDialog
           open

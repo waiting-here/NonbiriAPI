@@ -130,6 +130,7 @@ type MutationResult[T any] struct {
 }
 
 type AdminListQuery struct {
+	Title    string
 	State    string
 	Severity string
 	Cursor   string

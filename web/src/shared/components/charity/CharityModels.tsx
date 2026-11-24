@@ -1422,7 +1422,7 @@ export function ModelsPanel({
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const logReturnTo = logManagementReturnPath(location.state, role);
+  const logReturnTo = logManagementReturnPath(location.state, role, location.search);
   const manageTriggerId = useId();
   const client = useQueryClient();
   const [params, setParams] = useSearchState();
@@ -1579,7 +1579,7 @@ export function ModelsPanel({
         description={selected ? `${selected.full_name} · #${selected.id}` : undefined}
         back={
           logReturnTo && (!managingKey || !selected) ? (
-            <Link className="nb-btn nb-btn--ghost" to={logReturnTo}>
+            <Link className="nb-btn nb-btn--ghost" to={logReturnTo} state={{logPrivate:location.state?.logPrivate}}>
               {t('common.operations.logs.returnToLogs')}
             </Link>
           ) : !managingKey && (creating || selectedId) ? (
@@ -1797,7 +1797,7 @@ export function ModelsPanel({
                 keyID: managedKey,
                 backLabel: logReturnTo ? t('common.operations.logs.returnToLogs') : undefined,
                 onBack: () => {
-                  if (logReturnTo) navigate(logReturnTo);
+                  if (logReturnTo) navigate(logReturnTo,{state:{logPrivate:location.state?.logPrivate}});
                   else
                     setParams((current) => {
                       const next = new URLSearchParams(current);

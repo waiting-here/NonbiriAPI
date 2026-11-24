@@ -155,6 +155,7 @@ export interface Configuration {
   time_zone: string;
 }
 export type AdminInput =
+  | { kind: 'delete_pool' | 'delete_preset'; expected_revision: number; delete_id: string }
   | {
       kind: 'settings';
       expected_revision: number;

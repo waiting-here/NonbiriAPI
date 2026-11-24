@@ -116,7 +116,9 @@ for (const role of ['admin', 'level6', 'level5'] as const) {
     }
     await page.getByRole('link', { name: 'Return to request logs', exact: true }).click();
     await expect(page).toHaveURL(original);
-    await panel.locator('summary').filter({ hasText: 'Service call attempts' }).click();
+    const attemptsHeading = panel.locator('summary').filter({ hasText: 'Service call attempts' });
+    if ((await attemptsHeading.locator('..').getAttribute('open')) === null)
+      await attemptsHeading.click();
     const links = panel.getByRole('link', { name: 'Manage charity key', exact: true });
     await expect(links).toHaveCount(detail.attempts.data.length);
     if (role === 'admin') {
@@ -146,10 +148,13 @@ for (const role of ['admin', 'level6', 'level5'] as const) {
       const toggle = panel.locator('summary').filter({ hasText: 'Service call attempts' });
       if ((await toggle.locator('..').getAttribute('open')) === null) await toggle.click();
       const link = panel.getByRole('link', { name: 'Manage charity key', exact: true }).nth(index);
-      await expect(link).toHaveAttribute(
-        'href',
-        new RegExp(`charity_model=31&managed_donation=${index + 7}&managed_key=${index + 11}$`),
-      );
+      const target = new URL((await link.getAttribute('href'))!, origin);
+      expect(target.searchParams.get('charity_model')).toBe('31');
+      expect(target.searchParams.get('managed_donation')).toBe(String(index + 7));
+      expect(target.searchParams.get('managed_key')).toBe(String(index + 11));
+      const carried = new URLSearchParams(target.searchParams.get('log_context') ?? '');
+      expect(carried.get('request_id')).toBe(detail.request.id);
+      expect(carried.has('charity_model')).toBe(false);
       await link.click();
       await expect(
         page.getByRole('heading', { name: `Manage donated key #${index + 11}`, exact: true }),

@@ -198,12 +198,16 @@ export function getReportPage(
   page: string,
   pageSize: PageSize,
   signal?: AbortSignal,
+  search = '',
+  pending = false,
 ): Promise<NumberedReportPage<ReturnType<typeof normalizeReportSummary>>> {
   const safeStatus = requestStatus(status);
   const window = requestWindow(page, pageSize);
   return decoded(
     queryPath('/admin/api/reports', {
       status: safeStatus || undefined,
+      search: search || undefined,
+      pending: pending ? 'true' : undefined,
       page: window.page,
       page_size: window.pageSize,
     }),
@@ -292,8 +296,21 @@ export const reportPageKeys = {
   root: ['admin', 'operations', 'reports'] as const,
   badge: (accountId: string) => [...reportPageKeys.root, 'badge', accountId] as const,
   lists: (accountId: string) => [...reportPageKeys.root, 'page', accountId] as const,
-  list: (accountId: string, status: string, page: string, pageSize: PageSize) =>
-    [...reportPageKeys.lists(accountId), status, page, pageSize] as const,
+  list: (
+    accountId: string,
+    status: string,
+    page: string,
+    pageSize: PageSize,
+    search = '',
+    pending = false,
+  ) =>
+    [
+      ...reportPageKeys.lists(accountId),
+      status,
+      ...(search || pending ? [search, pending] : []),
+      page,
+      pageSize,
+    ] as const,
   detail: (accountId: string, id: string, page: string, pageSize: PageSize) =>
     [...reportPageKeys.root, 'detail-page', accountId, id, page, pageSize] as const,
   targets: (accountId: string, id: string, page: string, pageSize: PageSize) =>
@@ -325,11 +342,14 @@ export function useReportsPage(
   page: string,
   pageSize: PageSize,
   enabled = true,
+  search = '',
+  pending = false,
 ): UseQueryResult<NumberedReportPage<ReturnType<typeof normalizeReportSummary>>, Error> {
-  const prefix = [...reportPageKeys.lists(accountId), status] as const;
+  const queryKey = reportPageKeys.list(accountId, status, page, pageSize, search, pending);
+  const prefix = queryKey.slice(0, -2);
   return useQuery<NumberedReportPage<ReturnType<typeof normalizeReportSummary>>, Error>({
-    queryKey: reportPageKeys.list(accountId, status, page, pageSize),
-    queryFn: ({ signal }) => getReportPage(status, page, pageSize, signal),
+    queryKey,
+    queryFn: ({ signal }) => getReportPage(status, page, pageSize, signal, search, pending),
     enabled:
       enabled &&
       Boolean(accountId) &&
