@@ -341,8 +341,15 @@ func performanceRoute(path string) string {
 		return path
 	}
 	if strings.HasPrefix(path, "/api/games/") {
-		game, _, _ := strings.Cut(strings.TrimPrefix(path, "/api/games/"), "/")
+		game, action, _ := strings.Cut(strings.TrimPrefix(path, "/api/games/"), "/")
 		switch game {
+		case "whale-haven":
+			switch action {
+			case "profile", "availability", "actions":
+				return "game.whale-haven." + action
+			default:
+				return "game.whale-haven"
+			}
 		case "blackjack", "bidding", "likes", "linklink", "rps", "fishing", "lake-notes", "gacha", "steady-catch", "gwent":
 			if path == "/api/games/"+game+"/leaderboard" {
 				return "game." + game + ".leaderboard"

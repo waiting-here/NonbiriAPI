@@ -89,7 +89,7 @@ func TestPressureFailedFlushRetriesWithoutLosingPeaks(t *testing.T) {
 	if err := monitor.flush(context.Background()); err == nil {
 		t.Fatal("expected write failure")
 	}
-	if monitor.flushedAt != 0 {
+	if monitor.lastFlushed.at != 0 {
 		t.Fatal("failed flush advanced the cursor")
 	}
 	reading.RPM, reading.Concurrency = 1, 0
@@ -143,6 +143,53 @@ func TestPressureUnflushedSeriesStaysBounded(t *testing.T) {
 	}
 }
 
+func TestPressureOnlyTakesWriterForNewOrRaisedMinute(t *testing.T) {
+	database := pressureDatabase(t)
+	reading := PressureReading{RPM: 5, Concurrency: 2}
+	monitor, err := NewPressureMonitor(t.Context(), database, func() PressureReading { return reading })
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().Truncate(time.Minute)
+	monitor.sample(at)
+	if err := monitor.flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	writer, err := database.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reading.RPM = 3
+	monitor.sample(at.Add(15 * time.Second))
+	expired, cancel := context.WithCancel(t.Context())
+	cancel()
+	err = monitor.flush(expired)
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if err != nil {
+		t.Fatalf("unchanged minute needed a writer: %v", err)
+	}
+	reading.Concurrency = 7
+	monitor.sample(at.Add(35 * time.Second))
+	if err := monitor.flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	monitor.sample(at.Add(time.Minute))
+	if err := monitor.flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var count, firstRPM, firstConcurrency, lastRPM int
+	if err := database.QueryRow(`SELECT count(*),max(CASE WHEN observed_at=?1 THEN rpm END),
+max(CASE WHEN observed_at=?1 THEN concurrency END),max(CASE WHEN observed_at=?2 THEN rpm END)
+FROM global_pressure_samples`, at.Unix(), at.Add(time.Minute).Unix()).Scan(&count, &firstRPM, &firstConcurrency, &lastRPM); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 || firstRPM != 5 || firstConcurrency != 7 || lastRPM != 3 {
+		t.Fatalf("minute samples count=%d first=%d/%d next=%d", count, firstRPM, firstConcurrency, lastRPM)
+	}
+}
+
 func TestPressureFlushBoundsBacklogAndDefersForBusyWriter(t *testing.T) {
 	database := pressureDatabase(t)
 	monitor, err := NewPressureMonitor(context.Background(), database, func() PressureReading {
@@ -167,7 +214,7 @@ func TestPressureFlushBoundsBacklogAndDefersForBusyWriter(t *testing.T) {
 	if closeErr := writer.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	if err == nil || time.Since(started) > time.Second || monitor.flushedAt != 0 {
+	if err == nil || time.Since(started) > time.Second || monitor.lastFlushed.at != 0 {
 		t.Fatalf("busy writer was not deferred: elapsed=%v err=%v", time.Since(started), err)
 	}
 	if err := monitor.flush(t.Context()); err != nil {
