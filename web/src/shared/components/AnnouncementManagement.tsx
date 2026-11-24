@@ -1,4 +1,5 @@
 import { DraftLeaveGuard } from '@shared/components/charity/DraftLeaveScope';
+import { useScopedListSearch } from '@shared/operations/useScopedListSearch';
 import { useAnnouncementReturn } from '@shared/operations/useAnnouncementReturn';
 import { DataTable } from '@shared/components/ui/DataTable';
 import { Field } from '@shared/components/ui/Field';
@@ -96,8 +97,13 @@ export function AnnouncementManagement({
     role === 'admin'
       ? `/announcements/${encodeURIComponent(id)}`
       : `/steward?tab=announcements&announcement=${encodeURIComponent(id)}`;
-  const [titleSearch, setTitleSearch] = useState('');
-  const [titleQuery, setTitleQuery] = useState('');
+  const {
+    draft: titleSearch,
+    setDraft: setTitleSearch,
+    applied: titleQuery,
+    apply: applyTitleSearch,
+    listSearch,
+  } = useScopedListSearch(accountID && !sessionError ? role + ':announcements:' + accountID : '');
   const [reviewed, setReviewed] = useState(false);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -202,7 +208,7 @@ export function AnnouncementManagement({
         onSuccess: (receipt) => {
           const destination = detailPath(receipt.id);
           savedDestination.current = destination;
-          navigate(destination, { state: { returnTo } });
+          navigate(destination, { state: { returnTo, listSearch } });
         },
       },
     );
@@ -397,11 +403,8 @@ export function AnnouncementManagement({
       <Card>
         <FilterBar
           query={list}
-          activeCount={[state, severity].filter(Boolean).length}
-          onSubmit={() => {
-            setTitleQuery(titleSearch.trim());
-            pager.setPage('1');
-          }}
+          activeCount={[state, severity, titleQuery].filter(Boolean).length}
+          onSubmit={() => applyTitleSearch()}
           search={
             <>
               <Field label={t('common.announcementTitleSearch')}>
@@ -448,17 +451,14 @@ export function AnnouncementManagement({
                   </select>
                 )}
               </Field>
-              {state || severity ? (
+              {state || severity || titleQuery ? (
                 <Button
                   variant="ghost"
                   type="button"
                   onClick={() =>
-                    setParams((previous) => {
-                      const next = new URLSearchParams(previous);
-                      next.delete('state');
-                      next.delete('severity');
-                      next.set('page', '1');
-                      return next;
+                    applyTitleSearch('', (params) => {
+                      params.delete('state');
+                      params.delete('severity');
                     })
                   }
                 >
@@ -577,7 +577,7 @@ export function AnnouncementManagement({
                           onClick={(event) => {
                             remember(event.currentTarget);
                             navigate(detailPath(item.id), {
-                              state: { returnTo, announcementSource },
+                              state: { returnTo, announcementSource, listSearch },
                             });
                           }}
                         >

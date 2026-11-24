@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useScopedListSearch } from '@shared/operations/useScopedListSearch';
 import { StatusBadge } from '@shared/components/ui/StatusBadge';
 import { reportStatusTone } from '../features/operations/reports';
 import { QueryFeedback } from '@shared/components/QueryFeedback';
@@ -45,8 +45,13 @@ export function ReportsPage() {
   const session = useAdminSession();
   const accountId = session.data?.admin.username ?? '';
   const scopeReady = !session.isPending && !session.error && Boolean(accountId);
-  const [searchDraft, setSearchDraft] = useState('');
-  const [search, setSearch] = useState('');
+  const {
+    draft: searchDraft,
+    setDraft: setSearchDraft,
+    applied: search,
+    apply: applySearch,
+    listSearch,
+  } = useScopedListSearch(scopeReady ? 'admin:reports:' + accountId : '');
   const pending = searchParams.get('pending') === 'true' && !searchParams.has('status');
   const status = selectedStatus(searchParams.getAll('status'));
   const pager = useUrlPagePager({
@@ -198,10 +203,7 @@ export function ReportsPage() {
         <PanelBody>
           <FilterBar
             activeCount={Number(Boolean(status || pending)) + Number(Boolean(search))}
-            onSubmit={() => {
-              setSearch(searchDraft.trim());
-              pager.setPage('1');
-            }}
+            onSubmit={() => applySearch()}
             search={
               <>
                 <Field label={t('admin.audit.searchReports')}>
@@ -236,11 +238,13 @@ export function ReportsPage() {
                   <button
                     type="button"
                     className="nb-btn nb-btn--ghost"
-                    onClick={() => {
-                      setSearch('');
-                      setSearchDraft('');
-                      updateStatus('');
-                    }}
+                    onClick={() =>
+                      applySearch('', (params) => {
+                        params.delete('status');
+                        params.delete('pending');
+                        params.set('page_size', String(pager.pageSize));
+                      })
+                    }
                   >
                     {t('common.resetFilter')}
                   </button>
@@ -361,6 +365,7 @@ export function ReportsPage() {
                           }}
                           to={`/reports/${encodeURIComponent(item.id)}`}
                           state={{
+                            listSearch,
                             returnTo: listReturn(
                               reports.data.pagination.page,
                               reports.data.pagination.page_size,

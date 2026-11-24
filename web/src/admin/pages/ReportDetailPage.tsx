@@ -101,7 +101,7 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
   const [decision, setDecision] = useState<Decision>(null);
   const revealLineage = useCallback(
     (node: HTMLHeadingElement | null) => {
-      if (node) {
+      if (node && urlLineageTargetId) {
         node.focus({ preventScroll: true });
         node.scrollIntoView?.({ block: 'nearest' });
       }
@@ -325,7 +325,10 @@ function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string
         title={t('admin.reports.detail.title')}
         description={t('admin.reports.detail.description')}
         back={
-          <Link to={listReturnPath(location.state, '/reports')}>
+          <Link
+            to={listReturnPath(location.state, '/reports')}
+            state={{ listSearch: location.state?.listSearch }}
+          >
             {t('admin.reports.detail.back')}
           </Link>
         }

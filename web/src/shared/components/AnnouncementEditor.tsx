@@ -142,7 +142,7 @@ export function AnnouncementEditor({
             queryKey: managedAnnouncementKeys.detail(role, account, announcementId),
             exact: true,
           });
-          navigate(backTo, { replace: true });
+          navigate(backTo, { replace: true, state: { listSearch: location.state?.listSearch } });
         });
       await client.invalidateQueries({ queryKey: managedAnnouncementKeys.pages(role) });
       context.assertCurrent();
@@ -252,7 +252,13 @@ export function AnnouncementEditor({
       : 'management.announcements.detail.description',
   );
   const back = (
-    <Link to={backTo} state={{ announcementSource: location.state?.announcementSource }}>
+    <Link
+      to={backTo}
+      state={{
+        announcementSource: location.state?.announcementSource,
+        listSearch: location.state?.listSearch,
+      }}
+    >
       {t('management.announcements.detail.back')}
     </Link>
   );

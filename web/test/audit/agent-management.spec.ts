@@ -162,8 +162,8 @@ test('administrator configures a source, edits personal memory and cleans retain
     ).toBeVisible();
     await page.getByRole('button', { name: history.backToGroups, exact: true }).click();
     const cleanup = page.getByRole('button', { name: history.cleanupFiltered, exact: true });
-    await page.getByRole('button', { name: common.common.moreFilters, exact: true }).click();
-    await page.getByLabel(history.fields.time_to, { exact: true }).fill('2099-12-31T23:59:00');
+    await page.locator('summary').filter({ hasText: common.common.moreFilters }).click();
+    await page.getByLabel(history.fields.time_to, { exact: true }).fill('2099-12-31T23:59:59');
     await expect(cleanup).toBeDisabled();
     await expect(page.getByText(admin.admin.audit.cleanupDraft, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: common.common.search, exact: true }).click();

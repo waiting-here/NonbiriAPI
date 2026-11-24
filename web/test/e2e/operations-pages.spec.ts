@@ -604,16 +604,19 @@ test('administrator report inbox opens an authoritative empty case detail', asyn
       by_status: { pending_indexing: '0', pending_review: '1', approved_processing: '0' },
     },
   });
-  await mockJson(page, {
-    origin: ADMIN_ORIGIN,
-    method: 'GET',
-    path: '/admin/api/reports?page=1&page_size=20',
-    body: {
-      data: [reportSummary],
-      next_cursor: null,
-      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-    },
-  });
+  const privateFilter = 'reported.example.test';
+  for (const query of ['', 'search=' + privateFilter + '&']) {
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/reports?' + query + 'page=1&page_size=20',
+      body: {
+        data: [reportSummary],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+      },
+    });
+  }
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
@@ -637,11 +640,27 @@ test('administrator report inbox opens an authoritative empty case detail', asyn
   });
 
   await page.goto(`${ADMIN_ORIGIN}/reports`);
+  const filter = page.getByRole('searchbox', {
+    name: 'Search report ID, connector or service URL',
+  });
+  await filter.fill(privateFilter);
+  await Promise.all([
+    page.waitForResponse(
+      (response) => new URL(response.url()).searchParams.get('search') === privateFilter,
+    ),
+    filter.press('Enter'),
+  ]);
+  expect(page.url()).not.toContain(privateFilter);
   await expect(page.getByText('https://reported.example.test/v1')).toBeVisible();
   await page.locator(`a[href="/reports/${REPORT_ID}"]`).click();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/reports/${REPORT_ID}`);
   await expect(page.getByText('https://reported.example.test/v1')).toBeVisible();
   await expect(page.locator('.empty-state')).toHaveCount(2);
+  await page.getByRole('link', { name: 'Back to report inbox' }).click();
+  await expect(filter).toHaveValue(privateFilter);
+  await page.reload();
+  await expect(filter).toHaveValue(privateFilter);
+  expect(page.url()).not.toContain(privateFilter);
   await assertRouteClean(page, setup, scenario);
 });
 
@@ -657,16 +676,19 @@ test('administrator announcement list opens the strict published authority detai
     viewport: 'desktop',
   };
   const setup = await prepare(context, page, scenario);
-  await mockJson(page, {
-    origin: ADMIN_ORIGIN,
-    method: 'GET',
-    path: '/admin/api/announcements?page=1&page_size=20',
-    body: {
-      data: [adminAnnouncement],
-      next_cursor: null,
-      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
-    },
-  });
+  const privateFilter = 'authority';
+  for (const query of ['', 'title=' + privateFilter + '&']) {
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/announcements?' + query + 'page=1&page_size=20',
+      body: {
+        data: [adminAnnouncement],
+        next_cursor: null,
+        pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+      },
+    });
+  }
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
@@ -675,6 +697,15 @@ test('administrator announcement list opens the strict published authority detai
   });
 
   await page.goto(`${ADMIN_ORIGIN}/announcements`);
+  const filter = page.getByRole('searchbox', { name: '搜索公告标题' });
+  await filter.fill(privateFilter);
+  await Promise.all([
+    page.waitForResponse(
+      (response) => new URL(response.url()).searchParams.get('title') === privateFilter,
+    ),
+    filter.press('Enter'),
+  ]);
+  expect(page.url()).not.toContain(privateFilter);
   const row = page.locator('tr').filter({ hasText: 'Administrator authority draft' });
   await expect(row).toBeVisible();
   await row.locator('button').click();
@@ -682,5 +713,10 @@ test('administrator announcement list opens the strict published authority detai
   await expect(page.locator('input[value="Administrator authority draft"]')).toBeVisible();
   await expect(page.getByText('Published safe body.')).toBeVisible();
   await expect(page.locator('.ops-announcement-body script')).toHaveCount(0);
+  await page.getByRole('link', { name: '返回公告列表' }).click();
+  await expect(filter).toHaveValue(privateFilter);
+  await page.reload();
+  await expect(filter).toHaveValue(privateFilter);
+  expect(page.url()).not.toContain(privateFilter);
   await assertRouteClean(page, setup, scenario);
 });
