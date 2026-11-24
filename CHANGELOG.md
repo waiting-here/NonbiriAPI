@@ -4,6 +4,23 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## Unreleased
+
+- Hungry whales can visit open neighbors for food while both keepers are offline.
+  Manual refills ask for confirmation when food would spill. Whale interactions give
+  immediate feedback, and tailor coupons are consumed only when the price drops.
+- New protocol selections default to OpenAI-compatible. New platform models and
+  OpenAI-compatible bindings initially select Chat Completions. Other supported
+  services can be selected explicitly.
+- Platform inference errors follow the account language. Recognized caller-input
+  errors reported by an upstream retain the donated key's current failure count,
+  including after protocol conversion or request adaptation.
+- Preserve fractions of a percent in charity discount reservations and settlement.
+  Schema 57 includes the corresponding offline upgrade from schema 56.
+- Improve service setup, donation review, permission and limit editing, operations,
+  request logs and station assistant approvals. Mobile navigation, keyboard focus,
+  draft recovery and on-demand loading cover both stations.
+
 ## 1.4.2 — 2026-11-21
 
 - Feature selected sign-in rewards and choose an activity cover from pool

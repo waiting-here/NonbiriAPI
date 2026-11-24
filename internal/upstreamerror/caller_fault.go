@@ -1,6 +1,11 @@
 package upstreamerror
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"regexp"
+)
+
+var openAIMessageRole = regexp.MustCompile(`^(?:messages|input)(?:\[[0-9]+\]|\.[0-9]+)\.role$`)
 
 // CallerFault identifies a caller-input error reported by the upstream.
 // The zero value does not exempt a failed attempt.
@@ -36,6 +41,9 @@ func (c Context) callerFault(fields map[string]json.RawMessage) CallerFault {
 	if json.Unmarshal(fields["param"], &param) != nil ||
 		!parameterErrorKind(c.responseStatus, kind, code) {
 		return CallerFault{}
+	}
+	if openAIMessageRole.MatchString(param) {
+		return CallerFault{status: c.responseStatus, code: code}
 	}
 	// Resource references, model selection, identity, storage and service tiers
 	// can fail because of upstream configuration or permissions. Unknown names

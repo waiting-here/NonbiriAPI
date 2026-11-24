@@ -186,7 +186,7 @@ it.each(['order', 'delete'] as const)(
       await view.user.click(screen.getAllByRole('button', { name: 'Remove' })[0]!);
       const dialog = await screen.findByRole('alertdialog');
       expect(f.writes).toHaveLength(0);
-      await view.user.click(within(dialog).getByRole('button', { name: 'Remove', exact: true }));
+      await view.user.click(within(dialog).getByRole('button', { name: 'Remove' }));
     }
     await waitFor(() => expect(f.writes).toHaveLength(1));
     await waitFor(() => expect(f.reads()).toBe(before + 1));

@@ -5,7 +5,7 @@ import {
 } from '@shared/operations/stewardPermissions';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { charityKeys, getDonationBadge, type CharityRole } from '@shared/operations/charity';
 import { getManagedDonationsPage } from '@shared/operations/donationPages';
@@ -28,7 +28,7 @@ export function DonationPendingBadge({
     user?: { id?: string; effective_level: number; steward_permissions?: StewardPermissions };
   }>({
     queryKey: ['user', 'session'],
-    enabled: false,
+    queryFn: skipToken,
   }).data;
   const currentAccount =
     (!session?.user?.id || session.user.id === accountID) &&

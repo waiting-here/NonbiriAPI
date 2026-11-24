@@ -103,13 +103,17 @@ describe('ordered native target matrix', () => {
     const added = screen.getByRole('group', { name: '3. Entry C' });
     const chat = within(added).getByRole('checkbox', { name: 'Chat completions' });
     expect(chat).toBeChecked();
-    for (const option of within(added).getAllByRole('checkbox')) expect(option).toBeChecked();
+    const responses = within(added).getByRole('checkbox', { name: 'Responses' });
+    expect(responses).not.toBeChecked();
     const rows = JSON.parse(screen.getByTestId('targets').textContent!) as MatrixTarget[];
     expect(rows[2]).toMatchObject({
       endpoint_key_id: '13',
       upstream_model_id: 'vendor/c',
-      native_services: fixture.data[0].native_services,
+      native_services: ['chat_completions'],
     });
+    await view.user.click(responses);
+    const selected = JSON.parse(screen.getByTestId('targets').textContent!) as MatrixTarget[];
+    expect(selected[2]?.native_services).toEqual(fixture.data[0].native_services);
   });
   it('applies an explicit bulk selection only to empty targets, preserving an exception and target order', async () => {
     vi.stubGlobal(

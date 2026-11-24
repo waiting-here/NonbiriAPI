@@ -14,11 +14,14 @@ describe('AccountMenu keyboard contract', () => {
     await rendered.user.click(trigger);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Theme' })).toHaveFocus();
+    const first = screen.getByRole('link', { name: 'Announcements' });
+    expect(first).toHaveFocus();
     await rendered.user.tab();
+    expect(screen.getByRole('link', { name: 'Account' })).toHaveFocus();
     await rendered.user.tab();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus();
     await rendered.user.tab();
-    expect(screen.getByRole('combobox', { name: 'Theme' })).toHaveFocus();
+    expect(first).toHaveFocus();
 
     await rendered.user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
