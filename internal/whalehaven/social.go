@@ -375,6 +375,16 @@ func (w *world) reward(r *resident, peer, at, coins, shards int64, cfg config.Se
 		wallet.ConchShards -= overflow
 		wallet.DailyConchShardsGained -= overflow
 	}
+	if kind == "settlement" && p < coins {
+		switch {
+		case !r.state.StoveReady(at, cfg):
+			text += "（自家近期开火用粮不足，未获鲸币）"
+		case wallet.Pearls == assets.MaxBalance:
+			text += "（小鲸币钱包已满）"
+		default:
+			text += "（今日社交鲸币已达上限）"
+		}
+	}
 	w.keepDay(r)
 	r.dirty = true
 	w.remember(event{user: r.id, peer: peer, at: at, kind: kind, text: text, movementReason: "social_reward", pearls: p, shards: s})
@@ -516,6 +526,9 @@ func (w *world) sendVisit(g *resident, a actionRequest) error {
 	}
 	if h.state.Home.TroughGrams <= 0 {
 		return conflict("这户饭碗里已经没有余粮了。")
+	}
+	if h.state.BankFull(w.config) {
+		return conflict("这户存钱罐已满，暂时不能开饭。可以换一家串门。")
 	}
 	if w.guestCount(h.id) >= 2 {
 		return conflict("这户的两个客位已经坐满了。")

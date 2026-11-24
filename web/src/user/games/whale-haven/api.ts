@@ -26,6 +26,7 @@ export interface Profile {
       label: string;
       allow_hire: boolean;
       working: boolean;
+      meal_paused?: boolean;
       started_at_ms: number;
       work_ends_at_ms?: number;
     };

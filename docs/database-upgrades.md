@@ -14,6 +14,11 @@ complete recovery set before running the explicit offline conversion.
 | Exact v1.3.12 schema 54 | The same converter also applies the model-usage conversion. |
 | Earlier supported database | Use the v1.3.12 upgrader first, then convert its schema 54 database using v1.4.3. |
 
+For sites using the former Whale Haven defaults of 28 g per meal and 35 g per visit coin,
+conversion adds a settings revision with a rate of 28 g per coin. Earlier meals
+use the settings effective at settlement. Custom meal sizes and coin rates keep
+their configured values.
+
 The converter identifies each source layout by its schema manifest.
 
 | Source reference | Schema | Manifest SHA-256 |

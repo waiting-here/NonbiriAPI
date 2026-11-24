@@ -2,6 +2,7 @@ package whalehaven
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -54,6 +55,9 @@ type exchangeRequest struct {
 
 func decodeBody(r *http.Request, dest any) error {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 8193))
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if err != nil || len(raw) > 8192 || strictjson.ValidateObject(raw) != nil {
 		return invalid("请求内容无效。")
 	}
@@ -117,6 +121,9 @@ func (s *Service) Register(reg resources.UserRouteRegistrar) error {
 		if err := reg.RegisterUserRoute(route.method, prefix+route.path, func(out http.ResponseWriter, req *http.Request, user resources.UserPrincipal) {
 			value, err := s.handle(req, user.UserID, route.path)
 			if err != nil {
+				if context.Cause(req.Context()) == context.Canceled && errors.Is(err, context.Canceled) {
+					return
+				}
 				writeFailure(out, err)
 				return
 			}

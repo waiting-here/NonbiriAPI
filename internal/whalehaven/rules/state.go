@@ -155,6 +155,10 @@ func (h *Home) BankRoom(capacity int64) float64 {
 	return room
 }
 
+func (s *State) BankFull(p Parameters) bool {
+	return s.Home.BankRoom(s.BankCapacity(p)) == 0
+}
+
 func (s *State) ConversionBP(now int64, p Parameters) int64 {
 	level := 1 + min(9, s.Whale.Affection/max(1, p.Value("affection_per_level")))
 	rate := p.Value("conversion_base_bp") + p.Value("affection_level_"+strconv.FormatInt(level, 10)+"_bp")
