@@ -14,16 +14,7 @@ function shouldRetry(failureCount: number, error: unknown): boolean {
   // Auth, validation, not-found and rate-limit responses are deterministic for
   // the current request. Retrying them creates noise and can repeat mutations
   // when a caller accidentally uses a query for a write operation.
-  if (
-    isApiError(error) &&
-    (error.status === 400 ||
-      error.status === 401 ||
-      error.status === 403 ||
-      error.status === 404 ||
-      error.status === 405 ||
-      error.status === 413 ||
-      error.status === 429)
-  ) {
+  if (isApiError(error) && error.status >= 400 && error.status < 500 && error.status !== 408) {
     return false;
   }
   return failureCount < QUERY_DEFAULTS.retry;

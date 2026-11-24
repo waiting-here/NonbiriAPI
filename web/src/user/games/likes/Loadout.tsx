@@ -255,6 +255,8 @@ export function LoadoutEditor({
         </p>
       )}
       <ExpandablePanel
+        unmountOnClose
+        dismissOnEscape
         open={!!detailRole}
         title={detailRole?.name ?? ''}
         closeLabel={t('common.close')}

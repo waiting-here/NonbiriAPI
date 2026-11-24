@@ -33,7 +33,6 @@ export function OperationFeedback({
     <div
       className={`nb-operation-feedback nb-operation-feedback--${outcome}`}
       role={outcome === 'failed' || outcome === 'conflict' ? 'alert' : 'status'}
-      aria-live="polite"
     >
       <p>{message ?? t(labels[outcome])}</p>
       {detail ? (

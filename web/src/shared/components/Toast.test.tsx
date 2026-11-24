@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ToastViewport } from './Toast';
+import { Profiler } from 'react';
+import { ToastProvider, useOptionalToast, ToastViewport } from './Toast';
 
 afterEach(() => vi.useRealTimers());
 describe('toast reading time', () => {
@@ -38,4 +39,27 @@ describe('toast reading time', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(dismiss).toHaveBeenCalledExactlyOnceWith('error');
   });
+});
+
+it('keeps an unacknowledged error and avoids committing action-only consumers for toast updates', () => {
+  const commits = vi.fn();
+  function Controls() {
+    const toast = useOptionalToast()!;
+    return (
+      <Profiler id="action-subscriber" onRender={commits}>
+        <button onClick={() => toast.push({ tone: 'error', message: 'Write failed' })}>Fail</button>
+        <button onClick={() => toast.push({ message: 'Info' })}>Notify</button>
+      </Profiler>
+    );
+  }
+  render(
+    <ToastProvider>
+      <Controls />
+    </ToastProvider>,
+  );
+  const baseline = commits.mock.calls.length;
+  fireEvent.click(screen.getByText('Fail'));
+  for (let index = 0; index < 6; index++) fireEvent.click(screen.getByText('Notify'));
+  expect(screen.getByRole('alert')).toHaveTextContent('Write failed');
+  expect(commits.mock.calls.length).toBe(baseline);
 });

@@ -53,6 +53,16 @@ function initial(): Profile {
         stove_required_grams: 180,
         feed_silver_fish_price_milli: 19000,
         feed_silver_fish_grams: 200,
+        coupon_discount_bp: 2000,
+        decor_jelly_lamp_price_pearls: 85,
+        decor_coral_tea_price_pearls: 115,
+        decor_golden_clam_price_pearls: 168,
+        decor_shell_cabinet_price_pearls: 68,
+        decor_pearl_clock_price_pearls: 48,
+        decor_sea_planter_price_pearls: 58,
+        outfit_knit_beret_price_pearls: 150,
+        outfit_winter_snow_price_pearls: 185,
+        outfit_whale_hoodie_price_pearls: 220,
       },
     },
     social: { open: false, door: 'bay-a', accept_work: false, away: null, guests: [] },
@@ -123,6 +133,87 @@ test('an oversized serving needs confirmation even in an empty custom bowl', asy
   await expect(dialog).toContainText('100 g');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   expect(sent).toEqual([]);
+});
+
+test('tailor coupon savings agree on the shelf, at confirmation and after purchase', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  const { home, wallet, whale } = profile.snapshot;
+  whale.hasCompletedNaming = true;
+  wallet.pearls = 100;
+  const buffs = {
+    autoRefillEnabled: false,
+    autoRefillTickets: 0,
+    aromaCharges: 0,
+    aromaActiveGrams: 0,
+    wardrobeDiscountCoupons: 1,
+  };
+  home.buffs = buffs;
+  profile.settings.exchange_enabled = false;
+  profile.settings.values.decor_shell_cabinet_price_pearls = 1;
+  profile.settings.values.decor_pearl_clock_price_pearls = 0;
+  const sent: Action[] = [];
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
+    if (route.request().method() === 'POST') {
+      const action = route.request().postDataJSON();
+      expect(action).toMatchObject({
+        type: 'toggle_decor',
+        decorId: 'jelly_lamp',
+        expected_profile_revision: '1',
+      });
+      sent.push(action);
+      home.ownedDecor.push('jelly_lamp');
+      home.equippedDecor.push('jelly_lamp');
+      buffs.wardrobeDiscountCoupons = 0;
+      wallet.pearls = 32;
+      profile.snapshot.revision++;
+    }
+    await route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  const outfit = page.getByRole('article').filter({ hasText: '鲸鱼贝雷帽针织裙' });
+  const outfitPrice = '原价 150 枚 · 1 张裁缝券抵 30 枚 · 实付 120 枚小鲸币';
+  const dialog = page.getByRole('alertdialog');
+  await expect(outfit).toContainText(outfitPrice);
+  await outfit.getByRole('button', { name: '解锁衣装' }).click();
+  await expect(dialog).toContainText(outfitPrice);
+  await dialog.getByRole('button', { name: '取消' }).click();
+  await page.getByRole('button', { name: '收起菜单面板' }).click();
+  await page.getByRole('button', { name: '鲸币', exact: true }).click();
+  for (const [name, total] of [
+    ['珍珠舷窗挂钟', 0],
+    ['贝壳橡木矮柜', 1],
+  ] as const) {
+    const item = page.getByRole('listitem').filter({ hasText: name });
+    const kept = `实付 ${total} 枚小鲸币 · 裁缝券保留`;
+    await expect(item).toContainText(kept);
+    await item.getByRole('button', { name: '解锁家具' }).click();
+    await expect(dialog).toContainText(kept);
+    await dialog.getByRole('button', { name: '取消' }).click();
+  }
+  expect(sent).toHaveLength(0);
+  const lamp = page.getByRole('listitem').filter({ hasText: '幽蓝数据水母夜灯' });
+  const lampPrice = '原价 85 枚 · 1 张裁缝券抵 17 枚 · 实付 68 枚小鲸币';
+  await expect(lamp).toContainText(lampPrice);
+  await lamp.getByRole('button', { name: '解锁家具' }).click();
+  await expect(dialog).toContainText(lampPrice);
+  await dialog.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(
+    page.getByRole('status').filter({ hasText: '已解锁并布置幽蓝数据水母夜灯' }),
+  ).toContainText(lampPrice);
+  await expect(lamp.getByRole('button', { name: '收起', exact: true })).toBeVisible();
+  expect(sent).toHaveLength(1);
+  await page.getByRole('button', { name: '收起菜单面板' }).click();
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await expect(outfit).toContainText('实付 150 枚小鲸币');
+  await expect(outfit).not.toContainText('裁缝券');
+  await expect(page.getByText('32 小鲸币', { exact: true })).toBeVisible();
 });
 
 test('a visiting keeper sees hiring and meal state consistently in both havens', async ({
@@ -482,6 +573,79 @@ for (const width of [1440, 390]) {
   }
 }
 
+test('a cold headpat keeps idle frames moving and plays the decoded action from frame zero', async ({
+  page,
+}, info) => {
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.addInitScript(() => {
+    localStorage.setItem('nb.lang', 'zh');
+    const draw = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function (image: CanvasImageSource, ...coords: number[]) {
+      const [x, y] = coords;
+      if (
+        image instanceof HTMLImageElement &&
+        this.canvas.classList.contains('whale-rig-canvas') &&
+        /\/(idle|waving)\.webp/.test(image.src)
+      ) {
+        const name = image.src.includes('/waving.') ? 'wave' : 'idle';
+        const trace = this.canvas.dataset;
+        const cell = String(x) + ',' + String(y);
+        if (trace[name] !== cell) {
+          trace[name] = cell;
+          trace[name + 'Count'] = String(Number(trace[name + 'Count'] ?? '0') + 1);
+          trace[name + 'First'] ??= cell;
+        }
+      }
+      return Reflect.apply(draw, this, [image, ...coords]);
+    };
+  });
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.snapshot.whale.petLookEnabled = false;
+  profile.snapshot.whale.petRoamEnabled = false;
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) =>
+    route.fulfill({ json: profile }),
+  );
+  let release!: () => void;
+  const decoded = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/i2v/waving.webp', async (route) => {
+    await decoded;
+    await route.continue();
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  const canvas = page.locator('canvas.whale-rig-canvas').first();
+  await expect(canvas).toBeVisible();
+  const requested = page.waitForRequest('**/i2v/waving.webp');
+  await page.getByRole('button', { name: /摸摸头（/ }).click();
+  await requested;
+  const before = Number(await canvas.getAttribute('data-idle-count'));
+  // A single loop is 4.45 s. A delayed decode must not consume its lifetime.
+  await expect
+    .poll(async () => Number(await canvas.getAttribute('data-idle-count')), { timeout: 8000 })
+    .toBeGreaterThan(before + 106);
+  release();
+  await expect(canvas).toHaveAttribute('data-wave-first', '0,0');
+  await expect
+    .poll(async () => Number(await canvas.getAttribute('data-wave-count')))
+    .toBeGreaterThan(4);
+  const evidence = process.env.NONBIRI_VISUAL_DIR;
+  if (evidence) {
+    await mkdir(evidence, { recursive: true });
+    await canvas.screenshot({ path: join(evidence, 'headpat-cold-decoded.png') });
+  }
+  await expect
+    .poll(async () => Number(await canvas.getAttribute('data-wave-count')), { timeout: 8000 })
+    .toBeGreaterThan(85);
+  await info.attach('decoded-visual-frames', {
+    body: String(await canvas.getAttribute('data-wave-count')),
+    contentType: 'text/plain',
+  });
+});
+
 test('menu position takes effect in place and routine interactions reply in the cabin', async ({
   page,
 }) => {
@@ -492,11 +656,16 @@ test('menu position takes effect in place and routine interactions reply in the 
   const profile = initial();
   profile.snapshot.whale.hasCompletedNaming = true;
   let failChat = false;
+  let releaseHead: (() => void) | undefined;
+  const heldHead = new Promise<void>((resolve) => {
+    releaseHead = resolve;
+  });
   profile.settings.values.affection_per_level = 250;
   profile.snapshot.whale.affection = 120;
   await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ json: profile });
     const { type } = route.request().postDataJSON();
+    if (type === 'interact') await heldHead;
     if (type === 'buy_feed')
       return route.fulfill({
         status: 409,
@@ -553,7 +722,11 @@ test('menu position takes effect in place and routine interactions reply in the 
   await chat.click();
   await expect(page.getByRole('button', { name: /听我讲个海湾冷笑话/ })).toBeVisible();
   await expect(button('关闭提示')).toHaveCount(0);
+  const waving = page.waitForRequest((request) => /waving.*\.webp/.test(request.url()));
   await page.getByRole('button', { name: /摸摸头（/ }).click();
+  await waving;
+  await expect(page.getByRole('button', { name: /摸摸头，好开心/ })).toHaveCount(0);
+  releaseHead?.();
   await expect(page.getByRole('button', { name: /摸摸头，好开心/ })).toBeVisible();
   await expect(button('关闭提示')).toHaveCount(0);
   failChat = true;

@@ -51,7 +51,6 @@ export function LanguageSwitcher({
             type="button"
             lang={code}
             aria-pressed={current === code}
-            aria-current={current === code ? 'true' : undefined}
             aria-disabled={busy || undefined}
             onClick={() => void select(code)}
           >

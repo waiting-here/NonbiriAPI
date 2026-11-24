@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -150,8 +151,8 @@ export function ManagedKeyLimitsControl({
   const valid =
     validLimit(concurrency) &&
     validLimit(rpm) &&
-    validLimit(queue.concurrency_queue_limit || '0') &&
-    validLimit(queue.rpm_queue_limit || '0');
+    (queue.concurrency_overflow !== 'queue' || validLimit(queue.concurrency_queue_limit || '0')) &&
+    (queue.rpm_overflow !== 'queue' || validLimit(queue.rpm_queue_limit || '0'));
   const queueChanges = keyQueueChanges(queue, baseline.queue);
   const changed =
     Number(concurrency) !== baseline.concurrency ||
@@ -173,6 +174,7 @@ export function ManagedKeyLimitsControl({
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   return (
     <section className="ops-stack">
+      <DraftLeaveGuard dirty={isDirty(draft) && !lost} />
       <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} queue={item} />
       <p className="muted">{t('common.keyLimits.managedHint')}</p>
       <KeyLimitFields
@@ -240,6 +242,17 @@ export function ManagedKeyLimitsControl({
         >
           {t(unknown ? 'common.donationReview.retrySame' : 'common.keyLimits.save')}
         </Button>
+        {isDirty(draft) && !locked && (
+          <Button
+            type="button"
+            onClick={() => {
+              setDraft(newDraft(incoming));
+              save.reset();
+            }}
+          >
+            {t('common.localDraftDiscard')}
+          </Button>
+        )}
         {!unknown && !save.isPending ? (
           <Button
             type="button"

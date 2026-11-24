@@ -76,7 +76,13 @@ export function Field({
       <FieldLabelContext.Provider value={labelProps.id}>
         {filterLayout ? <div className="nb-field__control">{control}</div> : control}
       </FieldLabelContext.Provider>
-      {filterLayout ? <div className="nb-field__messages">{messages}</div> : messages}
+      {filterLayout ? (
+        help || error ? (
+          <div className="nb-field__messages">{messages}</div>
+        ) : null
+      ) : (
+        messages
+      )}
     </div>
   );
 }

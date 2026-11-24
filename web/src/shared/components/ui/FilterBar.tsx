@@ -103,27 +103,20 @@ export function FilterBar({
         <div className="nb-filter__row">
           <div className="nb-filter__search">
             {search}
-            {onReset ? (
-              <>
-                {onSubmit && (
-                  <Button
-                    type={Tag === 'form' ? 'submit' : 'button'}
-                    disabled={submitDisabled}
-                    onClick={Tag === 'div' ? onSubmit : undefined}
-                  >
-                    {submitLabel ?? t('common.search')}
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={resetDisabled}
-                  onClick={onReset}
-                >
-                  {resetLabel ?? t('common.resetFilter')}
-                </Button>
-              </>
-            ) : null}
+            {onSubmit && (
+              <Button
+                type={Tag === 'form' ? 'submit' : 'button'}
+                disabled={submitDisabled}
+                onClick={Tag === 'div' ? onSubmit : undefined}
+              >
+                {submitLabel ?? t('common.search')}
+              </Button>
+            )}
+            {onReset && (
+              <Button type="button" variant="secondary" disabled={resetDisabled} onClick={onReset}>
+                {resetLabel ?? t('common.resetFilter')}
+              </Button>
+            )}
           </div>
           {secondary && !secondaryAlwaysVisible ? (
             <details
@@ -184,7 +177,7 @@ export function FilterBar({
             ))}
             {onClearAll ? (
               <Button type="button" variant="ghost" size="sm" onClick={onClearAll}>
-                {clearAllLabel}
+                {clearAllLabel ?? t('common.resetFilter')}
               </Button>
             ) : null}
           </div>

@@ -552,6 +552,7 @@ export function DonationComposer({
         </section>
         <ExpandablePanel
           open={pickerOpen}
+          dismissOnEscape
           onClose={() => setPickerOpen(false)}
           title={t('user.charity.presentation.chooseKeys')}
           closeLabel={t('common.close')}

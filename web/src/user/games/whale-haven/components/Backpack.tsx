@@ -305,8 +305,15 @@ export function Backpack({
                 <img src={getSceneAssetUrl('props/buff-tailor-coupon.webp')} alt="" />
               </span>
               <span>
-                已持有 <strong>裁缝海螺券 ×{buffs.wardrobeDiscountCoupons}</strong>
-                ，下次解锁新服装或家具自动省 {values.coupon_discount_bp / 100}% 小鲸币！
+                <strong>
+                  {t('裁缝海螺券', 'Tailor coupon')} ×{buffs.wardrobeDiscountCoupons}
+                </strong>
+                <small className="wh-detail">
+                  {t(
+                    `券面减免 ${values.coupon_discount_bp / 100}%。解锁新衣装或家具时，能省小鲸币才会用券。`,
+                    `${values.coupon_discount_bp / 100}% off new outfits and furnishings. A coupon is used only when it saves coins.`,
+                  )}
+                </small>
               </span>
             </div>
           )}

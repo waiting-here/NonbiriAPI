@@ -1,3 +1,4 @@
+import { DraftLeaveScope } from '@shared/components/charity/DraftLeaveScope';
 import { FocusScope } from 'react-aria';
 import { useDrawerOverlay } from '@shared/components/OverlaySurface';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -14,7 +15,7 @@ import { ErrorState, LoadingState, PageFooter } from '@shared/components/States'
 import { Icon } from '@shared/components/Icon';
 import { useOptionalToast } from '@shared/components/Toast';
 import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { ThemeToggle } from '@shared/theme/ThemeToggle';
+import { ThemeToggle, DisplayPreferences } from '@shared/theme/ThemeToggle';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useAdminSession } from '../data';
 import { useAdminBranding } from '../branding';
@@ -327,7 +328,12 @@ export function AdminLayout() {
             signOutLabel={t('common.signOut')}
             working={logoutBusy}
             station="admin"
-            languageControl={<LanguageSwitcher />}
+            languageControl={
+              <>
+                <LanguageSwitcher />
+                <DisplayPreferences />
+              </>
+            }
             onSignOut={() => void logout()}
           />
         </div>
@@ -368,7 +374,9 @@ export function AdminLayout() {
           {logoutError ? <ErrorState error={logoutError} /> : null}
           {/* Keep route-local mutation and form state scoped to one admin. */}
           <TimeContextProvider station="admin">
-            <Outlet key={session.data.admin.username} />
+            <DraftLeaveScope>
+              <Outlet key={session.data.admin.username} />
+            </DraftLeaveScope>
           </TimeContextProvider>
           <PageFooter copyright={t('common.copyright', { year: new Date().getFullYear() })} />
         </main>

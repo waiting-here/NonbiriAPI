@@ -15,6 +15,33 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "deviceDisplay": {
+      "density": "显示密度",
+      "compact": "紧凑",
+      "comfortable": "舒适",
+      "font": "字号",
+      "standard": "默认",
+      "large": "大字号"
+    },
+    "responseErrors": {
+      "invalid": "请核对请求字段后重试。",
+      "large": "请求内容过大。",
+      "provider": "上游服务返回了错误。",
+      "unavailable": "服务暂时不可用。",
+      "locked": "此资源正在使用中。",
+      "limit": "此资源已达到上限。"
+    },
+    "localDraftDiscard": "放弃本地修改",
+    "adaptationTransfer": {
+      "format": "格式化 JSON",
+      "title": "导入导出公开规则",
+      "rules": "规则 JSON",
+      "help": "可转移公开的头部名、扩展路径、数值生成参数、受支持的生成选项、JSON 内容类型及数字客户端版本。受保护值不会导出。预览后可将规则合入当前草稿。",
+      "invalid": "请核对规则名、值类型及受保护条目后重新预览。",
+      "export": "导出公开规则",
+      "preview": "预览导入",
+      "apply": "合入草稿"
+    },
     "cloudflareProxy": {
       "label": "Cloudflare 转发",
       "off": "已关闭，请求直接连接上游。",

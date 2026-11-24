@@ -8,12 +8,14 @@ export function NativeDialog({
   open = true,
   onDismiss,
   busy = false,
+  dismissOnBackdrop = false,
   children,
   ...props
 }: Omit<ComponentProps<'dialog'>, 'open' | 'onClose' | 'onCancel' | 'children'> & {
   open?: boolean;
   onDismiss: () => void;
   busy?: boolean;
+  dismissOnBackdrop?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -52,6 +54,24 @@ export function NativeDialog({
         data-nb-focus-boundary=""
         aria-modal={open || undefined}
         aria-busy={busy}
+        onClick={(event) => {
+          props.onClick?.(event);
+          if (
+            !dismissOnBackdrop ||
+            busy ||
+            event.defaultPrevented ||
+            event.target !== event.currentTarget
+          )
+            return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+          )
+            onDismiss();
+        }}
         onKeyDown={(event) => {
           props.onKeyDown?.(event);
           // Native cancel runs after keydown; keep an ancestor RAC overlay from consuming Escape first.

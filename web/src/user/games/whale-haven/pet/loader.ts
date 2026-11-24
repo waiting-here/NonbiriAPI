@@ -23,6 +23,7 @@ export function resolveOutfitPetId(outfit?: string, isWorkerUniform?: boolean): 
 }
 
 type Motion = CodexPetStateId | 'feast' | 'workerFeast' | 'workerIdle' | 'sleeping' | 'look360';
+const ready = Promise.resolve();
 const cache = new Map<string, Promise<LoadedCodexPetAssets>>();
 const pending = new WeakMap<LoadedCodexPetAssets, Map<Motion, Promise<void>>>();
 export function invalidateCodexPetCache(petId: string) {
@@ -60,7 +61,7 @@ export function requestMotion(assets: LoadedCodexPetAssets, motion: Motion): Pro
     motion === 'feast' ||
     motion === 'look360';
   const slice = extra ? layout[motion] : layout.states[motion];
-  if (!slice?.sheet || (!extra && assets.stateSheets?.[motion])) return Promise.resolve();
+  if (!slice?.sheet || (!extra && assets.stateSheets?.[motion])) return ready;
   const task = sheet(getSceneAssetUrl('pet/' + assets.manifest.id), slice, layout)
     .then((loaded) => {
       if (extra) assets[(motion + 'Sheet') as 'workerIdleSheet'] = loaded;

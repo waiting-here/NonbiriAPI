@@ -9,6 +9,8 @@ export function ExpandablePanel({
   closeLabel,
   busy = false,
   children,
+  unmountOnClose = false,
+  dismissOnEscape = false,
   footer,
 }: {
   open: boolean;
@@ -16,6 +18,8 @@ export function ExpandablePanel({
   title: ReactNode;
   closeLabel: string;
   busy?: boolean;
+  unmountOnClose?: boolean;
+  dismissOnEscape?: boolean;
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -30,10 +34,17 @@ export function ExpandablePanel({
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, [open]);
+  if (!open && unmountOnClose) return null;
   return (
     <section
       ref={ref}
       hidden={!open}
+      onKeyDown={(event) => {
+        if (dismissOnEscape && event.key === 'Escape' && !event.defaultPrevented && !busy) {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
       className="nb-expandable-panel"
       aria-labelledby={titleID}
       aria-busy={busy}

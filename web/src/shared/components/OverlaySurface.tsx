@@ -147,6 +147,7 @@ export function AnchoredSurface({
   children,
   className,
   nonModal = false,
+  matchTrigger = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -154,6 +155,7 @@ export function AnchoredSurface({
   children: ReactNode;
   className?: string;
   nonModal?: boolean;
+  matchTrigger?: boolean;
 }) {
   const context = useSlottedContext(PopoverContext);
   const localRef = useRef<HTMLElement>(null);
@@ -162,13 +164,26 @@ export function AnchoredSurface({
     {
       triggerRef,
       popoverRef: ref,
-      placement: 'bottom end',
+      placement: matchTrigger ? 'bottom start' : 'bottom end',
       offset: 4,
       isNonModal: nonModal,
       shouldCloseOnInteractOutside: (target) => !triggerRef.current?.contains(target),
     },
     overlayState(open, onClose),
   );
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    const surface = ref.current;
+    if (!matchTrigger || !open || !trigger || !surface) return;
+    const resize = () => {
+      surface.style.width = String(trigger.getBoundingClientRect().width) + 'px';
+    };
+    resize();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(resize);
+    observer.observe(trigger);
+    return () => observer.disconnect();
+  }, [matchTrigger, open, ref, triggerRef]);
   if (!open) return null;
   const content = [PopoverContext, ...(context?.clearContexts ?? [])].reduce<ReactNode>(
     (node, Context) => createElement(Context.Provider, { value: null }, node),

@@ -1,10 +1,32 @@
 import { useTranslation } from 'react-i18next';
-import type { Profile } from './api';
+import { costWithCoupon, type Profile } from './api';
 
 export function useWhaleText() {
   const { i18n } = useTranslation();
   const english = (i18n.resolvedLanguage ?? i18n.language).startsWith('en');
   return (zh: string, en: string) => (english ? en : zh);
+}
+
+export function unlockPriceText(
+  profile: Profile,
+  basePrice: number,
+  t: ReturnType<typeof useWhaleText>,
+) {
+  const price = costWithCoupon(profile, basePrice);
+  const total = t(
+    `实付 ${price} 枚小鲸币`,
+    `Total ${price} whale ${price === 1 ? 'coin' : 'coins'}`,
+  );
+  if (price < basePrice) {
+    const saved = basePrice - price;
+    return t(
+      `原价 ${basePrice} 枚 · 1 张裁缝券抵 ${saved} 枚 · ${total}`,
+      `List price ${basePrice} · One tailor coupon saves ${saved} · ${total}`,
+    );
+  }
+  if (profile.snapshot.home.buffs?.wardrobeDiscountCoupons)
+    return t(`${total} · 裁缝券保留`, `${total} · Tailor coupon kept`);
+  return total;
 }
 
 export function guestVisitLabel(

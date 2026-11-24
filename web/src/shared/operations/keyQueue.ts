@@ -48,7 +48,12 @@ export function keyQueueChanges(
   const previous = keyQueueInput(keyQueueDraft(baseline));
   return Object.fromEntries(
     keyQueueFields
-      .filter((field) => next[field] !== previous[field])
+      .filter(
+        (field) =>
+          next[field] !== previous[field] &&
+          !(field === 'concurrency_queue_limit' && next.concurrency_overflow !== 'queue') &&
+          !(field === 'rpm_queue_limit' && next.rpm_overflow !== 'queue'),
+      )
       .map((field) => [field, next[field]]),
   );
 }

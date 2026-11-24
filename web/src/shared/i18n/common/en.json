@@ -15,6 +15,33 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "deviceDisplay": {
+      "density": "Display density",
+      "compact": "Compact",
+      "comfortable": "Comfortable",
+      "font": "Text size",
+      "standard": "Default",
+      "large": "Large"
+    },
+    "responseErrors": {
+      "invalid": "Check the request fields and try again.",
+      "large": "The request is too large.",
+      "provider": "The provider returned an error.",
+      "unavailable": "The service is temporarily unavailable.",
+      "locked": "This resource is currently in use.",
+      "limit": "This resource has reached its limit."
+    },
+    "localDraftDiscard": "Discard local changes",
+    "adaptationTransfer": {
+      "format": "Format JSON",
+      "title": "Transfer public rules",
+      "rules": "Rule JSON",
+      "help": "Transfer public header names, extension paths, numeric generation limits, supported generation choices, JSON content types and numeric client versions. Protected values are excluded. Preview the changes before adding them to this draft.",
+      "invalid": "Check the rule names, value types and protected entries before previewing.",
+      "export": "Export public rules",
+      "preview": "Preview import",
+      "apply": "Add to draft"
+    },
     "cloudflareProxy": {
       "label": "Cloudflare forwarding",
       "off": "Off. Requests connect directly to upstreams.",

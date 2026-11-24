@@ -36,6 +36,7 @@ function Suggestions({
       onClose={state.close}
       triggerRef={triggerRef}
       nonModal
+      matchTrigger
       className="nb-suggestions-popover"
     >
       {list}
@@ -59,6 +60,9 @@ export function SuggestInput({
 }: Props) {
   const ref = useRef<HTMLInputElement>(null);
   const fieldLabel = useContext(FieldLabelContext);
+  const items = [...new Set(suggestions)]
+    .filter((item) => item.toLocaleLowerCase().includes(value.toLocaleLowerCase()))
+    .map((id) => ({ id }));
   return (
     <ComboBox
       className="nb-suggestions"
@@ -71,9 +75,7 @@ export function SuggestInput({
       onInputChange={(next) => {
         if (!disabled && !readOnly) onChange(next);
       }}
-      items={[...new Set(suggestions)]
-        .filter((item) => item.toLocaleLowerCase().includes(value.toLocaleLowerCase()))
-        .map((id) => ({ id }))}
+      items={items}
       allowsCustomValue
       menuTrigger="focus"
       isDisabled={disabled}
@@ -86,7 +88,7 @@ export function SuggestInput({
       aria-describedby={describedBy}
     >
       <Input {...input} ref={ref} className={className} />
-      <Suggestions triggerRef={ref} disabled={Boolean(disabled || readOnly)} />
+      <Suggestions triggerRef={ref} disabled={Boolean(disabled || readOnly || !items.length)} />
     </ComboBox>
   );
 }
