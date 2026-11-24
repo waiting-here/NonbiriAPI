@@ -206,7 +206,7 @@ function SourceDetails({
               {t('common.connections.delete')}
             </button>
           </div>
-          <ConnectionOperationNotice operation={refresh} />
+          <ConnectionOperationNotice operation={refresh} showSaved={false} />
           <ConnectionOperationNotice operation={change} />
         </PanelBody>
       </Panel>

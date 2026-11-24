@@ -16,6 +16,7 @@ import zhCommon from '../../src/shared/i18n/common/zh.json' with { type: 'json' 
 import enUser from '../../src/user/i18n/en.json' with { type: 'json' };
 import zhUser from '../../src/user/i18n/zh.json' with { type: 'json' };
 import { serviceCopy, servicePanel } from '../service-onboarding';
+import type { DiscoveryEvidence } from '../../src/user/features/core/types';
 
 const endpoint = {
   ...endpointScope,
@@ -39,7 +40,7 @@ const evidence = {
   safe_class: 'none',
   observed_at: 1700000000,
   count: '2',
-};
+} satisfies DiscoveryEvidence;
 const key = {
   ...credentialGrant,
   id: '21',
@@ -107,6 +108,177 @@ const projection = {
   body_forced: { mode: 'replace', values: {} },
   native_extension_paths: { mode: 'replace', values: [] },
 };
+
+for (const locale of ['en', 'zh'] as const) {
+  test(`focused donated key follows model checks and fits its actions ${locale}`, async ({
+    page,
+  }) => {
+    const { core, services } = (locale === 'zh' ? zhUser : enUser).user;
+    await page.addInitScript((language) => localStorage.setItem('nb.lang', language), locale);
+    await mockPublicConfig(page, 'user');
+    await mockRoleSession(page, 'user', 'user');
+    await mockConnectionResources(page, () => [endpoint]);
+    const detail = '/api/endpoints/11/keys/21';
+    const successful = { ...evidence, revision: '2', last_success_at: 1700000000 };
+    const checking: DiscoveryEvidence = {
+      state: 'checking',
+      revision: '2',
+      result: null,
+      safe_class: 'none',
+      observed_at: 1700000000,
+      count: null,
+    };
+    let current: DiscoveryEvidence = checking;
+    let fetched = false;
+    let starts = 0;
+    const backup = {
+      ...key,
+      id: '22',
+      note: 'Backup key',
+      discovery_source_id: null,
+      browse: {
+        ...key.browse,
+        discovery: { ...checking, state: 'unknown', revision: '1', observed_at: null },
+      },
+    };
+    const donated = () => ({
+      ...key,
+      browse: { ...key.browse, donation_eligibility: 'already_donated', discovery: current },
+    });
+    await page.route(`${USER_ORIGIN}/api/endpoints/11**`, async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === '/api/endpoints/11')
+        return route.fulfill({ json: { ...endpoint, key_count: '2' } });
+      if (url.pathname === '/api/endpoints/11/keys')
+        return route.fulfill({ json: numberedPage([donated(), backup], url.searchParams) });
+      if (url.pathname === detail) return route.fulfill({ json: donated() });
+      if (url.pathname === '/api/endpoints/11/keys/22') return route.fulfill({ json: backup });
+      if (url.pathname === detail + '/models/refresh') {
+        starts++;
+        current = { ...checking, revision: '3', last_success_at: successful.last_success_at };
+        return route.fulfill({
+          status: 202,
+          json: { operation_id: 'op_000000000000000000000A', evidence: current },
+        });
+      }
+      if ([detail + '/models', '/api/endpoints/11/keys/22/models'].includes(url.pathname)) {
+        const primary = url.pathname.startsWith(detail);
+        const models =
+          primary && fetched && url.searchParams.get('source') !== 'manual' ? entries : [];
+        return route.fulfill({
+          json: {
+            evidence: primary ? current : backup.browse.discovery,
+            automatic_entries: models,
+            manual_entries: [],
+            next_cursor: null,
+            ...(url.searchParams.has('page')
+              ? { pagination: numberedPage(models, url.searchParams).pagination }
+              : {}),
+          },
+        });
+      }
+      return route.fallback();
+    });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1&endpoint_id=11&focus_key_id=21`);
+    const row = page.getByRole('row').filter({ has: page.getByText(key.note, { exact: true }) });
+    const rowRefresh = row.getByRole('button', {
+      name: core['endpoints.refreshDiscovery'],
+      exact: true,
+    });
+    const viewModels = row.getByRole('button', { name: services.viewModels, exact: true });
+    const panel = page.getByRole('region', { name: `${services.viewModels} · ${key.note}` });
+    const fetchModels = panel.getByRole('button', { name: services.fetchModels, exact: true });
+    await expect(viewModels).toBeVisible();
+    await expect(rowRefresh).toBeDisabled();
+    await expect(panel.getByText(core['endpoints.discoveryChecking'])).toBeVisible();
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(
+          () =>
+            viewModels.evaluate((button) => {
+              const text = document.createRange();
+              text.selectNodeContents(button);
+              const bounds = button.getBoundingClientRect();
+              const label = text.getBoundingClientRect();
+              const menu = button
+                .parentElement!.querySelector('.nb-more button')!
+                .getBoundingClientRect();
+              return {
+                labelFits:
+                  label.left >= bounds.left &&
+                  label.right <= bounds.right &&
+                  label.top >= bounds.top &&
+                  label.bottom <= bounds.bottom,
+                alignedActions: bounds.right + 7 <= menu.left && Math.abs(bounds.y - menu.y) <= 1,
+                tableFits:
+                  button.closest('.nb-table-wrap')!.scrollWidth <=
+                  button.closest('.nb-table-wrap')!.clientWidth,
+                pageFits: document.documentElement.scrollWidth <= innerWidth,
+              };
+            }),
+          { message: `${locale} ${width}px key actions` },
+        )
+        .toEqual({ labelFits: true, alignedActions: true, tableFits: true, pageFits: true });
+      if (width !== 768 && process.env.NONBIRI_VISUAL_DIR) {
+        const out = process.env.NONBIRI_VISUAL_DIR;
+        await mkdir(out, { recursive: true });
+        await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+          await row.screenshot({ path: join(out, `focused-key-${locale}-${width}-${theme}.png`) });
+        }
+      }
+    }
+
+    fetched = true;
+    current = successful;
+    const successText = core['endpoints.discoveryNonempty'].replace('{{count}}', '2');
+    await expect(panel.getByText(successText)).toBeVisible();
+    await expect(rowRefresh).toBeEnabled();
+    await expect(row.locator('.services-key-discovery .nb-num')).toHaveText('2');
+    await expect(panel.getByText(services.lastSuccessfulFetch, { exact: false })).toBeVisible();
+
+    await panel.getByRole('tab', { name: services.manualModels }).click();
+    await fetchModels.click();
+    await expect(fetchModels).toBeDisabled();
+    await expect(rowRefresh).toBeDisabled();
+    await expect(panel.getByText(core['endpoints.discoveryChecking'])).toBeVisible();
+    await expect(panel.getByText(successText)).toHaveCount(0);
+    current = {
+      ...checking,
+      state: 'failed',
+      revision: '3',
+      safe_class: 'transport',
+      last_success_at: successful.last_success_at,
+    };
+    await expect(panel.getByText(core['endpoints.discoveryFailedTitle'])).toBeVisible();
+    await expect(
+      row.getByRole('button', { name: core['endpoints.discoveryFailedTitle'] }),
+    ).toBeVisible();
+    await expect(rowRefresh).toBeEnabled();
+    await expect(fetchModels).toBeEnabled();
+    await expect(panel.getByText(successText)).toHaveCount(0);
+    await expect(panel.getByText(services.retainedCatalog)).toBeVisible();
+    await panel.getByRole('tab', { name: services.pulledModels }).click();
+    await expect(panel.getByRole('checkbox', { name: 'model-a' })).toBeVisible();
+    expect(starts).toBe(1);
+
+    await page.getByRole('link', { name: services.backToAllKeys }).click();
+    await page
+      .getByRole('row')
+      .filter({ hasText: backup.note })
+      .getByRole('button', { name: services.viewModels })
+      .click();
+    await expect(
+      page
+        .getByRole('region', { name: `${services.viewModels} · ${backup.note}` })
+        .getByText(core['endpoints.discoveryUnknown']),
+    ).toBeVisible();
+    await expect(page.getByText(services.retainedCatalog)).toHaveCount(0);
+  });
+}
 
 for (const locale of ['en', 'zh'] as const) {
   test(`service secret markers remain editable without revealing values ${locale}`, async ({
