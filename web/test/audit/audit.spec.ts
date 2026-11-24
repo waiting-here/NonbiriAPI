@@ -455,7 +455,9 @@ test('an alert opens the exact retained issue context across refresh and mobile 
     await page.reload();
     await expect(page.getByText(f.issue_id, { exact: true })).toBeVisible();
     expect(page.url()).toBe(saved);
-    await expect(page.locator('a[href="/users?user=' + f.users[0].id + '"]')).toBeVisible();
+    const relatedUser = page.getByRole('link', { name: 'Open related page', exact: true });
+    await expect(relatedUser).toBeVisible();
+    await expect(relatedUser).toHaveAttribute('href', '/users?user=' + f.users[0].id);
     const response = await api(
       context,
       '/admin/api/alerts/targets/issue_user/' + f.users[0].id,

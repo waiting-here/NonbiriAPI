@@ -1,3 +1,4 @@
+import { submitPendingReview } from '../controls';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -704,7 +705,7 @@ test('custom rerank paths keep self-use separate from charity overrides and dona
     await expect(
       charity.getByRole('button', { name: r.saveCharityRerank, exact: true }),
     ).toBeDisabled();
-    await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    await submitPendingReview(reviewer, c.approveAllUses);
     await expect
       .poll(async () => (await userAPI<Donation>(owner, '/api/donations/' + donation.id)).status)
       .toBe('approved');
@@ -1238,7 +1239,7 @@ test('additional services stay pending with their old budget and redacted stewar
       'POST',
       '/api/steward/donations/' + donation.id + '/pending-review',
     );
-    await reviewer.getByRole('button', { name: c.approveAllUses, exact: true }).click();
+    await submitPendingReview(reviewer, c.approveAllUses);
     const acceptedResponse = await accepted;
     expect(acceptedResponse.status()).toBe(200);
     expect(acceptedResponse.request().postDataJSON()).toMatchObject({
@@ -1285,7 +1286,7 @@ test('additional services stay pending with their old budget and redacted stewar
       'POST',
       '/api/steward/donations/' + donation.id + '/pending-review',
     );
-    await reviewer.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    await submitPendingReview(reviewer, c.rejectAllUses);
     const rejectedResponse = await rejected;
     expect(rejectedResponse.status()).toBe(200);
     expect(rejectedResponse.request().postDataJSON()).toMatchObject({
@@ -2161,7 +2162,7 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
       'POST',
       '/admin/api/donations/' + donation.id + '/pending-review',
     );
-    await page.getByRole('button', { name: c.rejectAllUses, exact: true }).click();
+    await submitPendingReview(page, c.rejectAllUses);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     const receipt = await reviewed;
     expect(receipt.status()).toBe(200);
@@ -2196,7 +2197,11 @@ test('bulk use review covers hidden pages and updates rejected and approved summ
     await page.goto(
       fixture().admin_url + '/charity?charity_section=donations&donation_id=' + approved.id,
     );
-    await page.getByRole('button', { name: c.approveAllUses, exact: true }).first().click();
+    await submitPendingReview(
+      page,
+      c.approveAllUses,
+      page.getByRole('button', { name: c.approveAllUses, exact: true }).first(),
+    );
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await expect(page.getByText(c.reviewSaved, { exact: true }).first()).toBeVisible();
     const rows = await uses(owner, approved.id);

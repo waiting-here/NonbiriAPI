@@ -582,6 +582,12 @@ test('administrator saves changed binding order, removes a connection and delete
       .first()
       .getByRole('button', { name: copy.operations.charity.remove, exact: true })
       .click();
+    const removeBinding = page.getByRole('alertdialog');
+    await expect(removeBinding).toBeVisible();
+    expect((await read(admin, state.admin_url, bindingsPath)).bindings).toHaveLength(2);
+    await removeBinding
+      .getByRole('button', { name: copy.operations.charity.remove, exact: true })
+      .click();
     await expect(ordered.locator('tbody tr')).toHaveCount(1);
     expect(
       (await read(admin, state.admin_url, bindingsPath)).bindings.map(

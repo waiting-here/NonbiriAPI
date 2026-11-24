@@ -1,3 +1,4 @@
+import { submitPendingReview } from '../controls';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
@@ -446,9 +447,7 @@ for (const actor of ['admin', 'five', 'six'] as const) {
             response.request().method() === 'GET' &&
             new URL(response.url()).pathname === api + '/donations/badge',
         ),
-        page
-          .getByRole('button', { name: copy.common.connections.rejectAllUses, exact: true })
-          .click(),
+        submitPendingReview(page, copy.common.connections.rejectAllUses),
       ]);
       expect(review.status()).toBe(200);
       expect((await review.json()).handling).toMatchObject({

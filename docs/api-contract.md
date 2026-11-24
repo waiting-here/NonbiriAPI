@@ -511,6 +511,8 @@ Personal requests reserve no general credits and remain available with a negativ
 
 `UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state and independent game/charity public preferences. `automatic_restrictions` is an array of safe `{kind,reason_code,reason,started_at,ends_at}` summaries, without thresholds, counters or evidence. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
 
+For level-5 stewards, the optional `user.blocked_inherited_limits` lists the editable limit fields whose current site defaults exceed that steward's delegated maximum. Both individual and batch limit editors use these names when offering inheritance. The backend checks the current effective value again when applying a change. The list omits fields outside the steward's permissions and exposes no site default values.
+
 ### Browser association audit
 
 Successful user website sign-ins and session reads may issue the host-only

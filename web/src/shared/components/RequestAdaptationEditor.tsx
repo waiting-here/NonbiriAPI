@@ -813,11 +813,11 @@ export function RequestAdaptationEditor({
     null,
   );
   const [blocked, setBlocked] = useState(false);
-  const generation = useRef(0);
+  const activeContext = useRef<symbol | null>(null);
   useLayoutEffect(() => {
-    generation.current++;
+    activeContext.current = Symbol();
     return () => {
-      generation.current++;
+      activeContext.current = null;
     };
   }, [url]);
   const [loadedContext, setLoadedContext] = useState<string | null>(null);
@@ -907,7 +907,7 @@ export function RequestAdaptationEditor({
       setNotice(error instanceof Error ? error.message : copy('saveError'));
       return;
     }
-    const operationGeneration = generation.current;
+    const savedContext = activeContext.current;
     setSavingUrl(url);
     setNotice('');
     let successfulResponseReceived = false;
@@ -917,7 +917,7 @@ export function RequestAdaptationEditor({
         headers: { 'Idempotency-Key': newOperationKey() },
         json: payload,
       });
-      if (generation.current !== operationGeneration) return;
+      if (activeContext.current !== savedContext) return;
       successfulResponseReceived = true;
       const next = parseView(response);
       setView(next);
@@ -925,18 +925,18 @@ export function RequestAdaptationEditor({
       setLoadError(null);
       try {
         const current = parseView(await apiFetch<unknown>(url));
-        if (generation.current !== operationGeneration) return;
+        if (activeContext.current !== savedContext) return;
         setView(current);
         setDraft(newDraft(current));
         setBlocked(false);
       } catch {
-        if (generation.current !== operationGeneration) return;
+        if (activeContext.current !== savedContext) return;
         setLoadError('savedRefreshFailed');
         setBlocked(true);
       }
       setNotice(modelScope ? t('requestAdaptation.model.saved') : copy('saved'));
     } catch (error) {
-      if (generation.current !== operationGeneration) return;
+      if (activeContext.current !== savedContext) return;
       if (isApiError(error) && error.status === 409) {
         setNotice(copy('conflict'));
         setBlocked(true);
@@ -953,7 +953,7 @@ export function RequestAdaptationEditor({
       }
     } finally {
       setSavingUrl((current) =>
-        current === url && generation.current === operationGeneration ? null : current,
+        current === url && activeContext.current === savedContext ? null : current,
       );
     }
   };
