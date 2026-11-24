@@ -271,12 +271,22 @@ test('key binding collects multiple targets, shows exact existing bindings, and 
     await visuals(page, info, 'binding-service-choice', () =>
       serviceEditor.scrollIntoViewIfNeeded(),
     );
+    const candidateSearch = page.getByPlaceholder(common.common.workflow.upstreamSearch);
+    const candidateSource = page.getByRole('combobox', {
+      name: common.common.operations.charity.candidateSourceFilter,
+    });
+    await searchModels(page, 'binding-up-');
+    await candidateSource.selectOption('manual');
+    await candidateSearch.fill('draft for next target');
     await page.getByRole('button', { name: batch.backTargets }).click();
     await page
       .getByRole('row')
       .filter({ hasText: '[公益]binding-browser/target-1' })
       .getByRole('button', { name: batch.chooseUpstream })
       .click();
+    await expect(candidateSearch).toHaveValue('draft for next target');
+    await expect(candidateSource).toHaveValue('manual');
+    await candidateSource.selectOption('');
     await page.getByRole('checkbox', { name: /binding-up-2/ }).check();
     await page.getByRole('button', { name: batch.backTargets }).click();
     await expect(page.getByRole('region', { name: batch.selected })).toContainText(

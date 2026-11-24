@@ -25,7 +25,6 @@ import {
   type EndpointPolicyInput,
 } from '@shared/operations/endpointPolicies';
 import { useSearchState } from '@shared/operations/useSearchState';
-import { usePagePager } from '@shared/operations/usePagePager';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
@@ -860,10 +859,19 @@ const proxyModeCopy = {
 
 function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { active: boolean }) {
   const { t } = useTranslation();
-  const pager = usePagePager({
+  const location = useLocation();
+  const [, setParams] = useSearchState();
+  const scope = role + ':' + accountId;
+  const saved = (
+    location.state as { loadedRoutesFilter?: { scope?: string; text?: string } } | null
+  )?.loadedRoutesFilter;
+  const search = saved?.scope === scope && typeof saved.text === 'string' ? saved.text : '';
+  const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'loaded-cloudflare-routes',
     scopeKey: accountId,
+    pageParam: 'routes_page',
+    pageSizeParam: 'routes_page_size',
   });
   const routes = useQuery({
     queryKey: [...endpointPolicyKeys(role), 'routes', accountId],
@@ -874,7 +882,6 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
   useEffect(() => {
     if (denied(routes.error)) onCapabilityLoss?.();
   }, [routes.error, onCapabilityLoss]);
-  const [search, setSearch] = useState('');
   const filtered = (routes.data?.routes ?? []).filter((row) =>
     [row.source_base_url, row.gateway_origin, row.credential_header].some((value) =>
       value.toLowerCase().includes(search.trim().toLowerCase()),
@@ -883,7 +890,9 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
   const count = filtered.length;
   const pages = Math.max(1, Math.ceil(count / pager.pageSize));
   const page = Math.min(Number(pager.page), pages);
-  if (routes.data && String(page) !== pager.page) pager.setPage(String(page));
+  useEffect(() => {
+    if (active && routes.data && String(page) !== pager.page) pager.setPage(String(page));
+  }, [active, page, pager, routes.data]);
   return (
     <Panel>
       <PanelBody>
@@ -934,8 +943,17 @@ function LoadedRoutes({ role, accountId, active, onCapabilityLoss }: Props & { a
                         type="search"
                         value={search}
                         onChange={(event) => {
-                          setSearch(event.target.value);
-                          pager.setPage('1');
+                          const text = event.target.value;
+                          setParams(
+                            (next) => {
+                              next.set('routes_page', '1');
+                              return next;
+                            },
+                            {
+                              replace: true,
+                              state: { ...location.state, loadedRoutesFilter: { scope, text } },
+                            },
+                          );
                         }}
                       />
                     )}

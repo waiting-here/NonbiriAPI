@@ -56,6 +56,12 @@ const candidatePageList = 'charity-binding-candidates';
 
 type SourceScope = 'active' | 'all';
 type CandidateSource = '' | 'automatic' | 'manual';
+export interface CandidateFilters {
+  draft: string;
+  query: string;
+  source: CandidateSource;
+}
+const emptyCandidateFilters: CandidateFilters = { draft: '', query: '', source: '' };
 
 const charitySelectionKey = (entry: CharityBindingCandidate) =>
   `${entry.donation_key_id}:${entry.upstream_model_id}`;
@@ -100,6 +106,7 @@ export interface CharityPickerKeyManagerProps {
 }
 
 interface CharityBindingPickerProps {
+  retainedCandidateFilters?: [CandidateFilters | undefined, (value: CandidateFilters) => void];
   showSelectionSummary?: boolean;
   fixedKey?: ManagedDonationKeySummary;
   capacity?: number;
@@ -155,6 +162,7 @@ export function CharityBindingPicker(props: CharityBindingPickerProps) {
 }
 
 function CharityBindingPickerBody({
+  retainedCandidateFilters,
   showSelectionSummary = true,
   role,
   modelId,
@@ -202,9 +210,15 @@ function CharityBindingPickerBody({
   const [selectedKeySnapshot, setSelectedKey] = useState<ManagedDonationKeySummary | null>(
     fixedKey ?? null,
   );
-  const [candidateQueryDraft, setCandidateQueryDraft] = useState('');
-  const [candidateQuery, setCandidateQuery] = useState('');
-  const [candidateSource, setCandidateSource] = useState<CandidateSource>('');
+  const localCandidateFilters = useState(emptyCandidateFilters);
+  const [savedCandidateFilters, setCandidateFilters] =
+    retainedCandidateFilters ?? localCandidateFilters;
+  const candidateFilters = savedCandidateFilters ?? emptyCandidateFilters;
+  const {
+    draft: candidateQueryDraft,
+    query: candidateQuery,
+    source: candidateSource,
+  } = candidateFilters;
   const lossNotified = useRef(false);
   const [managingKey, setManagingKey] = useState(false);
   const { listRef, detailRef, remember } = useDetailNavigation(
@@ -353,9 +367,7 @@ function CharityBindingPickerBody({
     setSelectedKey(null);
     setKeyQueryDraft('');
     setKeyQuery('');
-    setCandidateQueryDraft('');
-    setCandidateQuery('');
-    setCandidateSource('');
+    setCandidateFilters(emptyCandidateFilters);
   };
   const chooseSource = (next: DonationSourceSummary | null) => {
     if (interactionBlocked) return;
@@ -367,9 +379,7 @@ function CharityBindingPickerBody({
     if (interactionBlocked || (next !== null && isTerminalKey(next))) return;
     pendingFocus.current = next ? {} : { restoreId: selectedKey?.key_id };
     setSelectedKey(next);
-    setCandidateQueryDraft('');
-    setCandidateQuery('');
-    setCandidateSource('');
+    setCandidateFilters(emptyCandidateFilters);
   };
   useEffect(() => {
     const requested = pendingFocus.current;
@@ -412,7 +422,7 @@ function CharityBindingPickerBody({
   };
   const submitCandidateQuery = () => {
     if (interactionBlocked || !candidateQueryValid) return;
-    setCandidateQuery(candidateQueryDraft.trim());
+    setCandidateFilters({ ...candidateFilters, query: candidateQueryDraft.trim() });
   };
   const clearSource = () => chooseSource(null);
   const clearKey = () => chooseKey(null);
@@ -776,9 +786,7 @@ function CharityBindingPickerBody({
                     onSubmit={submitCandidateQuery}
                     onReset={() => {
                       if (interactionBlocked) return;
-                      setCandidateQueryDraft('');
-                      setCandidateQuery('');
-                      setCandidateSource('');
+                      setCandidateFilters(emptyCandidateFilters);
                     }}
                     search={
                       <>
@@ -799,7 +807,12 @@ function CharityBindingPickerBody({
                               maxLength={1024}
                               disabled={interactionBlocked}
                               aria-invalid={!candidateQueryValid}
-                              onChange={(event) => setCandidateQueryDraft(event.target.value)}
+                              onChange={(event) =>
+                                setCandidateFilters({
+                                  ...candidateFilters,
+                                  draft: event.target.value,
+                                })
+                              }
                             />
                           )}
                         </Field>
@@ -811,7 +824,10 @@ function CharityBindingPickerBody({
                               disabled={interactionBlocked}
                               onChange={(event) => {
                                 if (interactionBlocked) return;
-                                setCandidateSource(event.target.value as CandidateSource);
+                                setCandidateFilters({
+                                  ...candidateFilters,
+                                  source: event.target.value as CandidateSource,
+                                });
                               }}
                             >
                               <option value="">

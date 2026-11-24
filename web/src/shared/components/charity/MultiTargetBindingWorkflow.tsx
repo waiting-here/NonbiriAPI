@@ -28,7 +28,11 @@ import { PagePagination } from '@shared/operations/PagePagination';
 import { isManagementForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { getManagedBindingCandidatesPage } from '@shared/operations/charityPages';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { CharityBindingPicker, type CharitySelection } from '../CharityBindingPicker';
+import {
+  CharityBindingPicker,
+  type CandidateFilters,
+  type CharitySelection,
+} from '../CharityBindingPicker';
 import { BindingServiceEditor } from './BindingRouteGuide';
 import { DonationKeyModels } from '../DonationKeyModels';
 import { DraftLeaveGuard } from './DraftLeaveScope';
@@ -83,6 +87,7 @@ export function MultiTargetBindingWorkflow({
   const [q, setQ] = useState('');
   const [draft, setDraft] = useState('');
   const [pickerBlocked, setPickerBlocked] = useState(true);
+  const candidateFilters = useState<CandidateFilters>();
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<unknown>(null);
   const pager = usePagePager({
@@ -453,6 +458,7 @@ export function MultiTargetBindingWorkflow({
               role={role}
               modelId={target.charity_model_id}
               fixedKey={item}
+              retainedCandidateFilters={candidateFilters}
               showSelectionSummary={false}
               capacity={MAX_MANUAL_BINDINGS - entries.length + currentEntries.length}
               selected={selected}

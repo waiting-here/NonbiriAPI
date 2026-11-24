@@ -1,4 +1,5 @@
 import { ConfirmDialog } from './ConfirmDialog';
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
 import { Button } from '@shared/components/ui/Button';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -143,6 +144,7 @@ export function FailureResetControl({
   if (lost) return <p role="alert">{t('common.operations.charity.accessLost')}</p>;
   return (
     <Fold className="failure-reset-control" title={t('common.failureReset.title')}>
+      <DraftLeaveGuard dirty={working || job?.phase === 'paused'} />
       <p>{t('common.failureReset.help')}</p>
       {!job ? (
         <>
