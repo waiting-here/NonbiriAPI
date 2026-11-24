@@ -8,7 +8,7 @@ import {
   type SessionHeaderInput,
 } from '@shared/sessionHeaders';
 import { CloudflareProxyField } from '@shared/components/CloudflareProxyField';
-import { Field, Fields, FormActions } from '@shared/components/ui';
+import { Field, Fields, FormActions, Segmented } from '@shared/components/ui';
 import { sameRolePolicy } from './policy';
 import { ModelTypesField } from '@shared/components/ModelTypesField';
 import { RolePolicyEditor } from '@shared/components/RolePolicyEditor';
@@ -20,7 +20,7 @@ import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicy } from '@shared/rolePolicy';
 import type { TransportRule } from '@shared/transportRule';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { createModel, getModel, patchModel } from '../api';
 import { CoreErrorPanel } from '../components';
 import { useCoreCopy } from '../copy';
@@ -77,18 +77,10 @@ export function ModelEditor({
   onCancel,
   onSaved,
   onCapabilityLoss,
-  sources,
-  initialStrategy,
 }: {
   accountId: string;
   initial?: Model;
   inSheet?: boolean;
-  initialStrategy?: RouteStrategy;
-  sources?: (
-    strategy: RouteStrategy,
-    onChange: (value: RouteStrategy) => void,
-    locked: boolean,
-  ) => ReactNode;
   onCancel: () => void;
   onSaved: (model: Model) => void;
   onCapabilityLoss?: (error: unknown) => void;
@@ -99,10 +91,10 @@ export function ModelEditor({
   const [provider, setProvider] = useState(initial?.provider ?? '');
   const [modelName, setModelName] = useState(initial?.model ?? '');
   const [strategy, setStrategy] = useState<RouteStrategy>(
-    initialStrategy ?? initial?.route_strategy ?? 'cache_balanced',
+    initial?.route_strategy ?? 'cache_balanced',
   );
   const [modelTypes, setModelTypes] = useState<ModelType[]>(
-    initial?.model_types ?? ['chat_completions', 'responses'],
+    initial?.model_types ?? ['chat_completions'],
   );
   const [showTypeError, setShowTypeError] = useState(false);
   const [cloudflareProxy, setCloudflareProxy] = useState(initial?.cloudflare_proxy_enabled ?? true);
@@ -225,6 +217,7 @@ export function ModelEditor({
         await operation.mutateAsync(operation.variables).catch(() => undefined);
       return;
     }
+    if (initial && dirtyCount === 0) return;
     let input = operation.outcome === 'unknown' ? operation.variables : undefined;
     if (!input) {
       if (modelTypes.length === 0) {
@@ -348,7 +341,7 @@ export function ModelEditor({
   );
   return (
     <form ref={formRef} className="model-editor core-form" onSubmit={(event) => void submit(event)}>
-      {inSheet ? (
+      {inSheet || initial ? (
         <div className="nb-stack">
           <p className="nb-small nb-muted model-create-intro">{textModel('createHelp')}</p>
           {basicFields}
@@ -371,7 +364,17 @@ export function ModelEditor({
           <PanelBody>{basicFields}</PanelBody>
         </Panel>
       )}
-      {initial ? sources?.(strategy, setStrategy, hasAttempt) : null}
+      <Segmented
+        label={t('models.strategy')}
+        value={strategy}
+        onChange={setStrategy}
+        disabled={hasAttempt}
+        options={[
+          { value: 'ordered', label: t('models.ordered') },
+          { value: 'random', label: t('models.random') },
+          { value: 'cache_balanced', label: textModel('balancedSummary') },
+        ]}
+      />
       <Fold
         plain={inSheet}
         title={textModel('advanced')}
@@ -431,17 +434,22 @@ export function ModelEditor({
         busy,
         operation.outcome === 'refresh-failed',
       )}
-      {initial && dirtyCount > 3 && !hasAttempt ? (
-        <SaveBar
-          dirtyCount={dirtyCount}
-          busy={busy}
-          saveDisabled={!!roleResult.error || headersInvalid}
-          onSave={() => formRef.current?.requestSubmit()}
-          onDiscard={discard}
-          saveLabel={t('common.save')}
-          discardLabel={textModel('discard')}
-          dirtyLabel={(count) => textModel('dirtyCount', { count })}
-        />
+      {initial && dirtyCount > 0 && !hasAttempt ? (
+        <>
+          <button type="button" className="nb-btn nb-btn--secondary" onClick={onCancel}>
+            {t('common.cancel')}
+          </button>
+          <SaveBar
+            dirtyCount={dirtyCount}
+            busy={busy}
+            saveDisabled={!!roleResult.error || headersInvalid}
+            onSave={() => formRef.current?.requestSubmit()}
+            onDiscard={discard}
+            saveLabel={t('common.save')}
+            discardLabel={textModel('discard')}
+            dirtyLabel={(count) => textModel('dirtyCount', { count })}
+          />
+        </>
       ) : (
         <FormActions>
           {inSheet ? (
@@ -457,9 +465,17 @@ export function ModelEditor({
           <button
             type="submit"
             className="nb-btn nb-btn--primary"
-            disabled={busy || (!hasAttempt && (!!roleResult.error || headersInvalid))}
+            disabled={
+              busy ||
+              (!hasAttempt &&
+                (!!roleResult.error || headersInvalid || (Boolean(initial) && dirtyCount === 0)))
+            }
           >
-            {busy ? t('common.working') : hasAttempt ? text('user.quickstart.checkResult') : t('common.save')}
+            {busy
+              ? t('common.working')
+              : hasAttempt
+                ? text('user.quickstart.checkResult')
+                : t('common.save')}
           </button>
         </FormActions>
       )}

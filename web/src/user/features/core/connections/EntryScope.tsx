@@ -5,7 +5,6 @@ import { CredentialDetail } from './CredentialsPanel';
 import { SourceForm } from './SourceForm';
 import { connectionKeys } from './ResourceList';
 import type { DiscoverySource } from './types';
-import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Field, Fields, FormActions, Fold, Note } from '@shared/components/ui';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
@@ -107,11 +106,6 @@ function EntryScopeEditor({ accountId, endpoint }: { accountId: string; endpoint
             )}
           </Field>
         </Fields>
-        {endpoint.connection_id ? (
-          <Link to={'/endpoints?connection_id=' + encodeURIComponent(endpoint.connection_id)}>
-            {t('common.connections.backToConnection')}
-          </Link>
-        ) : null}
         <ProtocolRerankField
           formats={allowed?.rerank_formats}
           value={format}
@@ -154,12 +148,16 @@ export function KeyCredentialScope({
   endpoint,
   entryKey,
   defaultOpen = false,
+  onBack,
+  onDeleted,
   revealCatalog = 0,
 }: {
   accountId: string;
   endpoint: Endpoint;
   entryKey: EndpointKey;
   defaultOpen?: boolean;
+  onBack?: () => void;
+  onDeleted?: () => void;
   revealCatalog?: number;
 }) {
   const { t } = useTranslation();
@@ -171,13 +169,12 @@ export function KeyCredentialScope({
           <CredentialDetail
             accountId={accountId}
             id={entryKey.credential_id}
-            onBack={() => undefined}
+            onBack={onBack}
+            onDeleted={onDeleted}
           />
         ) : null}
       </Fold>
-      <Fold lazy title={t('user.services.protocolAccess')}>
-        <KeyProtocolAccess accountId={accountId} endpoint={endpoint} entryKey={entryKey} />
-      </Fold>
+
       <Fold
         key={revealCatalog}
         lazy
@@ -279,70 +276,5 @@ function PairListSettings({
           : attach(saved)
       }
     />
-  );
-}
-
-function KeyProtocolAccess({
-  accountId,
-  endpoint,
-  entryKey,
-}: {
-  accountId: string;
-  endpoint: Endpoint;
-  entryKey: EndpointKey;
-}) {
-  const { t } = useTranslation();
-  const options = useEndpointCreateOptions(accountId);
-  const services =
-    options.data?.native_service_options?.find(
-      (row) => row.connector_type === endpoint.connector_type,
-    )?.native_services ?? [];
-  const [expectedRevision, setExpectedRevision] = useState(entryKey.revision);
-  const operation = useMetadataOperation(
-    accountId,
-    '/api/endpoints/' + resourcePath(endpoint.id) + '/keys/' + resourcePath(entryKey.id),
-    'PATCH',
-    (signal) => readEndpointKey(endpoint.id, entryKey.id, signal),
-    () => undefined,
-    (saved) => setExpectedRevision(saved.revision),
-  );
-  const locked =
-    operation.isPending ||
-    operation.outcome === 'unknown' ||
-    operation.outcome === 'refresh-failed';
-  return (
-    <form
-      className="nb-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void operation
-          .mutateAsync({ native_services: services, expected_revision: expectedRevision })
-          .catch(() => undefined);
-      }}
-    >
-      <p className="nb-small nb-muted">{t('user.services.protocolAccessHelp')}</p>
-      <ConnectionOperationNotice operation={operation} />
-      {operation.outcome === 'conflict' ? (
-        <button
-          type="button"
-          className="nb-btn nb-btn--secondary"
-          onClick={() => {
-            setExpectedRevision(entryKey.revision);
-            operation.reset();
-          }}
-        >
-          {t('common.connections.useCurrentRevision')}
-        </button>
-      ) : null}
-      <FormActions>
-        <button
-          type="submit"
-          className="nb-btn nb-btn--primary"
-          disabled={locked || !services.length || operation.outcome === 'conflict'}
-        >
-          {t('common.connections.save')}
-        </button>
-      </FormActions>
-    </form>
   );
 }

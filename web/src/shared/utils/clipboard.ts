@@ -3,7 +3,10 @@
 // hidden textarea + execCommand fallback runs instead. The return value only
 // reports whether the copy likely succeeded so the caller can show feedback.
 
-export async function copyText(value: string): Promise<boolean> {
+export async function copyText(
+  value: string,
+  options: { fallbackOnRejection?: boolean } = {},
+): Promise<boolean> {
   if (!value) return false;
   try {
     if (navigator.clipboard?.writeText) {
@@ -11,7 +14,7 @@ export async function copyText(value: string): Promise<boolean> {
       return true;
     }
   } catch {
-    // Permission denied or API unavailable: fall through to the legacy path.
+    if (options.fallbackOnRejection === false) return false;
   }
   try {
     const textarea = document.createElement('textarea');
@@ -20,10 +23,12 @@ export async function copyText(value: string): Promise<boolean> {
     textarea.style.position = 'fixed';
     textarea.style.opacity = '0';
     document.body.appendChild(textarea);
-    textarea.select();
-    const ok = document.execCommand('copy');
-    textarea.remove();
-    return ok;
+    try {
+      textarea.select();
+      return document.execCommand('copy');
+    } finally {
+      textarea.remove();
+    }
   } catch {
     return false;
   }

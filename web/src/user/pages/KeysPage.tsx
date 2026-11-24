@@ -1,3 +1,4 @@
+import { copyText } from '@shared/utils/clipboard';
 import { CopyValue } from '@shared/components/CopyValue';
 import { Fold, OutcomeNote, PanelBody, PanelHead } from '@shared/components/ui';
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
@@ -14,7 +15,12 @@ import { regenerateCallerKey } from '../features/core/api';
 import { CoreErrorPanel, CoreLoading, CoreTime, CoreUserGate } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
 import { coreKeys, coreSessionMatchesAccount, useCallerKey } from '../features/core/queries';
-import { createOperationIdentity, isConflict, isOutcomeUnknown } from '../features/core/request';
+import {
+  callerSafeError,
+  createOperationIdentity,
+  isConflict,
+  isOutcomeUnknown,
+} from '../features/core/request';
 import {
   callerKeyMachineReducer,
   initialCallerKeyMachineState,
@@ -38,18 +44,6 @@ const pageCopyKeys = {
 
 function pageInstanceIdentity(): string {
   return createOperationIdentity().actionId;
-}
-
-async function copyCallerKeySecret(secret: string): Promise<boolean> {
-  if (!secret || typeof navigator === 'undefined') return false;
-  try {
-    const clipboard = navigator.clipboard;
-    if (!clipboard?.writeText) return false;
-    await clipboard.writeText(secret);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 type SecretCopyResult = {
@@ -92,17 +86,19 @@ export function CallerKeyPanel({
     initialCallerKeyMachineState(accountId, pageInstanceId),
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [discardId, setDiscardId] = useState<string | null>(null);
   const [copyResult, setCopyResult] = useState<SecretCopyResult | null>(null);
   const revealActionRef = useRef<string | null>(null);
   const copyAttemptRef = useRef(0);
 
   useEffect(() => {
     if (location.hash !== '#client') return;
-    markOnboarding('client');
+    markOnboarding(accountId, 'client');
     clientRef.current?.scrollIntoView?.({ block: 'start' });
-  }, [location.hash]);
+  }, [location.hash, accountId]);
 
   const clearCopyFeedback = () => {
+    setDiscardId(null);
     copyAttemptRef.current += 1;
     revealActionRef.current = null;
     setCopyResult(null);
@@ -229,7 +225,7 @@ export function CallerKeyPanel({
           actionId,
           expectedGeneration,
           outcome,
-          message: t('common.fixedFailure'),
+          message: callerSafeError(error) || t('common.fixedFailure'),
         });
         if (outcome === 'conflict' || outcome === 'unknown') {
           dispatch({ type: 'read-start', accountId, pageInstanceId });
@@ -265,7 +261,7 @@ export function CallerKeyPanel({
   const copying = useOperation<{ actionId: string; generation: string; attempt: number }, string>({
     authorityRoot: ['user', 'core'],
     execute: async (intent, secret, _key, context) => {
-      const ok = await copyCallerKeySecret(secret ?? '');
+      const ok = await copyText(secret ?? '', { fallbackOnRejection: false });
       context.commit(() => {
         const current = queryClient.getQueryData<CallerKeyAuthority>(coreKeys.callerKey(accountId));
         if (
@@ -322,7 +318,7 @@ export function CallerKeyPanel({
           <div className="api-client-row">
             <h3>{text('apiAddress')}</h3>
             <div className="api-client-row__value">
-              <ApiAddressCopy />
+              <ApiAddressCopy accountId={accountId} />
             </div>
           </div>
 
@@ -412,7 +408,14 @@ export function CallerKeyPanel({
                     <button
                       type="button"
                       className="nb-btn nb-btn--secondary"
-                      onClick={closeReveal}
+                      onClick={() => {
+                        if (
+                          copyResult?.actionId === state.reveal?.actionId &&
+                          copyResult?.status === 'copied'
+                        )
+                          closeReveal();
+                        else setDiscardId(state.reveal?.actionId ?? null);
+                      }}
                     >
                       {t('keys.closeReveal')}
                     </button>
@@ -438,7 +441,10 @@ export function CallerKeyPanel({
                           recheck: () => void authority.refetch(),
                         }
                       : state.mutation === 'error'
-                        ? { kind: 'oneTimeMissed' }
+                        ? {
+                            kind: 'failed',
+                            message: state.mutationError || t('common.fixedFailure'),
+                          }
                         : { kind: 'idle' }
                 }
               />
@@ -454,6 +460,17 @@ export function CallerKeyPanel({
         {children}
       </div>
 
+      <ConfirmDialog
+        open={Boolean(discardId && state.reveal?.actionId === discardId)}
+        title={t('keys.closeReveal')}
+        description={t('keys.oneTimeBody')}
+        confirmLabel={t('keys.closeReveal')}
+        danger
+        onCancel={() => setDiscardId(null)}
+        onConfirm={() => {
+          if (state.reveal?.actionId === discardId) closeReveal();
+        }}
+      />
       <ConfirmDialog
         open={confirmOpen}
         title={t('keys.rotateTitle')}

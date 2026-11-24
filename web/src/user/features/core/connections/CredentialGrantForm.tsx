@@ -51,7 +51,7 @@ export function CredentialGrantForm({
     operation.isPending ||
     operation.outcome === 'unknown' ||
     operation.outcome === 'refresh-failed';
-  if (saved)
+  if (saved && !onSaved)
     return (
       <div className="nb-stack">
         <Note tone="ok">{t('user.services.keyAdded')}</Note>

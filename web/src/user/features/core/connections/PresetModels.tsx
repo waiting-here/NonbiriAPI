@@ -1,3 +1,4 @@
+import { defaultBindingServices } from '@shared/nativeServices';
 import { CoreErrorPanel } from '../components';
 import type { DiscoveryModel } from './types';
 import { Link, useLocation } from 'react-router';
@@ -47,6 +48,7 @@ export interface MappingSaveState {
   ready: boolean;
   complete: boolean;
   locked: boolean;
+  missing: string;
 }
 export function PresetModelRow({
   accountId,
@@ -65,7 +67,7 @@ export function PresetModelRow({
 }: {
   accountId: string;
   rowId?: string;
-  bulk?: { provider: string; types: ModelType[]; generation: number };
+  bulk?: { provider: string; types: ModelType[]; services: NativeService[]; generation: number };
   collapsed?: boolean;
   editableUpstream?: boolean;
   grantsByEntry?: boolean;
@@ -86,11 +88,25 @@ export function PresetModelRow({
   const [services, setServices] = useState<Record<string, NativeService[] | null>>({});
   const [provider, setProvider] = useState(initialProvider);
   const [name, setName] = useState(mapping.model_id);
-  const [types, setTypes] = useState<ModelType[]>(() =>
+  const [typeOverride, setTypes] = useState<ModelType[]>();
+  const types =
+    typeOverride ??
     MODEL_TYPES.filter((type) =>
-      mapping.entries.some((entry) => entry.native_services.includes(type)),
-    ),
-  );
+      mapping.entries.some((entry) => {
+        const endpoint = entries[entry.entry_id];
+        const allowed = endpoint
+          ? (grants[grantsByEntry ? entry.entry_id : endpoint.id]?.native_services ?? [])
+          : [];
+        const defaults =
+          editableUpstream && endpoint?.connector_type === 'openai-compatible'
+            ? defaultBindingServices(
+                endpoint.connector_type,
+                entry.native_services.length ? entry.native_services : allowed,
+              )
+            : entry.native_services;
+        return defaults.includes(type);
+      }),
+    );
   const [model, setModel] = useState<Model | null>(null);
   const [catalogs, setCatalogs] = useState<Record<string, boolean>>({});
   const active = useRef('');
@@ -101,8 +117,22 @@ export function PresetModelRow({
   if (bulk && generation !== bulk.generation) {
     setGeneration(bulk.generation);
     if (!edited && !model) {
-      setProvider(bulk.provider);
-      setTypes(bulk.types);
+      if (bulk.provider.trim()) setProvider(bulk.provider.trim());
+      if (bulk.types.length) setTypes(bulk.types);
+      if (bulk.services.length) {
+        const next = { ...services };
+        for (const entry of mapping.entries) {
+          const endpoint = entries[entry.entry_id];
+          const key = endpoint && grants[grantsByEntry ? entry.entry_id : endpoint.id];
+          const allowed = (key?.native_services ?? []).filter(
+            (service) =>
+              bulk.services.includes(service) &&
+              (!entry.native_services.length || entry.native_services.includes(service)),
+          );
+          if (allowed.length && next[entry.entry_id] !== null) next[entry.entry_id] = allowed;
+        }
+        setServices(next);
+      }
     }
   }
   const operation = useConnectionOperation(accountId, (result) => {
@@ -121,11 +151,13 @@ export function PresetModelRow({
     const key = endpoint ? grants[grantsByEntry ? entry.entry_id : endpoint.id] : undefined;
     const known = key?.native_services ?? [];
     if (!known.length) return undefined;
-    return entry.native_services.length
-      ? entry.native_services.filter((service) => known.includes(service))
-      : known.length === 1
-        ? known
-        : [];
+    const declared = entry.native_services.filter((service) => known.includes(service));
+    if (editableUpstream && endpoint?.connector_type === 'openai-compatible')
+      return defaultBindingServices(
+        endpoint.connector_type,
+        entry.native_services.length ? declared : known,
+      );
+    return entry.native_services.length ? declared : known.length === 1 ? known : [];
   };
   const targets = mapping.entries.flatMap((entry) => {
     const endpoint = entries[entry.entry_id];
@@ -241,24 +273,28 @@ export function PresetModelRow({
       setReadError(error as Error);
     }
   };
-  const ready =
-    !(
-      missingSource &&
+  const missing = [
+    missingSource &&
       targets.some(
         (target) =>
           (names[target.entry.entry_id] ?? target.entry.upstream_model_id) === mapping.model_id,
-      )
-    ) &&
-    targets.length > 0 &&
-    targets.every(
-      (target) =>
-        (names[target.entry.entry_id] ?? target.entry.upstream_model_id).trim().length > 0,
-    ) &&
-    (Boolean(model) || Boolean(provider.trim() && name.trim() && types.length));
+      ) &&
+      t('common.connections.upstreamModel'),
+    !targets.length && t('common.nativeServices.title'),
+    targets.some(
+      (target) => !(names[target.entry.entry_id] ?? target.entry.upstream_model_id).trim(),
+    ) && t('common.connections.upstreamModel'),
+    !model && !provider.trim() && t('common.connections.provider'),
+    !model && !name.trim() && t('common.connections.model'),
+    !model && !types.length && t('common.modelTypes.title'),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const ready = !missing;
   const identity = rowId ?? mapping.model_id;
   useEffect(() => {
-    onState?.(identity, { ready, complete, locked });
-  }, [onState, identity, ready, complete, locked]);
+    onState?.(identity, { ready, complete, locked, missing });
+  }, [onState, identity, ready, complete, locked, missing]);
   useEffect(() => {
     register?.(identity, save);
   });
@@ -291,15 +327,19 @@ export function PresetModelRow({
                 type="checkbox"
                 checked={Boolean(selected)}
                 disabled={locked || !key}
-                onChange={(event) =>
+                onChange={(event) => {
+                  setEdited(true);
                   setServices((previous) => {
                     const next = { ...previous };
                     if (event.target.checked)
-                      next[entry.entry_id] = key?.native_services?.slice() ?? [];
+                      next[entry.entry_id] = defaultBindingServices(
+                        endpoint?.connector_type,
+                        key?.native_services ?? [],
+                      );
                     else next[entry.entry_id] = null;
                     return next;
-                  })
-                }
+                  });
+                }}
               />
               <span>
                 {(endpoint?.note || endpoint?.base_url || t('common.connections.entryNotCreated')) +
@@ -321,12 +361,13 @@ export function PresetModelRow({
                     value={names[entry.entry_id] ?? entry.upstream_model_id}
                     disabled={locked}
                     maxLength={512}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setEdited(true);
                       setNames((previous) => ({
                         ...previous,
                         [entry.entry_id]: event.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                   />
                 )}
               </Field>
@@ -336,6 +377,7 @@ export function PresetModelRow({
                 options={key.native_services ?? []}
                 value={selected}
                 onChange={(value) => {
+                  setEdited(true);
                   setServices((previous) => ({ ...previous, [entry.entry_id]: value }));
                   if (!types.length) setTypes(MODEL_TYPES.filter((type) => value.includes(type)));
                 }}

@@ -1,3 +1,5 @@
+import { NativeServicesField } from '@shared/components/NativeServicesField';
+import type { NativeService } from '@shared/nativeServices';
 import { Link } from 'react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,13 +36,23 @@ export function DirectoryBatch({
   const [attempted, setAttempted] = useState(false);
   const [provider, setProvider] = useState('');
   const [types, setTypes] = useState<ModelType[]>([]);
-  const [bulk, setBulk] = useState({ provider: '', types: [] as ModelType[], generation: 0 });
+  const [services, setServices] = useState<NativeService[]>([]);
+  const availableServices = [
+    ...new Set(Object.values(grants).flatMap((key) => key.native_services ?? [])),
+  ];
+  const [bulk, setBulk] = useState({
+    provider: '',
+    types: [] as ModelType[],
+    services: [] as NativeService[],
+    generation: 0,
+  });
   const onState = useCallback((id: string, state: MappingSaveState) => {
     setStates((previous) => {
       const old = previous[id];
       return old?.ready === state.ready &&
         old?.complete === state.complete &&
-        old?.locked === state.locked
+        old?.locked === state.locked &&
+        old.missing === state.missing
         ? previous
         : { ...previous, [id]: state };
     });
@@ -50,6 +62,7 @@ export function DirectoryBatch({
   }, []);
   const [expansions, setExpansions] = useState<Record<string, boolean>>({});
   const remaining = rows.filter((row) => !states[row.id]?.complete);
+  const incomplete = remaining.filter((row) => !states[row.id]?.ready);
   const locked = busy || rows.some((row) => states[row.id]?.locked);
   useEffect(() => {
     onLockChange?.(locked);
@@ -84,12 +97,25 @@ export function DirectoryBatch({
             )}
           </Field>
           <ModelTypesField value={types} onChange={setTypes} disabled={locked} />
+          {availableServices.length > 0 && (
+            <NativeServicesField
+              options={availableServices}
+              value={services}
+              onChange={setServices}
+              disabled={locked}
+            />
+          )}
           <button
             type="button"
             className="nb-btn nb-btn--secondary"
-            disabled={locked}
+            disabled={locked || (!provider.trim() && !types.length && !services.length)}
             onClick={() =>
-              setBulk((previous) => ({ provider, types, generation: previous.generation + 1 }))
+              setBulk((previous) => ({
+                provider,
+                types,
+                services,
+                generation: previous.generation + 1,
+              }))
             }
           >
             {t('common.connections.applyToUnedited')}
@@ -98,50 +124,53 @@ export function DirectoryBatch({
       ) : null}
       <fieldset disabled={busy} className="nb-stack connection-model-batch">
         {rows.map((row) => (
-          <Fold
-            key={row.id}
-            title={row.upstream_model_id}
-            open={expansions[row.id] ?? rows.length <= 5}
-            onOpenChange={(open) => setExpansions((current) => ({ ...current, [row.id]: open }))}
-            meta={
-              states[row.id]?.complete && !(expansions[row.id] ?? rows.length <= 5)
-                ? t('common.connections.mappingSaved')
-                : undefined
-            }
-          >
-            <PresetModelRow
-              accountId={accountId}
-              collapsed={!(expansions[row.id] ?? rows.length <= 5)}
-              rowId={row.id}
-              initialProvider={row.provider || (initialTarget ? 'my' : '')}
-              bulk={bulk}
-              catalogEntry={row.catalogEntry}
-              editableUpstream
-              grantsByEntry
-              onState={onState}
-              register={register}
-              mapping={{
-                model_id: row.upstream_model_id,
-                entries: Object.keys(grants).map((id) => ({
-                  entry_id: id,
-                  upstream_model_id: row.upstream_model_id,
-                  native_services: row.needs_service_selection ? [] : row.native_services,
-                })),
-              }}
-              entries={entries}
-              grants={grants}
-            />
-            {onRemove && (expansions[row.id] ?? rows.length <= 5) ? (
-              <button
-                type="button"
-                className="nb-btn nb-btn--ghost"
-                disabled={locked}
-                onClick={() => onRemove(row.id)}
-              >
-                {t('common.remove')}
-              </button>
-            ) : null}
-          </Fold>
+          <div key={row.id} id={'mapping-' + row.id}>
+            <Fold
+              title={row.upstream_model_id}
+              open={expansions[row.id] ?? rows.length <= 5}
+              onOpenChange={(open) => setExpansions((current) => ({ ...current, [row.id]: open }))}
+              meta={
+                states[row.id]?.complete && !(expansions[row.id] ?? rows.length <= 5)
+                  ? t('common.connections.mappingSaved')
+                  : states[row.id]?.missing && !states[row.id]?.complete
+                    ? `${t('user.services.mappingIncomplete')} · ${states[row.id].missing}`
+                    : undefined
+              }
+            >
+              <PresetModelRow
+                accountId={accountId}
+                collapsed={!(expansions[row.id] ?? rows.length <= 5)}
+                rowId={row.id}
+                initialProvider={row.provider || (initialTarget ? 'my' : '')}
+                bulk={bulk}
+                catalogEntry={row.catalogEntry}
+                editableUpstream
+                grantsByEntry
+                onState={onState}
+                register={register}
+                mapping={{
+                  model_id: row.upstream_model_id,
+                  entries: Object.keys(grants).map((id) => ({
+                    entry_id: id,
+                    upstream_model_id: row.upstream_model_id,
+                    native_services: row.needs_service_selection ? [] : row.native_services,
+                  })),
+                }}
+                entries={entries}
+                grants={grants}
+              />
+              {onRemove && (expansions[row.id] ?? rows.length <= 5) ? (
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--ghost"
+                  disabled={locked}
+                  onClick={() => onRemove(row.id)}
+                >
+                  {t('common.remove')}
+                </button>
+              ) : null}
+            </Fold>
+          </div>
         ))}
       </fieldset>
       {attempted ? (
@@ -155,6 +184,23 @@ export function DirectoryBatch({
       {remaining.length ? (
         <>
           <Note>{t('common.connections.batchMappingHelp')}</Note>
+          {incomplete.length > 0 && (
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              onClick={() => {
+                const id = incomplete[0]!.id;
+                setExpansions((previous) => ({ ...previous, [id]: true }));
+                requestAnimationFrame(() => {
+                  const row = document.getElementById('mapping-' + id);
+                  row?.querySelector('summary')?.focus();
+                  row?.scrollIntoView?.({ block: 'nearest' });
+                });
+              }}
+            >
+              {t('user.services.reviewIncompleteModels', { count: incomplete.length })}
+            </button>
+          )}
           <button
             type="button"
             className="nb-btn nb-btn--primary"

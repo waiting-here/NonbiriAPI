@@ -174,6 +174,7 @@
       "modelName": "服务商模型名",
       "moreSource": "{{name}} 的来源操作",
       "dirtyCount": "已修改 {{count}} 项",
+      "orderChanged": "排序版本已更新。放弃此次排序草稿可载入最新顺序。",
       "discard": "放弃修改",
       "deleteHelp": "客户端将无法再使用 {{name}}。来源服务和密钥不受影响。",
       "searchPlaceholder": "模型名或调用名",
@@ -1889,6 +1890,7 @@
         "endpoint": "服务"
       },
       "resourceType": "相关",
+      "issueNumber": "异常编号",
       "closedResourceUnavailable": "相关的服务或密钥已经删除，这个问题已关闭。",
       "detail": {
         "auth": "服务密钥验证失败",
@@ -3632,6 +3634,12 @@
       "statuses": "至少一项成功返回 200；全部已确认失败返回 422；没有成功且仍有未完成项返回 504。不同内容共用同一 key 返回 409。"
     },
     "services": {
+      "backToAllKeys": "返回全部密钥",
+      "rotationRevisionChanged": "评估影响期间凭据版本发生变化。请核对更新后的影响清单，再继续轮换。",
+      "chooseManualModels": "选择要绑定的手动模型",
+      "manageManualModels": "管理手动模型",
+      "mappingIncomplete": "尚未填全映射",
+      "reviewIncompleteModels": "检查未就绪的映射（{{count}}）",
       "emptyServices": "还没有服务",
       "chooseCatalog": "模型列表设置",
       "catalogRequired": "先为这把密钥选择模型目录，再读取可用模型。你也可以手动添加模型。",
@@ -3690,8 +3698,6 @@
       "saveListSettings": "保存列表设置",
       "manualBulkHelp": "每行一个上游型号。重新获取列表会保留这些手动条目。",
       "usageEndpoint": "使用端点",
-      "protocolAccess": "协议能力",
-      "protocolAccessHelp": "将此端点协议支持的全部调用能力用于这把密钥，保留现有模型列表。",
       "lastSuccessfulFetch": "上次成功获取",
       "fetchChanges": "本次新增 {{added}} 个，移除 {{removed}} 个。手动条目及已有绑定保留。",
       "endpointSettings": "端点设置",

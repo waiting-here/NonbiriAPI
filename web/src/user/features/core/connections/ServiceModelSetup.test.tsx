@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { StrictMode } from 'react';
 import { screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../test/unit/support';
@@ -61,7 +62,7 @@ it('keeps retained models and manual maintenance reachable after a failed fetch'
   await view.user.type(screen.getByLabelText('Draft model name'), 'Keep my edits');
   await view.user.click(screen.getByLabelText('another-model'));
   expect(screen.getByLabelText('Draft model name')).toHaveValue('Keep my edits');
-  await view.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+  await view.user.click(screen.getByRole('tab', { name: 'Manual models' }));
   expect(screen.getByText('Manual catalog editor')).toBeVisible();
 });
 
@@ -99,6 +100,31 @@ it.each(['region', 'unavailable'] as const)(
     }
   },
 );
+
+it('consumes a newly focused key discovery once across effect replays', async () => {
+  run.mockClear();
+  const started = vi.fn();
+  const props = {
+    accountId: '1',
+    entry: fixture('endpoint.json'),
+    entryKey: fixture('endpoint_key.json'),
+    autoRefresh: true,
+    onAutoRefreshStarted: started,
+  };
+  const view = await renderWithProviders(
+    <StrictMode>
+      <ServiceModelSetup {...props} />
+    </StrictMode>,
+    { station: 'user' },
+  );
+  view.rerender(
+    <StrictMode>
+      <ServiceModelSetup {...props} />
+    </StrictMode>,
+  );
+  expect(started).toHaveBeenCalledTimes(1);
+  expect(run).toHaveBeenCalledExactlyOnceWith({ kind: 'refresh', endpointId: '11', keyId: '21' });
+});
 
 it('opens manual entry for a new key without an automatic catalog', async () => {
   await renderWithProviders(

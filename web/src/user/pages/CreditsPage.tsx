@@ -81,8 +81,23 @@ function CreditHistory({
   });
   const data = useRetainedQueryData(history, historyScope);
   const busy = history.isFetching;
-  const timeReady =
-    timeDraftValue(fromTimeDraft) !== undefined && timeDraftValue(toTimeDraft) !== undefined;
+  const setPeriod = (days: number) => {
+    const end = new Date();
+    const utc = fromTimeDraft.zone === 'UTC';
+    if (utc) {
+      end.setUTCHours(0, 0, 0, 0);
+      end.setUTCDate(end.getUTCDate() + 1);
+    } else {
+      end.setHours(0, 0, 0, 0);
+      end.setDate(end.getDate() + 1);
+    }
+    const start = new Date(end);
+    if (utc) start.setUTCDate(end.getUTCDate() - days);
+    else start.setDate(end.getDate() - days);
+    setFromTimeDraft(createTimeDraft(start.getTime() / 1000, 'minute', fromTimeDraft.zone));
+    setToTimeDraft(createTimeDraft(end.getTime() / 1000, 'minute', toTimeDraft.zone));
+    setValidation(null);
+  };
   const refresh = () => {
     // Mark cached pages stale before returning to the first page without its old anchor.
     void client.invalidateQueries({ queryKey: historyScope, refetchType: 'none' });
@@ -189,15 +204,10 @@ function CreditHistory({
           query={{ ...history, data, retained: history.data === undefined && data !== undefined }}
           onSubmit={apply}
           onReset={reset}
-          submitDisabled={busy || !timeReady}
+          submitDisabled={busy}
+          submitLabel={copy.apply}
           resetDisabled={busy}
-          activeCount={
-            Number(Boolean(url.filter.category)) +
-            Number(Boolean(url.filter.direction)) +
-            Number(Boolean(url.filter.asset_type && url.filter.asset_type !== 'all')) +
-            Number(url.filter.from !== undefined) +
-            Number(url.filter.to !== undefined)
-          }
+          activeCount={Number(url.filter.from !== undefined) + Number(url.filter.to !== undefined)}
           search={
             <>
               <Field label={copy.category} size="short">
@@ -237,6 +247,29 @@ function CreditHistory({
           }
           secondary={
             <>
+              <div className="nb-actions">
+                {([1, 7, 30] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    className="nb-btn nb-btn--ghost nb-btn--sm"
+                    onClick={() => setPeriod(days)}
+                  >
+                    {days === 1 ? copy.today : days === 7 ? copy.lastWeek : copy.lastMonth}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--ghost nb-btn--sm"
+                  onClick={() => {
+                    setFromTimeDraft(createTimeDraft(null));
+                    setToTimeDraft(createTimeDraft(null));
+                    setValidation(null);
+                  }}
+                >
+                  {copy.clearTime}
+                </button>
+              </div>
               <TimeInput
                 station="user"
                 label={copy.from}
@@ -254,7 +287,9 @@ function CreditHistory({
             </>
           }
         />
-        <p className="credit-history__time-note">{copy.localTime}</p>
+        <p className="credit-history__time-note">
+          {copy.localTime} ({fromTimeDraft.zone})
+        </p>
         {validation ? (
           <p className="field-error" role="alert">
             {copy.invalidRange}

@@ -95,16 +95,23 @@ describe('credit history time filters', () => {
       },
     ]);
     const view = await renderWithProviders(<SessionCredits />, { station: 'user', role: 'user' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Apply filters' })).toBeEnabled(),
+    );
     await view.user.click(screen.getByText('More filters', { exact: true }));
     const input = screen.getByLabelText('From');
     fireEvent.change(input, { target: { value: localFrom.slice(0, 16) } });
     await screen.findByRole('button', { name: 'Retry' });
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
+    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    expect(
+      screen.getByText('Enter a valid time range, with the end after the start.'),
+    ).toBeVisible();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
     await view.user.click(screen.getByRole('button', { name: 'Reset' }));
     expect(input).toHaveValue('');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Apply filters' })).toBeEnabled(),
+    );
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 
@@ -122,10 +129,12 @@ describe('credit history time filters', () => {
       },
     ]);
     await renderWithProviders(<SessionCredits />, { station: 'user', role: 'user' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Apply filters' })).toBeEnabled(),
+    );
     const requests = fetchMock.mock.calls.length;
     currentZone = 'Asia/Tokyo';
-    fireEvent.submit(screen.getByRole('button', { name: 'Search' }).closest('form')!);
+    fireEvent.submit(screen.getByRole('button', { name: 'Apply filters' }).closest('form')!);
     expect(screen.getByRole('alert')).toBeVisible();
     expect(fetchMock.mock.calls).toHaveLength(requests);
   });
@@ -178,9 +187,13 @@ describe('credit history time filters', () => {
     const toInput = screen.getByLabelText('Before');
     fireEvent.change(fromInput, { target: { value: localFrom.slice(0, 16) } });
     fireEvent.change(toInput, { target: { value: localTo.slice(0, 16) } });
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled());
-    await view.user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(screen.queryByText('Resolving time…')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/time/resolve?')),
+      ).toHaveLength(2),
+    );
+    await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
         `/api/credits/history?asset_type=all&page=1&page_size=20&from=${from}&to=${to}`,

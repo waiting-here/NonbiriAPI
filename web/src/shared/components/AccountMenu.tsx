@@ -5,7 +5,6 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Icon } from './Icon';
-import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { routePath } from '@shared/routing/routeRegistry';
 
 interface AccountMenuProps {
@@ -73,7 +72,15 @@ export function AccountMenu({
           <div className="nb-account-menu__identity">{displayName}</div>
           <div className="nb-account-menu__actions">
             {languageControl}
-            {station === 'user' ? <ThemeToggle /> : null}
+            {station === 'user' ? (
+              <Link
+                className="nb-btn nb-btn--ghost nb-btn--sm"
+                to={routePath('user', 'announcements')}
+                onClick={() => setOpen(false)}
+              >
+                {t('user.announcements.nav')}
+              </Link>
+            ) : null}
             <Link
               className="nb-btn nb-btn--ghost nb-btn--sm"
               to={accountHref}

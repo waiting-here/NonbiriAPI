@@ -193,9 +193,7 @@ async function capture(page: Page, name: string, locale: string, metrics: unknow
       });
     }
 }
-test('unfinished setup comes first even after an API call, and completed setup moves below announcements', async ({
-  page,
-}) => {
+test('setup stays in place after completing the final step', async ({ page }) => {
   await mockPublicConfig(page, 'user');
   await mockRoleSession(page, 'user', 'user');
   const session = userSession('user');
@@ -227,8 +225,11 @@ test('unfinished setup comes first even after an API call, and completed setup m
   await page.locator('.home-start .home-address-copy button').click();
   await expect(page.getByRole('heading', { name: 'Setup guide complete' })).toBeVisible();
   await expect(
-    page.locator('.home-daily + .home-announcements ~ .home-start--complete'),
+    page.locator('.home-welcome + .home-start--complete + .home-daily + .home-announcements'),
   ).toBeVisible();
+  await expect(page.locator('.home-start--complete .home-address-copy button')).toHaveText(
+    'Copied',
+  );
 });
 test('home only advertises Whale Haven after the effective switch is confirmed', async ({
   page,
@@ -345,7 +346,7 @@ for (const locale of ['en', 'zh'] as const) {
     await expect(
       page.getByRole('status').filter({ hasText: locale === 'zh' ? '复制失败' : 'Copy failed' }),
     ).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.client'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.1.client'))).toBeNull();
 
     state.active = true;
     await page.reload();
@@ -363,7 +364,7 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect(page).toHaveURL(`${USER_ORIGIN}/keys#client`);
     await expect(page.locator('#client')).toContainText(`${USER_ORIGIN}/v1`);
-    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.client'))).toBe('1');
+    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.1.client'))).toBe('1');
     await page
       .getByRole('button', { name: locale === 'zh' ? '复制API 地址' : 'Copy API address' })
       .click();
@@ -447,7 +448,7 @@ for (const locale of ['en', 'zh'] as const) {
     state.models = true;
     await page.goto(USER_ORIGIN);
     await expect(page.getByRole('heading', { name: completed })).toBeVisible();
-    await expect(page.locator('.home-checklist')).toHaveCount(0);
+    await expect(page.locator('.home-checklist')).toBeVisible();
     await capture(page, 'home-complete', locale, metrics);
     state.models = false;
     state.charity = true;
@@ -457,7 +458,7 @@ for (const locale of ['en', 'zh'] as const) {
       .getByRole('button', { name: locale === 'zh' ? '隐藏' : 'Hide', exact: true })
       .click();
     await expect(page.locator('.home-start')).toHaveCount(0);
-    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.hidden'))).toBe('1');
+    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.1.hidden'))).toBe('1');
     await page.reload();
     await expect(
       page.getByRole('heading', { name: locale === 'zh' ? '我的钱包' : 'My wallet' }),
@@ -472,7 +473,7 @@ for (const locale of ['en', 'zh'] as const) {
       .click();
     await expect(page.getByRole('heading', { name: completed })).toBeVisible();
     await expect(page.getByRole('heading', { name: completed })).toBeFocused();
-    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.hidden'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('nb.onboarding.1.hidden'))).toBeNull();
 
     state.key = false;
     await page.goto(`${USER_ORIGIN}/keys`);
@@ -489,6 +490,10 @@ for (const locale of ['en', 'zh'] as const) {
     await assertNoSensitiveBrowserPersistence(page, [secret]);
     await page
       .getByRole('button', { name: locale === 'zh' ? '我已保存' : 'I have saved it', exact: true })
+      .click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: locale === 'zh' ? '我已保存' : 'I have saved it' })
       .click();
     await expect(page.locator('.core-secret-value')).toHaveCount(0);
     await page.reload();

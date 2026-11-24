@@ -37,6 +37,24 @@ describe('user operations contracts', () => {
     });
   });
 
+  it('exposes the owning key on current key deep links and accepts older links', () => {
+    const current = {
+      ...issue,
+      source: 'model_discovery',
+      resource_kind: 'endpoint_key',
+      summary_code: 'discovery_failed',
+    };
+    const link = { route_id: 'endpoint-detail', resource_id: '11', key_id: '21' };
+    expect(normalizeIssue({ ...current, deep_link: link }).deep_link).toEqual(link);
+    expect(
+      normalizeIssue({ ...current, deep_link: { route_id: 'endpoint-detail', resource_id: '11' } })
+        .deep_link?.key_id,
+    ).toBeUndefined();
+    expect(() =>
+      normalizeIssue({ ...current, state: 'closed', closed_at: 2, deep_link: link }),
+    ).toThrow();
+  });
+
   it('rejects crossed issue tuples and incomplete or mismatched deep links', () => {
     const discovery = {
       ...issue,

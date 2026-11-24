@@ -124,13 +124,15 @@ export function CredentialDetail({
   accountId,
   id,
   onBack,
+  onDeleted,
 }: {
   accountId: string;
   id: string;
-  onBack: () => void;
+  onBack?: () => void;
+  onDeleted?: () => void;
 }) {
   const { t } = useTranslation();
-  const back = (
+  const back = onBack && (
     <button type="button" className="nb-btn nb-btn--secondary" onClick={onBack}>
       {t('common.connections.backToCredentials')}
     </button>
@@ -154,7 +156,13 @@ export function CredentialDetail({
       </div>
     );
   return (
-    <CredentialDetails key={id} accountId={accountId} credential={query.data} onBack={onBack} />
+    <CredentialDetails
+      key={id}
+      accountId={accountId}
+      credential={query.data}
+      onBack={onBack}
+      onDeleted={onDeleted}
+    />
   );
 }
 
@@ -162,13 +170,15 @@ function CredentialDetails({
   accountId,
   credential,
   onBack,
+  onDeleted,
 }: {
   accountId: string;
   credential: Credential;
-  onBack: () => void;
+  onBack?: () => void;
+  onDeleted?: () => void;
 }) {
   const { t } = useTranslation();
-  const [rotating, setRotating] = useState(false);
+  const [rotating, setRotating] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [readyRevision, setReadyRevision] = useState('');
   const [danger, setDanger] = useState<{ kind: 'disable' | 'delete'; revision: string } | null>(
@@ -177,13 +187,17 @@ function CredentialDetails({
   const path = '/api/credentials/' + resourcePath(credential.id);
   const read = (signal: AbortSignal) => connectionAPI.credential(credential.id, signal);
   const patch = useMetadataOperation(accountId, path, 'PATCH', read, () => setDanger(null));
-  const remove = useMetadataOperation(accountId, path, 'DELETE', read, onBack);
+  const remove = useMetadataOperation(accountId, path, 'DELETE', read, () =>
+    (onDeleted ?? onBack)?.(),
+  );
   const action = danger?.kind === 'delete' ? remove : patch;
   return (
     <div className="nb-stack">
-      <button type="button" className="nb-btn nb-btn--ghost" onClick={onBack}>
-        {t('common.connections.backToCredentials')}
-      </button>
+      {onBack && (
+        <button type="button" className="nb-btn nb-btn--ghost" onClick={onBack}>
+          {t('common.connections.backToCredentials')}
+        </button>
+      )}
       <Panel>
         <PanelHead
           title={credentialLabel(credential)}
@@ -199,7 +213,7 @@ function CredentialDetails({
               <button
                 type="button"
                 className="nb-btn nb-btn--primary"
-                onClick={() => setRotating((value) => !value)}
+                onClick={() => setRotating((value) => (value ? null : credential.revision))}
               >
                 {t('common.connections.rotate')}
               </button>
@@ -264,25 +278,46 @@ function CredentialDetails({
           />
         </ExpandablePanel>
       ) : null}
-      <CredentialImpactPanel
-        accountId={accountId}
-        credentialId={credential.id}
-        revision={credential.revision}
-        onReady={setReadyRevision}
-      />
+      {!rotating && (
+        <CredentialImpactPanel
+          accountId={accountId}
+          credentialId={credential.id}
+          revision={credential.revision}
+          onReady={setReadyRevision}
+        />
+      )}
       {rotating ? (
         <ExpandablePanel
           open
-          onClose={() => setRotating(false)}
+          onClose={() => setRotating(null)}
           title={t('common.connections.rotate')}
           closeLabel={t('common.connections.close')}
         >
-          {readyRevision === credential.revision ? (
+          <CredentialImpactPanel
+            accountId={accountId}
+            credentialId={credential.id}
+            revision={credential.revision}
+            onReady={setReadyRevision}
+          />
+          {rotating !== credential.revision ? (
+            <div role="status" className="nb-stack nb-stack--sm">
+              <p>{t('user.services.rotationRevisionChanged')}</p>
+              <button
+                type="button"
+                className="nb-btn nb-btn--secondary"
+                disabled={readyRevision !== credential.revision}
+                onClick={() => setRotating(credential.revision)}
+              >
+                {t('common.connections.useCurrentRevision')}
+              </button>
+            </div>
+          ) : null}
+          {rotating === credential.revision && readyRevision === credential.revision ? (
             <CredentialCreateForm
               accountId={accountId}
               connectionId={credential.connection_id ?? ''}
               replace={credential}
-              onSaved={() => setRotating(false)}
+              onSaved={() => setRotating(null)}
             />
           ) : null}
         </ExpandablePanel>

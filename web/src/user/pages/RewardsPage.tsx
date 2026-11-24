@@ -23,6 +23,8 @@ import {
   rewardKeys,
   type Redemption,
 } from '@shared/rewards/api';
+import { UserPageGate } from '../components/UserPageGate';
+import { coreKeys } from '../features/core/queries';
 import { useUserSession } from '../data';
 import { creditHistoryKeys } from '../features/credits/queries';
 import { limitedActivityKeys } from '../features/limitedactivities/queries';
@@ -31,19 +33,13 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import '@shared/rewards/rewards.css';
 export function RewardsPage() {
   const session = useUserSession();
-  if (session.isPending)
-    return (
-      <div className="page reward-stack rewards-page">
-        <LoadingState />
-      </div>
-    );
-  if (!session.data)
-    return (
-      <div className="page reward-stack rewards-page">
-        <ErrorState error={session.error} />
-      </div>
-    );
-  return <RewardsContent key={session.data.user.id} account={session.data.user.id} />;
+  return (
+    <UserPageGate>
+      {session.data ? (
+        <RewardsContent key={session.data.user.id} account={session.data.user.id} />
+      ) : null}
+    </UserPageGate>
+  );
 }
 function RewardsContent({ account }: { account: string }) {
   const { t } = useTranslation();
@@ -70,6 +66,7 @@ function RewardsContent({ account }: { account: string }) {
     queryFn: ({ signal }) => getReceipts(cursor, signal),
   });
   const invalidateBalances = () => {
+    void client.invalidateQueries({ queryKey: coreKeys.me(account) });
     void client.invalidateQueries({ queryKey: creditHistoryKeys.account(account) });
     void client.invalidateQueries({ queryKey: limitedActivityKeys.wallet(account) });
   };

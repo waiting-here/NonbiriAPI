@@ -129,7 +129,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
     ...priceDraft(model),
     cloudflareProxy: model?.cloudflare_proxy_enabled ?? false,
     sessionHeaders: sessionHeaderDraft(model?.session_headers),
-    modelTypes: model ? [...model.model_types] : ['chat_completions', 'responses'],
+    modelTypes: model ? [...model.model_types] : ['chat_completions'],
     transportRule: model?.transport_rule ?? 'passthrough',
     rolePolicy: draftFromRolePolicy(model?.role_policy),
     isMainstream: model?.is_mainstream ?? false,
