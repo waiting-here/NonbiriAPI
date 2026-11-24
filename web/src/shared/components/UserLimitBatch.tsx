@@ -252,15 +252,16 @@ export function UserLimitBatch({
             </Button>
           ) : (
             <>
-              {failed.length > 0 && !operation.isPending && (
-                <Button
-                  variant="primary"
-                  disabled={operation.isPending || loading}
-                  onClick={() => void execute(failed.map((r) => r.item))}
-                >
-                  {t('management.users.batchLimitRetry')}
-                </Button>
-              )}
+              {failed.length > 0 &&
+                (failed.some((row) => row.state !== 'queued') || !operation.isPending) && (
+                  <Button
+                    variant="primary"
+                    disabled={operation.isPending || loading}
+                    onClick={() => void execute(failed.map((r) => r.item))}
+                  >
+                    {t('management.users.batchLimitRetry')}
+                  </Button>
+                )}
               <Button
                 disabled={operation.isPending || loading}
                 onClick={() => {

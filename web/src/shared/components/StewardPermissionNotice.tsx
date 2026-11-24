@@ -5,7 +5,7 @@ export function StewardPermissionNotice({ permission }: { permission?: string })
   const { t } = useTranslation();
   return (
     <Note tone="warn">
-      {t('management.permissions.denied')}
+      <span>{t('management.permissions.denied')}</span>
       {permission && (
         <>
           {' '}

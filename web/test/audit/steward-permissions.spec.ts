@@ -232,7 +232,11 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     await expect(page.getByText(copy.common.outcome.saved, { exact: true })).toBeVisible();
     const noGrants = (await get(admin, state.admin_url, path)) as Policy;
     expect(noGrants.donation_scope).toBe('none');
-    expect(Object.values(noGrants.permissions).every((value) => !value)).toBe(true);
+    expect(
+      Object.entries(noGrants.permissions).every(([key, value]) =>
+        key === 'ai.memory.edit' ? value === original.permissions[key] : !value,
+      ),
+    ).toBe(true);
     const visitor = await steward.newPage();
     await visitor.goto(`${state.user_url}/steward?tab=users`);
     await expect(
@@ -255,11 +259,15 @@ test('admin and level 6 configure actual level-5 permissions while the shared UI
     const full = (await get(admin, state.admin_url, path)) as Policy;
     expect(full.donation_scope).toBe('full');
     expect(Object.keys(full.permissions).sort()).toEqual(Object.keys(original.permissions).sort());
-    expect(Object.values(full.permissions).every((value) => value)).toBe(true);
+    expect(
+      Object.entries(full.permissions).every(([key, value]) =>
+        key === 'ai.memory.edit' ? value === original.permissions[key] : value,
+      ),
+    ).toBe(true);
     expect(full.permissions).toMatchObject({
       'ai.chat': true,
       'ai.review.read': true,
-      'ai.memory.edit': true,
+      'ai.memory.edit': original.permissions['ai.memory.edit'],
       'risk.configure': true,
     });
     await visitor.goto(`${state.user_url}/steward/endpoints`);

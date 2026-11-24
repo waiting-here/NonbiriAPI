@@ -223,7 +223,7 @@ describe('shared account management', () => {
     ).not.toBeChecked();
   });
 
-  it('keeps the full level-five controls while saving only changed inference limits', async () => {
+  it('shows read-only profile fields for default level five and saves only the permitted inference limits', async () => {
     let target = {
       ...userFixture('7', 4),
       global_rpm_limit: '80',
@@ -250,10 +250,10 @@ describe('shared account management', () => {
       locale: 'en',
     });
     await view.user.click(await screen.findByRole('tab', { name: 'Limits and level' }));
-    expect(screen.getByLabelText('Endpoint limit')).toBeEnabled();
-    expect(screen.getByLabelText('Set level')).toBeEnabled();
-    expect(screen.getByLabelText('Language')).toBeEnabled();
-    expect(screen.getByText('Current limit: 80')).toBeVisible();
+    expect(screen.getByLabelText('Endpoint limit')).toBeDisabled();
+    expect(screen.getByLabelText('Set level')).toBeDisabled();
+    expect(screen.getByLabelText('Language')).toBeDisabled();
+    expect(screen.getByText(/Current limit: 80/)).toBeVisible();
     fireEvent.change(screen.getByLabelText('Global RPM per user'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('Light charity RPM'), { target: { value: '40' } });
     fireEvent.change(screen.getByLabelText('Light concurrency'), { target: { value: '20' } });
@@ -341,17 +341,22 @@ describe('shared account management', () => {
     await view.user.type(screen.getByLabelText('Light charity RPM'), '45');
     await view.user.selectOptions(screen.getByLabelText('Global RPM per user action'), 'inherit');
     await view.user.click(screen.getByRole('button', { name: 'Apply to selected users' }));
-    await screen.findByRole('button', { name: 'Retry failed users' });
+    const preview = await screen.findByRole('alertdialog');
+    expect(preview).toHaveTextContent('member-7');
+    expect(preview).toHaveTextContent('member-8');
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
+    await view.user.click(within(preview).getByRole('button', { name: 'Apply to selected users' }));
+    await screen.findByRole('button', { name: 'Retry unfinished users' });
     await waitFor(() =>
       expect(calls.filter((c) => c.path.startsWith('/admin/api/users?'))).toHaveLength(2),
     );
     expect(screen.queryByText('Saving selected users…')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry failed users' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retry unfinished users' })).toBeDisabled();
     await act(async () => finishRefresh());
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Retry failed users' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Retry unfinished users' })).toBeEnabled(),
     );
-    await view.user.click(screen.getByRole('button', { name: 'Retry failed users' }));
+    await view.user.click(screen.getByRole('button', { name: 'Retry unfinished users' }));
     await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(3));
     const writes = calls.filter((c) => c.method === 'PATCH');
     expect(writes.map((c) => c.path)).toEqual([
@@ -370,9 +375,15 @@ describe('shared account management', () => {
   });
 
   it('keeps level-five controls and drafts after permission denials while allowing an authorized ban', async () => {
+    const policy = defaultStewardPermissions(5);
+    policy.permissions['users.profile'] = true;
+    policy.permissions['users.unban'] = true;
+    policy.permissions['risk.read'] = true;
+    policy.limits['users.endpoint_limit_max'] = '100';
     let target = userFixture('7', 4);
     const calls = install((call) => {
-      if (call.path === '/api/session') return session(5);
+      if (call.path === '/api/session')
+        return { user: { ...session(5).user, steward_permissions: policy } };
       if (call.path.startsWith('/api/steward/users?')) return page([target]);
       if (call.path === '/api/steward/users/7' && call.method === 'GET') return target;
       if (
@@ -411,7 +422,9 @@ describe('shared account management', () => {
     const endpointLimit = screen.getByLabelText('Endpoint limit');
     fireEvent.change(endpointLimit, { target: { value: '99' } });
     await view.user.click(screen.getByRole('button', { name: 'Save settings' }));
-    await screen.findByText(view.i18n.t('management.permissions.denied'));
+    await within(screen.getByRole('tabpanel', { name: 'Limits and level' })).findByText(
+      view.i18n.t('management.permissions.denied'),
+    );
     expect(screen.getByRole('heading', { name: 'member-7' })).toBeVisible();
     expect(endpointLimit).toHaveValue('99');
     expect(target.endpoint_limit).toBeNull();
@@ -1076,6 +1089,11 @@ describe('shared announcement editor', () => {
     });
     view.queryClient.setQueryData(['user', 'session'], session());
     await view.user.click(await screen.findByRole('button', { name: 'Create draft' }));
+    await view.user.type(screen.getByRole('textbox', { name: 'English title' }), 'Private update');
+    await view.user.type(
+      screen.getByRole('textbox', { name: 'English body' }),
+      'Draft content for review.',
+    );
     await view.user.click(screen.getByRole('button', { name: 'Create private draft' }));
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Create private draft' })).toBeNull(),

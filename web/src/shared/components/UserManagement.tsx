@@ -59,7 +59,12 @@ import {
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber } from '@shared/operations/pageNumbers';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isManagementForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import {
+  isForbidden,
+  isManagementForbidden,
+  isNotFoundError,
+  isUnauthorized,
+} from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { accountCopy, accountHistoryCopy } from './accountCopy';
 import { formatCredits } from '../../user/games/common/strict';
@@ -506,7 +511,7 @@ function UserAuthority({
   const mutationError =
     patch.error ?? profile.error ?? manualLevel.error ?? ban.error ?? unban.error;
   useEffect(() => {
-    if (isUnauthorized(mutationError) || isManagementForbidden(mutationError)) onAuthorityLoss?.();
+    if (isUnauthorized(mutationError) || isForbidden(mutationError)) onAuthorityLoss?.();
   }, [mutationError, onAuthorityLoss]);
   const economyUnknown = patch.outcome === 'unknown';
   const economyLocked = patch.isPending || economyUnknown;
@@ -775,97 +780,90 @@ function UserAuthority({
               <Fold plain title={t('management.users.inferenceLimitRules')}>
                 <p>{t('management.users.inferenceLimitHelp')}</p>
               </Fold>
-              {profileEditable || levelEditable ? (
-                <Fields>
+              <Fields>
+                <Field
+                  label={t('management.users.endpointLimit')}
+                  size="short"
+                  help={
+                    profileEditable && limits
+                      ? t('common.governance.ceiling', { max: endpointMax })
+                      : undefined
+                  }
+                >
+                  {(field) => (
+                    <input
+                      {...field}
+                      inputMode="numeric"
+                      disabled={!profileEditable}
+                      value={draft.endpointLimit}
+                      onChange={(event) =>
+                        setDraft({ ...draft, endpointLimit: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label={t('management.users.levelControl')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      disabled={!levelEditable}
+                      value={draft.level}
+                      onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                    >
+                      <option value="">{t('management.users.levelManualNone')}</option>
+                      {(role === 'admin'
+                        ? [1, 2, 3, 4, 5, 6]
+                        : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
+                      ).map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field label={t('management.users.language')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      disabled={!profileEditable}
+                      value={draft.lang}
+                      onChange={(event) =>
+                        setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
+                      }
+                    >
+                      <option value="" disabled>
+                        {t('management.users.languageDefault')}
+                      </option>
+                      <option value="zh">中文</option>
+                      <option value="en">English</option>
+                    </select>
+                  )}
+                </Field>
+                {role === 'admin' ? (
                   <Field
-                    label={t('management.users.endpointLimit')}
-                    size="short"
-                    help={
-                      profileEditable && limits
-                        ? t('common.governance.ceiling', { max: endpointMax })
-                        : undefined
-                    }
+                    label={t('management.users.discordGatePolicy')}
+                    help={t('management.users.discordGateHelp')}
                   >
                     {(field) => (
-                      <input
-                        {...field}
-                        inputMode="numeric"
-                        disabled={!profileEditable}
-                        value={draft.endpointLimit}
-                        onChange={(event) =>
-                          setDraft({ ...draft, endpointLimit: event.target.value })
-                        }
-                      />
-                    )}
-                  </Field>
-                  <Field label={t('management.users.levelControl')} size="short">
-                    {(field) => (
                       <select
                         {...field}
-                        disabled={!levelEditable}
-                        value={draft.level}
-                        onChange={(event) => setDraft({ ...draft, level: event.target.value })}
+                        value={draft.discordGatePolicy}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            discordGatePolicy: event.target.value as UserDraft['discordGatePolicy'],
+                          })
+                        }
                       >
-                        <option value="">{t('management.users.levelManualNone')}</option>
-                        {(role === 'admin'
-                          ? [1, 2, 3, 4, 5, 6]
-                          : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
-                        ).map((level) => (
-                          <option key={level} value={level}>
-                            {level}
-                          </option>
-                        ))}
+                        <option value="inherit">{t('management.users.discordGateInherit')}</option>
+                        <option value="require">{t('management.users.discordGateRequire')}</option>
+                        <option value="exempt">{t('management.users.discordGateExempt')}</option>
                       </select>
                     )}
                   </Field>
-                  <Field label={t('management.users.language')} size="short">
-                    {(field) => (
-                      <select
-                        {...field}
-                        disabled={!profileEditable}
-                        value={draft.lang}
-                        onChange={(event) =>
-                          setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
-                        }
-                      >
-                        <option value="" disabled>
-                          {t('management.users.languageDefault')}
-                        </option>
-                        <option value="zh">中文</option>
-                        <option value="en">English</option>
-                      </select>
-                    )}
-                  </Field>
-                  {role === 'admin' ? (
-                    <Field
-                      label={t('management.users.discordGatePolicy')}
-                      help={t('management.users.discordGateHelp')}
-                    >
-                      {(field) => (
-                        <select
-                          {...field}
-                          value={draft.discordGatePolicy}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              discordGatePolicy: event.target
-                                .value as UserDraft['discordGatePolicy'],
-                            })
-                          }
-                        >
-                          <option value="inherit">
-                            {t('management.users.discordGateInherit')}
-                          </option>
-                          <option value="require">
-                            {t('management.users.discordGateRequire')}
-                          </option>
-                          <option value="exempt">{t('management.users.discordGateExempt')}</option>
-                        </select>
-                      )}
-                    </Field>
-                  ) : null}
-                </Fields>
-              ) : null}
+                ) : null}
+              </Fields>
               {invalidLimits ? (
                 <p className="field-error" role="alert">
                   {t('management.users.limitInvalid')}
