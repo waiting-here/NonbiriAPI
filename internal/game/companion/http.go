@@ -134,6 +134,7 @@ func (s *Service) request(r *http.Request, user int64, game, op string) (any, er
 			if err != nil {
 				return nil, err
 			}
+			break
 		}
 		return out, nil
 	case "/preferences":

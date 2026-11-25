@@ -70,12 +70,8 @@ func (s *Service) compile(ctx context.Context, game, source string) ([]byte, str
 		return nil, "The sample reply does not match its decision window.", nil
 	}
 	if game == "likes" {
-		var value struct {
-			Kind string          `json:"kind"`
-			Plan json.RawMessage `json:"plan"`
-		}
-		if json.Unmarshal(reply.Action, &value) != nil || value.Kind != "plan" || len(bytes.TrimSpace(value.Plan)) == 0 || value.Plan[0] != '{' {
-			return nil, "Expected a plan for the sample decision.", nil
+		if !validLikesSample(sample, reply.Action) {
+			return nil, "The program returned an illegal plan for the sample.", nil
 		}
 	} else {
 		var got map[string]any
