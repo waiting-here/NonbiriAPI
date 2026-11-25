@@ -237,6 +237,28 @@ func TestFlattenStreamPreservesContinuationAtTerminal(t *testing.T) {
 	}
 }
 
+func TestFlattenSinkEmitsRoleOnceWithBufferedContinuation(t *testing.T) {
+	out := httptest.NewRecorder()
+	sink := NewFlattenSink(out, 1<<20, 1<<20, nil)
+	defer sink.Clear()
+	for _, data := range []string{
+		`{"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","reasoning_details":[{"type":"reasoning.summary","index":0,"summary":"summary"}],"tool_calls":[{"index":0,"id":"call","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}`,
+		"[DONE]",
+	} {
+		if _, err := sink.Write([]byte("data: " + data + "\n\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sink.Complete(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	result := out.Body.String()
+	first, _, _ := strings.Cut(result, "\n\n")
+	if strings.Count(result, `"role":"assistant"`) != 1 || !strings.Contains(first, `"role":"assistant"`) || !strings.Contains(first, "reasoning_details") || !strings.Contains(result, "mx_tool") {
+		t.Fatalf("role should appear once in the initial continuation frame: %s", result)
+	}
+}
+
 func TestFlattenSinkRejectsGeneratedSecretAndOversizedFrame(t *testing.T) {
 	for _, limit := range []int{1 << 20, 100} {
 		out := httptest.NewRecorder()

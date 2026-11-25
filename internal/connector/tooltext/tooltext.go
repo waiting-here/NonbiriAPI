@@ -666,12 +666,17 @@ func StreamCompletionBodyAfter(first map[string]json.RawMessage, states map[int]
 		if len(state.Tools) == 0 && state.FinishEmitted {
 			continue
 		}
-		message := map[string]any{"role": state.Role, "content": content}
+		message := map[string]any{"content": content}
 		if len(state.pendingReasoning) != 0 {
 			message["reasoning_content"] = string(state.pendingReasoning)
 		}
-		if message["role"] == "" {
-			message["role"] = "assistant"
+		if len(state.pendingContinuation) == 0 || state.roleEmitted {
+			// Otherwise the first continuation frame opens this choice with its role.
+			role := state.Role
+			if role == "" {
+				role = "assistant"
+			}
+			message["role"] = role
 		}
 		if len(state.Tools) > 0 {
 			if state.FinishReason != "tool_calls" {

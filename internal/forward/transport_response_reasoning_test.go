@@ -88,6 +88,105 @@ func TestTransportFragmentsTextAndPreservesReasoningCiphertext(t *testing.T) {
 	}
 }
 
+func TestTransportFragmentsReasoningMirrorsTogether(t *testing.T) {
+	text := strings.Repeat("镜像🙂", 30000)
+	for _, tc := range []struct {
+		name            string
+		alias           string
+		details, blocks bool
+	}{
+		{name: "scalar alias", alias: text},
+		{name: "signed details", details: true},
+		{name: "all matching shapes", alias: text, details: true, blocks: true},
+		{name: "different alias", alias: "independent provider text", blocks: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			message := map[string]any{"role": "assistant", "content": "answer", "reasoning_content": text}
+			if tc.alias != "" {
+				message["reasoning"] = tc.alias
+			}
+			if tc.details {
+				message["reasoning_details"] = []any{
+					map[string]any{"type": "reasoning.encrypted", "index": 0, "data": "opaque-before"},
+					map[string]any{"type": "reasoning.text", "index": 1, "id": "r", "text": text, "signature": "unique-signature"},
+					map[string]any{"type": "reasoning.encrypted", "index": 2, "data": "opaque-after"},
+				}
+			}
+			if tc.blocks {
+				message["thinking_blocks"] = []any{map[string]any{"type": "thinking", "index": 0, "thinking": text, "signature": "block-signature"}}
+			}
+			raw, err := json.Marshal(map[string]any{
+				"id": "chat", "created": 1, "object": "chat.completion", "model": "m",
+				"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "message": message}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			frames, err := completionToStream(raw, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var visible strings.Builder
+			synchronized := true
+			for _, frame := range frames[:len(frames)-1] {
+				var event struct {
+					Choices []struct {
+						Delta struct {
+							Reasoning string
+							Canonical string                      `json:"reasoning_content"`
+							Details   []struct{ Text string }     `json:"reasoning_details"`
+							Blocks    []struct{ Thinking string } `json:"thinking_blocks"`
+						}
+					}
+				}
+				if err := json.Unmarshal(bytes.TrimSpace(bytes.TrimPrefix(frame, []byte("data: "))), &event); err != nil {
+					t.Fatal(err)
+				}
+				if len(event.Choices) == 0 {
+					continue
+				}
+				delta := event.Choices[0].Delta
+				if delta.Canonical != "" {
+					if tc.alias == text && delta.Reasoning != delta.Canonical || tc.alias != text && delta.Reasoning != "" {
+						synchronized = false
+					}
+					if tc.details && (len(delta.Details) != 1 || delta.Details[0].Text != delta.Canonical) {
+						synchronized = false
+					}
+					if tc.blocks && (len(delta.Blocks) != 1 || delta.Blocks[0].Thinking != delta.Canonical) {
+						synchronized = false
+					}
+					visible.WriteString(delta.Canonical)
+					continue
+				}
+				if delta.Reasoning != "" && tc.alias == text {
+					visible.WriteString(delta.Reasoning)
+				}
+				for _, part := range delta.Details {
+					visible.WriteString(part.Text)
+				}
+				for _, part := range delta.Blocks {
+					visible.WriteString(part.Thinking)
+				}
+			}
+			if visible.String() != text {
+				t.Fatalf("fallback client read %d bytes of reasoning, want %d", visible.Len(), len(text))
+			}
+			if !synchronized {
+				t.Fatal("reasoning fields only share a frame when their text matches exactly")
+			}
+			stream := bytes.Join(frames, nil)
+			if tc.details && (bytes.Count(stream, []byte("unique-signature")) != 1 || bytes.Count(stream, []byte("opaque-before")) != 1 || bytes.Count(stream, []byte("opaque-after")) != 1) {
+				t.Fatal("reasoning continuation data was repeated or lost")
+			}
+			restored, err := streamToCompletion(stream)
+			if err != nil || !bytes.Equal(restored, raw) {
+				t.Fatalf("round trip changed one or more reasoning fields: %v", err)
+			}
+		})
+	}
+}
+
 func TestTransportRejectsUnrepresentableReasoningSnapshots(t *testing.T) {
 	for _, field := range []string{"encrypted_content", "reasoning_details", "thinking_blocks"} {
 		t.Run(field, func(t *testing.T) {

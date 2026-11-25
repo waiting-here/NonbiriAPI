@@ -58,21 +58,26 @@ func reasoningContinuationField(field string, previous, next any) string {
 	return key
 }
 
-func reasoningPartTextField(field string, part map[string]any) string {
-	var textKey string
+func reasoningPartTextKey(field, kind string) string {
 	switch field {
 	case "reasoning_details":
-		switch part["type"] {
+		switch kind {
 		case "reasoning.text":
-			textKey = "text"
+			return "text"
 		case "reasoning.summary":
-			textKey = "summary"
+			return "summary"
 		}
 	case "thinking_blocks":
-		if part["type"] == "thinking" {
-			textKey = "thinking"
+		if kind == "thinking" {
+			return "thinking"
 		}
 	}
+	return ""
+}
+
+func reasoningPartTextField(field string, part map[string]any) string {
+	kind, _ := part["type"].(string)
+	textKey := reasoningPartTextKey(field, kind)
 	if textKey == "" {
 		return ""
 	}
@@ -166,13 +171,141 @@ func fragmentReasoningPart(field string, part map[string]any, emit func(any) err
 		return err
 	}
 	if hasSignature {
-		if field == "thinking_blocks" {
-			fragment[key] = ""
-		} else {
-			delete(fragment, key)
-		}
+		clearReasoningPartText(field, fragment, key)
 		fragment["signature"] = signature
 		return emit([]any{fragment})
+	}
+	return nil
+}
+
+func clearReasoningPartText(field string, part map[string]any, key string) {
+	if field == "thinking_blocks" {
+		part[key] = ""
+	} else {
+		delete(part, key)
+	}
+}
+
+type reasoningMirror struct {
+	field, textKey string
+	part           map[string]any
+	before, after  []any
+}
+
+func matchingReasoningMirror(field string, value any, text string) (reasoningMirror, bool) {
+	parts, _ := value.([]any)
+	var mirror reasoningMirror
+	for i, value := range parts {
+		part, ok := value.(map[string]any)
+		if !ok {
+			return reasoningMirror{}, false
+		}
+		kind, _ := part["type"].(string)
+		if field == "reasoning_details" && kind == "reasoning.encrypted" || field == "thinking_blocks" && kind == "redacted_thinking" {
+			continue
+		}
+		key := reasoningPartTextKey(field, kind)
+		if value, ok := part[key].(string); mirror.part != nil || key == "" || !ok || value != text {
+			return reasoningMirror{}, false
+		}
+		mirror = reasoningMirror{field: field, textKey: key, part: part, before: parts[:i], after: parts[i+1:]}
+	}
+	return mirror, mirror.part != nil
+}
+
+func fragmentChatCompletionFields(fields map[string]any, emit func(map[string]any) error) error {
+	canonical, _ := fields["reasoning_content"].(string)
+	if canonical == "" {
+		return fragmentCompletionFields(fields, emit)
+	}
+	group := map[string]any{"reasoning_content": canonical}
+	alias, _ := fields["reasoning"].(string)
+	if alias == canonical {
+		group["reasoning"] = canonical
+	}
+	var mirrors []reasoningMirror
+	for _, field := range [...]string{"reasoning_details", "thinking_blocks"} {
+		if mirror, ok := matchingReasoningMirror(field, fields[field], canonical); ok {
+			mirrors = append(mirrors, mirror)
+			group[field] = []any{mirror.part}
+		}
+	}
+	if len(group) == 1 {
+		return fragmentCompletionFields(fields, emit)
+	}
+	if role, ok := fields["role"]; ok {
+		if err := emit(map[string]any{"role": role}); err != nil {
+			return err
+		}
+		delete(fields, "role")
+	}
+	for _, mirror := range mirrors {
+		if err := emitOpaqueReasoningParts(mirror.field, mirror.before, emit); err != nil {
+			return err
+		}
+	}
+	// Keep equivalent channels in the same event even if the full message or
+	// the reasoning group exceeds one frame. Fallback readers then see one copy.
+	if err := emit(group); err != nil {
+		if err := fragmentReasoningMirrors(canonical, group, mirrors, emit); err != nil {
+			return err
+		}
+	}
+	for _, mirror := range mirrors {
+		if err := emitOpaqueReasoningParts(mirror.field, mirror.after, emit); err != nil {
+			return err
+		}
+	}
+	for field := range group {
+		delete(fields, field)
+	}
+	return fragmentCompletionFields(fields, emit)
+}
+
+func emitOpaqueReasoningParts(field string, parts []any, emit func(map[string]any) error) error {
+	if len(parts) == 0 {
+		return nil
+	}
+	wrap := func(value any) error { return emit(map[string]any{field: value}) }
+	if err := wrap(parts); err == nil {
+		return nil
+	}
+	return fragmentReasoningParts(field, parts, wrap)
+}
+
+func fragmentReasoningMirrors(text string, group map[string]any, mirrors []reasoningMirror, emit func(map[string]any) error) error {
+	var signatures []map[string]any
+	for i := range mirrors {
+		mirror := &mirrors[i]
+		if reasoningPartTextField(mirror.field, mirror.part) == "" {
+			return errTransportResponse
+		}
+		mirror.part = maps.Clone(mirror.part)
+		if _, ok := mirror.part["signature"]; ok {
+			signed := maps.Clone(mirror.part)
+			clearReasoningPartText(mirror.field, signed, mirror.textKey)
+			signatures = append(signatures, map[string]any{mirror.field: []any{signed}})
+			delete(mirror.part, "signature")
+		}
+		group[mirror.field] = []any{mirror.part}
+	}
+	_, hasAlias := group["reasoning"]
+	if err := fragmentWireString(text, func(piece string) error {
+		group["reasoning_content"] = piece
+		if hasAlias {
+			group["reasoning"] = piece
+		}
+		for _, mirror := range mirrors {
+			mirror.part[mirror.textKey] = piece
+		}
+		return emit(group)
+	}); err != nil {
+		return err
+	}
+	for _, signature := range signatures {
+		if err := emit(signature); err != nil {
+			return err
+		}
 	}
 	return nil
 }

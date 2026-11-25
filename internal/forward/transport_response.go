@@ -251,7 +251,7 @@ func completionToStream(raw []byte, includeUsage bool) ([][]byte, error) {
 			if err := emit(fields, extra); err == nil {
 				return nil
 			}
-			if err := fragmentCompletionFields(fields, func(fragment map[string]any) error { return emit(fragment, nil) }); err != nil {
+			if err := fragmentChatCompletionFields(fields, func(fragment map[string]any) error { return emit(fragment, nil) }); err != nil {
 				return err
 			}
 			return fragmentCompletionFields(extra, func(fragment map[string]any) error { return emit(map[string]any{}, fragment) })
