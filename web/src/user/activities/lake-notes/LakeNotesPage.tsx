@@ -323,11 +323,15 @@ function LakeContent({ account }: { account: string }) {
   useEffect(() => {
     const view = query.data;
     const status = controller.snapshot().status;
-    // Returning to a cached page can reveal a newer saved cast. Preserve active
-    // input and uncertain requests, but refresh a controller waiting to resume.
-    if (view?.cast && !['running', 'saving', 'unknown'].includes(status))
+    // The cached cast may have ended while this route was closed.
+    if (
+      query.isSuccess &&
+      query.isFetchedAfterMount &&
+      view?.cast &&
+      !['running', 'saving', 'unknown'].includes(status)
+    )
       controller.adopt({ profile: view, cast: view.cast });
-  }, [query.data, controller]);
+  }, [query.data, query.isSuccess, query.isFetchedAfterMount, controller]);
   const update = (view: ProfileView) => client.setQueryData(lakeKeys(account), view);
   const collection = useRetainedOperation(
     async (location: string, key, context) => {
