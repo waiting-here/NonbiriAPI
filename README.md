@@ -26,9 +26,9 @@ and earn social rewards. Whale coins and conch
 shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 
-This source tree uses database schema 57 and account export format 38. Use the
-standalone offline upgrader for v1.4.0 through v1.4.2 databases and the schema 54
-bridge. Earlier supported sources first use the v1.3.12 upgrader.
+This source tree uses database schema 58 and account export format 38. Use the
+standalone offline upgrader for v1.4.0 through v1.4.2 databases, the schema 54
+bridge, and the earlier v1.4.3 development schema 57. Earlier supported sources first use the v1.3.12 upgrader.
 [Database upgrades](docs/database-upgrades.md) · [Changelog](CHANGELOG.md)
 
 ## Architecture
@@ -325,10 +325,10 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 57.
+Fresh databases start in maintenance with public features closed and use schema 58.
 Stop the old service, preserve its complete recovery set, and use the matching
 standalone [upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert an exact
-schema 54, 55 or 56 database to schema 57. Earlier registered sources first use the v1.3.12
+schema 54, 55, 56 or 57 database to schema 58. Earlier registered sources first use the v1.3.12
 upgrader. The service and deployment hooks leave conversion to the operator.
 Account export uses format 38.
 Upgrades are one-way: a server expecting an older or different schema cannot
