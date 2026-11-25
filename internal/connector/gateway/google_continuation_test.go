@@ -189,7 +189,7 @@ func TestGatewayGoogleChatJSONAndSSEContinuationRoundTrip(t *testing.T) {
 				if !result.Success || !result.Usage.Present || b.calls != 1 {
 					t.Fatal(result, w.Body.String())
 				}
-				message := googleReplayMessage(t, w.Body.String(), streaming)
+				message := gatewayReplayMessage(t, w.Body.String(), streaming)
 				if !strings.Contains(string(message), "continuation_id") {
 					t.Fatal(string(message))
 				}
@@ -226,7 +226,7 @@ func TestGatewayGoogleStreamLateToolSignature(t *testing.T) {
 				if !result.Success || !result.Usage.Present {
 					t.Fatal(result, w.Body.String())
 				}
-				message := googleReplayMessage(t, w.Body.String(), true)
+				message := gatewayReplayMessage(t, w.Body.String(), true)
 				replay := chat(t, `{"model":"public","messages":[`+string(message)+`,{"role":"tool","tool_call_id":"next-call","content":"done"}]}`)
 				defer replay.Clear()
 				compiled, err := compileChatForType(kind, replay, "", nil)
@@ -241,7 +241,7 @@ func TestGatewayGoogleStreamLateToolSignature(t *testing.T) {
 
 // Keep actual emitted text, incremental tool arguments and the terminal
 // continuation when constructing the next Chat turn.
-func googleReplayMessage(t *testing.T, body string, streaming bool) []byte {
+func gatewayReplayMessage(t *testing.T, body string, streaming bool) []byte {
 	t.Helper()
 	var envelope struct {
 		Choices []struct {
@@ -256,7 +256,7 @@ func googleReplayMessage(t *testing.T, body string, streaming bool) []byte {
 		return envelope.Choices[0].Message
 	}
 	message := object{"role": json.RawMessage(`"assistant"`)}
-	var content strings.Builder
+	var content, reasoning strings.Builder
 	calls := []toolCall{}
 	for _, line := range strings.Split(body, "\n") {
 		if !strings.HasPrefix(line, "data: {") {
@@ -273,6 +273,13 @@ func googleReplayMessage(t *testing.T, body string, streaming bool) []byte {
 				t.Fatal(line)
 			}
 			content.WriteString(value)
+		}
+		if raw, present := delta["reasoning_content"]; present {
+			value, ok := text(raw)
+			if !ok {
+				t.Fatal(line)
+			}
+			reasoning.WriteString(value)
 		}
 		if raw, present := delta["extra_content"]; present {
 			message["extra_content"] = raw
@@ -302,6 +309,9 @@ func googleReplayMessage(t *testing.T, body string, streaming bool) []byte {
 	}
 	if len(calls) > 0 {
 		message["tool_calls"], _ = json.Marshal(calls)
+	}
+	if reasoning.Len() != 0 {
+		message["reasoning_content"], _ = json.Marshal(reasoning.String())
 	}
 	message["content"], _ = json.Marshal(content.String())
 	raw, err := json.Marshal(message)

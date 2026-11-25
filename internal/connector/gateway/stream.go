@@ -26,7 +26,7 @@ type streamTool struct {
 	partIndex       int
 }
 
-func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *http.Response, request *openai.ChatRequest, guard responseGuard, errorContext upstreamerror.Context, continuationIDs ...string) contract.AttemptResult {
+func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *http.Response, request *openai.ChatRequest, guard responseGuard, errorContext upstreamerror.Context, protocol contract.Type, continuationID string) contract.AttemptResult {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{MaxBytes: min(maxStreamBytes, a.backend.MaxResponseBytes()), MaxLineBytes: maxLineBytes, MaxEventBytes: maxEventBytes, ReadBuffer: 64 << 10, EventBuffer: 4})
@@ -168,6 +168,10 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		}
 		var delta map[string]any
 		switch kind {
+		case "ping":
+			if protocol != contract.TypeAISDKGatewayV4 || !only(part, "type") {
+				return failure("upstream stream ping was invalid", upstreamerror.Detail{})
+			}
 		case "stream-start":
 			if started || len(texts) > 0 || len(tools) > 0 {
 				return failure("upstream stream start was out of order", upstreamerror.Detail{})
@@ -353,10 +357,6 @@ func (a *Adapter) stream(ctx context.Context, w http.ResponseWriter, response *h
 		return failure("upstream stream ended without a finish", upstreamerror.Detail{})
 	}
 	finalDelta := map[string]any{}
-	continuationID := ""
-	if len(continuationIDs) > 0 {
-		continuationID = continuationIDs[0]
-	}
 	if extra := gatewayExtra(parts, continuationID); extra != nil {
 		finalDelta["extra_content"] = extra
 	}
