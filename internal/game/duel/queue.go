@@ -92,7 +92,7 @@ func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult,
 		return MutationResult{}, ErrForbidden
 	}
 	var occupied int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, in.UserID, s.rules.ID()).Scan(&occupied); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_duel_user_slots WHERE user_id=? AND game_key=?) OR EXISTS(SELECT 1 FROM companion_matches WHERE user_id=? AND game=? AND status='active')`, in.UserID, s.rules.ID(), in.UserID, s.rules.ID()).Scan(&occupied); err != nil {
 		return MutationResult{}, err
 	}
 	if occupied != 0 {
