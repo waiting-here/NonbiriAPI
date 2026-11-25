@@ -23,6 +23,11 @@ func TestDefaultVisitMealPaysBothKeepersOnce(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			f := newForagingFixture(t)
+			if automatic {
+				// Depart at 22:30 site time so the meal ends just before midnight.
+				day := f.at.UTC().AddDate(0, 0, 1)
+				f.at = time.Date(day.Year(), day.Month(), day.Day(), 14, 30, 0, 0, time.UTC)
+			}
 			start := f.at
 			guest, host := f.user(t, "guest"), f.user(t, "host")
 			g, h := f.adopt(t, guest, "Fin"), f.adopt(t, host, "Shell")
@@ -69,27 +74,33 @@ func TestDefaultVisitMealPaysBothKeepersOnce(t *testing.T) {
 					t.Fatal("returned before eating the last fraction of a gram")
 				}
 			}
-			f.at = departure.Add(4_666_667 * time.Millisecond)
+			mealEnd := departure.Add(4_666_667 * time.Millisecond)
+			f.at = mealEnd
+			wantToday := float64(1)
+			if automatic {
+				// Both keepers were offline when the whale returned the previous day.
+				f.at = mealEnd.Add(20 * time.Minute)
+				wantToday = 0
+			}
 			g = f.call(t, guest, "profile", nil, "", 200)
 			snap := g["snapshot"].(map[string]any)
 			wallet := snap["wallet"].(map[string]any)
 			if g["social"].(map[string]any)["away"] != nil || wallet["pendingSocialPearls"] != float64(1) || wallet["pendingConchShards"] != float64(1) || wallet["pearls"] != float64(0) {
 				t.Fatalf("guest meal projected at return: %v, %v", g["social"], wallet)
 			}
-			settle := visitAction(g, "set_open")
-			settle["open"] = true
+			settle := visitAction(g, "harvest_pearls")
 			for range 2 {
 				f.call(t, guest, "actions", settle, "post-default-visit-rewards-once", 200)
 			}
 			for _, id := range []int64{guest, host} {
 				p := f.call(t, id, "profile", nil, "", 200)["snapshot"].(map[string]any)
 				wallet = p["wallet"].(map[string]any)
-				if wallet["pearls"] != float64(1) || wallet["conchShards"] != float64(1) || wallet["pendingSocialPearls"] != float64(0) || wallet["dailySocialPearlsGained"] != float64(1) {
+				if wallet["pearls"] != float64(1) || wallet["conchShards"] != float64(1) || wallet["pendingSocialPearls"] != float64(0) || wallet["dailySocialPearlsGained"] != wantToday {
 					t.Fatalf("posted reward for %d: %v", id, wallet)
 				}
 				var count int
 				var at int64
-				if err := f.store.ReadDB().QueryRow("SELECT count(*),MIN(created_at) FROM whale_haven_movements WHERE user_id=? AND reason='social_reward'", id).Scan(&count, &at); err != nil || count != 1 || at != f.at.UnixMilli() {
+				if err := f.store.ReadDB().QueryRow("SELECT count(*),MIN(created_at) FROM whale_haven_movements WHERE user_id=? AND reason='social_reward'", id).Scan(&count, &at); err != nil || count != 1 || at != mealEnd.UnixMilli() {
 					t.Fatal("posted movement", id, count, at, err)
 				}
 				home := p["home"].(map[string]any)
