@@ -15,6 +15,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -606,6 +607,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 	controller := http.NewResponseController(writer)
 	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 	committed := false
+	var written int64
 	failure := func(diagnostic string) AttemptResult {
 		return a.streamProtocolFailure(writer, controller, committed, usage, diagnostic)
 	}
@@ -615,6 +617,9 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 		wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
 		committed = committed || wrote
+		if writeErr == nil {
+			written += int64(len(frame))
+		}
 		return wrote, writeErr
 	}
 	for {
@@ -662,31 +667,30 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 					clear(finish)
 					return failure("upstream stream chunk exceeded protocol bounds")
 				}
-				contentFrame := append([]byte("data: "), content...)
-				contentFrame = append(contentFrame, '\n', '\n')
-				if _, writeErr := writeFrame(contentFrame, content); writeErr != nil {
-					clear(contentFrame)
-					clear(content)
-					clear(finish)
-					if errors.Is(writeErr, errFlattenStreamRejected) {
-						return failure("upstream stream was rejected")
-					}
-					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
+				defer clear(content)
+				defer clear(finish)
+				finalBytes := int64(len(content) + len(finish) + 16 + len(usageFrame) + len("data: [DONE]\n\n"))
+				maxFrame := min(a.maxSSEEventBytes+8, a.maxSSELineBytes+2)
+				continuation, err := tooltext.StreamContinuationFrames(firstRoot, states, maxFrame, a.maxStreamBytes-written-finalBytes)
+				if err != nil {
+					return failure("upstream stream chunk exceeded protocol bounds")
 				}
-				clear(contentFrame)
-				clear(content)
-				finishFrame := append([]byte("data: "), finish...)
-				finishFrame = append(finishFrame, '\n', '\n')
-				if _, writeErr := writeFrame(finishFrame, finish); writeErr != nil {
-					clear(finishFrame)
-					clear(finish)
-					if errors.Is(writeErr, errFlattenStreamRejected) {
-						return failure("upstream stream was rejected")
+				defer func() {
+					for _, data := range continuation {
+						clear(data)
 					}
-					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
+				}()
+				for _, data := range append(continuation, content, finish) {
+					frame := append(append([]byte("data: "), data...), '\n', '\n')
+					_, writeErr := writeFrame(frame, data)
+					clear(frame)
+					if writeErr != nil {
+						if errors.Is(writeErr, errFlattenStreamRejected) {
+							return failure("upstream stream was rejected")
+						}
+						return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
+					}
 				}
-				clear(finishFrame)
-				clear(finish)
 			}
 			if len(usageFrame) > 0 {
 				if _, writeErr := writeFrame(usageFrame, streamFramePayload(usageFrame)); writeErr != nil {

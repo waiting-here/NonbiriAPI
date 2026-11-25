@@ -247,11 +247,37 @@ func completionToStream(raw []byte, includeUsage bool) ([][]byte, error) {
 			}
 			return appendFrame([]any{row})
 		}
-		if err := emit(message, extra); err != nil {
-			if err := fragmentCompletionFields(message, func(fragment map[string]any) error { return emit(fragment, nil) }); err != nil {
+		emitFields := func(fields, extra map[string]any) error {
+			if err := emit(fields, extra); err == nil {
+				return nil
+			}
+			if err := fragmentChatCompletionFields(fields, func(fragment map[string]any) error { return emit(fragment, nil) }); err != nil {
+				return err
+			}
+			return fragmentCompletionFields(extra, func(fragment map[string]any) error { return emit(map[string]any{}, fragment) })
+		}
+		if ciphertext := message["encrypted_content"]; ciphertext != nil {
+			// The continuation is a standalone snapshot after thinking and before
+			// ordinary output. It cannot be fragmented to fit a frame.
+			reasoning := make(map[string]any)
+			for _, key := range [...]string{"role", "reasoning", "reasoning_content", "reasoning_details", "thinking_blocks"} {
+				if value, ok := message[key]; ok {
+					reasoning[key] = value
+					delete(message, key)
+				}
+			}
+			if len(reasoning) != 0 {
+				if err := emitFields(reasoning, nil); err != nil {
+					return nil, err
+				}
+			}
+			if err := emit(map[string]any{"encrypted_content": ciphertext}, nil); err != nil {
 				return nil, err
 			}
-			if err := fragmentCompletionFields(extra, func(fragment map[string]any) error { return emit(map[string]any{}, fragment) }); err != nil {
+			delete(message, "encrypted_content")
+		}
+		if len(message) != 0 || len(extra) != 0 {
+			if err := emitFields(message, extra); err != nil {
 				return nil, err
 			}
 		}
@@ -283,7 +309,7 @@ func fragmentCompletionFields(fields map[string]any, emit func(map[string]any) e
 	for key := range fields {
 		keys = append(keys, key)
 	}
-	priority := map[string]int{"role": 0, "id": 1, "type": 2, "name": 3}
+	priority := map[string]int{"role": 0, "id": 1, "type": 2, "name": 3, "reasoning": 4, "reasoning_content": 5, "reasoning_details": 6, "thinking_blocks": 7}
 	sort.Slice(keys, func(i, j int) bool {
 		left, leftOK := priority[keys[i]]
 		right, rightOK := priority[keys[j]]
@@ -301,6 +327,19 @@ func fragmentCompletionFields(fields map[string]any, emit func(map[string]any) e
 		if err := wrap(value); err == nil {
 			continue
 		}
+		switch key {
+		case "encrypted_content":
+			return errTransportResponse
+		case "reasoning_details", "thinking_blocks":
+			parts, ok := value.([]any)
+			if !ok || len(parts) == 0 {
+				return errTransportResponse
+			}
+			if err := fragmentReasoningParts(key, parts, wrap); err != nil {
+				return err
+			}
+			continue
+		}
 		switch typed := value.(type) {
 		case string:
 			switch key {
@@ -308,25 +347,8 @@ func fragmentCompletionFields(fields map[string]any, emit func(map[string]any) e
 			default:
 				return errTransportResponse
 			}
-			for len(typed) > 0 {
-				// JSON escaping can expand one source byte to six wire bytes.
-				end := min(len(typed), openai.DefaultMaxSSELineBytes/6)
-				for end < len(typed) && !utf8.RuneStart(typed[end]) {
-					end--
-				}
-				for end > 0 {
-					if err := wrap(typed[:end]); err == nil {
-						break
-					}
-					end /= 2
-					for end > 0 && !utf8.RuneStart(typed[end]) {
-						end--
-					}
-				}
-				if end == 0 {
-					return errTransportResponse
-				}
-				typed = typed[end:]
+			if err := fragmentWireString(typed, func(piece string) error { return wrap(piece) }); err != nil {
+				return err
 			}
 		case map[string]any:
 			if key == "extra_content" {
@@ -394,6 +416,30 @@ func fragmentCompletionFields(fields map[string]any, emit func(map[string]any) e
 	return nil
 }
 
+func fragmentWireString(text string, emit func(string) error) error {
+	for len(text) > 0 {
+		// JSON escaping can expand one source byte to six wire bytes.
+		end := min(len(text), openai.DefaultMaxSSELineBytes/6)
+		for end < len(text) && !utf8.RuneStart(text[end]) {
+			end--
+		}
+		for end > 0 {
+			if err := emit(text[:end]); err == nil {
+				break
+			}
+			end /= 2
+			for end > 0 && !utf8.RuneStart(text[end]) {
+				end--
+			}
+		}
+		if end == 0 {
+			return errTransportResponse
+		}
+		text = text[end:]
+	}
+	return nil
+}
+
 func fragmentAudio(audio map[string]any, emit func(map[string]any) error) error {
 	keys := make([]string, 0, len(audio))
 	for key := range audio {
@@ -454,6 +500,14 @@ type indexedDeltas map[int64]map[string]any
 // When a choice contains structured parts, retain plain text in the same
 // sequence. Already-structured parts pass through without reinterpretation.
 func mergeChatMessageDelta(message, delta map[string]any) error {
+	for _, key := range [...]string{"reasoning_details", "thinking_blocks", "encrypted_content"} {
+		if value, present := delta[key]; present {
+			if err := mergeChatReasoning(message, key, value); err != nil {
+				return err
+			}
+			delete(delta, key)
+		}
+	}
 	switch content := delta["content"].(type) {
 	case []any:
 		if text, ok := message["content"].(*strings.Builder); ok {

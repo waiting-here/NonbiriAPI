@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 func TestCompletionWrapperExactShapeAndUsage(t *testing.T) {
@@ -148,6 +150,112 @@ func TestFlattenSinkKeepsReasoningAndIsolatesCombinedUsage(t *testing.T) {
 	}
 	if !strings.Contains(frames[3], `"choices":[]`) || !strings.Contains(frames[3], `"total_tokens":7`) {
 		t.Fatalf("wrong usage frame: %s", frames[3])
+	}
+}
+
+func TestFlattenStreamPreservesContinuationAtTerminal(t *testing.T) {
+	const first = `{"role":"assistant","reasoning_details":[{"type":"reasoning.text","index":0,"id":"r","text":"already sent"}]}`
+	const reasoning = `{"reasoning":"provider alias","reasoning_content":"canonical","reasoning_details":[{"type":"reasoning.text","index":0,"id":"r","text":"tool stage"}]}`
+	const tools = `,"tool_calls":[{"index":0,"id":"call","type":"function","function":{"name":"lookup","arguments":"{}"}}]}`
+	const signature = `{"reasoning_details":[{"type":"reasoning.text","index":0,"id":"r","signature":"opaque-signature"}],"thinking_blocks":[{"type":"redacted_thinking","index":1,"data":"opaque-block"}]}`
+	const ciphertext = `{"encrypted_content":"opaque-ciphertext"}`
+	const extension = `{"extra_content":{"openai":{"reasoning":[{"type":"reasoning","id":"retained","encrypted_content":"opaque-extension"}]}}}`
+	frame := func(delta, finish, usage string) string {
+		return `data: {"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":` + delta + `,"finish_reason":` + finish + `}]` + usage + "}\n\n"
+	}
+	ordinary := frame(first, "null", "")
+	buffered := frame(strings.TrimSuffix(reasoning, "}")+tools, "null", "") + frame(signature, "null", "") + frame(ciphertext, "null", "") +
+		frame(extension, `"tool_calls"`, `,"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}`)
+	for _, consumer := range []string{"sink", "native"} {
+		for _, terminal := range []struct {
+			name string
+			done bool
+		}{{"complete", true}, {"interrupted", false}} {
+			t.Run(consumer+"/"+terminal.name, func(t *testing.T) {
+				out := httptest.NewRecorder()
+				wire := ordinary + buffered
+				if terminal.done {
+					wire += "data: [DONE]\n\n"
+				}
+				if consumer == "sink" {
+					sink := NewFlattenSink(out, 1<<20, 1<<20, nil)
+					defer sink.Clear()
+					for _, event := range strings.Split(strings.TrimSuffix(wire, "\n\n"), "\n\n") {
+						if _, err := sink.Write([]byte(event + "\n\n")); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if out.Body.String() != ordinary {
+						t.Fatal("continuation escaped before protocol confirmation")
+					}
+					if err := sink.Complete(time.Second); (err == nil) != terminal.done {
+						t.Fatalf("terminal error: %v", err)
+					}
+				} else {
+					adapter := &Adapter{maxSSELineBytes: DefaultMaxSSELineBytes, maxSSEEventBytes: DefaultMaxSSEEventBytes, maxStreamBytes: DefaultMaxStreamBytes}
+					guard, source := newResponseGuard(), newResponseGuard()
+					defer guard.Clear()
+					defer source.Clear()
+					response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(wire))}
+					result := adapter.flattenStream(t.Context(), out, response, guard, source, upstreamerror.Context{})
+					if result.Success != terminal.done {
+						t.Fatalf("result=%+v body=%s", result, out.Body)
+					}
+				}
+				result := out.Body.String()
+				if !terminal.done {
+					if strings.Contains(result, "tool stage") || strings.Contains(result, "opaque-") || strings.Contains(result, "mx_tool") || strings.Contains(result, "[DONE]") {
+						t.Fatalf("buffered data escaped an incomplete stream: %s", result)
+					}
+					return
+				}
+				if strings.Contains(result, `"tool_calls"`) || strings.Count(result, "already sent") != 1 {
+					t.Fatalf("original tools or reasoning prefix repeated: %s", result)
+				}
+				remaining := result
+				for _, delta := range []string{reasoning, signature, ciphertext, extension} {
+					var expected map[string]json.RawMessage
+					if err := json.Unmarshal([]byte(delta), &expected); err != nil {
+						t.Fatal(err)
+					}
+					compact, _ := json.Marshal(expected)
+					marker := `"delta":` + string(compact)
+					if strings.Count(result, marker) != 1 {
+						t.Fatalf("reasoning delta missing, altered or repeated (%s): %s", marker, result)
+					}
+					var ordered bool
+					_, remaining, ordered = strings.Cut(remaining, marker)
+					if !ordered {
+						t.Fatalf("reasoning delta out of order (%s): %s", marker, result)
+					}
+				}
+				if !strings.Contains(remaining, "mx_tool") || !strings.Contains(remaining, `"choices":[],"created"`) || !strings.Contains(remaining, `"total_tokens":7`) || !strings.HasSuffix(remaining, "data: [DONE]\n\n") {
+					t.Fatalf("wrong terminal ordering: %s", result)
+				}
+			})
+		}
+	}
+}
+
+func TestFlattenSinkEmitsRoleOnceWithBufferedContinuation(t *testing.T) {
+	out := httptest.NewRecorder()
+	sink := NewFlattenSink(out, 1<<20, 1<<20, nil)
+	defer sink.Clear()
+	for _, data := range []string{
+		`{"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","reasoning_details":[{"type":"reasoning.summary","index":0,"summary":"summary"}],"tool_calls":[{"index":0,"id":"call","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}`,
+		"[DONE]",
+	} {
+		if _, err := sink.Write([]byte("data: " + data + "\n\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sink.Complete(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	result := out.Body.String()
+	first, _, _ := strings.Cut(result, "\n\n")
+	if strings.Count(result, `"role":"assistant"`) != 1 || !strings.Contains(first, `"role":"assistant"`) || !strings.Contains(first, "reasoning_details") || !strings.Contains(result, "mx_tool") {
+		t.Fatalf("role should appear once in the initial continuation frame: %s", result)
 	}
 }
 
