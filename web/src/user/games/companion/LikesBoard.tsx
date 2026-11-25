@@ -15,7 +15,7 @@ import { gameRequest } from '../common/request';
 import { useReducedMotion } from '../likes/motion';
 import type { Pair, Profile } from '../common/duel/types';
 import type { Match } from './api';
-import '../likes/likes.css';
+import '../likes/battle.css';
 
 export interface LikesBoardProps {
   match?: Match;

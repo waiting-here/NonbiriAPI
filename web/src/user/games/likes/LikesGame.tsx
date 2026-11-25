@@ -47,10 +47,7 @@ import { BattleAtmosphere } from './BattleAtmosphere';
 import type { LikesView, Presentation, Selection } from './types';
 import '../games.css';
 import '../common/duel/duel.css';
-import './likes.css';
-import './effects.css';
-import './desktop.css';
-import './guidance.css';
+import './battle.css';
 const Tutorial = lazy(() => import('./tutorial/Tutorial'));
 function Rules({
   catalog,
