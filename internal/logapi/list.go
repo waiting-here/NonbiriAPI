@@ -125,6 +125,9 @@ func listLogs[T any](ctx context.Context, r *Repository, scope logSearchScope, f
 func listPageIDs(ctx context.Context, tx *sql.Tx, query string, args []any, limit int) (ids []int64, last listCursor, more bool, err error) {
 	finish := observeLogRead(ctx, "ids")
 	defer func() { finish(err) }()
+	if limit < 1 || limit > maximumLimit {
+		return nil, last, false, ErrInvalid
+	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, last, false, translateReadError(ctx, err)
