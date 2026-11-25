@@ -745,6 +745,16 @@ test('level-five model editor retains its draft after denied permission and save
   };
   const guard = await prepare(context, page, scenario);
   await installManagementRoutes(page, scenario, state);
+  const policy = defaultStewardPermissions(5);
+  policy.permissions['charity.model_settings'] = true;
+  policy.permissions['charity.pricing'] = true;
+  const baseSession = userSession('level5');
+  const granted = {
+    ...baseSession,
+    user: { ...baseSession.user, steward_permissions: policy },
+  };
+  for (const path of ['/api/session', '/api/me'])
+    await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: granted });
   let authorized = false;
   const deniedBodies: JSONRecord[] = [];
   await page.route(
@@ -796,17 +806,6 @@ test('level-five model editor retains its draft after denied permission and save
   await expect(embeddings).toBeChecked();
   await expect(save).toBeEnabled();
   expect(state.patchBodies).toHaveLength(0);
-  const policy = defaultStewardPermissions(5);
-  policy.revision = '2';
-  policy.permissions['charity.model_settings'] = true;
-  policy.permissions['charity.pricing'] = true;
-  const baseSession = userSession('level5');
-  const granted = {
-    ...baseSession,
-    user: { ...baseSession.user, steward_permissions: policy },
-  };
-  for (const path of ['/api/session', '/api/me'])
-    await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: granted });
   authorized = true;
   await save.click();
   await expect.poll(() => state.patchBodies.length).toBe(1);
