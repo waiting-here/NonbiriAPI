@@ -452,7 +452,7 @@ export function ModelEditor({
         </>
       ) : (
         <FormActions>
-          {inSheet ? (
+          {inSheet || initial ? (
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
