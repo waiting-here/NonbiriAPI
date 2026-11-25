@@ -116,6 +116,14 @@ for (const width of [390, 1440])
         expect(prefs.contribute).toBe(false);
         await page.getByRole('button', { name: 'Start free match' }).click();
         await expect(page.getByRole('status').filter({ hasText: 'AI is thinking' })).toBeVisible();
+        const bidCard = page.getByRole('button', { name: /bid.*\(3\)/i });
+        await expect(bidCard).toBeVisible();
+        expect(
+          await bidCard.evaluate((card) =>
+            getComputedStyle(card).getPropertyValue('--bid-red').trim(),
+          ),
+        ).not.toBe('');
+        await expect(page.getByText(/if time expires before you lock/i)).toHaveCount(0);
         await page.getByRole('button', { name: /bid.*\(3\)/i }).click();
         await page.getByRole('button', { name: /lock in bid/i }).click();
         await page.reload();

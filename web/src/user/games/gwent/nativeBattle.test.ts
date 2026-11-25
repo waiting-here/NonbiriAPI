@@ -118,6 +118,23 @@ describe('original battlefield with authoritative actions', () => {
     expect(document.querySelectorAll('#arena-hand button')).toHaveLength(1);
     expect(document.querySelectorAll('#arena-stats-op .arena-card')).toHaveLength(0);
   });
+  it('shows an untimed target choice in companion matches', () => {
+    const f = fixture();
+    const target = { ...f.view.hand[0], instance_id: 3 };
+    const view = {
+      ...f.view,
+      choice: { kind: 'medic', cards: [target], rows: [], remaining: 1, can_quit: false },
+      legal_actions: [{ kind: 'choose', card: 3 }],
+    };
+    f.renderer.render({
+      ...f.snapshot,
+      companion: true,
+      home: { current: { ...f.snapshot.home.current, view } },
+    });
+    expect(document.getElementById('dialog-description')).toHaveTextContent('还可选择 1 次');
+    expect(document.getElementById('dialog-description')).not.toHaveTextContent('倒计时');
+    expect(document.getElementById('decision-dialog-timer')).not.toBeVisible();
+  });
   it('renders a real target decision and sends the exact target action', () => {
     const f = fixture();
     const target = { ...f.view.hand[0], instance_id: 3 };

@@ -82,11 +82,13 @@ export function BiddingControls({
   blocked,
   onAction,
   onSelect,
+  timed = true,
 }: {
   readonly state: Pick<DuelState<BiddingView, never, never>, 'view' | 'you' | 'locked' | 'phase'>;
   readonly blocked: boolean;
   readonly onAction: (action: BiddingAction) => void;
   readonly onSelect?: () => void;
+  readonly timed?: boolean;
 }) {
   const text = useDuelText();
   const [draft, setDraft] = useState<number | null>(null);
@@ -193,7 +195,7 @@ export function BiddingControls({
           {locked ? text('bidding.locked') : text('bidding.lockInBid')}
         </button>
       </div>
-      <p className="bid-hint">{text('bidding.ifTimeExpiresBeforeYouLockYour')}</p>
+      {timed && <p className="bid-hint">{text('bidding.ifTimeExpiresBeforeYouLockYour')}</p>}
     </section>
   );
 }

@@ -43,3 +43,10 @@
   padding-inline: var(--nb-space-2);
   font-weight: 600;
 }
+
+.companion-program-settings .duel-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--nb-space-2);
+}
