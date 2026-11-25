@@ -1,31 +1,39 @@
 package companion
 
 import (
-	"context"
-	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/companion/program"
+	"github.com/waiting-here/NonbiriAPI/internal/game/companion/runner"
 )
 
-type builtInFixture struct {
-	testPrograms
-	service *program.Service
-}
-
-func (p builtInFixture) ResolveTx(_ context.Context, _ *sql.Tx, _ int64, game, name string, difficulty int) (program.Binding, error) {
-	return program.Binding{Game: game, Name: name, Difficulty: difficulty, Official: true}, nil
-}
-func (p builtInFixture) Decide(ctx context.Context, b program.Binding, q, c Raw) (Raw, error) {
-	return p.service.Decide(ctx, b, q, c)
-}
 func TestBuiltInOpponentsFinishOnLiveService(t *testing.T) {
 	for _, game := range []string{"bidding", "gwent", "likes"} {
 		t.Run(game, func(t *testing.T) {
 			s := fixture(t)
-			s.programs = builtInFixture{service: program.New(s.shared)}
+			s.programs = program.New(s.shared)
+			if _, err := s.shared.Database.Exec(db.CompanionProgramsSQL); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.shared.Database.Exec(`INSERT INTO companion_programs(game,name,active_version,last_version) VALUES(?,'official',1,1)`, game); err != nil {
+				t.Fatal(err)
+			}
+			tx, err := s.shared.Database.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = s.create(t.Context(), tx, 1, game, token(20), start{Mode: "standard", Program: "private", Difficulty: 1})
+			tx.Rollback()
+			if !errors.Is(err, runner.ErrUploadsDisabled) {
+				t.Fatal("private selection admitted", err)
+			}
 			m := createGame(t, s, 1, game, "official", token(20))
+			if !m.Official || m.Version != 0 {
+				t.Fatal("match did not pin the built-in", m.binding())
+			}
 			r, err := rulesFor(game, m.Mode)
 			if err != nil {
 				t.Fatal(err)

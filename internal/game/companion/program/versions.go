@@ -20,6 +20,9 @@ import (
 var compiling = make(chan struct{}, 1)
 
 func (s *Service) compile(ctx context.Context, game, source string) ([]byte, string, error) {
+	if !runner.UploadsEnabledFor(game) {
+		return nil, "", runner.ErrUploadsDisabled
+	}
 	if s.worker.Path == "" {
 		return nil, "", resources.ErrUnavailable
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	gamecore "github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/companion/routes"
+	"github.com/waiting-here/NonbiriAPI/internal/game/companion/runner"
 	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -53,6 +54,8 @@ func writeError(w http.ResponseWriter, err error) {
 		code, msg = httperr.CodeNotFound, "Match or program not found."
 	case errors.Is(err, resources.ErrUnauthorized):
 		code, msg = httperr.CodeUnauthorized, "Authentication required."
+	case errors.Is(err, runner.ErrUploadsDisabled):
+		code, msg = httperr.CodeForbidden, "Only the built-in companion is available in this release."
 	case errors.Is(err, resources.ErrForbidden):
 		code, msg = httperr.CodeForbidden, "Forbidden."
 	case errors.Is(err, resources.ErrMaintenance):
