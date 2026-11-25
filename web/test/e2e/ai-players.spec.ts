@@ -41,9 +41,15 @@ for (const width of [390, 1440])
             return route.fulfill({
               json: {
                 enabled: true,
-                upload_available: false,
+                upload_available: true,
                 official: { name: 'official', version: 0, difficulties: [1] },
-                programs: [],
+                programs: [
+                  {
+                    name: 'Old private opponent',
+                    version: 1,
+                    versions: [{ version: 1, status: 'ready', created_at: 10 }],
+                  },
+                ],
               },
             });
           if (p === path + '/preferences') {
@@ -99,6 +105,11 @@ for (const width of [390, 1440])
         });
         await page.goto(USER_ORIGIN + '/games/bidding');
         await page.getByRole('link', { name: 'Free AI companion' }).click();
+        await expect(page.getByRole('heading', { name: 'Official companion' })).toBeVisible();
+        await expect(page.getByRole('combobox', { name: 'Opponent', exact: true })).toHaveCount(0);
+        await expect(
+          page.getByText(/private programs|old private opponent|upload|compiler diagnostics/i),
+        ).toHaveCount(0);
         await page.getByText('Memory and sharing', { exact: true }).click();
         await page.getByLabel('Personal match memory', { exact: true }).selectOption('opponent');
         await expect.poll(() => prefs.memory).toBe('opponent');

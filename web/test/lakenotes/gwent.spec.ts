@@ -90,6 +90,8 @@ test('native Gwent deck selection, simultaneous decisions, reconnect and free se
     await page.goto(fixture().user_url + '/games/gwent');
     const arena = page.frameLocator('iframe.gwent-original-frame');
     await arena.locator('#companion-entry').click();
+    await expect(page.getByRole('heading', { name: '官方陪玩' })).toBeVisible();
+    await expect(page.getByText(/我的私人程序|上传程序|编译诊断/)).toHaveCount(0);
     await page.getByLabel('对手阵营', { exact: true }).selectOption('deepseek');
     await arena.locator('#player-faction').selectOption('claude');
     await arena.locator('#edit-deck').click();
@@ -163,6 +165,11 @@ for (const game of ['bidding', 'likes'] as const) {
         const before = await (await api(user, '/api/games')).json();
         await page.goto(fixture().user_url + '/games/' + game);
         await page.getByRole('link', { name: 'Free AI companion' }).click();
+        await expect(page.getByRole('heading', { name: 'Official companion' })).toBeVisible();
+        await expect(page.getByRole('combobox', { name: 'Opponent', exact: true })).toHaveCount(0);
+        await expect(page.getByText(/private programs|compiler diagnostics|upload/i)).toHaveCount(
+          0,
+        );
         if (game === 'likes') {
           await page.getByText('Set opponent loadout', { exact: true }).click();
           await page.getByLabel('Opponent character', { exact: true }).selectOption({ index: 1 });

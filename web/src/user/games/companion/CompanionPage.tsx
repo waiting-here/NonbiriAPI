@@ -7,7 +7,11 @@ import { Field, Fields, Fold, Toggle } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import type { PageSize } from '@shared/operations/pageNumbers';
 import { formatDateTime } from '@shared/utils/datetime';
-import type { CompanionGame, CompanionPrograms } from '@shared/companion';
+import {
+  companionUploadsAvailable,
+  type CompanionGame,
+  type CompanionPrograms,
+} from '@shared/companion';
 import { GameBackLink } from '../common/GameBackLink';
 import { DuelDialog } from '../common/duel/Dialog';
 import type { DuelLobbyContext } from '../common/duel/types';
@@ -214,9 +218,12 @@ export function CompanionPage({
   const pref = useCompanionWrite<Preferences>(game, home.refetch);
   const active = home.data?.active;
   const latest = home.data?.latest;
+  const uploadsAvailable = companionUploadsAvailable(
+    game,
+    programs.data?.upload_available === true,
+  );
   const target =
-    program === 'official' ||
-    programs.data?.programs.some((p) => p.name === program && p.version != null)
+    uploadsAvailable && programs.data?.programs.some((p) => p.name === program && p.version != null)
       ? program
       : 'official';
   const changePref = (update: Partial<Preferences>) =>
@@ -351,7 +358,7 @@ export function CompanionPage({
             )}
             {programs.data && home.data && (
               <section className="companion-panel nb-stack">
-                <h2>{text('choose')}</h2>
+                <h2>{text(uploadsAvailable ? 'choose' : 'official')}</h2>
                 <p>{text('free')}</p>
                 <Fields columns={2}>
                   {game === 'likes' && (
@@ -390,28 +397,30 @@ export function CompanionPage({
                       )}
                     </Field>
                   )}
-                  <Field label={text('opponent')}>
-                    {(field) => (
-                      <select
-                        {...field}
-                        value={target}
-                        onChange={(e) => setProgram(e.target.value)}
-                      >
-                        <option value="official">
-                          {text('official')} · v{programs.data!.official.version}
-                        </option>
-                        {programs
-                          .data!.programs.filter((p) =>
-                            p.versions.some((v) => v.status === 'ready'),
-                          )
-                          .map((p) => (
-                            <option value={p.name} key={p.name}>
-                              {p.name} · v{p.version}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                  </Field>
+                  {uploadsAvailable && (
+                    <Field label={text('opponent')}>
+                      {(field) => (
+                        <select
+                          {...field}
+                          value={target}
+                          onChange={(e) => setProgram(e.target.value)}
+                        >
+                          <option value="official">
+                            {text('official')} · v{programs.data!.official.version}
+                          </option>
+                          {programs
+                            .data!.programs.filter((p) =>
+                              p.versions.some((v) => v.status === 'ready'),
+                            )
+                            .map((p) => (
+                              <option value={p.name} key={p.name}>
+                                {p.name} · v{p.version}
+                              </option>
+                            ))}
+                        </select>
+                      )}
+                    </Field>
+                  )}
                   {game === 'gwent' && (
                     <Field label={text('aiFaction')}>
                       {(field) => (
@@ -496,7 +505,7 @@ export function CompanionPage({
           </Fields>
         </Fold>
       )}
-      {programs.data && (
+      {programs.data && uploadsAvailable && (
         <Fold title={text('library')} lazy>
           <ProgramLibrary game={game} programs={programs.data} refresh={programs.refetch} />
         </Fold>
