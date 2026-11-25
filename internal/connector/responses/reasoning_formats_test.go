@@ -197,3 +197,44 @@ func TestToolArgumentsFirstSuppliedInDoneSnapshot(t *testing.T) {
 		}
 	}
 }
+
+// Ollama's Responses wire sends summary_text events directly, then repeats
+// the full summary and an opaque continuation in output_item.done.
+func TestSummaryDeltasWithoutPartWrappersReachChatImmediately(t *testing.T) {
+	d := NewDecoder("unbranded", time.Unix(1, 0), false)
+	defer d.Clear()
+	const final = `{"id":"r","type":"reasoning","summary":[{"type":"summary_text","text":"first second"}],"encrypted_content":"first second"}`
+	events := []string{
+		`{"type":"response.created","response":{"id":"resp","status":"in_progress"}}`,
+		`{"type":"response.output_item.added","output_index":0,"item":{"id":"r","type":"reasoning","summary":[]}}`,
+		`{"type":"response.reasoning_summary_text.delta","output_index":0,"item_id":"r","summary_index":0,"delta":"first "}`,
+		`{"type":"response.reasoning_summary_text.delta","output_index":0,"item_id":"r","summary_index":0,"delta":"second"}`,
+		`{"type":"response.reasoning_summary_text.done","output_index":0,"item_id":"r","summary_index":0,"text":"first second"}`,
+		`{"type":"response.output_item.done","output_index":0,"item":` + final + `}`,
+		`{"type":"response.completed","response":{"id":"resp","output":[` + final + `]}}`,
+	}
+	for i, event := range events {
+		raw := []byte(fmt.Sprintf(`{"sequence_number":%d,`, i) + event[1:])
+		frames, err := d.Event("", raw)
+		if err != nil {
+			t.Fatalf("event %d: %v", i, err)
+		}
+		switch i {
+		case 2, 3:
+			if len(frames) != 1 || !strings.Contains(string(frames[0]), `"reasoning_content":`) {
+				t.Fatalf("summary delta %d was delayed", i)
+			}
+		case 5:
+			if len(frames) != 1 || !strings.Contains(string(frames[0]), `"encrypted_content"`) || strings.Contains(string(frames[0]), `"reasoning_content"`) {
+				t.Fatalf("unexpected completed item %s", frames)
+			}
+		default:
+			if len(frames) != 0 {
+				t.Fatalf("duplicate output on event %d", i)
+			}
+		}
+	}
+	if _, err := d.Finish(); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -2,6 +2,7 @@ package responses
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
@@ -114,58 +115,66 @@ func finalPartsMatch(raw json.RawMessage, observed []*partState, reasoningKind s
 	return true
 }
 
-// Both typed content_part wrappers and bare reasoning_text events occur on the
-// wire. Buffer raw reasoning until the final item establishes whether a separate
-// user-facing summary exists. Summary deltas can be delivered immediately.
-func (d *decoder) observeReasoningText(item *itemState, kind string, root map[string]json.RawMessage) error {
-	index, ok := chatwire.Integer(root["content_index"])
-	if !ok || index > int64(len(item.reasoningParts)) {
-		return chatwire.ErrProtocol
+// Raw reasoning and summaries both occur with or without part wrappers.
+// Keep their indexes independent. Only the summary can be projected before
+// the final item establishes which text is displayed on replay.
+func (d *decoder) observeReasoningPart(item *itemState, kind string, root map[string]json.RawMessage) (map[string]any, error) {
+	parts, indexKey, partType := &item.reasoningParts, "content_index", "reasoning_text"
+	summary := strings.HasPrefix(kind, "response.reasoning_summary_")
+	if summary {
+		parts, indexKey, partType = &item.parts, "summary_index", "summary_text"
 	}
-	added := kind == "response.content_part.added" || kind == "response.reasoning_part.added"
-	partDone := kind == "response.content_part.done" || kind == "response.reasoning_part.done"
-	if index == int64(len(item.reasoningParts)) {
+	index, ok := chatwire.Integer(root[indexKey])
+	if !ok || index > int64(len(*parts)) {
+		return nil, chatwire.ErrProtocol
+	}
+	added := strings.HasSuffix(kind, "_part.added")
+	partDone := strings.HasSuffix(kind, "_part.done")
+	if index == int64(len(*parts)) {
 		if partDone {
-			return chatwire.ErrProtocol
+			return nil, chatwire.ErrProtocol
 		}
-		item.reasoningParts = append(item.reasoningParts, &partState{kind: "reasoning_text", wrapped: added})
+		*parts = append(*parts, &partState{kind: partType, wrapped: added})
 	} else if added {
-		return chatwire.ErrProtocol
+		return nil, chatwire.ErrProtocol
 	}
-	part := item.reasoningParts[index]
+	part := (*parts)[index]
 	if part.done {
-		return chatwire.ErrProtocol
+		return nil, chatwire.ErrProtocol
 	}
-	switch {
-	case added, partDone:
-		_, text, err := parsePart(root["part"], "reasoning_text")
+	if added || partDone {
+		_, text, err := parsePart(root["part"], partType)
 		if err != nil || added && text != "" || partDone && (!part.wrapped || !part.textDone || part.text.String() != text) {
-			return chatwire.ErrProtocol
+			return nil, chatwire.ErrProtocol
 		}
 		part.done = partDone
-	case kind == "response.reasoning_text.delta":
-		text, ok := chatwire.String(root["delta"])
-		if !ok || part.textDone || d.reasoningBytes+len(text) > maxReasoningBytes {
-			return chatwire.ErrProtocol
-		}
-		d.reasoningBytes += len(text)
-		part.text.WriteString(text)
-	case kind == "response.reasoning_text.done":
-		text, ok := chatwire.String(root["text"])
-		if !ok || part.textDone {
-			return chatwire.ErrProtocol
-		}
-		if part.text.Len() == 0 {
-			if d.reasoningBytes+len(text) > maxReasoningBytes {
-				return chatwire.ErrProtocol
-			}
-			d.reasoningBytes += len(text)
-			part.text.WriteString(text)
-		} else if part.text.String() != text {
-			return chatwire.ErrProtocol
-		}
+		return nil, nil
+	}
+	key := "delta"
+	if strings.HasSuffix(kind, "_text.done") {
+		key = "text"
+	}
+	text, ok := chatwire.String(root[key])
+	if !ok || part.textDone {
+		return nil, chatwire.ErrProtocol
+	}
+	if key == "text" {
 		part.textDone = true
 		part.done = !part.wrapped
+		if part.text.Len() != 0 {
+			if part.text.String() != text {
+				return nil, chatwire.ErrProtocol
+			}
+			return nil, nil
+		}
 	}
-	return nil
+	if d.reasoningBytes+len(text) > maxReasoningBytes {
+		return nil, chatwire.ErrProtocol
+	}
+	d.reasoningBytes += len(text)
+	part.text.WriteString(text)
+	if summary && text != "" {
+		return map[string]any{"reasoning_content": text}, nil
+	}
+	return nil, nil
 }

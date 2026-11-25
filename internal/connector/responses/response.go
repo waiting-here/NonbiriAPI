@@ -452,8 +452,14 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			switch kind {
 			case "response.reasoning_text.delta", "response.reasoning_text.done",
 				"response.content_part.added", "response.content_part.done",
-				"response.reasoning_part.added", "response.reasoning_part.done":
-				return nil, d.observeReasoningText(item, kind, root)
+				"response.reasoning_part.added", "response.reasoning_part.done",
+				"response.reasoning_summary_part.added", "response.reasoning_summary_part.done",
+				"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done":
+				delta, err = d.observeReasoningPart(item, kind, root)
+				if err != nil {
+					return nil, err
+				}
+				return d.emitDelta(delta)
 			}
 		}
 		switch kind {
@@ -527,33 +533,21 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 				}
 				item.argsDone = true
 			}
-		case "response.content_part.added", "response.reasoning_summary_part.added":
-			summary := kind == "response.reasoning_summary_part.added"
-			if summary && item.kind != "reasoning" || !summary && item.kind != "message" {
+		case "response.content_part.added":
+			if item.kind != "message" {
 				return nil, chatwire.ErrProtocol
 			}
-			key := "content_index"
-			partType := ""
-			if summary {
-				key = "summary_index"
-				partType = "summary_text"
-			}
-			partIndex, ok := chatwire.Integer(root[key])
-			kind, text, err := parsePart(root["part"], partType)
+			partIndex, ok := chatwire.Integer(root["content_index"])
+			kind, text, err := parsePart(root["part"], "")
 			if !ok || partIndex != int64(len(item.parts)) || err != nil || text != "" {
 				return nil, chatwire.ErrProtocol
 			}
 			item.parts = append(item.parts, &partState{kind: kind})
-		case "response.output_text.delta", "response.output_text.done", "response.refusal.delta", "response.refusal.done", "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done", "response.content_part.done", "response.reasoning_summary_part.done":
-			summary := kind == "response.reasoning_summary_text.delta" || kind == "response.reasoning_summary_text.done" || kind == "response.reasoning_summary_part.done"
-			if summary && item.kind != "reasoning" || !summary && item.kind != "message" {
+		case "response.output_text.delta", "response.output_text.done", "response.refusal.delta", "response.refusal.done", "response.content_part.done":
+			if item.kind != "message" {
 				return nil, chatwire.ErrProtocol
 			}
-			key := "content_index"
-			if summary {
-				key = "summary_index"
-			}
-			partIndex, ok := chatwire.Integer(root[key])
+			partIndex, ok := chatwire.Integer(root["content_index"])
 			if !ok || partIndex >= int64(len(item.parts)) {
 				return nil, chatwire.ErrProtocol
 			}
@@ -562,29 +556,22 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 				return nil, chatwire.ErrProtocol
 			}
 			switch kind {
-			case "response.content_part.done", "response.reasoning_summary_part.done":
-				partType := ""
-				if summary {
-					partType = "summary_text"
-				}
-				partKind, text, err := parsePart(root["part"], partType)
+			case "response.content_part.done":
+				partKind, text, err := parsePart(root["part"], "")
 				if err != nil || partKind != part.kind || text != part.text.String() || !part.textDone {
 					return nil, chatwire.ErrProtocol
 				}
 				part.done = true
 			default:
 				want, field := "output_text", "content"
-				if summary {
-					want = "summary_text"
-					field = "reasoning_content"
-				} else if kind == "response.refusal.delta" || kind == "response.refusal.done" {
+				if kind == "response.refusal.delta" || kind == "response.refusal.done" {
 					want = "refusal"
 					field = "refusal"
 				}
 				if part.kind != want || part.textDone {
 					return nil, chatwire.ErrProtocol
 				}
-				isDelta := kind == "response.output_text.delta" || kind == "response.refusal.delta" || kind == "response.reasoning_summary_text.delta"
+				isDelta := kind == "response.output_text.delta" || kind == "response.refusal.delta"
 				key := "text"
 				if want == "refusal" {
 					key = "refusal"
