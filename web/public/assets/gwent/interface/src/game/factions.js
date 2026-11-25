@@ -11,6 +11,7 @@ export const factionRules = {
   claude: { name: '共识裁定', description: '小局战力相同时获胜；双方都是 Claude 时仍按平局处理。' },
   gemini: {
     name: '感知先机',
-    description: '选择整场第一小局的先手，限时 15 秒；超时随机。双方都是 Gemini 时随机先手。',
+    description:
+      '选择整场第一小局的先手。真人对战限时 15 秒，超时随机。双方都是 Gemini 时随机先手。',
   },
 };

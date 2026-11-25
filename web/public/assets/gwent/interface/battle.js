@@ -370,8 +370,11 @@ export class PlatformBattle {
     if (key !== this.choiceKey) {
       const expected = this.snapshot.home?.current;
       document.getElementById('dialog-title').textContent = choices[choice.kind] ?? '完成卡牌选择';
-      document.getElementById('dialog-description').textContent =
-        `还可选择 ${choice.remaining} 次 · 按屏幕倒计时完成选择`;
+      document.getElementById('dialog-description').textContent = this.snapshot.companion
+        ? choice.remaining
+          ? `还可选择 ${choice.remaining} 次`
+          : '请选择行动。'
+        : `还可选择 ${choice.remaining} 次 · 按屏幕倒计时完成选择`;
       document.getElementById('dialog-cards').replaceChildren(
         ...choice.cards.map((card) => {
           const action = actions.find((a) => a.card === card.instance_id),

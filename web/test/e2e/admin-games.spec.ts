@@ -596,7 +596,9 @@ for (const width of [390, 1440]) {
         ? ['上传并编译', '启用此版本']
         : ['Upload and compile', 'Activate version'])
         await expect(page.getByRole('button', { name })).toBeDisabled();
-      await toggle.click();
+      await page
+        .getByText(zh ? '开放新的陪玩对局' : 'Allow new companion matches', { exact: true })
+        .click();
       await expect.poll(() => enabled.get(game)).toBe(false);
       await expect(toggle).not.toBeChecked();
     }

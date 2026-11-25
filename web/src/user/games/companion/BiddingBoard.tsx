@@ -22,38 +22,41 @@ export function BiddingBoard({
   locked[you] = !match.decision_id;
   locked[other] = match.ai_state === 'locked';
   return (
-    <div className="bid-play">
-      <div className="bid-phase">
-        <strong>{t('common.companion.round', { round: match.round })} / 13</strong>
-        <span>
-          {t('common.companion.score', { you: view.scores[you], other: view.scores[other] })}
-        </span>
+    <div className="bidding-game">
+      <div className="bid-play">
+        <div className="bid-phase">
+          <strong>{t('common.companion.round', { round: match.round })} / 13</strong>
+          <span>
+            {t('common.companion.score', { you: view.scores[you], other: view.scores[other] })}
+          </span>
+        </div>
+        <section className="bid-table">
+          <RewardDeck view={view} side={you} round={match.round} you={you} />
+          <div className="bid-rewards">
+            {view.rewards
+              .filter((card) => card.round === match.round)
+              .map((card) => (
+                <RewardCard key={card.side} card={card} />
+              ))}
+          </div>
+          <RewardDeck view={view} side={other} round={match.round} you={you} />
+          <div className="bid-pool">
+            <span>{t('common.companion.pool')}</span>
+            <strong>{view.pool}</strong>
+          </div>
+        </section>
+        {onAction && (
+          <BiddingControls
+            key={match.id + ':' + match.round + ':' + match.phase}
+            state={{ view, you, locked, phase: match.phase === 'joker' ? 'joker' : 'bid' }}
+            timed={false}
+            blocked={busy}
+            onAction={onAction}
+          />
+        )}
+        <PublicCards view={view} you={you} />
+        <PlayedHistory view={view} you={you} />
       </div>
-      <section className="bid-table">
-        <RewardDeck view={view} side={you} round={match.round} you={you} />
-        <div className="bid-rewards">
-          {view.rewards
-            .filter((card) => card.round === match.round)
-            .map((card) => (
-              <RewardCard key={card.side} card={card} />
-            ))}
-        </div>
-        <RewardDeck view={view} side={other} round={match.round} you={you} />
-        <div className="bid-pool">
-          <span>{t('common.companion.pool')}</span>
-          <strong>{view.pool}</strong>
-        </div>
-      </section>
-      {onAction && (
-        <BiddingControls
-          key={match.id + ':' + match.round + ':' + match.phase}
-          state={{ view, you, locked, phase: match.phase === 'joker' ? 'joker' : 'bid' }}
-          blocked={busy}
-          onAction={onAction}
-        />
-      )}
-      <PublicCards view={view} you={you} />
-      <PlayedHistory view={view} you={you} />
     </div>
   );
 }
