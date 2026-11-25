@@ -127,16 +127,16 @@ for (const width of [1440, 390])
         });
         try {
           await page.goto(origin + '/logs?from=&to=');
-          await expect(page.locator('.log-panel .nb-state[role="status"]')).toBeVisible();
-          await page.clock.fastForward(8_100);
-          await expect(page.locator('.log-panel .nb-state[role="status"]')).toContainText(
-            'still running',
-          );
+          const feedback = page.locator('.log-panel [data-log-search-state]');
+          await expect(feedback).toHaveAttribute('data-log-search-state', 'loading');
+          await page.clock.fastForward(5_100);
+          await expect(feedback).toHaveAttribute('data-log-search-state', 'long');
+          await expect(feedback.getByRole('button', { name: 'Cancel search' })).toBeVisible();
           initial.release();
           await expect(page.locator('.log-panel .nb-table tbody tr')).toHaveCount(20);
           await page.getByRole('button', { name: 'Next', exact: true }).click();
-          const feedback = page.locator('.log-panel .nb-query-feedback');
-          await expect(feedback).toContainText('Updating results');
+          await expect(feedback).toHaveAttribute('data-log-search-state', 'loading');
+          await expect(feedback).toContainText('Showing earlier results.');
           const results = page
             .locator('.log-panel .nb-table')
             .locator('xpath=ancestor::*[@aria-busy][1]');
@@ -144,16 +144,19 @@ for (const width of [1440, 390])
           await expect(results).toHaveAttribute('aria-busy', 'true');
           await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
           await expect(page.locator('.log-panel .nb-table tbody tr')).toHaveCount(20);
-          await page.clock.fastForward(8_100);
-          await expect(feedback).toContainText('still running');
-          await expect(feedback.locator('.nb-query-feedback__indicator')).toHaveCSS(
+          await page.clock.fastForward(5_100);
+          await expect(feedback).toHaveAttribute('data-log-search-state', 'long');
+          await expect(feedback).toContainText('You can cancel at any time.');
+          await expect(feedback.locator('.log-search-feedback__icon')).toHaveCSS(
             'animation-name',
             'none',
           );
           await feedback.scrollIntoViewIfNeeded();
           await picture(page, `logs-${station}-${width}-${theme}-pending`);
           replacement.release();
-          await expect(feedback).toContainText('query failed');
+          await expect(feedback).toHaveAttribute('data-log-search-state', 'error');
+          await expect(feedback).toContainText('The query did not finish. Try again.');
+          await expect(feedback).toContainText('Showing earlier results.');
           await expect(page.locator('.log-panel .nb-table tbody tr')).toHaveCount(20);
           await expect(page.locator('.log-panel [role="alert"]')).toBeVisible();
           await picture(page, `logs-${station}-${width}-${theme}-failed`);
@@ -163,7 +166,8 @@ for (const width of [1440, 390])
             .getByRole('button', { name: 'Retry', exact: true })
             .click();
           await expect(page.locator('.log-panel .nb-table tbody tr')).toHaveCount(1);
-          await expect(feedback).toHaveCount(0);
+          await expect(feedback).toHaveAttribute('data-log-search-state', 'complete');
+          await expect(feedback).not.toContainText('Showing earlier results.');
           expect(reads).toBe(3);
         } finally {
           initial.release();

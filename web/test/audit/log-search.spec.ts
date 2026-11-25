@@ -15,7 +15,7 @@ type Fixture = {
 
 test.skip(process.env.NONBIRI_MANAGEMENT_BROWSER !== '1', 'Requires the audit fixture.');
 
-async function logSession(browser: Browser, role: 'admin' | 'user') {
+async function logSession(browser: Browser, role: 'admin' | 'steward' | 'user') {
   const fixture: Fixture = JSON.parse(
     readFileSync(process.env.NONBIRI_AUDIT_BROWSER_STATE!, 'utf8'),
   );
@@ -23,7 +23,7 @@ async function logSession(browser: Browser, role: 'admin' | 'user') {
   const origin = admin ? fixture.admin_url : fixture.user_url;
   const cookie = admin
     ? fixture.admin_cookie
-    : fixture.users.find(({ level }) => level === 1)!.cookie;
+    : fixture.users.find(({ level }) => level === (role === 'steward' ? 6 : 1))!.cookie;
   const context = await browser.newContext({
     viewport: admin ? { width: 1440, height: 900 } : { width: 390, height: 844 },
     reducedMotion: admin ? 'no-preference' : 'reduce',
@@ -131,6 +131,45 @@ test('request logs hand off to a real search and show the exact results', async 
     await refreshed;
     await expect(progress(page, 'complete')).toContainText(copy.complete);
     expect(initialRequests).toBe(2);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a steward search crossing five seconds completes with an exact empty page', async ({
+  browser,
+}) => {
+  const { context, origin } = await logSession(browser, 'steward');
+  try {
+    const page = await context.newPage();
+    const listPath = '/api/steward/logs';
+    await page.route(
+      (url) => url.pathname === listPath,
+      (route) =>
+        route.continue({
+          headers: { ...route.request().headers(), 'x-fixture-slow-log-search': '1' },
+        }),
+    );
+    const accepted = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === listPath && response.status() === 202,
+    );
+    const completed = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname.startsWith('/api/steward/log-searches/') &&
+        response.status() === 200,
+    );
+    await page.goto(origin + '/steward?tab=logs&status=599', { waitUntil: 'domcontentloaded' });
+    await expect(progress(page, 'long')).toContainText(commonZh.common.operations.logs.search.long);
+    const receipt = await (await accepted).json();
+    const response = await completed;
+    expect(new URL(response.url()).pathname).toBe('/api/steward/log-searches/' + receipt.search_id);
+    const result = await response.json();
+    expect(result.pagination.total_items).toBe('0');
+    expect(result.data).toEqual([]);
+    await expect(progress(page, 'complete')).toBeVisible();
+    await expect(
+      page.getByText(commonZh.common.operations.logs.stewardEmpty, { exact: true }),
+    ).toBeVisible();
   } finally {
     await context.close();
   }
