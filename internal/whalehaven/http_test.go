@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -247,6 +248,87 @@ func TestBowlRefillHonorsConfirmedSpillAfterAutomaticRefill(t *testing.T) {
 		if result["inventory"].(map[string]any)["silver_fish"] != 1.0 || result["home"].(map[string]any)["troughGrams"] != 250.0 {
 			t.Fatalf("unexpected confirmed refill: %v", result)
 		}
+	}
+}
+
+func TestConchActivityFromStoredV142Notes(t *testing.T) {
+	for id, name := range map[string]string{
+		"auto_refill": "定时续碗保温券", "aroma_boost": "五常新米增香包",
+		"wardrobe_coupon": "深海裁缝海螺券", "affection_candy": "海盐牛奶糖",
+	} {
+		entry := eventView("1", 1000, "gacha", "海螺扭蛋 · "+id, 0, 0, false)
+		if entry["conchReward"] != id || entry["title"] != "海螺扭蛋 · "+name {
+			t.Errorf("old %s record: %v", id, entry)
+		}
+	}
+}
+
+func TestConchDrawAppliesCandyAndReplaysItsOwnPrize(t *testing.T) {
+	f := newStationFixture(t)
+	f.enable(t)
+	user := f.user(t, "keeper")
+	before := f.adopt(t, user, "Fin")["snapshot"].(map[string]any)
+	tx, err := f.store.DB().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := assets.MoveTx(t.Context(), tx, user, f.at.UnixMilli(), assets.Balance{Shards: 10}, "site_reward", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`UPDATE whale_haven_settings SET document=json_set(document,
+		'$.values.conch_auto_refill_weight',0,'$.values.conch_aroma_boost_weight',0,'$.values.conch_wardrobe_coupon_weight',0,
+		'$.values.candy_mood',92,'$.values.candy_affection',7) WHERE revision=2`); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	spin := func(snapshot map[string]any, settings string) map[string]any {
+		return map[string]any{"type": "spin_conch_gacha", "expected_profile_revision": key(int64(snapshot["revision"].(float64))), "expected_settings_revision": settings}
+	}
+	first := spin(before, "2")
+	const firstKey = "conch-candy-draw-and-replay"
+	draw := f.call(t, user, "actions", first, firstKey, 200)
+	after := draw["snapshot"].(map[string]any)
+	whale := after["whale"].(map[string]any)
+	if draw["conch_reward"] != "affection_candy" || whale["mood"] != 92.0 || whale["affection"] != before["whale"].(map[string]any)["affection"].(float64)+7 {
+		t.Fatalf("candy draw %v, whale %v", draw["conch_reward"], whale)
+	}
+	if !reflect.DeepEqual(before["inventory"], after["inventory"]) || !reflect.DeepEqual(before["home"].(map[string]any)["buffs"], after["home"].(map[string]any)["buffs"]) ||
+		after["wallet"].(map[string]any)["conchShards"] != 5.0 {
+		t.Fatal("candy should consume five shards and leave stored items alone")
+	}
+	fresh := f.call(t, user, "profile", nil, "", 200)
+	event := fresh["snapshot"].(map[string]any)["logs"].([]any)[0].(map[string]any)
+	if fresh["conch_reward"] != nil || event["title"] != "海螺扭蛋 · 海盐牛奶糖" || event["conchReward"] != draw["conch_reward"] {
+		t.Fatalf("reloaded candy event %v", event)
+	}
+	// Replay after a different prize and after the first draw has left the 40-entry timeline.
+	if _, err := f.store.DB().Exec(`INSERT INTO whale_haven_settings(revision,effective_at,document)
+		SELECT 3,effective_at,json_set(document,'$.values.conch_affection_candy_weight',0,'$.values.conch_wardrobe_coupon_weight',1)
+		FROM whale_haven_settings WHERE revision=2`); err != nil {
+		t.Fatal(err)
+	}
+	second := f.call(t, user, "actions", spin(after, "3"), "conch-coupon-next-draw", 200)
+	if second["conch_reward"] != "wardrobe_coupon" {
+		t.Fatal(second["conch_reward"])
+	}
+	if _, err := f.store.DB().Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<39)
+		INSERT INTO whale_haven_events(user_id,created_at,kind,text) SELECT ?,?,'interact','摸头' FROM n`, user, f.at.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	retry := f.call(t, user, "actions", first, firstKey, 200)
+	snap := retry["snapshot"].(map[string]any)
+	buffs := snap["home"].(map[string]any)["buffs"].(map[string]any)
+	if retry["operation_id"] != draw["operation_id"] || retry["conch_reward"] != draw["conch_reward"] ||
+		snap["wallet"].(map[string]any)["conchShards"] != 0.0 || buffs["wardrobeDiscountCoupons"] != 1.0 ||
+		snap["whale"].(map[string]any)["affection"] != whale["affection"] {
+		t.Fatal("replay changed the original prize or awarded it twice")
+	}
+	logs := snap["logs"].([]any)
+	if len(logs) != 40 || logs[39].(map[string]any)["conchReward"] != "wardrobe_coupon" {
+		t.Fatal("expected the later coupon as the only draw on the current timeline")
 	}
 }
 

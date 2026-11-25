@@ -1,10 +1,26 @@
 import { useTranslation } from 'react-i18next';
 import { costWithCoupon, type Profile } from './api';
+import { CONCH_GACHA_POOL } from './game/catalog';
 
 export function useWhaleText() {
   const { i18n } = useTranslation();
   const english = (i18n.resolvedLanguage ?? i18n.language).startsWith('en');
   return (zh: string, en: string) => (english ? en : zh);
+}
+
+export function conchRewardCopy(id: string | undefined, t: ReturnType<typeof useWhaleText>) {
+  const prize = CONCH_GACHA_POOL.find((item) => item.id === id);
+  if (!prize) return;
+  return {
+    name: t(...prize.name),
+    destination:
+      prize.id === 'affection_candy'
+        ? t('小鲸已当场吃掉。', 'Your whale ate it right away.')
+        : t(
+            '已存入背包，可在「海螺扭蛋与道具」查看。',
+            'You can find it under Conch draws and boosts in your bag.',
+          ),
+  };
 }
 
 export function unlockPriceText(

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
-import { unlockPriceText, useWhaleText } from './copy';
+import { conchRewardCopy, unlockPriceText, useWhaleText } from './copy';
 import { Link } from 'react-router';
 import { Amount } from '@shared/components/Amount';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -179,7 +179,7 @@ function WhaleGame() {
       setBusy(false);
     }
   }
-  function receipt(command: Action, previous: Profile) {
+  function receipt(command: Action, previous: Profile, updated: Profile) {
     const item = itemToUnlock(previous, command);
     if (item) {
       const unlocked =
@@ -215,11 +215,18 @@ function WhaleGame() {
           '客鲸已回家，本次来往已结算。',
           'Your guest is home and the visit has been settled.',
         );
-      case 'spin_conch_gacha':
+      case 'spin_conch_gacha': {
+        const prize = conchRewardCopy(updated.conch_reward, t);
+        if (prize)
+          return t(
+            `抽到${prize.name}。${prize.destination}`,
+            `You drew ${prize.name}. ${prize.destination}`,
+          );
         return t(
           '海螺扭蛋已开启，本次奖励已领取。',
           'Conch draw complete. Your reward has been granted.',
         );
+      }
     }
   }
   async function dispatch(command: Action, onError?: (reason: string) => void) {
@@ -230,9 +237,9 @@ function WhaleGame() {
       soundEngine.play(kind);
     }
     const prev = profile;
-    const message = receipt(command, prev);
-    const updated = await commit(() => act(prev, command), message, onError);
+    const updated = await commit(() => act(prev, command), undefined, onError);
     if (updated) {
+      let message = receipt(command, prev, updated);
       if (
         prev.snapshot.interactionAffectionRemaining > 0 &&
         updated.snapshot.interactionAffectionRemaining === 0
@@ -241,8 +248,9 @@ function WhaleGame() {
           '今天的三次互动羁绊奖励已领完，仍可继续互动。',
           'You earned all three interaction Bond XP awards today. You can keep playing.',
         );
-        setFeedback({ message: message ? `${message} ${limit}` : limit, error: false });
+        message = message ? `${message} ${limit}` : limit;
       }
+      if (message) setFeedback({ message, error: false });
       if (command.type === 'chat' || command.type === 'interact')
         setSpokenReply(updated.snapshot.whale.tempEmotion?.line ?? '');
       const anim =

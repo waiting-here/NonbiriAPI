@@ -1,4 +1,4 @@
-import { useWhaleText } from '../copy';
+import { conchRewardCopy, useWhaleText } from '../copy';
 import { useState } from 'react';
 import { Amount } from '@shared/components/Amount';
 import { Sparkles } from './Icons';
@@ -81,6 +81,10 @@ export function Backpack({
 
   const shards = snapshot.wallet.conchShards ?? 0;
   const pullCost = values.conch_cost_shards;
+  const recentDraw = conchRewardCopy(
+    snapshot.logs.find((entry) => entry.kind === 'gacha')?.conchReward,
+    t,
+  );
 
   return (
     <>
@@ -217,6 +221,14 @@ export function Backpack({
           </span>
         </div>
 
+        {recentDraw && (
+          <p className="wh-detail">
+            <strong>{t(`最近抽到${recentDraw.name}`, `Last draw · ${recentDraw.name}`)}</strong>
+            {' · '}
+            {recentDraw.destination}
+          </p>
+        )}
+
         <div className="conch-gacha-hero">
           <div className="conch-gacha-hero__art">
             <img
@@ -233,12 +245,28 @@ export function Backpack({
             </p>
             <div className="conch-gacha-prizes">
               {CONCH_GACHA_POOL.map((g) => (
-                <span key={g.id} className="conch-prize-pill" title={g.description}>
-                  {g.artwork ? <img src={getSceneAssetUrl(g.artwork)} alt="" /> : g.emoji}
-                  {g.name.split('（')[0].split(' ×')[0]}
+                <span key={g.id} className="conch-prize-pill" title={t(...g.description)}>
+                  {g.artwork ? (
+                    <img src={getSceneAssetUrl(g.artwork)} alt="" />
+                  ) : (
+                    <span aria-hidden="true">{g.emoji}</span>
+                  )}
+                  {t(...g.name)}
                 </span>
               ))}
             </div>
+            <p>
+              {t(
+                '抽到海盐牛奶糖时，小鲸会当场吃掉。',
+                'Your whale eats sea salt milk candy as soon as you draw it.',
+              )}
+              {Number.isFinite(values.candy_mood) &&
+                Number.isFinite(values.candy_affection) &&
+                t(
+                  `心情变为 ${values.candy_mood}，羁绊 +${values.candy_affection}。`,
+                  ` Mood becomes ${values.candy_mood} and Bond XP increases by ${values.candy_affection}.`,
+                )}
+            </p>
           </div>
         </div>
 

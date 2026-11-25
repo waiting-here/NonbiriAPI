@@ -8,7 +8,7 @@ import {
 import { MessageCircle, Waves } from './Icons';
 import { UiSwitch } from './UiMotifs';
 import type { Action, Profile } from '../api';
-import { unlockPriceText, useWhaleText } from '../copy';
+import { conchRewardCopy, unlockPriceText, useWhaleText } from '../copy';
 import { formatDateTime } from '@shared/utils/datetime';
 const OUTFITS = (Object.keys(OUTFIT_CATALOG) as WhaleOutfitId[]).filter(
   (id) => !OUTFIT_CATALOG[id].hidden,
@@ -218,21 +218,29 @@ export function ActivityPane({ snapshot }: { snapshot: GameSnapshot }) {
           <p className="deck-empty">{t('小屋还没有新动态。', 'There is no haven activity yet.')}</p>
         ) : (
           <ol className="deck-timeline deck-timeline--activity">
-            {snapshot.logs.map((entry) => (
-              <li key={entry.id} className="deck-timeline__entry" data-kind={entry.kind}>
-                <div className="deck-timeline__heading">
-                  <h4>{entry.title}</h4>
-                  <time dateTime={new Date(entry.timestamp).toISOString()}>
-                    {formatDateTime(entry.timestamp, undefined, undefined, 'second')}
-                  </time>
-                </div>
-                {entry.detail && <p>{entry.detail}</p>}
-                {entry.highlight && (
-                  <span className="nb-badge nb-badge--warm">{entry.highlight}</span>
-                )}
-                {entry.presetMessage && <MessageNote message={entry.presetMessage} />}
-              </li>
-            ))}
+            {snapshot.logs.map((entry) => {
+              const prize = conchRewardCopy(entry.conchReward, t);
+              return (
+                <li key={entry.id} className="deck-timeline__entry" data-kind={entry.kind}>
+                  <div className="deck-timeline__heading">
+                    <h4>
+                      {prize
+                        ? t(`海螺扭蛋 · ${prize.name}`, `Conch draw · ${prize.name}`)
+                        : entry.title}
+                    </h4>
+                    <time dateTime={new Date(entry.timestamp).toISOString()}>
+                      {formatDateTime(entry.timestamp, undefined, undefined, 'second')}
+                    </time>
+                  </div>
+                  {prize && <p>{prize.destination}</p>}
+                  {entry.detail && <p>{entry.detail}</p>}
+                  {entry.highlight && (
+                    <span className="nb-badge nb-badge--warm">{entry.highlight}</span>
+                  )}
+                  {entry.presetMessage && <MessageNote message={entry.presetMessage} />}
+                </li>
+              );
+            })}
           </ol>
         )}
       </section>
