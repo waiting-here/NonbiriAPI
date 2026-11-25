@@ -244,7 +244,11 @@ test.describe('donation resource submission', () => {
         }
         return route.fallback();
       });
-      await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+      await page.goto(`${USER_ORIGIN}/charity?tab=models&q=catalog-search`);
+      await page.getByRole('tab', { name: copy.tabs.donate, exact: true }).click();
+      await expect(page).toHaveURL(
+        (url) => url.searchParams.get('tab') === 'donate' && !url.searchParams.has('q'),
+      );
       const openPicker = page.getByRole('button', {
         name: copy.presentation.openPicker,
         exact: true,
@@ -309,16 +313,20 @@ test.describe('donation resource submission', () => {
       await composer
         .getByRole('checkbox', { name: copy.ownershipAuthorization, exact: true })
         .check();
+      await expect(page).toHaveURL((url) => url.searchParams.get('endpoint_page') === '2');
       await page.getByRole('tab', { name: copy.tabs.models, exact: true }).click();
+      await expect(page).toHaveURL(
+        (url) => url.searchParams.get('tab') === 'models' && !url.searchParams.has('endpoint_page'),
+      );
       await page.getByRole('tab', { name: copy.tabs.donate, exact: true }).click();
       await expect(description).toHaveValue('Cross-page contribution');
       await expect(expiry).toHaveValue(LOCAL_EXPIRY.slice(0, 16));
       await openPicker.click();
-      await expect(page).toHaveURL((url) => url.searchParams.get('endpoint_page') === '2');
+      await expect(page).toHaveURL((url) => !url.searchParams.has('endpoint_page'));
       for (const key of ['head101…tail', 'head121…tail', 'head201…tail']) {
         await expect(selected.getByText(key, { exact: true })).toBeVisible();
       }
-      await expect(sources.getByRole('button', { name: /^Source 1 / })).toHaveCount(0);
+      await expect(sources.getByRole('button', { name: /^Source 1 / })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );

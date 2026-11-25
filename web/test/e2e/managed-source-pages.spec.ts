@@ -246,6 +246,7 @@ function createManagedSourceFixture(setup: StationSetup): ManagedSourceFixture {
         const supportPaths =
           setup.station === 'admin'
             ? new Set([
+                '/admin/api/alerts',
                 '/admin/api/branding',
                 '/admin/api/config',
                 '/admin/api/session',

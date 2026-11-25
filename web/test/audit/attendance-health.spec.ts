@@ -122,9 +122,7 @@ test('owner, admin and steward release cooldowns and show consistent station tim
         timeZone: role === 'owner' ? 'America/New_York' : 'UTC',
       }).format(new Date((until + (role === 'owner' ? 0 : 480 * 60)) * 1000));
       await expect(health).toContainText('Rate limit wait until ' + expected);
-      await controls
-        .getByRole('button', { name: 'Reset failures and resume services', exact: true })
-        .click();
+      await controls.getByRole('button', { name: 'Reset eligible uses', exact: true }).click();
       await expect(controls).toContainText('Rate-limit wait retained until ' + expected);
       await expect(controls).toContainText('Smart backoff retained until ' + expected);
       await expect(health).not.toContainText('10 consecutive failures');

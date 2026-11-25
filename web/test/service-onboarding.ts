@@ -70,13 +70,13 @@ export async function fillService(
   expect(label).toBeTruthy();
   await panel.getByLabel(services.serviceAddress, { exact: true }).fill(input.url);
   await panel.getByLabel(serviceCopy(locale).serviceName, { exact: true }).fill(input.name);
-  if (input.protocol !== undefined || input.discovery === false) {
-    await open(services.advancedSetup);
+  if (input.protocol !== undefined) {
     await panel
       .getByRole('combobox', { name: copy.protocol, exact: true })
       .selectOption({ label: label! });
   }
   if (input.discovery === false) {
+    await open(services.advancedSetup);
     await open(copy.discoveryOptional);
     await panel
       .getByRole('checkbox', { name: serviceCopy(locale).discoverModels, exact: true })

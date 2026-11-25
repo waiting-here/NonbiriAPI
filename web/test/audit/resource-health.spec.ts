@@ -61,7 +61,7 @@ test('current service failures are visible to owner and managers and recover thr
       await expect(health.getByText('10 consecutive failures', { exact: true })).toBeVisible();
       await expect(health).toContainText('reset failures to resume');
       await expect(
-        page.getByRole('button', { name: 'Reset failures and resume services', exact: true }),
+        page.getByRole('button', { name: 'Reset eligible uses', exact: true }),
       ).toBeVisible();
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 1000 });

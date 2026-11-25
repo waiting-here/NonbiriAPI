@@ -200,7 +200,6 @@ for (const width of [1440, 390]) {
         await page.goto(`${USER_ORIGIN}/endpoints?connection_id=1`);
         await page.getByRole('button', { name: c.addEntry, exact: true }).first().click();
         const wizard = page.getByRole('dialog', { name: c.addEntry, exact: true });
-        await wizard.locator('summary').filter({ hasText: serviceUI.advancedSetup }).click();
         const choice = wizard.getByRole('combobox', { name: c.protocol, exact: true });
         await choice.selectOption(kind);
         await expect(choice).toHaveValue(kind);
@@ -226,7 +225,9 @@ for (const width of [1440, 390]) {
         await save.click();
         await expect(wizard.getByText(workflow.serviceReady, { exact: true })).toBeVisible();
         if (supportsDiscovery)
-          await expect(wizard.getByText(c.saved, { exact: true })).toBeVisible();
+          await expect(
+            wizard.getByText(userCopy.user.core['endpoints.discoveryEmpty'], { exact: true }),
+          ).toBeVisible();
         const nativeServices = createOptions.native_service_options.find(
           (row) => row.connector_type === kind,
         )!.native_services;
