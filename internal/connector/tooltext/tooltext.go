@@ -670,8 +670,9 @@ func StreamCompletionBodyAfter(first map[string]json.RawMessage, states map[int]
 		if len(state.pendingReasoning) != 0 {
 			message["reasoning_content"] = string(state.pendingReasoning)
 		}
-		if len(state.pendingContinuation) == 0 || state.roleEmitted {
-			// Otherwise the first continuation frame opens this choice with its role.
+		if !state.roleEmitted && len(state.pendingContinuation) == 0 {
+			// Supply the role here only when neither a prior delta nor a pending
+			// continuation frame has opened this choice.
 			role := state.Role
 			if role == "" {
 				role = "assistant"

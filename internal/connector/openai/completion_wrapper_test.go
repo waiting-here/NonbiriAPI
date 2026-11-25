@@ -209,8 +209,13 @@ func TestFlattenStreamPreservesContinuationAtTerminal(t *testing.T) {
 					}
 					return
 				}
-				if strings.Contains(result, `"tool_calls"`) || strings.Count(result, "already sent") != 1 {
-					t.Fatalf("original tools or reasoning prefix repeated: %s", result)
+				wantCanonical := 0
+				if consumer == "native" {
+					wantCanonical = 1
+				}
+				if strings.Contains(result, `"tool_calls"`) || strings.Count(result, `"text":"already sent"`) != 1 ||
+					strings.Count(result, `"reasoning_content":"already sent"`) != wantCanonical || strings.Count(result, `"role":"assistant"`) != 1 {
+					t.Fatalf("unexpected tools, role or readable reasoning prefix: %s", result)
 				}
 				remaining := result
 				for _, delta := range []string{reasoning, signature, ciphertext, extension} {
