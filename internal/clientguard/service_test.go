@@ -58,7 +58,9 @@ func newGuardFixture(t *testing.T) *guardFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.exec(`CREATE TABLE guard_game_cancels(user_id INTEGER PRIMARY KEY)`)
+	// The hook and its rollback check share the single writer. Keep its test
+	// table local to that connection so the read pool keeps its loaded schema.
+	f.exec(`CREATE TEMP TABLE guard_game_cancels(user_id INTEGER PRIMARY KEY)`)
 	f.service, err = New(Config{
 		Database: store.DB(), ReadDatabase: store.ReadDB(), Rejections: claims,
 		BeginUserRetirement: func(context.Context, int64) (Retirement, error) {
