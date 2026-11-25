@@ -75,7 +75,7 @@ import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
+import { isForbidden, isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { buildRolePolicy, draftFromRolePolicy, type RolePolicyDraft } from '@shared/rolePolicy';
 import '@shared/styles/charity-management.css';
 import { timeDraftValue } from '@shared/time';
@@ -331,9 +331,9 @@ function ModelForm({
   const unknownSave = save.error && responseOutcomeUnknown(save.error);
   const capabilityLost =
     isUnauthorized(save.error) ||
-    isManagementForbidden(save.error) ||
+    isForbidden(save.error) ||
     isUnauthorized(remove.error) ||
-    isManagementForbidden(remove.error);
+    isForbidden(remove.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -964,9 +964,9 @@ function BindingsPanel({
   );
   const mutationCapabilityLost =
     isUnauthorized(order.error) ||
-    isManagementForbidden(order.error) ||
+    isForbidden(order.error) ||
     isUnauthorized(remove.error) ||
-    isManagementForbidden(remove.error);
+    isForbidden(remove.error);
   useEffect(() => {
     if (mutationCapabilityLost) onCapabilityLoss?.();
   }, [mutationCapabilityLost, onCapabilityLoss]);
