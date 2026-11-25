@@ -96,6 +96,8 @@ export function InspectionWorkspace({
       .closest('.inspection-dock, [role="dialog"]')
       ?.querySelector<HTMLElement>('h2');
     const frame = requestAnimationFrame(() => {
+      // A cached detail can focus its linked attempt before the inspector mounts.
+      if (!prior && detailHost.contains(document.activeElement)) return;
       if (viewport) viewport.scrollTop = prior?.top ?? 0;
       (prior?.focus?.isConnected ? prior.focus : title)?.focus({ preventScroll: true });
     });
