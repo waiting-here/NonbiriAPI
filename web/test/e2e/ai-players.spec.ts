@@ -128,6 +128,21 @@ for (const width of [390, 1440])
         await page.getByRole('button', { name: /lock in bid/i }).click();
         await page.reload();
         await expect(page.getByRole('button', { name: /bid.*\(3\)/i })).toBeDisabled();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+        if (width === 390) {
+          await expect(page.getByRole('button', { name: 'Abandon match' })).toBeInViewport({
+            ratio: 1,
+          });
+          const hand = page.locator('.bid-decision .bid-hand-scroll');
+          await hand.scrollIntoViewIfNeeded();
+          expect(
+            await hand.evaluate((strip) => {
+              strip.scrollLeft = strip.scrollWidth;
+              return strip.scrollLeft;
+            }),
+          ).toBeGreaterThan(0);
+          await expect(hand.getByRole('button').last()).toBeInViewport({ ratio: 1 });
+        }
         if (process.env.NONBIRI_VISUAL_DIR)
           await page.screenshot({
             path: process.env.NONBIRI_VISUAL_DIR + '/companion-' + theme + '-' + width + '.png',
