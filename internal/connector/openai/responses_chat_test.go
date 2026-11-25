@@ -92,6 +92,69 @@ func TestResponsesChatKeepsSeparateReasoningTurns(t *testing.T) {
 	}
 }
 
+func TestResponsesChatIncompleteTextReplay(t *testing.T) {
+	for _, tc := range []struct{ finish, detail, field string }{
+		{"length", "max_output_tokens", "reasoning_content"},
+		{"content_filter", "content_filter", "reasoning"},
+	} {
+		for _, stream := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/stream=%t", tc.finish, stream), func(t *testing.T) {
+				message := `{"role":"assistant","content":"partial answer","` + tc.field + `":"thought"}`
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if stream {
+						w.Header().Set("Content-Type", "text/event-stream")
+						fmt.Fprint(w, chatResponseChunk(message, fmt.Sprintf("%q", tc.finish), "null")+"data: [DONE]\n\n")
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprintf(w, `{"id":"c1","object":"chat.completion","created":1,"choices":[{"index":0,"message":%s,"finish_reason":%q}]}`, message, tc.finish)
+				}))
+				defer server.Close()
+				request := inferenceRequestForTest(t, contract.OperationResponses, fmt.Sprintf(`{"model":"public","input":"hi","stream":%t}`, stream))
+				defer request.Clear()
+				writer := httptest.NewRecorder()
+				result := adapterForServer(t, server.URL, nil, nil).AttemptInference(context.Background(), writer, NewTarget(server.URL+"/v1", "upstream", NewCredential([]byte("fixture-key"), nil)), request, contract.TypeOpenAIChatCompletions, contract.AttemptPolicy{})
+				if !result.Success {
+					t.Fatal(result)
+				}
+				response := writer.Body.Bytes()
+				if stream {
+					events := projectionEvents(t, writer.Body.String())
+					if len(events) == 0 || string(events[len(events)-1]["type"]) != `"response.incomplete"` {
+						t.Fatal(writer.Body)
+					}
+					response = events[len(events)-1]["response"]
+				}
+				var terminal struct {
+					Status string
+					Output []json.RawMessage
+					Detail struct{ Reason string } `json:"incomplete_details"`
+				}
+				if json.Unmarshal(response, &terminal) != nil || terminal.Status != "incomplete" || terminal.Detail.Reason != tc.detail || len(terminal.Output) != 2 {
+					t.Fatal(string(response))
+				}
+				for _, item := range terminal.Output {
+					if !bytes.Contains(item, []byte(`"status":"incomplete"`)) {
+						t.Fatal(string(item))
+					}
+				}
+				input := append(terminal.Output, json.RawMessage(`{"role":"user","content":"continue"}`))
+				history, _ := json.Marshal(input)
+				replay := inferenceRequestForTest(t, contract.OperationResponses, `{"model":"public","input":`+string(history)+`}`)
+				defer replay.Clear()
+				body, err := replay.compileChatResponse("upstream", contract.AttemptPolicy{})
+				var chat struct{ Messages []map[string]json.RawMessage }
+				if err != nil || json.Unmarshal(body, &chat) != nil || len(chat.Messages) != 2 {
+					t.Fatalf("replay failed: %s, %v", body, err)
+				}
+				if string(chat.Messages[0][tc.field]) != `"thought"` || string(chat.Messages[0]["content"]) != `"partial answer"` || string(chat.Messages[1]["content"]) != `"continue"` {
+					t.Fatal(string(body))
+				}
+			})
+		}
+	}
+}
+
 func testResponsesChatScalarRoundTrip(t *testing.T, field string) {
 	t.Helper()
 	const answer = `"content":"answer","refusal":"declined"`
@@ -263,6 +326,10 @@ func TestResponsesChatRejectsUnrepresentableRequests(t *testing.T) {
 		`[{"type":"reasoning","summary":[],"encrypted_content":"opaque","content":[{"type":"reasoning_text","text":"thought"}]}]`,
 		`[{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"thought","signature":"signed"}]}]`,
 		`[{"type":"reasoning","status":"in_progress","content":[{"type":"reasoning_text","text":"thought"}]}]`,
+		`[{"type":"message","role":"assistant","status":"in_progress","content":"partial"}]`,
+		`[{"type":"message","role":"user","status":"incomplete","content":"partial"}]`,
+		`[{"type":"function_call","status":"incomplete","call_id":"c","name":"f","arguments":"{"},{"type":"function_call_output","call_id":"c","output":"done"}]`,
+		`[{"type":"function_call","call_id":"c","name":"f","arguments":"{}"},{"type":"function_call_output","call_id":"c","status":"incomplete","output":"partial"}]`,
 		`[{"role":"user","content":[{"type":"input_file","file_data":"inline","filename":"a.pdf"}]}]`,
 		`[{"type":"function_call_output","call_id":"missing","output":"x"}]`,
 		`[{"type":"function_call","call_id":"c","name":"f","arguments":"{}"}]`,

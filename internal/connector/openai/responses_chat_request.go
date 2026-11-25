@@ -375,7 +375,7 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 					return bad()
 				}
 			}
-			if item["status"] != nil && !bytes.Equal(item["status"], []byte(`"completed"`)) {
+			if !replayableChatTextStatus(item["status"], !gateway) {
 				return bad()
 			}
 			if raw := item["summary"]; raw != nil && !visitJSONArray(raw, func([]byte) bool { return false }) {
@@ -436,11 +436,11 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 					return bad()
 				}
 			}
-			if raw := item["status"]; raw != nil && !bytes.Equal(raw, []byte(`"completed"`)) {
-				return bad()
-			}
 			role, _ := decisionString(item["role"], 1, 32)
 			if role != "user" && role != "assistant" && role != "system" && role != "developer" {
+				return bad()
+			}
+			if !replayableChatTextStatus(item["status"], !gateway && role == "assistant") {
 				return bad()
 			}
 			content, err := responseChatContent(item["content"], role)
@@ -541,6 +541,12 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 
 func hasChatReasoning(message map[string]any) bool {
 	return message["reasoning_content"] != nil || message["reasoning"] != nil
+}
+
+// A terminal length or content filter stop still supplies usable assistant
+// text for the next Chat turn. Tool history requires completed calls and results.
+func replayableChatTextStatus(status json.RawMessage, allowIncomplete bool) bool {
+	return status == nil || bytes.Equal(status, []byte(`"completed"`)) || allowIncomplete && bytes.Equal(status, []byte(`"incomplete"`))
 }
 
 // When adjacent items have the IDs produced by the bridge, use the shared
