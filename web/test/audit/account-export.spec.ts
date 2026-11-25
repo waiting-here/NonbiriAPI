@@ -80,7 +80,11 @@ test('account page downloads the current export with personal session-header set
       page.goto(state.user_url + '/account'),
     ]);
     expect(download.suggestedFilename()).toBe(filename);
-    const exported = JSON.parse(await readFile((await download.path())!, 'utf8')) as {
+    const games = ['bidding', 'likes', 'gwent'] as const;
+    const exported = JSON.parse(await readFile((await download.path())!, 'utf8')) as Record<
+      (typeof games)[number],
+      { companion: unknown }
+    > & {
       schema_version: number;
       donations: {
         id: string;
@@ -90,6 +94,13 @@ test('account page downloads the current export with personal session-header set
       models: { id: string; session_headers: unknown }[];
     };
     expect(exported.schema_version).toBe(39);
+    for (const game of games) {
+      expect(exported[game].companion).toMatchObject({
+        preferences: { memory: 'none', contribute: false },
+        matches: [],
+        programs: [],
+      });
+    }
     const quota = state.management.model_quotas;
     const donated = exported.donations.find((donation) => donation.id === quota.donation_id);
     const key = donated?.keys.find((key) => key.id === quota.key_id);

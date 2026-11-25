@@ -10,7 +10,7 @@ import {
 } from './support';
 
 for (const locale of ['en', 'zh'] as const) {
-  test(`account export downloads v30 on verified return in ${locale}`, async ({ page }) => {
+  test(`downloads the current account export after verification in ${locale}`, async ({ page }) => {
     const guard = collectConsoleViolations(page);
     await page.setViewportSize({ width: locale === 'zh' ? 390 : 1440, height: 900 });
     await mockRoleSession(page, 'user', 'user');
