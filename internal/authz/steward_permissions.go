@@ -333,9 +333,15 @@ func StewardRoutePermission(method, path string) string {
 		return "risk.manage"
 	case p == "logs/pressure":
 		return "pressure.read"
+	case strings.HasPrefix(p, "log-searches/"):
+		id := strings.TrimPrefix(p, "log-searches/")
+		if (read || method == "DELETE") && id != "" && !strings.Contains(id, "/") {
+			return "logs.read"
+		}
+		return "unconfigured"
 	case strings.HasPrefix(p, "diagnostics"), strings.HasPrefix(p, "logs/diagnostic"), strings.Contains(p, "/headers"), strings.Contains(p, "/errors"), strings.HasSuffix(p, "/source"):
 		return "diagnostics.read"
-	case strings.HasPrefix(p, "logs"), p == "log-searches/{search_id}":
+	case strings.HasPrefix(p, "logs"):
 		return "logs.read"
 	case strings.HasPrefix(p, "announcements"):
 		if read {

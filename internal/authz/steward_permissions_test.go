@@ -122,6 +122,16 @@ func TestAIPermissionsDefaultsCurrentFormatAndRoutes(t *testing.T) {
 	if StewardRoutePermission("POST", "/api/steward/donations/1/pending-review") != "donations.review" {
 		t.Fatal("whole pending review mapping")
 	}
+	for _, path := range []string{"{search_id}", "errorsABC42", "fresh-result"} {
+		for _, method := range []string{"GET", "DELETE"} {
+			if got := StewardRoutePermission(method, "/api/steward/log-searches/"+path); got != "logs.read" {
+				t.Fatalf("search permission for %s %s: %s", method, path, got)
+			}
+		}
+	}
+	if got := StewardRoutePermission("GET", "/api/steward/log-searches/id/details"); got != "unconfigured" {
+		t.Fatalf("unexpected nested search permission: %s", got)
+	}
 	if StewardRoutePermission("PUT", "/api/steward/ai/chat/messages/1") != "ai.chat" {
 		t.Fatal("chat message edit mapping")
 	}
