@@ -178,16 +178,15 @@ test('fatfish editor and playtest fit the whole field without internal scrolling
           animations: 'disabled',
         });
       if (directory && [1440, 390].includes(size.width)) {
-        await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-        await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark');
-        await page.keyboard.press('Escape');
+        const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
+        await theme.selectOption('dark');
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
         await page.screenshot({
           path: join(directory, `after-${kind}-${size.name}-dark.png`),
           animations: 'disabled',
         });
-        await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-        await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('light');
-        await page.keyboard.press('Escape');
+        await theme.selectOption('light');
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
       }
     }
   };
