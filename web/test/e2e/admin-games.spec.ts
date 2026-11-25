@@ -522,36 +522,88 @@ for (const scenario of [
 }
 
 for (const width of [390, 1440]) {
-  test('admin selects the official companion version at ' + width, async ({ context, page }) => {
-    const errors = await prepare(context, page, {
-      current: structuredClone(INITIAL_CONFIG),
-      patches: [],
-    });
+  test('admin can toggle each built-in companion at ' + width, async ({ context, page }) => {
+    const zh = width === 390;
+    const errors = await prepare(
+      context,
+      page,
+      {
+        current: structuredClone(INITIAL_CONFIG),
+        patches: [],
+      },
+      { locale: zh ? 'zh' : 'en', theme: zh ? 'dark' : 'light' },
+    );
     await page.setViewportSize({ width, height: 900 });
-    const official = {
-      name: 'official',
-      version: 0,
-      difficulties: [1],
-      versions: [
-        { version: 0, status: 'ready', created_at: 0 },
-        { version: 1, status: 'ready', created_at: 100 },
-      ],
-    };
-    const state = { enabled: true, upload_available: true, official, programs: [] };
+    const games = zh
+      ? { bidding: '竞标对决', likes: '回合制对战', gwent: 'AI 昆特牌' }
+      : { bidding: 'Bidding Duel', likes: 'Turn-based battle', gwent: 'AI Gwent' };
+    const enabled = new Map(Object.keys(games).map((game) => [game, true]));
     await page.route('**/admin/api/games/*/companion**', async (route) => {
-      const request = route.request();
-      if (request.method() === 'POST') {
-        expect(request.headers()['idempotency-key']).toBeTruthy();
-        expect(new URL(request.url()).pathname).toBe('/admin/api/games/likes/companion/activate');
-        expect(request.postDataJSON()).toEqual({ version: 1 });
-        official.version = 1;
+      const req = route.request(),
+        parts = new URL(req.url()).pathname.split('/'),
+        game = parts[4];
+      if (req.method() === 'POST') {
+        expect(parts.slice(5).join('/')).toBe('companion/settings');
+        expect(req.headers()['idempotency-key']).toBeTruthy();
+        enabled.set(game, req.postDataJSON().enabled);
       }
-      return route.fulfill({ json: state });
+      return route.fulfill({
+        json: {
+          enabled: enabled.get(game),
+          upload_available: true,
+          upload_game_enabled: true,
+          upload_global_enabled: true,
+          official: {
+            name: 'official',
+            version: 0,
+            difficulties: [1],
+            versions: [
+              { version: 0, status: 'ready', created_at: 0 },
+              { version: 1, status: 'ready', created_at: 100 },
+            ],
+          },
+          programs: [],
+        },
+      });
     });
     await page.goto(ADMIN_ORIGIN + '/games/companions');
-    await page.getByRole('tab', { name: 'Turn-based battle', exact: true }).click();
-    await page.getByRole('button', { name: 'Activate version' }).click();
-    await expect.poll(() => official.version).toBe(1);
+    for (const [game, label] of Object.entries(games)) {
+      await page.getByRole('tab', { name: label, exact: true }).click();
+      const toggle = page.getByRole('switch', {
+        name: zh ? '开放新的陪玩对局' : 'Allow new companion matches',
+      });
+      await expect(toggle).toBeChecked();
+      for (const name of zh
+        ? ['全站程序上传', '本游戏程序上传']
+        : ['Site-wide program uploads', 'Program uploads for this game']) {
+        const uploadGate = page.getByRole('switch', { name });
+        await expect(uploadGate).toBeDisabled();
+        await expect(uploadGate).not.toBeChecked();
+      }
+      await expect(
+        page.getByText(
+          zh ? 'v1.4.3 暂不支持程序上传。' : 'Program uploads are unavailable in v1.4.3.',
+        ),
+      ).toBeVisible();
+      await expect(page.locator('input[type=file]')).toBeDisabled();
+      await expect(
+        page.getByRole('textbox', { name: zh ? '源代码' : 'Source code' }),
+      ).toBeDisabled();
+      await expect(
+        page.getByRole('combobox', { name: zh ? '官方程序版本' : 'Official program version' }),
+      ).toBeDisabled();
+      for (const name of zh
+        ? ['上传并编译', '启用此版本']
+        : ['Upload and compile', 'Activate version'])
+        await expect(page.getByRole('button', { name })).toBeDisabled();
+      await toggle.click();
+      await expect.poll(() => enabled.get(game)).toBe(false);
+      await expect(toggle).not.toBeChecked();
+    }
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({
+        path: process.env.NONBIRI_VISUAL_DIR + '/companion-admin-' + width + '.png',
+      });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

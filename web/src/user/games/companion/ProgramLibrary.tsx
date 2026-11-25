@@ -2,7 +2,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { useState } from 'react';
 import { useCompanionCopy } from '@shared/companionCopy';
 import { ErrorState } from '@shared/components/States';
-import { Field, Fields, Fold, FormActions, Toggle } from '@shared/components/ui';
+import { Field, Fields, Fold, FormActions } from '@shared/components/ui';
 import {
   companionPath,
   type CompanionGame,
@@ -36,6 +36,7 @@ export function ProgramLibrary({
   const unknown = save.outcome === 'unknown';
   const busy = save.isPending || unknown;
   const official = programs.official;
+  const [version, setVersion] = useState(official.version);
   const groups = admin ? [official] : programs.programs;
   const submit = () =>
     save.mutate({
@@ -44,97 +45,85 @@ export function ProgramLibrary({
     });
   return (
     <div className="nb-stack">
-      {admin && (
-        <Toggle
-          label={key('open')}
-          checked={programs.enabled}
-          disabled={busy}
-          onChange={(enabled) => save.mutate({ path: '/settings', body: { enabled } })}
-        />
-      )}
       {!admin && (
         <a href={companionPath(game) + '/kit'} download>
           {key('kit')}
         </a>
       )}
-      {programs.upload_available ? (
-        <form
-          className="nb-stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          <Fields columns={1}>
-            {!admin && (
-              <Field label={key('programName')} help={key('programNameHelp')}>
-                {(field) => (
-                  <input
-                    {...field}
-                    list="companion-program-names"
-                    required
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                )}
-              </Field>
-            )}
-            {!admin && (
-              <datalist id="companion-program-names">
-                {groups.map((p) => (
-                  <option key={p.name} value={p.name} />
-                ))}
-              </datalist>
-            )}
-            <Field label={key('sourceFile')} help={key('sourceLimit')}>
+      <form
+        className="nb-stack"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <Fields columns={1}>
+          {!admin && (
+            <Field label={key('programName')} help={key('programNameHelp')}>
               {(field) => (
                 <input
                   {...field}
-                  type="file"
-                  accept=".cpp,.cc,.cxx,text/plain"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    if (file.size > 256 * 1024) {
-                      setFileError(key('sourceLimit'));
-                      return;
-                    }
-                    try {
-                      setSource(await file.text());
-                      setFileError('');
-                    } catch {
-                      setFileError(key('fileFailed'));
-                    }
-                  }}
-                />
-              )}
-            </Field>
-            <Field label={key('source')} error={fileError}>
-              {(field) => (
-                <textarea
-                  {...field}
-                  className="mono"
-                  spellCheck={false}
-                  rows={5}
+                  list="companion-program-names"
                   required
-                  value={source}
-                  onChange={(e) => {
-                    setSource(e.target.value);
-                    setFileError('');
-                  }}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
                 />
               )}
             </Field>
-          </Fields>
-          <FormActions align="start">
-            <button type="submit" className="nb-btn nb-btn--secondary" disabled={busy}>
-              {key('compile')}
-            </button>
-          </FormActions>
-        </form>
-      ) : (
-        <p>{key('uploadUnavailable')}</p>
-      )}
+          )}
+          {!admin && (
+            <datalist id="companion-program-names">
+              {groups.map((p) => (
+                <option key={p.name} value={p.name} />
+              ))}
+            </datalist>
+          )}
+          <Field label={key('sourceFile')} help={key('sourceLimit')}>
+            {(field) => (
+              <input
+                {...field}
+                type="file"
+                accept=".cpp,.cc,.cxx,text/plain"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 256 * 1024) {
+                    setFileError(key('sourceLimit'));
+                    return;
+                  }
+                  try {
+                    setSource(await file.text());
+                    setFileError('');
+                  } catch {
+                    setFileError(key('fileFailed'));
+                  }
+                }}
+              />
+            )}
+          </Field>
+          <Field label={key('source')} error={fileError}>
+            {(field) => (
+              <textarea
+                {...field}
+                className="mono"
+                spellCheck={false}
+                rows={5}
+                required
+                value={source}
+                onChange={(e) => {
+                  setSource(e.target.value);
+                  setFileError('');
+                }}
+              />
+            )}
+          </Field>
+        </Fields>
+        <FormActions align="start">
+          <button type="submit" className="nb-btn nb-btn--secondary" disabled={busy}>
+            {key('compile')}
+          </button>
+        </FormActions>
+      </form>
       {save.error && (
         <ErrorState
           error={save.error}
@@ -145,6 +134,38 @@ export function ProgramLibrary({
         <p role="status">
           {key(save.data.status === 'failed' ? 'failed' : 'ready')} · v{save.data.version}
         </p>
+      )}
+      {admin && (
+        <>
+          <Field label={key('officialVersion')}>
+            {(field) => (
+              <select
+                {...field}
+                value={version}
+                onChange={(e) => setVersion(Number(e.target.value))}
+              >
+                {(official.versions?.length
+                  ? official.versions
+                  : [{ version: official.version, status: 'ready' }]
+                ).map((v) => (
+                  <option key={v.version} value={v.version} disabled={v.status !== 'ready'}>
+                    v{v.version}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <FormActions align="start">
+            <button
+              type="button"
+              className="nb-btn nb-btn--secondary"
+              disabled={busy || version === official.version}
+              onClick={() => save.mutate({ path: '/activate', body: { version } })}
+            >
+              {key('activate')}
+            </button>
+          </FormActions>
+        </>
       )}
       {groups.map((group) => (
         <section key={group.name} className="nb-stack nb-stack--sm">
@@ -183,17 +204,15 @@ export function ProgramLibrary({
                     {key('viewSource')}
                   </button>
                 )}
-                {v.status === 'ready' && v.version !== group.version && (
+                {!admin && v.status === 'ready' && v.version !== group.version && (
                   <button
                     type="button"
                     className="nb-btn nb-btn--secondary nb-btn--sm"
                     disabled={busy}
                     onClick={() =>
                       save.mutate({
-                        path: admin ? '/activate' : '/programs/activate',
-                        body: admin
-                          ? { version: v.version }
-                          : { version: v.version, name: group.name },
+                        path: '/programs/activate',
+                        body: { version: v.version, name: group.name },
                       })
                     }
                   >

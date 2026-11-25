@@ -31,3 +31,15 @@
 .companion-page h1 {
   font-size: var(--nb-font-size-2xl);
 }
+
+.companion-program-settings {
+  min-width: 0;
+  margin: 0;
+  padding: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-card);
+}
+.companion-program-settings > legend {
+  padding-inline: var(--nb-space-2);
+  font-weight: 600;
+}
