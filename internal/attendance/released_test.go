@@ -27,8 +27,8 @@ func releasedAttendancePath(t *testing.T) string {
 
 func TestWriteReleasedAttendanceFixture(t *testing.T) {
 	path := releasedAttendancePath(t)
-	if db.CurrentSchemaVersion != 55 && db.CurrentSchemaVersion != 56 {
-		t.Fatal("the fixture requires a released attendance database")
+	if db.CurrentSchemaVersion != 55 && db.CurrentSchemaVersion != 56 && db.CurrentSchemaVersion != 57 {
+		t.Fatal("the fixture requires a registered attendance source")
 	}
 	f := setup(t)
 	p := f.create(t, input("cumulative"))
@@ -105,7 +105,7 @@ func TestReleasedAttendanceRejectsUpgradedSchema(t *testing.T) {
 		t.Fatal("released application opened the upgraded database")
 	}
 	var mismatch *db.StartupError
-	if !errors.As(err, &mismatch) || mismatch.Kind != db.StartupSchemaMismatch || mismatch.ExpectedSchemaVersion != db.CurrentSchemaVersion || mismatch.ActualSchemaVersion == nil || *mismatch.ActualSchemaVersion != 57 {
+	if !errors.As(err, &mismatch) || mismatch.Kind != db.StartupSchemaMismatch || mismatch.ExpectedSchemaVersion != db.CurrentSchemaVersion || mismatch.ActualSchemaVersion == nil || *mismatch.ActualSchemaVersion != 58 {
 		t.Fatal("wrong rejection", err)
 	}
 	after, err := os.ReadFile(path)

@@ -60,6 +60,55 @@ func TestConvertReleasedSchema56Database(t *testing.T) {
 	convertReleasedFixture(t, "NONBIRI_RELEASED_SCHEMA56_FIXTURE", 0, 56, db.Schema56ManifestHash)
 }
 
+func TestConvertDevelopmentSchema57Database(t *testing.T) {
+	convertReleasedFixture(t, "NONBIRI_DEVELOPMENT_SCHEMA57_FIXTURE", 0, 57, db.Schema57ManifestHash)
+}
+
+func TestSchema57CallerErrorIndexUpgrade(t *testing.T) {
+	path, vault := bootstrapTestPath(t, "logs.sqlite"), bootstrapTestVault(t)
+	source, err := db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	dbtest.RestoreSchema57Fixture(t, source.DB())
+	assertRetainedManifest(t, source.DB(), db.Schema57ManifestHash)
+	const id = "req_000000000000000000001A"
+	mustExec(t, source.DB(), `INSERT INTO logical_requests(id,route_kind,state,attempt_limit,caller_result_class,caller_status,caller_error_code,accounting_state,settlement_destination,ledger_rows_remaining,created_at,terminal_at)
+VALUES(?,'charity_responses','terminal',1,'failed',400,'invalid_request','none','user',zeroblob(16),100,101)`, id)
+	mustExec(t, source.DB(), `INSERT INTO request_logs(logical_request_id,route_kind,caller_result_class,caller_status,status_code,caller_error_code,error_code,started_at,completed_at)
+VALUES(?,'charity_responses','failed',400,400,'invalid_request','invalid_request',100,101)`, id)
+	if err := source.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	_, err = Run(ctx, path, vault, Options{Apply: true, Progress: func(p Progress) {
+		if p.Table == "request_logs" && p.State == "completed" {
+			cancel()
+		}
+	}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal("expected cancellation after index build", err)
+	}
+	if check, err := Run(t.Context(), path, vault, Options{}); err != nil || check.SourceSchemaVersion != 57 || check.Status != "ready" {
+		t.Fatal("rolled-back source", check, err)
+	}
+	if got, err := Run(t.Context(), path, vault, Options{Apply: true}); err != nil || got.SourceSchemaVersion != 57 || got.Status != "converted" {
+		t.Fatal(got, err)
+	}
+	target, err := db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	var actualID string
+	var started, completed int64
+	if err := target.ReadDB().QueryRow("SELECT logical_request_id,started_at,completed_at FROM request_logs WHERE caller_error_code=?", "invalid_request").Scan(&actualID, &started, &completed); err != nil || actualID != id || started != 100 || completed != 101 {
+		t.Fatal("retained caller error", actualID, started, completed, err)
+	}
+}
+
 func TestSchema56VisitRewardRateChangesProspectively(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
@@ -180,7 +229,7 @@ func TestUnsupportedUpgradeSourcesRemainUnchanged(t *testing.T) {
 	for _, tc := range []struct {
 		marker  int
 		message string
-	}{{53, "v1.3.12"}, {28, "v1.3.12"}, {db.CurrentSchemaVersion + 1, "newer"}, {54, "differs from the released schema"}, {55, "differs from the released schema"}} {
+	}{{53, "v1.3.12"}, {28, "v1.3.12"}, {db.CurrentSchemaVersion + 1, "newer"}, {54, "differs from the released schema"}, {55, "differs from the released schema"}, {56, "differs from the released schema"}, {57, "differs from the released schema"}} {
 		database, err := sql.Open("sqlite", path)
 		if err != nil {
 			t.Fatal(err)

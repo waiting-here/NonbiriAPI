@@ -69,7 +69,16 @@ var schema56CallerErrors string
 // RestoreSchema56Fixture reinstates the caller-error receipt DDL from v1.4.2.
 func RestoreSchema56Fixture(t *testing.T, source *sql.DB) {
 	t.Helper()
+	RestoreSchema57Fixture(t, source)
 	if _, err := source.ExecContext(t.Context(), schema56CallerErrors+"ALTER TABLE charity_reservations DROP COLUMN discount_basis_points; UPDATE schema_state SET version=56"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// RestoreSchema57Fixture reinstates the exact v1.4.3 development layout.
+func RestoreSchema57Fixture(t *testing.T, source *sql.DB) {
+	t.Helper()
+	if _, err := source.ExecContext(t.Context(), `DROP INDEX idx_request_logs_caller_error_started; UPDATE schema_state SET version=57`); err != nil {
 		t.Fatal(err)
 	}
 }

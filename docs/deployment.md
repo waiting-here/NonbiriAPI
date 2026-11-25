@@ -344,17 +344,17 @@ own status in the details and do not acquire the site's login/session semantics.
 
 ## Database compatibility and version changes
 
-A fresh installation initializes schema 57. Stop an existing service and
+A fresh installation initializes schema 58. Stop an existing service and
 preserve the matching recovery set before running the v1.4.3
 [standalone upgrader](../cmd/nonbiri-upgrade-v1/README.md) on its exact
-schema 54, 55 or 56 database. Earlier registered databases first use the
+schema 54, 55, 56 or 57 database. Earlier registered databases first use the
 v1.3.12 tool. Account exports use format 38. See [database upgrades](database-upgrades.md)
 for the source fingerprint, conversion and recovery procedure.
 
 The service and upgrader expose their compiled identities via
 `maintenance schema-info --json` and `--schema-info --json`, respectively.
-The service requires exact schema 57 and declares no conversions. The tool
-lists the three sources. Deployment hooks stop on mismatches so the operator can
+The service requires exact schema 58 and declares no conversions. The tool
+lists the four sources. Deployment hooks stop on mismatches so the operator can
 preserve the source and deliberately invoke conversion.
 
 Current-schema validation and unfinished-work recovery remain part of startup.

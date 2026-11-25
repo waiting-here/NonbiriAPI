@@ -532,8 +532,8 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 57.
-The v1.4.3 tool converts registered schema 54, 55 or 56 databases after the
+Normal startup initializes absent storage or opens only exact current schema 58.
+The v1.4.3 tool converts registered schema 54, 55, 56 or 57 databases after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending

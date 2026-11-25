@@ -190,20 +190,28 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 			return err
 		}
 	}
-	if err := offlineStep(ctx, "migration", 57, "dispatch_caller_parameter_errors", "Google caller error receipts", func() error {
-		_, err := tx.ExecContext(ctx, db.GoogleCallerParameterSQL)
-		return err
-	}); err != nil {
-		return err
+	if source < 57 {
+		if err := offlineStep(ctx, "migration", 57, "dispatch_caller_parameter_errors", "Google caller error receipts", func() error {
+			_, err := tx.ExecContext(ctx, db.GoogleCallerParameterSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+		if err := offlineStep(ctx, "migration", 57, "charity_reservations", "fractional discount snapshots", func() error {
+			_, err := tx.ExecContext(ctx, db.CharityDiscountPrecisionSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+		if err := offlineStep(ctx, "migration", 57, "whale_haven_settings", "Whale Haven visit reward rate", func() error {
+			return updateVisitRewardRate(ctx, tx, time.Now().UnixMilli())
+		}); err != nil {
+			return err
+		}
 	}
-	if err := offlineStep(ctx, "migration", 57, "charity_reservations", "fractional discount snapshots", func() error {
-		_, err := tx.ExecContext(ctx, db.CharityDiscountPrecisionSQL)
+	if err := offlineStep(ctx, "migration", 58, "request_logs", "caller error log index", func() error {
+		_, err := tx.ExecContext(ctx, db.RequestLogCallerErrorIndexSQL)
 		return err
-	}); err != nil {
-		return err
-	}
-	if err := offlineStep(ctx, "migration", 57, "whale_haven_settings", "Whale Haven visit reward rate", func() error {
-		return updateVisitRewardRate(ctx, tx, time.Now().UnixMilli())
 	}); err != nil {
 		return err
 	}

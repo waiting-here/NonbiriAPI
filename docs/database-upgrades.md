@@ -2,19 +2,20 @@
 
 ## Supported databases
 
-v1.4.3 uses schema 57. Stop the existing instance and preserve its
+v1.4.3 uses schema 58. Stop the existing instance and preserve its
 complete recovery set before running the explicit offline conversion.
 
 | Starting state | How to use v1.4.3 |
 | --- | --- |
-| Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 57. |
-| Exact current schema 57 | Start the service with its matching configuration and master key. |
+| Fresh deployment | Start with the database file and SQLite sidecars absent. The service initializes schema 58. |
+| Exact current schema 58 | Start the service with its matching configuration and master key. |
+| Exact v1.4.3 development schema 57 | Use the offline upgrader to build the caller-error search index. |
 | Exact v1.4.2 schema 56 | Use the v1.4.3 offline upgrader to extend caller-error receipts and preserve fractional reservation discounts. |
 | Exact v1.4.0 / v1.4.1 schema 55 | The same converter also adds sign-in presentation settings. |
 | Exact v1.3.12 schema 54 | The same converter also applies the model-usage conversion. |
 | Earlier supported database | Use the v1.3.12 upgrader first, then convert its schema 54 database using v1.4.3. |
 
-For sites using the former Whale Haven defaults of 28 g per meal and 35 g per visit coin,
+For conversions from schema 56 or earlier on sites using the former Whale Haven defaults of 28 g per meal and 35 g per visit coin,
 conversion adds a settings revision with a rate of 28 g per coin. Earlier meals
 use the settings effective at settlement. Custom meal sizes and coin rates keep
 their configured values.
@@ -26,6 +27,7 @@ The converter identifies each source layout by its schema manifest.
 | v1.3.12 (`03456c51`), shared by v1.3.10–v1.3.12 | 54 | `ca682daf10a780b8ab38d4095301324a1f007af3fb2ac159fbbbf0daef0107b5` |
 | v1.4.1 (`b1700f25`), shared by v1.4.0 and v1.4.1 | 55 | `a4c97524571580d8b513789c2a4d1b1ec80c1bdedec8d1eace14bcdcbc291ee4` |
 | v1.4.2 (`1bb01bdb`) | 56 | `5bfd5783118b05d6a6970bdf269bf6f3816aeeeed152ca0fcaa916b33a425358` |
+| v1.4.3 development (`5a506879`) | 57 | `c5ce69539353d996e43de54ec225d9f30d9799268e83b220b6d378080967181b` |
 
 The v1.3.12 tool accepts its registered schema 16–26 and 33–53 sources.
 Consult that tool's source matrix before attempting the first leg.
@@ -59,8 +61,8 @@ go forward only. Preserve any new data accepted after reopening. Service startup
 and deployment hooks never invoke `--apply`.
 
 The following commands print their compiled identities without loading
-configuration or opening storage. The service declares exact startup at 57.
-The upgrader lists the accepted source versions and their release identities.
+configuration or opening storage. The service declares exact startup at 58.
+The upgrader lists the accepted source versions and their source identities.
 
 ```sh
 ./nonbiriapi maintenance schema-info --json
@@ -68,6 +70,8 @@ The upgrader lists the accepted source versions and their release identities.
 ```
 
 ## Schema changes
+
+Schema 58 indexes request logs with a caller error by error code, start time and row ID. The index includes completion time for retention checks and the historical model and route for charity-model searches. The offline upgrade builds it in the same transaction as the version change.
 
 Schema 57 extends the caller-error receipt constraint to accept the numeric
 Google error code `400` for a verified HTTP 400 input rejection. Conversion
