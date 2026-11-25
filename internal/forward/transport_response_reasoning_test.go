@@ -187,6 +187,114 @@ func TestTransportFragmentsReasoningMirrorsTogether(t *testing.T) {
 	}
 }
 
+func TestTransportFragmentsMultiPartReasoningMirrorsTogether(t *testing.T) {
+	summary := strings.Repeat("摘要🙂", 20000)
+	thought := strings.Repeat("推理🎐", 20000)
+	canonical := summary + thought
+	for _, tc := range []struct {
+		name    string
+		blocks  []any
+		details []any
+		ok      bool
+	}{
+		{name: "one structured mirror with scalar alias", ok: true},
+		{name: "matching structural boundaries", ok: true, blocks: []any{
+			map[string]any{"type": "thinking", "index": 0, "thinking": summary},
+			map[string]any{"type": "redacted_thinking", "index": 1, "data": "redacted-middle"},
+			map[string]any{"type": "thinking", "index": 2, "thinking": thought, "signature": "block-signature"},
+		}},
+		{name: "different structural boundaries", blocks: []any{
+			map[string]any{"type": "thinking", "index": 0, "thinking": canonical},
+		}},
+		{name: "adjacent unsigned blocks with no identity", details: []any{
+			map[string]any{"type": "reasoning.text", "text": summary},
+			map[string]any{"type": "reasoning.text", "text": thought},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			message := map[string]any{
+				"role": "assistant", "content": "answer", "reasoning_content": canonical, "reasoning": canonical,
+				"reasoning_details": []any{
+					map[string]any{"type": "reasoning.summary", "index": 0, "id": "s", "summary": summary},
+					map[string]any{"type": "reasoning.encrypted", "index": 0, "id": "e", "data": "opaque-middle"},
+					map[string]any{"type": "reasoning.text", "index": 0, "id": "r", "text": thought, "signature": "unique-signature"},
+				},
+			}
+			if tc.blocks != nil {
+				message["thinking_blocks"] = tc.blocks
+			}
+			if tc.details != nil {
+				message["reasoning_details"] = tc.details
+			}
+			raw, err := json.Marshal(map[string]any{
+				"id": "chat", "created": 1, "object": "chat.completion", "model": "m",
+				"choices": []any{map[string]any{"index": 0, "finish_reason": "stop", "message": message}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			frames, err := completionToStream(raw, false)
+			if !tc.ok {
+				if !errors.Is(err, errTransportResponse) || len(frames) != 0 {
+					t.Fatalf("converted incompatible oversized mirror boundaries: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var visible strings.Builder
+			synchronized := true
+			for _, frame := range frames[:len(frames)-1] {
+				event, err := readWireObject(bytes.TrimSpace(bytes.TrimPrefix(frame, []byte("data: "))))
+				if err != nil {
+					t.Fatal(err)
+				}
+				delta := event["choices"].([]any)[0].(map[string]any)["delta"].(map[string]any)
+				primary, _ := delta["reasoning_content"].(string)
+				alias, _ := delta["reasoning"].(string)
+				var detailText, blockText strings.Builder
+				for _, source := range []struct {
+					field string
+					keys  []string
+					text  *strings.Builder
+				}{{"reasoning_details", []string{"summary", "text"}, &detailText}, {"thinking_blocks", []string{"thinking"}, &blockText}} {
+					parts, _ := delta[source.field].([]any)
+					for _, item := range parts {
+						for _, key := range source.keys {
+							text, _ := item.(map[string]any)[key].(string)
+							source.text.WriteString(text)
+						}
+					}
+				}
+				if alias != primary || detailText.String() != primary || tc.blocks != nil && blockText.String() != primary {
+					synchronized = false
+				}
+				if primary != "" {
+					visible.WriteString(primary)
+				} else if alias != "" {
+					visible.WriteString(alias)
+				} else if detailText.Len() != 0 {
+					visible.WriteString(detailText.String())
+				} else {
+					visible.WriteString(blockText.String())
+				}
+			}
+			if visible.String() != canonical || !synchronized {
+				t.Fatalf("fallback client read %d bytes, want %d once with equal per-frame text", visible.Len(), len(canonical))
+			}
+			stream := bytes.Join(frames, nil)
+			if bytes.Count(stream, []byte("opaque-middle")) != 1 || bytes.Count(stream, []byte("unique-signature")) != 1 {
+				t.Fatal("opaque data or signature was repeated or lost")
+			}
+			restored, err := streamToCompletion(stream)
+			if err != nil || !bytes.Equal(restored, raw) {
+				t.Fatalf("round trip changed reasoning items: %v", err)
+			}
+		})
+	}
+}
+
 func TestTransportRejectsUnrepresentableReasoningSnapshots(t *testing.T) {
 	for _, field := range []string{"encrypted_content", "reasoning_details", "thinking_blocks"} {
 		t.Run(field, func(t *testing.T) {
