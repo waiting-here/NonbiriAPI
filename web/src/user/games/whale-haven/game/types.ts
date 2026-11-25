@@ -177,6 +177,7 @@ export interface ActivityLogItem {
     | 'gacha';
   title: string;
   detail: string;
+  conchReward?: string;
   presetMessage?: string;
   highlight?: string;
 }

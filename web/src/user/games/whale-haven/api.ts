@@ -14,6 +14,7 @@ export const base = '/api/games/whale-haven';
 type Settings = { enabled: boolean; exchange_enabled: boolean; values: Record<string, number> };
 export interface Profile {
   snapshot: GameSnapshot;
+  conch_reward?: string;
   settings: Settings;
   settings_revision: string;
   timezone_offset_minutes: number;

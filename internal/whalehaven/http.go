@@ -216,7 +216,7 @@ func (s *Service) handle(req *http.Request, id int64, route string) (any, error)
 			if e = w.settle(r); e != nil {
 				return nil, e
 			}
-			return w.profile(r, operation)
+			return w.actionProfile(r, operation, action.Type)
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -311,7 +311,7 @@ func (s *Service) handle(req *http.Request, id int64, route string) (any, error)
 	}
 	// Projection reads the just-written event rows. Drop the in-memory copies to avoid duplicate timeline entries.
 	w.events = nil
-	value, err := w.profile(r, operation)
+	value, err := w.actionProfile(r, operation, action.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (s *Service) apply(w *world, r *resident, a actionRequest, op string) error
 		category = "harvest"
 	case "spin_conch_gacha":
 		category = "gacha"
-		note = "海螺扭蛋 · " + result.Reward
+		note = conchEventPrefix + result.Reward
 	case "select_outfit":
 		note = "更换衣装"
 	case "toggle_decor":
