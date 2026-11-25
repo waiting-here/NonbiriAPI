@@ -1,7 +1,6 @@
 package rps
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -52,9 +51,8 @@ func TestLedgerRetentionPreservesUnfinishedSessionRecovery(t *testing.T) {
 	if err := fixture.service.RecoverBeforeListen(ctx); err != nil {
 		t.Fatal(err)
 	}
-	after := fixture.sessionForUser(users[0])
-	if after.Phase != before.Phase || after.PhaseSeq != before.PhaseSeq || after.HealthEpoch != 8 {
-		t.Fatal("retention changed the recoverable game")
+	if fixture.scalar("SELECT count(*) FROM game_rps_summaries WHERE session_id=? AND terminal_reason='server_restart'", before.ID) != 1 {
+		t.Fatal("missing cancellation after retention")
 	}
 }
 
@@ -92,14 +90,16 @@ func TestRecoverBeforeListenAtBindsFrozenTimeLimitAndMore(t *testing.T) {
 	second, err := fixture.service.RecoverBeforeListenAt(
 		context.Background(), decisionNow, 1, time.Now().Add(time.Minute),
 	)
-	if err != nil || second.Processed != 1 || second.More || !fixture.service.recovered.Load() {
-		t.Fatalf("second recovery=(%+v,%v) recovered=%v", second, err, fixture.service.recovered.Load())
+	if err != nil || second.Processed != 1 || !second.More {
+		t.Fatal(second, err)
 	}
-	if got := fixture.scalar(`SELECT COUNT(*) FROM game_rps_queue`); got != 1 {
-		t.Fatalf("queues after second=%d", got)
+	for !fixture.service.recovered.Load() {
+		if _, err = fixture.service.RecoverBeforeListenAt(context.Background(), decisionNow, 1, time.Now().Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if got := fixture.scalar(`SELECT COUNT(*) FROM game_rps_queue WHERE id=? AND deadline=?`, future.Queue.ID, future.Queue.Deadline); got != 1 {
-		t.Fatal("startup recovery changed an unexpired queue")
+	if fixture.scalar("SELECT count(*) FROM game_rps_queue") != 0 {
+		t.Fatal("queue survived restart")
 	}
 	if got := fixture.scalar(`SELECT COUNT(*) FROM credit_operations
 WHERE kind='rps_queue_release' AND created_at<>?`, decisionNow); got != 0 {
@@ -107,7 +107,7 @@ WHERE kind='rps_queue_release' AND created_at<>?`, decisionNow); got != 0 {
 	}
 }
 
-func TestRecoverBeforeListenAtRestoresPhaseWithoutRevealingOrReplacingGesture(t *testing.T) {
+func TestRestartCancelsHiddenGestureWithoutRevealingIt(t *testing.T) {
 	fixture := newRPSFixture(t)
 	users, bindings := fixture.startThree(game.RPSModeStandard, rpsTestFunding, 8100)
 	record := fixture.sessionForUser(users[0])
@@ -141,24 +141,8 @@ func TestRecoverBeforeListenAtRestoresPhaseWithoutRevealingOrReplacingGesture(t 
 	if err != nil || result.Processed != 1 || result.More || !restarted.recovered.Load() {
 		t.Fatalf("phase recovery=(%+v,%v) recovered=%v", result, err, restarted.recovered.Load())
 	}
-	after := fixture.sessionForUser(users[0])
-	got := after.Seats[seat]
-	if after.HealthEpoch != 8 || after.Phase != locked.Phase || after.PhaseSeq != locked.PhaseSeq ||
-		after.PhaseDeadline == nil || *after.PhaseDeadline != decisionNow+int64(after.GestureSeconds) {
-		t.Fatalf("recovered session phase=%s seq=%s health=%d deadline=%v", after.Phase, after.PhaseSeq.Decimal(), after.HealthEpoch, after.PhaseDeadline)
-	}
-	if !bytes.Equal(got.GestureEnvelope, before.GestureEnvelope) || got.GesturePhaseSeq == nil ||
-		*got.GesturePhaseSeq != *before.GesturePhaseSeq || got.LastActionPhaseSeq == nil ||
-		*got.LastActionPhaseSeq != *before.LastActionPhaseSeq || got.FollowerAction != nil {
-		t.Fatal("health recovery changed hidden gesture material")
-	}
-	for index, candidate := range after.Seats {
-		if index != seat && (candidate.GestureEnvelope != nil || candidate.GesturePhaseSeq != nil || candidate.LastActionPhaseSeq != nil) {
-			t.Fatalf("seat %d gained hidden gesture material", index)
-		}
-		if candidate.TimeoutCount.Big().Sign() != 0 {
-			t.Fatalf("seat %d timed out during restart", index)
-		}
+	if fixture.scalar("SELECT count(*) FROM game_rps_summaries WHERE session_id=? AND terminal_reason='server_restart'", locked.ID) != 1 || fixture.scalar("SELECT count(*) FROM game_rps_seats WHERE session_id=?", locked.ID) != 0 {
+		t.Fatal("hidden choice survived cancellation")
 	}
 }
 
@@ -212,20 +196,14 @@ func TestRecoverBeforeListenAtTerminalProcessingConvergesAfterHealthBatch(t *tes
 	if err != nil || first.Processed != 1 || !first.More || restarted.recovered.Load() {
 		t.Fatalf("terminal health batch=(%+v,%v) recovered=%v", first, err, restarted.recovered.Load())
 	}
-	stillProcessing, found := fixture.maybeSession(record.ID)
-	if !found || stillProcessing.State != StateTerminalProcessing || stillProcessing.HealthEpoch != 9 ||
-		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 0 {
-		t.Fatal("health batch partially finalized terminal session")
-	}
-
 	second, err := restarted.RecoverBeforeListenAt(
 		context.Background(), decisionNow, 1, time.Now().Add(time.Minute),
 	)
-	if err != nil || second.Processed != 1 || second.More || !restarted.recovered.Load() {
+	if err != nil || second.Processed != 0 || second.More || !restarted.recovered.Load() {
 		t.Fatalf("terminal retry batch=(%+v,%v) recovered=%v", second, err, restarted.recovered.Load())
 	}
 	if _, found := fixture.maybeSession(record.ID); found ||
-		fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_terminal' AND source_id=?`, record.ID) != 1 ||
+		fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_refund' AND source_id=?`, record.ID) != 1 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 1 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results WHERE session_id_text=?`, record.ID) != 3 {
 		t.Fatal("terminal recovery did not converge exactly once")

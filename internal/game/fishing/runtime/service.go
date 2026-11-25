@@ -82,6 +82,7 @@ type Service struct {
 
 	rngMu             sync.Mutex
 	pondRNGMu         sync.Mutex
+	recoveryMu        sync.Mutex
 	workerMu          sync.Mutex
 	workerCancel      context.CancelFunc
 	workerDone        chan struct{}
@@ -175,21 +176,16 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if service == nil || service.closed.Load() {
 		return ErrClosed
 	}
-	service.recovered.Store(false)
-	if err := service.ValidatePersistedState(ctx); err != nil {
-		return err
-	}
+	now := service.now().UTC().Unix()
 	for {
-		processed, runErr := service.runDue(ctx, service.now().UTC().Unix(), true)
-		if runErr != nil {
-			return runErr
+		result, err := service.RecoverBeforeListenAt(ctx, now, workerBatchSize, time.Now().Add(2*time.Second))
+		if err != nil {
+			return err
 		}
-		if processed < workerBatchSize {
-			break
+		if !result.More {
+			return nil
 		}
 	}
-	service.recovered.Store(true)
-	return nil
 }
 
 func (service *Service) StartWorker(parent context.Context) error {

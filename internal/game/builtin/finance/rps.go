@@ -514,3 +514,115 @@ func (port rpsPort) ReleaseOnboarding(ctx context.Context, tx *sql.Tx, userID in
 	}
 	return port.releaseUser(ctx, tx, userID)
 }
+
+func (port rpsPort) CancelSession(ctx context.Context, tx *sql.Tx, id string, meta ledger.Meta, write ports.Mutation) error {
+	if !validSession(ctx, tx, id, meta) || meta.ActorUserID != 0 || write == nil {
+		return ledger.ErrInvalidPlan
+	}
+	account, version, err := sessionSource(ctx, tx, id, 0)
+	if err != nil {
+		return err
+	}
+	general, err := ledger.ReadAccount(ctx, tx, account)
+	if err != nil {
+		return err
+	}
+	escrow := ledger.AccountPair{General: account}
+	balances := ledger.Payment{General: general.Balance}
+	if version == 2 {
+		pair, err := codedAccounts(ctx, tx, "rps-session:"+id)
+		if err != nil {
+			return err
+		}
+		game, err := ledger.ReadAccount(ctx, tx, pair.Game)
+		if err != nil {
+			return err
+		}
+		escrow.Game, balances.Game = game.ID, game.Balance
+	}
+	external, err := codedAccounts(ctx, tx, "external")
+	if err != nil {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT seat_no,user_id,deletion_state,starting_balance,game_buy_in FROM game_rps_seats WHERE session_id=? ORDER BY seat_no`, id)
+	if err != nil {
+		return err
+	}
+	type refund struct {
+		user    int64
+		seat    int
+		payment ledger.Payment
+	}
+	var refunds []refund
+	count := 0
+	for rows.Next() {
+		var seat int
+		var user sql.NullInt64
+		var status string
+		var buy, game []byte
+		if err = rows.Scan(&seat, &user, &status, &buy, &game); err != nil {
+			rows.Close()
+			return err
+		}
+		count++
+		if status != "active" {
+			continue
+		}
+		total, err := db.DecodeU128(buy)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		gamePaid, err := db.DecodeU128(game)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		if !user.Valid || total.Big().Cmp(gamePaid.Big()) < 0 {
+			rows.Close()
+			return ledger.ErrInvalidPlan
+		}
+		g, err := ledger.AmountFromBig(new(big.Int).Sub(total.Big(), gamePaid.Big()))
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		v, err := ledger.AmountFromBig(gamePaid.Big())
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		refunds = append(refunds, refund{user.Int64, seat, ledger.Payment{General: g, Game: v}})
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if count != 3 {
+		return ledger.ErrInvalidPlan
+	}
+	var seats []ledger.RPSRefundSeat
+	for _, r := range refunds {
+		wallets, err := walletAccounts(ctx, tx, r.user)
+		if err != nil {
+			return err
+		}
+		seats = append(seats, ledger.RPSRefundSeat{Wallets: wallets, Payment: r.payment})
+		if version == 2 {
+			if err = port.release(ctx, tx, onboardingParent{column: "rps_session_id", id: id, seat: r.seat}, r.user); err != nil {
+				return err
+			}
+		}
+	}
+	plan, err := ledger.NewRPSRefund(meta, id, escrow, external, balances, seats)
+	if err != nil {
+		return err
+	}
+	ref, err := ledger.RPSSessionReservation(id)
+	if err != nil {
+		return err
+	}
+	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, ledger.ReservationMutation(write))
+	return err
+}

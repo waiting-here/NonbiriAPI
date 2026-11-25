@@ -115,12 +115,7 @@ func New(o Options) (*Service, error) {
 		if _, ok := o.Finance.(finance.AIDuel); !ok {
 			return nil, ErrInvariant
 		}
-		var err error
-		s.aiPool, err = ai.NewPool(2, AIActiveCapacity*2)
-		if err != nil {
-			return nil, err
-		}
-		s.aiWake = make(chan struct{}, 1)
+
 	}
 	if err := s.initializeReader(); err != nil {
 		return nil, err

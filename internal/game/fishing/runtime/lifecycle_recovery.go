@@ -39,6 +39,8 @@ func (service *Service) RecoverBeforeListenAt(
 		return RecoveryResult{}, err
 	}
 
+	service.recoveryMu.Lock()
+	defer service.recoveryMu.Unlock()
 	startup := !service.recovered.Load()
 	if startup && !service.recoveryValidated.Load() {
 		if err := service.ValidatePersistedState(workerCtx); err != nil {
@@ -46,6 +48,13 @@ func (service *Service) RecoverBeforeListenAt(
 		}
 	}
 
+	if startup {
+		result, err := service.cancelReserved(workerCtx, decisionNow, limit)
+		if err == nil && !result.More {
+			service.recovered.Store(true)
+		}
+		return result, err
+	}
 	processed, err := service.recoverFishingDueBatch(workerCtx, decisionNow, limit)
 	if err != nil {
 		return RecoveryResult{}, err
@@ -53,9 +62,6 @@ func (service *Service) RecoverBeforeListenAt(
 	more, err := service.fishingRecoveryPending(workerCtx, decisionNow)
 	if err != nil {
 		return RecoveryResult{}, err
-	}
-	if startup && !more {
-		service.recovered.Store(true)
 	}
 	return RecoveryResult{Processed: processed, More: more}, nil
 }

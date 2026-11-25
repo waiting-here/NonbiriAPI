@@ -286,7 +286,7 @@ func TestRecoveryCandidatesExcludeTerminalHistory(t *testing.T) {
 	}
 }
 
-func TestRecoveryBatchesPauseEachCastOnceWithoutAdvancingProgress(t *testing.T) {
+func TestRecoveryBatchesCancelEachCastOnceWithoutAdvancingProgress(t *testing.T) {
 	f := newFixture(t)
 	f.enable(t)
 	type progress struct {
@@ -297,7 +297,7 @@ func TestRecoveryBatchesPauseEachCastOnceWithoutAdvancingProgress(t *testing.T) 
 	read := func(id string) progress {
 		t.Helper()
 		var saved progress
-		if err := f.database.QueryRow("SELECT snapshot,revision,active_elapsed_ns FROM lake_notes_casts WHERE id=?", id).Scan(&saved.snapshot, &saved.revision, &saved.elapsed); err != nil {
+		if err := f.database.QueryRow("SELECT json_extract(snapshot,'$.tick'),revision,active_elapsed_ns FROM lake_notes_casts WHERE id=?", id).Scan(&saved.snapshot, &saved.revision, &saved.elapsed); err != nil {
 			t.Fatal(err)
 		}
 		return saved
@@ -341,5 +341,53 @@ func TestRecoveryBatchesPauseEachCastOnceWithoutAdvancingProgress(t *testing.T) 
 				t.Fatal(batch, i, actualPaused, err)
 			}
 		}
+	}
+}
+
+func TestRestartRefundsActualBaitFromPausedCastAndLeavesNewCastAlone(t *testing.T) {
+	f := newFixture(t)
+	f.enable(t)
+	f.profile(t)
+	ctx := f.ctx(f.user)
+	f.tx(t, func(tx *sql.Tx) {
+		p, err := profileTx(ctx, tx, f.user, false, testNow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.profile.OwnedGear = append(p.profile.OwnedGear, "fiberglassRod")
+		p.profile.Equipped.Rod = "fiberglassRod"
+		p.profile.BaitStock["basic"] = 2
+		p.profile.SelectedBait = "basic"
+		if err := saveProfileTx(ctx, tx, f.user, &p, testNow); err != nil {
+			t.Fatal(err)
+		}
+	})
+	before := f.profile(t)
+	c, err := f.service.Start(ctx, f.user, testKey(1510), StartInput{before.Revision})
+	if err != nil || c.Value.Profile.Profile.BaitStock["basic"] != 1 {
+		t.Fatal(c, err)
+	}
+	if _, err := f.service.Pause(ctx, f.user, c.Value.Cast.ID, testKey(1511), control(c.Value.Cast)); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, err := f.service.RecoverBeforeListener(ctx, testNow, 100, time.Second); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after := f.profile(t)
+	if after.Profile.BaitStock["basic"] != 2 || after.Profile.Coins != before.Profile.Coins || after.Profile.XP != before.Profile.XP || after.Cast != nil {
+		t.Fatal(after)
+	}
+	fresh, err := f.service.Start(ctx, f.user, testKey(1512), StartInput{after.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if work, err := f.service.RecoverBeforeListener(ctx, testNow+20, 100, time.Second); err != nil || work.Processed != 0 {
+		t.Fatal(work, err)
+	}
+	v, err := f.service.Cast(ctx, f.user, fresh.Value.Cast.ID)
+	if err != nil || v.Cast.State.Phase == "cancelled" {
+		t.Fatal(v, err)
 	}
 }

@@ -298,18 +298,25 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.ID, index, user, db.EncodeU256(seat.T
 		if err != nil {
 			return err
 		}
+		returnedGeneral := nullableU128(seat.TerminalReturn)
+		if *record.TerminalReason == TerminalServerRestart {
+			returnedGeneral = db.EncodeU128(generalBuyIn)
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_pending_results(
 user_id,session_id_text,mode,terminal_reason,own_seat_no,own_input,own_returned,own_wallet_net_sign,own_wallet_net_mag,
 seat0_result,seat1_result,seat2_result,created_at,rules_version,general_buy_in,game_buy_in,own_returned_general) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			*seat.UserID, record.ID, record.Mode, *record.TerminalReason, index, db.EncodeU256(seat.TotalInput),
 			db.EncodeU256(seat.TotalReturned), *seat.WalletNetSign, db.EncodeU128(*seat.WalletNetMag),
-			outcomes[0], outcomes[1], outcomes[2], now, record.RulesVersion, db.EncodeU128(generalBuyIn), db.EncodeU128(seat.GameBuyIn), nullableU128(seat.TerminalReturn)); err != nil {
+			outcomes[0], outcomes[1], outcomes[2], now, record.RulesVersion, db.EncodeU128(generalBuyIn), db.EncodeU128(seat.GameBuyIn), returnedGeneral); err != nil {
 			return classifyDB(err)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_pending_presentation(user_id, own_buy_in, own_cash_out, quick_seat0_gesture, quick_seat1_gesture, quick_seat2_gesture) VALUES(?, ?, ?, ?, ?, ?)`, *seat.UserID,
 			db.EncodeU128(seat.StartingBalance), nullableU128(seat.TerminalReturn), nullableString(record.Presentation.QuickGestures[0]),
 			nullableString(record.Presentation.QuickGestures[1]), nullableString(record.Presentation.QuickGestures[2])); err != nil {
 			return classifyDB(err)
+		}
+		if *record.TerminalReason == TerminalServerRestart {
+			continue
 		}
 		if err := service.applyFunStatsTx(ctx, tx, *seat.UserID, seat, now); err != nil {
 			return err

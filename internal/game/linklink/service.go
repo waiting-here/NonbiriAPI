@@ -75,6 +75,7 @@ type Service struct {
 	leaseMu sync.RWMutex
 	leases  map[leaseBindingKey]leaseBinding
 
+	recoveryMu        sync.Mutex
 	workerMu          sync.Mutex
 	workerCancel      context.CancelFunc
 	workerDone        chan struct{}

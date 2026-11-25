@@ -14,13 +14,9 @@ import (
 
 // pauseTx updates the authoritative controller columns. Decode overlays them
 // on the last exact simulation snapshot; no unacknowledged tick is replayed.
-func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, nowNS int64, where string, args []any, recovery bool) error {
+func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, nowNS int64, where string, args []any) error {
 	elapsed := "active_elapsed_ns+max(0,min(lease_until_ns,?)-active_started_at_ns)"
 	params := []any{nowNS, nowNS / int64(time.Second)}
-	if recovery {
-		elapsed = "active_elapsed_ns"
-		params = []any{nowNS / int64(time.Second)}
-	}
 	query := "UPDATE lake_notes_casts SET active_elapsed_ns=" + elapsed + ",active_started_at_ns=NULL,lease_until_ns=NULL,paused=1,held=0,revision=revision+1,updated_at=? WHERE paused=0 AND phase IN ('waiting','playing')"
 	if where != "" {
 		query += " AND (" + where + ")"
@@ -41,16 +37,16 @@ func (s *Service) expireUserTx(ctx context.Context, tx *sql.Tx, user int64, now 
 		where = "user_id=?"
 		args = []any{user}
 	}
-	return s.pauseTx(ctx, tx, now.UnixNano(), where, args, false)
+	return s.pauseTx(ctx, tx, now.UnixNano(), where, args)
 }
 func (s *Service) PreparePauseTx(ctx context.Context, tx *sql.Tx, now int64) (host.Finalizer, error) {
-	return nil, s.pauseTx(ctx, tx, now*int64(time.Second), "", nil, false)
+	return nil, s.pauseTx(ctx, tx, now*int64(time.Second), "", nil)
 }
 func (s *Service) PrepareMaintenanceTx(ctx context.Context, tx *sql.Tx, now int64) (host.Finalizer, error) {
 	return s.PreparePauseTx(ctx, tx, now)
 }
 func (s *Service) PrepareBanTx(ctx context.Context, tx *sql.Tx, user, now int64) (host.Finalizer, error) {
-	return nil, s.pauseTx(ctx, tx, now*int64(time.Second), "user_id=?", []any{user}, false)
+	return nil, s.pauseTx(ctx, tx, now*int64(time.Second), "user_id=?", []any{user})
 }
 func (s *Service) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, user, now int64) (host.Finalizer, error) {
 	if user <= 0 {
@@ -74,6 +70,11 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_recovery")
 	if limit < 1 || limit > lifecycle.WorkerBatchLimit || budget <= 0 || budget > lifecycle.WorkerBudget {
 		return lifecycle.WorkResult{}, ErrInvalid
+	}
+	s.recoveryMu.Lock()
+	defer s.recoveryMu.Unlock()
+	if s.recovered {
+		return lifecycle.WorkResult{}, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -105,13 +106,40 @@ func (s *Service) RecoverBeforeListener(ctx context.Context, now int64, limit in
 		ids = ids[:limit]
 	}
 	for _, id := range ids {
-		if e = s.pauseTx(ctx, tx, now*int64(time.Second), "id=?", []any{id}, true); e != nil {
+		if e = s.cancelCastTx(ctx, tx, id, now); e != nil {
 			return out, e
 		}
 		out.Processed++
 	}
-	return out, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return out, err
+	}
+	s.recovered = !out.More
+	return out, nil
 }
+func (s *Service) cancelCastTx(ctx context.Context, tx *sql.Tx, id string, now int64) error {
+	c, err := scanCastContext(ctx, tx.QueryRowContext(ctx, "SELECT "+castColumns+" FROM lake_notes_casts WHERE id=?", id).Scan)
+	if err != nil {
+		return err
+	}
+	if bait := c.state.Snapshot.Bait; bait != "" {
+		row, err := profileTx(ctx, tx, c.user, false, now)
+		if err != nil {
+			return err
+		}
+		if _, _, err = row.profile.AwardBait(bait, 1); err != nil {
+			return err
+		}
+		if err = saveProfileTx(ctx, tx, c.user, &row, now); err != nil {
+			return err
+		}
+	}
+	c.state.Phase = "cancelled"
+	c.state.Paused, c.state.Held = true, false
+	c.started, c.lease = sql.NullInt64{}, sql.NullInt64{}
+	return saveCastTx(ctx, tx, &c, time.Unix(now, 0), struct{}{})
+}
+
 func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.Duration) (_ lifecycle.WorkResult, resultErr error) {
 	ctx = context.WithValue(ctx, lakeOperationContextKey{}, "lake_retention")
 	if limit < 1 || limit > lifecycle.WorkerBatchLimit || budget <= 0 || budget > lifecycle.WorkerBudget {
@@ -160,7 +188,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.
 	}
 	if len(pauseIDs) != 0 {
 		where := "id IN (" + strings.TrimSuffix(strings.Repeat("?,", len(pauseIDs)), ",") + ")"
-		if e = s.pauseTx(ctx, tx, now*int64(time.Second), where, pauseIDs, false); e != nil {
+		if e = s.pauseTx(ctx, tx, now*int64(time.Second), where, pauseIDs); e != nil {
 			return out, e
 		}
 	}
@@ -177,7 +205,7 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, budget time.
 // Read active casts through the partial index so retained history does not
 // consume the recovery batch's time budget.
 const recoveryCandidatesSQL = `SELECT id FROM lake_notes_casts INDEXED BY idx_lake_notes_active_cast_user
-WHERE paused=0 AND phase IN ('waiting','playing') ORDER BY id LIMIT ?`
+WHERE phase IN ('waiting','playing') ORDER BY id LIMIT ?`
 
 // Active and terminal casts are disjoint. Separate scans let both existing
 // partial indexes exclude retained history before the shared ordered limit.

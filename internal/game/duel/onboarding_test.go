@@ -127,6 +127,7 @@ func TestNewcomerDuelTimeoutCompletionAndRecoveryCancellation(t *testing.T) {
 		enableNewRewards(f, "quick")
 		f.enqueue(0, 0)
 		f.enqueue(1, 0)
+		f.restartService()
 		if _, err := f.s.RecoverBeforeListenAt(f.ctx, f.clock.Load(), 100, time.Now().Add(time.Minute)); err != nil {
 			t.Fatal(err)
 		}

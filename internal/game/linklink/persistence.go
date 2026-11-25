@@ -170,6 +170,10 @@ FROM game_linklink_summaries WHERE session_id=? AND user_id=?`, sessionID, userI
 		}
 		value := new(big.Int).SetInt64(score.Int64).String()
 		summary.Score = &value
+	case TerminalCancelled:
+		if score.Valid {
+			return Summary{}, false, ErrInvariant
+		}
 	case TerminalAbandoned:
 		if score.Valid || summary.TerminalAt >= summary.Deadline {
 			return Summary{}, false, ErrInvariant
@@ -242,7 +246,7 @@ func (service *Service) terminalize(ctx context.Context, tx *sql.Tx, record sess
 		score = value
 		wire := new(big.Int).SetInt64(value).String()
 		scoreWire = &wire
-	case TerminalAbandoned:
+	case TerminalAbandoned, TerminalCancelled:
 		score = nil
 	default:
 		return Summary{}, ErrInvariant
@@ -252,7 +256,7 @@ INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal
 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.ID, record.UserID, record.Spec, record.PriceMilli, reason, record.CreatedAt, record.Deadline, terminalAt, record.PairsRemoved, score, record.RulesVersion, record.GamePaid, record.AssistsInitial, record.AssistsRemaining); err != nil {
 		return Summary{}, classifyDB(err)
 	}
-	if record.RulesVersion == 2 {
+	if record.RulesVersion == 2 || reason == TerminalCancelled {
 		if err := service.finance.Terminal(ctx, tx, record.ID, record.UserID, terminalAt); err != nil {
 			return Summary{}, mapLedger(err)
 		}

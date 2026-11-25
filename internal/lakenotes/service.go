@@ -37,6 +37,8 @@ type Service struct {
 	now          func() time.Time
 	random       rules.Random53
 	seed         func() (uint32, error)
+	recoveryMu   sync.Mutex
+	recovered    bool
 	budgetMu     sync.Mutex
 	budgetSecond int64
 	budgetTotal  int

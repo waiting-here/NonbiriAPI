@@ -330,7 +330,7 @@ func TestConcurrentQueueAcceptanceAndDuplicateKeys(t *testing.T) {
 	f.recovery()
 }
 
-func TestRestartCancelsDealtTableButPreservesWaiter(t *testing.T) {
+func TestRestartCancelsDealtTableAndRefundsWaiterOnce(t *testing.T) {
 	f := newFixture(t, 10)
 	for i := range 10 {
 		f.join(i)
@@ -345,14 +345,20 @@ func TestRestartCancelsDealtTableButPreservesWaiter(t *testing.T) {
 	f.s.Close()
 	f.s = f.service()
 	h = f.read(9)
-	if h.You == nil || h.You.ID != waiter || h.You.State != "waiting" {
-		t.Fatal("restart removed candidate")
+	if h.You != nil {
+		t.Fatal("restart left queue occupied")
 	}
+	var refunded int
+	if err := f.db.QueryRow("SELECT count(*) FROM game_blackjack_payments WHERE entry_id=? AND state='released'", waiter).Scan(&refunded); err != nil || refunded != 1 {
+		t.Fatal(refunded, err)
+	}
+	f.s.Close()
+	f.s = f.service()
 	var phase string
 	if err := f.db.QueryRow(`SELECT phase FROM game_blackjack_sessions WHERE id=?`, session).Scan(&phase); err != nil || phase != "cancelled" {
 		t.Fatal("restart did not cancel current table", err)
 	}
-	for _, identity := range f.users[:9] {
+	for _, identity := range f.users {
 		tx, err := f.db.Begin()
 		if err != nil {
 			t.Fatal(err)

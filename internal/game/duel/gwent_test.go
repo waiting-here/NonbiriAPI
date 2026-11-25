@@ -39,31 +39,16 @@ func TestGwentSimultaneousMulliganResumeAndDrawRefund(t *testing.T) {
 	if _, err := restarted.RecoverBeforeListenAt(f.ctx, 1000, 100, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	current := *f.read(0).Current
-	if string(current.View) != string(old.View) || current.DecisionID == old.DecisionID && !current.Locked[current.You] || *current.Deadline != 1030 {
-		t.Fatal("restart changed cards or retained stale decision", old, current)
-	}
 	if _, err := restarted.Action(f.ctx, duel.ActionInput{Identity: f.identity(0), IdempotencyKey: f.key(), SessionID: old.ID, PhaseSeq: old.PhaseSeq, DecisionID: old.DecisionID, Action: []byte(`{"kind":"pass"}`)}); !errors.Is(err, duel.ErrConflict) {
 		t.Fatal("pre-restart action accepted", err)
 	}
-	for range 8 {
-		home := f.read(0)
-		if home.Current == nil {
-			break
-		}
-		seat := 0
-		if home.Current.Locked[home.Current.You] {
-			seat = 1
-		}
-		f.action(seat, *f.read(seat).Current, `{"kind":"pass"}`)
-	}
 	home := f.read(0)
-	if home.Current != nil || home.LatestResult == nil || home.LatestResult.Outcome != "draw" || home.LatestResult.OwnRefund.Game != "3" || home.LatestResult.OwnRefund.General != "2" {
+	if home.Current != nil || home.LatestResult == nil || home.LatestResult.Outcome != "system_cancelled" || home.LatestResult.OwnRefund.General != "2" || home.LatestResult.OwnRefund.Game != "3" {
 		t.Fatal(home)
 	}
-	var count int
-	if err := f.db.QueryRow(`SELECT count(*) FROM game_duel_results WHERE result=1 AND rating_before=1500 AND rating_after=1500`).Scan(&count); err != nil || count != 2 {
-		t.Fatal(count, err)
+	var ranked int
+	if err := f.db.QueryRow("SELECT count(*) FROM game_duel_results WHERE session_id=?", old.ID).Scan(&ranked); err != nil || ranked != 0 {
+		t.Fatal(ranked, err)
 	}
 	f.ledger()
 }

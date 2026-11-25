@@ -225,7 +225,7 @@ WHERE p.user_id=?`, userID).Scan(
 	if record.RulesVersion == 2 && returnedGeneralRaw == nil {
 		return PendingResult{}, false, ErrInvariant
 	}
-	record.OwnBuyInGeneral, record.OwnBuyInGame, record.OwnReturnedGeneral, err = terminalFunding(record.RulesVersion, generalRaw, gameRaw, returnedGeneralRaw, record.OwnBuyIn, record.OwnCashOut, sign, wallet)
+	record.OwnBuyInGeneral, record.OwnBuyInGame, record.OwnReturnedGeneral, err = terminalFunding(record.TerminalReason == TerminalServerRestart, record.RulesVersion, generalRaw, gameRaw, returnedGeneralRaw, record.OwnBuyIn, record.OwnCashOut, sign, wallet)
 	if err != nil {
 		return PendingResult{}, false, err
 	}
