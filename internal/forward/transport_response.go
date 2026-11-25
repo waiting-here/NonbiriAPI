@@ -451,6 +451,35 @@ func fragmentAudio(audio map[string]any, emit func(map[string]any) error) error 
 
 type indexedDeltas map[int64]map[string]any
 
+// When a choice contains structured parts, retain plain text in the same
+// sequence. Already-structured parts pass through without reinterpretation.
+func mergeChatMessageDelta(message, delta map[string]any) error {
+	switch content := delta["content"].(type) {
+	case []any:
+		if text, ok := message["content"].(*strings.Builder); ok {
+			if len(content) == 0 {
+				delete(delta, "content")
+			} else if text.Len() != 0 {
+				message["content"] = []any{map[string]any{"type": "text", "text": text}}
+			}
+		}
+	case string:
+		if parts, ok := message["content"].([]any); ok && len(parts) > 0 {
+			delete(delta, "content")
+			if content != "" {
+				last, _ := parts[len(parts)-1].(map[string]any)
+				text, ok := last["text"].(*strings.Builder)
+				if !ok {
+					text = new(strings.Builder)
+					message["content"] = append(parts, map[string]any{"type": "text", "text": text})
+				}
+				text.WriteString(content)
+			}
+		}
+	}
+	return mergeDelta(message, delta)
+}
+
 // mergeDelta follows Chat Completions delta semantics. Text and function
 // fragments append; indexed tools merge without using remote indices as sizes.
 func mergeDelta(dst, src map[string]any) error {
@@ -701,7 +730,7 @@ func streamToCompletion(raw []byte) ([]byte, error) {
 				choices[index] = choice
 			}
 			if delta, ok := row["delta"].(map[string]any); ok {
-				if err := mergeDelta(choice["message"].(map[string]any), delta); err != nil {
+				if err := mergeChatMessageDelta(choice["message"].(map[string]any), delta); err != nil {
 					return nil, err
 				}
 			}

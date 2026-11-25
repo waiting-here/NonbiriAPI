@@ -18,12 +18,12 @@ func TestStreamBuffersPreserveByteOffsetsAndCleanup(t *testing.T) {
 		}
 		return root
 	}
-	consume(`{"content":"前缀🙂"}`, "null")
+	consume(`{"content":"前缀🙂","reasoning_content":"最初🙂"}`, "null")
 	prefix := states[0].Content
 	MarkStreamContentEmitted(states)
-	consume(`{"content":"后","tool_calls":[{"index":0,"id":"call","type":"function","function":{"name":"lookup","arguments":"{\"query\":\""}}]}`, "null")
+	consume(`{"content":"后","reasoning_content":"核","tool_calls":[{"index":0,"id":"call","type":"function","function":{"name":"lookup","arguments":"{\"query\":\""}}]}`, "null")
 	arguments := states[0].Tools[0].Arguments
-	root := consume(`{"content":"续","tool_calls":[{"index":0,"function":{"arguments":"世界\"}"}}]}`, `"tool_calls"`)
+	root := consume(`{"content":"续","reasoning_content":"对🙂","tool_calls":[{"index":0,"function":{"arguments":"世界\"}"}}]}`, `"tool_calls"`)
 	body, err := StreamCompletionBodyAfter(root, states)
 	if err != nil {
 		t.Fatal(err)
@@ -31,8 +31,9 @@ func TestStreamBuffersPreserveByteOffsetsAndCleanup(t *testing.T) {
 	var completion struct {
 		Choices []struct {
 			Message struct {
-				Content string
-				Calls   []struct {
+				Content   string
+				Reasoning string `json:"reasoning_content"`
+				Calls     []struct {
 					Function struct{ Arguments string }
 				} `json:"tool_calls"`
 			}
@@ -42,14 +43,14 @@ func TestStreamBuffersPreserveByteOffsetsAndCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	message := completion.Choices[0].Message
-	if prefix != "前缀🙂" || arguments != `{"query":"` || message.Content != "后续" ||
+	if prefix != "前缀🙂" || arguments != `{"query":"` || message.Content != "后续" || message.Reasoning != "核对🙂" ||
 		len(message.Calls) != 1 || message.Calls[0].Function.Arguments != `{"query":"世界"}` {
 		t.Fatalf("prefix or terminal suffix changed: %s", body)
 	}
 	tool := states[0].Tools[0]
 	ClearStreamStates(states)
 	if states[0].Content != "" || states[0].Tools != nil || tool.ID != "" || tool.Name != "" || tool.Arguments != "" ||
-		states[0].contentBuffer != nil || tool.argumentsBuffer != nil {
+		states[0].contentBuffer != nil || states[0].pendingReasoning != nil || tool.argumentsBuffer != nil {
 		t.Fatal("clear retained buffered values")
 	}
 	// Cleanup ends the old stream; a new stream starts with new metadata.
