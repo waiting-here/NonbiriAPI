@@ -1911,26 +1911,6 @@ function DonationsPanel({
         <div className="charity-donations__list" hidden={binding}>
           <Card>
             <div className="charity-donation-toolbar">
-              <Field label={t('common.governance.queueOrder')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={sort}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setSearchParams((current) => {
-                        const next = new URLSearchParams(current);
-                        next.set('donation_sort', value);
-                        next.set('donations_page', '1');
-                        return next;
-                      });
-                    }}
-                  >
-                    <option value="oldest">{t('common.governance.oldest')}</option>
-                    <option value="newest">{t('common.governance.newest')}</option>
-                  </select>
-                )}
-              </Field>
               <FilterBar
                 query={list}
                 onReset={() => {
@@ -1957,6 +1937,26 @@ function DonationsPanel({
                           value={queryDraft}
                           onChange={(event) => setQueryDraft(event.target.value)}
                         />
+                      )}
+                    </Field>
+                    <Field label={t('common.governance.queueOrder')} size="short">
+                      {(props) => (
+                        <select
+                          {...props}
+                          value={sort}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setSearchParams((current) => {
+                              const next = new URLSearchParams(current);
+                              next.set('donation_sort', value);
+                              next.set('donations_page', '1');
+                              return next;
+                            });
+                          }}
+                        >
+                          <option value="oldest">{t('common.governance.oldest')}</option>
+                          <option value="newest">{t('common.governance.newest')}</option>
+                        </select>
                       )}
                     </Field>
                   </>
