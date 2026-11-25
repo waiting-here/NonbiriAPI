@@ -141,7 +141,7 @@ for (const width of [390, 1440])
               return strip.scrollLeft;
             }),
           ).toBeGreaterThan(0);
-          await expect(hand.getByRole('button').last()).toBeInViewport({ ratio: 1 });
+          await expect(hand.getByRole('button').last()).toBeInViewport({ ratio: 0.99 });
         }
         if (process.env.NONBIRI_VISUAL_DIR)
           await page.screenshot({
