@@ -9,7 +9,7 @@ import (
 
 // These per-part keys are consumed by the pinned provider adapters. Other
 // provider options, especially routing and execution controls, are not replayed.
-func continuationMetadata(raw []byte, strict bool) (map[string]any, error) {
+func continuationMetadata(raw []byte, partKind string, strict bool) (map[string]any, error) {
 	if len(raw) == 0 || isNull(raw) {
 		return nil, nil
 	}
@@ -21,6 +21,9 @@ func continuationMetadata(raw []byte, strict bool) (map[string]any, error) {
 		"google": {"thoughtSignature"}, "googleVertex": {"thoughtSignature"}, "vertex": {"thoughtSignature"},
 		"anthropic": {"signature", "redactedData"},
 		"openai":    {"itemId", "reasoningEncryptedContent"}, "azure": {"itemId", "reasoningEncryptedContent"},
+	}
+	if partKind == "reasoning" {
+		allowed["bedrock"] = []string{"signature", "redactedData", "redactedContent"}
 	}
 	result := map[string]any{}
 	for provider, value := range root {
@@ -51,7 +54,10 @@ func continuationMetadata(raw []byte, strict bool) (map[string]any, error) {
 				continue
 			}
 			s, ok := text(value)
-			if !ok || len(s) == 0 || len(s) > 1<<20 || strings.ContainsAny(s, "\x00\r\n") {
+			// Older Bedrock adapters emit an empty redactedData string when the
+			// native redactedReasoning block has no data. Replay that marker.
+			allowsEmpty := provider == "bedrock" && key == "redactedData"
+			if !ok || s == "" && !allowsEmpty || len(s) > 1<<20 || strings.ContainsAny(s, "\x00\r\n") {
 				return nil, errResponse
 			}
 			out[key] = s
@@ -85,7 +91,7 @@ func continuationPart(part object, strict bool) (map[string]any, error) {
 	default:
 		return nil, errResponse
 	}
-	metadata, err := continuationMetadata(part["providerMetadata"], strict)
+	metadata, err := continuationMetadata(part["providerMetadata"], kind, strict)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +249,7 @@ func matchContinuation(parts, expected []any, field string) error {
 }
 
 func mergeContinuationMetadata(part map[string]any, raw []byte) error {
-	metadata, err := continuationMetadata(raw, false)
+	metadata, err := continuationMetadata(raw, part["type"].(string), false)
 	if err != nil {
 		return err
 	}

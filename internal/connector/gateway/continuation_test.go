@@ -254,3 +254,39 @@ func TestGatewayOmittedReasoningAndToolOnlyContinuationReplay(t *testing.T) {
 		}
 	}
 }
+
+func TestGatewayV4PingDuringReasoning(t *testing.T) {
+	const ping = `{"type":"ping"}`
+	const start = `{"type":"reasoning-start","id":"r"}`
+	const delta = `{"type":"reasoning-delta","id":"r","delta":"plan"}`
+	const end = `{"type":"reasoning-end","id":"r"}`
+	const finish = `{"type":"finish","finishReason":{"unified":"stop"},"usage":` + knownUsage + `}`
+	for _, tc := range []struct {
+		name string
+		kind contract.Type
+		body string
+		ok   bool
+	}{
+		{"v4-before-and-during", contract.TypeAISDKGatewayV4, sse(ping, start, delta, ping, end, finish), true},
+		{"v3", contract.TypeAISDKGatewayV3, sse(start, delta, ping, end, finish), false},
+		{"payload", contract.TypeAISDKGatewayV4, sse(start, `{"type":"ping","delta":"unexpected"}`, end, finish), false},
+		{"after-finish", contract.TypeAISDKGatewayV4, sse(start, delta, end, finish, ping), false},
+		{"missing-finish", contract.TypeAISDKGatewayV4, sse(ping), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := &fakeBackend{do: func(*http.Request) (*http.Response, error) { return response(tc.body, "text/event-stream"), nil }}
+			adapter, _ := NewAdapter(backend)
+			request := chat(t, `{"model":"public","messages":[{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true}}`)
+			defer request.Clear()
+			writer := httptest.NewRecorder()
+			result := adapter.Attempt(context.Background(), writer, contract.NewTarget(tc.kind, target().BaseURL(), "private"), secret(), request, nil, "")
+			body := writer.Body.String()
+			if result.Success != tc.ok || strings.Contains(body, "[DONE]") != tc.ok || strings.Contains(body, `"ping"`) {
+				t.Fatal(result, body)
+			}
+			if tc.ok && (strings.Count(body, `"reasoning_content":"plan"`) != 1 || strings.Count(body, `"completion_tokens":5`) != 1 || result.Usage.OutputTokens != 5) {
+				t.Fatal("invalid projection or usage", body)
+			}
+		})
+	}
+}
