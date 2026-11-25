@@ -74,10 +74,12 @@ func numberedFeed(t *testing.T, events ...map[string]any) (string, contract.Usag
 
 func TestSnapshotOnlyResponsesKeepOutputAndUsageOnce(t *testing.T) {
 	items := []json.RawMessage{json.RawMessage(signedReasoning), json.RawMessage(messageSnapshot), json.RawMessage(callAJSON), json.RawMessage(callBJSON)}
-	for _, mode := range []string{"terminal", "indexed done", "unindexed done"} {
+	for _, mode := range []string{"terminal", "single terminal", "indexed done", "unindexed done"} {
 		t.Run(mode, func(t *testing.T) {
 			events := toolEvents()[:1]
-			if mode != "terminal" {
+			if mode == "single terminal" {
+				events = nil
+			} else if mode != "terminal" {
 				for i, item := range items {
 					event := map[string]any{"type": "response.output_item.done", "item": item}
 					if mode == "indexed done" {
@@ -97,6 +99,28 @@ func TestSnapshotOnlyResponsesKeepOutputAndUsageOnce(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOptionalDoneSentinelRequiresMatchingSemanticTerminal(t *testing.T) {
+	newStream := func() *decoder { return NewDecoder("m", time.Unix(1, 0), true).(*decoder) }
+	if _, err := newStream().Event("", []byte("[DONE]")); err == nil {
+		t.Fatal("sentinel completed a stream without a semantic terminal")
+	}
+	d := newStream()
+	raw := []byte(`{"type":"response.completed","sequence_number":0,"response_id":"r","response":{"id":"r","output":[]}}`)
+	if _, err := d.Event("", raw); err != nil {
+		t.Fatal(err)
+	}
+	if frames, err := d.Event("message", []byte("[DONE]")); err != nil || len(frames) != 0 {
+		t.Fatal(frames, err)
+	}
+	if _, err := d.Event("", []byte("[DONE]")); err == nil {
+		t.Fatal("duplicate sentinel")
+	}
+	bad := strings.Replace(string(raw), `"id":"r"`, `"id":"other"`, 1)
+	if _, err := newStream().Event("", []byte(bad)); err == nil {
+		t.Fatal("terminal-only stream accepted conflicting identities")
 	}
 }
 

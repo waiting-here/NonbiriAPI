@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -32,6 +33,7 @@ type decoder struct {
 	id, model, responseID, finish                                 string
 	created, sequence                                             int64
 	started, terminal, finished, roleSent, nonReasoning, toolSeen bool
+	sentinelSeen                                                  bool
 	items                                                         []*itemState
 	toolCount                                                     int
 	reasoningBytes                                                int
@@ -268,6 +270,10 @@ func sameJSON(a, b []byte) bool {
 	return json.Unmarshal(a, &x) == nil && json.Unmarshal(b, &y) == nil && reflect.DeepEqual(x, y)
 }
 func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
+	if d.terminal && !d.finished && !d.sentinelSeen && (name == "" || name == "message") && bytes.Equal(bytes.TrimSpace(raw), []byte("[DONE]")) {
+		d.sentinelSeen = true
+		return nil, nil
+	}
 	root, err := chatwire.Object(raw)
 	if err != nil || d.terminal || d.finished {
 		return nil, chatwire.ErrProtocol
@@ -278,9 +284,10 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		return nil, chatwire.ErrProtocol
 	}
 	d.sequence = sequence
+	terminalEvent := kind == "response.completed" || kind == "response.incomplete"
 	if value, present := root["response_id"]; present {
 		id, ok := chatwire.String(value)
-		if !ok || !d.started || id != d.responseID {
+		if !ok || !d.started && !terminalEvent || d.started && id != d.responseID {
 			return nil, chatwire.ErrProtocol
 		}
 	}
@@ -303,12 +310,10 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		}
 		return nil, nil
 	case "response.completed", "response.incomplete":
-		if !d.started {
-			return nil, chatwire.ErrProtocol
-		}
 		response, err := chatwire.Object(root["response"])
-		id, _ := chatwire.String(response["id"])
-		if err != nil || id != d.responseID {
+		id, valid := chatwire.String(response["id"])
+		eventID, hasID := chatwire.String(root["response_id"])
+		if err != nil || !valid || id == "" || len(id) > 512 || d.started && id != d.responseID || hasID && eventID != id {
 			return nil, chatwire.ErrProtocol
 		}
 		output := make([]json.RawMessage, len(d.items))
