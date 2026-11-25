@@ -344,20 +344,23 @@ own status in the details and do not acquire the site's login/session semantics.
 
 ## Database compatibility and version changes
 
-A fresh installation initializes schema 58. Stop an existing service and
+A fresh installation initializes schema 59. Stop an existing service and
 preserve the matching recovery set before running the v1.4.3
 [standalone upgrader](../cmd/nonbiri-upgrade-v1/README.md) on its exact
-schema 54, 55, 56 or 57 database. Earlier registered databases first use the
-v1.3.12 tool. Account exports use format 38. See [database upgrades](database-upgrades.md)
+schema 54, 55, 56, 57 or 58 database. Earlier registered databases first use the
+v1.3.12 tool. Account exports use format 39. See [database upgrades](database-upgrades.md)
 for the source fingerprint, conversion and recovery procedure.
 
 The service and upgrader expose their compiled identities via
 `maintenance schema-info --json` and `--schema-info --json`, respectively.
-The service requires exact schema 58 and declares no conversions. The tool
-lists the four sources. Deployment hooks stop on mismatches so the operator can
+The service requires exact schema 59 and declares no conversions. The tool
+lists the five sources. Deployment hooks stop on mismatches so the operator can
 preserve the source and deliberately invoke conversion.
 
-Current-schema validation and unfinished-work recovery remain part of startup.
+The server validates the current schema before starting workers. Startup cancels unfinished games and clears waiting entries, returning charged entries to their original sources or releasing holds. Committed results stay available. Whale Haven production, visits and wages continue across restarts.
+
+The three built-in game companions run with the main server. For program uploads, deploy the optional Linux worker and its launcher under a dedicated unprivileged account with rootless Podman, a delegated user systemd manager and the pinned WASI SDK image. Set `NONBIRI_COMPANION_WORKER` to the launcher's absolute path. [Companion worker setup](ai-players.md#optional-compilation-and-execution)
+
 Use `./nonbiriapi maintenance verify` on a stopped current database or consistent
 copy when a full historical/credential audit is needed. Historical conversion
 commands remain outside the running service. A software patch need not change

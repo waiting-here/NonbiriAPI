@@ -20,8 +20,11 @@ has passed.
 
 ## Stable candidate
 
-- Validate fresh/exact-current schema 58 startup and the registered offline
-  conversions from schemas 54, 55, 56 and 57. Check fresh/converted target equality,
+- Play a free companion match from each game and replay a completed game from the player's seat. Verify blind setup, simultaneous choices, returning to an active game, the 20-second execution deadline after queueing and pinned program versions. Check personal and global history permissions and account export/deletion.
+- Check restart cancellation and original-source refunds for unfinished games and waiting entries, including repeated starts. Preserve committed results and Whale Haven visits, wages and offline production. Test the optional Linux upload component under its documented limits when included in the candidate.
+
+- Validate fresh/exact-current schema 59 startup and the registered offline
+  conversions from schemas 54, 55, 56, 57 and 58. Check fresh/converted target equality,
   rollback/cancellation, re-entry and upgrade-then-start. Verify older, newer,
   unknown and incomplete storage is rejected by the service before migration,
   repair, checkpoint or recovery writes. Check descriptor source coverage and
@@ -48,7 +51,7 @@ has passed.
   caller-parameter receipts. Include own pond queue/statistics and safe browser
   association observations, per-model quota limits and usage, and Whale Haven
   balances, adopted home and currency movements. Verify owner isolation and the
-  browser download of `nonbiriapi-account-export-v38.json`. Verify model/user
+  browser download of `nonbiriapi-account-export-v39.json`. Verify model/user
   deletion, late completions and the zero/default/positive idle-lifetime cases
   across all five session header formats.
 - Verify total and recurring quota limits at both key and model scope. Check

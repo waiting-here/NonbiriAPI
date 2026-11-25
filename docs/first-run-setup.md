@@ -192,14 +192,14 @@ material.
 ## 6. Prepare a Generation 2 database path
 
 For a fresh start, the configured database and its exact `-wal` and `-shm` paths
-must all be absent. Fresh storage uses schema 58. For an existing instance, the
+must all be absent. Fresh storage uses schema 59. For an existing instance, the
 v1.4.3 [standalone upgrader](database-upgrades.md#one-time-conversion) accepts
-the registered schema 54, 55, 56 and 57 layouts. Older registered sources first use the
+the registered schema 54, 55, 56, 57 and 58 layouts. Older registered sources first use the
 v1.3.12 tool.
 Preserve a complete matching recovery set, stop the old service and deliberately
 invoke the tool before starting the target. The service, startup scripts and
 deployment helpers must not apply upgrades implicitly. Empty placeholder files
-and unsupported earlier structures are rejected.
+and unsupported earlier structures are rejected. On startup, unfinished games and waiting entries are cancelled. Outstanding game entry payments are returned to their original sources or their reservations are released. Committed results and Whale Haven activity retain their normal lifecycles.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 

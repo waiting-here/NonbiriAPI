@@ -26,9 +26,11 @@ and earn social rewards. Whale coins and conch
 shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 
-This source tree uses database schema 58 and account export format 38. Use the
+Bidding Duel, Likes Duel and AI Gwent offer free matches against a built-in opponent or your own C++17 program. Leave a game and return while the server is running, or replay it after it ends. A server restart cancels unfinished matches and clears waiting queues. Whale Haven visits, wages and offline production continue under their existing schedules. [Game companions](docs/ai-players.md)
+
+This source tree uses database schema 59 and account export format 39. Use the
 standalone offline upgrader for v1.4.0 through v1.4.2 databases, the schema 54
-bridge, and the earlier v1.4.3 development schema 57. Earlier supported sources first use the v1.3.12 upgrader.
+bridge, and the earlier v1.4.3 development schemas 57 and 58. Earlier supported sources first use the v1.3.12 upgrader.
 [Database upgrades](docs/database-upgrades.md) · [Changelog](CHANGELOG.md)
 
 ## Architecture
@@ -325,12 +327,12 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [First-run setup](docs/first-run-setup.md) covers private paths, the encryption key, Discord OAuth and public origins. Copy [admin.env.example](admin.env.example) outside the checkout, replace placeholders and load it before starting. Preserve the database with its matching key.
 
-Fresh databases start in maintenance with public features closed and use schema 58.
+Fresh databases start in maintenance with public features closed and use schema 59.
 Stop the old service, preserve its complete recovery set, and use the matching
 standalone [upgrader](cmd/nonbiri-upgrade-v1/README.md) to convert an exact
-schema 54, 55, 56 or 57 database to schema 58. Earlier registered sources first use the v1.3.12
+schema 54, 55, 56, 57 or 58 database to schema 59. Earlier registered sources first use the v1.3.12
 upgrader. The service and deployment hooks leave conversion to the operator.
-Account export uses format 38.
+Account export uses format 39.
 Upgrades are one-way: a server expecting an older or different schema cannot
 open the upgraded database, and there is no schema downgrade migration. Do not overwrite newly accepted data with an
 old snapshot.
@@ -344,7 +346,7 @@ Source documentation does not imply an instance deployment.
 | --- | --- |
 | HTTP and automation | [API contract](docs/api-contract.md), [steward permissions](docs/steward-permissions.md), [steward integration](docs/steward-automation.md) |
 | Gateway and charging | [Gateway controls](docs/gateway-model-controls.md), [context prices](docs/charity-context-pricing.md), [managed headers](docs/charity-session-headers.md) |
-| Game integration | [Game modules](docs/game-modules.md), [randomness](docs/game-randomness.md), [duels](docs/duel-games.md), [AI players](docs/ai-players.md) |
+| Game integration | [Game modules](docs/game-modules.md), [randomness](docs/game-randomness.md), [duels](docs/duel-games.md), [Game companions](docs/ai-players.md) |
 | Game storage and rules | [Blackjack](docs/blackjack.md), [Steady Catch](docs/steady-catch.md), [AI Gwent](docs/ai-gwent.md), [Lake Notes](docs/lake-notes.md), [Fat Fish editor](docs/fatfish-editor.md) |
 | Collections and activities | [Gacha](docs/gacha.md), [art assets](docs/gacha-art.md), [periods](docs/limited-activities.md), [image activity](docs/image-activity.md), [rewards](docs/rewards.md) |
 | Candidate verification and publication | [Release checklist](docs/release-checklist.md), [repository settings](docs/github-settings.md) |

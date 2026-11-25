@@ -19,7 +19,7 @@ personal exports. The read-only deployment mode is not persisted per account.
 Worker and legacy gateway tokens remain private deployment configuration and
 never enter account exports. Routing preferences do not extend log retention.
 
-Current account export format 38 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Whale Haven includes both personal currencies, the adopted home and sourced movements. Deletion settles outstanding guest wages before removing the account records. Its filename is `nonbiriapi-account-export-v38.json`; SQLite `user_version` remains 2 and the current storage schema is 55. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
+Current account export format 39 includes safe `gacha` balances, owned cards, guarantees, claims, activity journals, draw details within 180 days and the saved appearance artwork key. Whale Haven includes both personal currencies, the adopted home and sourced movements. Deletion settles outstanding guest wages before removing the account records. Its filename is `nonbiriapi-account-export-v39.json`; SQLite `user_version` remains 2 and the current storage schema is 59. The v4 connector value follows existing endpoint, credential, discovery, binding, donation and history ownership/deletion rules; it adds no personal fields or retention period. All rows below describe current retained fields. This does not assert that a particular instance has been upgraded.
 
 Optional rerank paths belong to endpoints and submitted donation-use revisions;
 nullable management overrides belong to the donated use. The account export
@@ -481,7 +481,7 @@ Donation attempt classification follows claims and ordered streak generations. R
 | Gwent sessions and histories | `gwent` uses the shared owner-safe duel export; no opponent identity, hidden hand or unrevealed random seed. | Shared duel deletion and 30-day history retention apply; expired traces become anonymous without dates, identity, payment sources or ratings. |
 | Gwent custom decks | Browser-only, account-scoped deck slots have JSON import/export in the original deck editor; server account exports do not include them. | Decks remain until removed in the editor, browser storage is cleared, or account deletion clears that account's namespace in the current browser. |
 | `game_duel_results`, `game_duel_ratings` | Own per-match result and rating change, plus current rating, played count and update time. | Results follow 30-day match retention. Current rating remains for the account's lifetime. Deletion removes the owner's rows; late settlement cannot restore them. Public boards expose wins and win rate, never Elo. |
-| Permanent Lake Notes | Existing `lake_notes` projection preserves profile, casts, old entry payments and exchange receipts. Permanent per-location `collectionClaims` belongs to the profile, appears in owner exports and is deleted with the account; temporary receipt cleanup does not reset the 50-donation-credit reward. New exchanges record their accepted configuration revision; new casts have no activity period. | Moving to the game host does not shorten old receipt or profile retention. Save and cast formats have independent versions; unfinished legacy casts retain their exact rules. All four exchanges begin disabled after migration. |
+| Permanent Lake Notes | Existing `lake_notes` projection preserves profile, casts, old entry payments and exchange receipts. Permanent per-location `collectionClaims` belongs to the profile, appears in owner exports and is deleted with the account; temporary receipt cleanup does not reset the 50-donation-credit reward. New exchanges record their accepted configuration revision; new casts have no activity period. | Moving to the game host does not shorten old receipt or profile retention. Save and cast formats have independent versions; startup cancels unfinished casts while retaining permanent progression. All four exchanges begin disabled after migration. |
 
 ## Linearization and lifecycle acceptance
 
@@ -532,12 +532,12 @@ only addresses already retained by endpoints, donation keys or manual tags, and
 is removed when its final source address is removed. Neither rules nor the index
 add credentials or change account export format or donation-history retention.
 
-Normal startup initializes absent storage or opens only exact current schema 58.
-The v1.4.3 tool converts registered schema 54, 55, 56 or 57 databases after the
+Normal startup initializes absent storage or opens only exact current schema 59.
+The v1.4.3 tool converts registered schema 54, 55, 56, 57 or 58 databases after the
 matching recovery set is preserved; service startup and deployment helpers must
 not apply upgrades implicitly. Atomic conversion preserves the relevant indexes,
 authorization, steward policy/audit/tag data and assistant storage. Pending
-catalog reads do not grant inference access. Current export format is 38.
+catalog reads do not grant inference access. Current export format is 39.
 Upgrades are one-way;
 there is no old-server startup on an upgraded database or reverse migration.
 Fresh creation requires the main database and sidecars to be absent. Conversion
@@ -587,16 +587,27 @@ When a user deletes their account, a separate read-only security projection reta
 
 The snapshot and account retirement share one transaction after required domain handoffs and before wallet zeroing. Same-Discord minimum already-used reward/once-only qualifications and unexpired violation or frequency windows can remain enforceable across re-registration; they do not restore progress, resources, manual role or old private records. Self-deletion under an effective ban, charity pause or negative general/game balance adds a blacklist reason event. The first reason, actor and creation time remain immutable; later reasons append, and the entry lasts until an administrator removes it. Administrators and stewards with `blacklist.add` may add entries within their actual actor hierarchy; banning an existing account also requires ban/permanent-ban grants, and replacing its active ban requires unban authority; only administrators remove them. Registration and ban mutations recheck the identity in their transaction. Removing a blacklist entry does not unban an account or restore its credentials.
 
-## AI challenge data
+## Companion games
 
-| Family | Export | Retention and deletion |
+| Family | Account export | Retention and deletion |
 | --- | --- | --- |
-| `game_ai_preferences`, `game_ai_memories` | Own preference, eligible manual-bid features, feature version and window | Preference follows account; samples expire after 1–30 days and keep at most 1–100 matches per user/bot. Shrinking discards excess; expanding never rebuilds. Collected with decision memory on or off. Parent match cleanup and account deletion cascade. |
-| `game_ai_sessions`, `game_duel_history` | Own used summary, memory setting, source/policy version, first-clear result and action provenance | Snapshot and ordering row follow the 30-day match. Private policy and AI random seed are excluded. Anonymous traces omit memory, original IDs, exact times and user linkage. |
-| `game_ai_clears`, existing continuity eligibility | Own challenge completion, reward and safe receipt | Clear receipt follows account lifetime; its ledger link may expire. Minimal keyed eligibility persists independently after deletion and match expiry to prevent repeat rewards for the same Discord identity. |
-| `game_ai_queue`, bot/challenge/policy/version/settings tables | Own queue terms through game state; no administrative policy export | Waiting is unpaid, limited to 64 entries and 120 seconds. Failed receipts expire after 120 seconds. Bot/challenge IDs and immutable versions remain administrative configuration; disable preserves references. |
+| `companion_preferences` | Personal memory mode and consent to contribute to official history | Account lifetime. Choices apply to new matches. Personalization and contribution are separate and default off. |
+| `companion_matches` | Own retained match, seat view, actions, sealed choice, constraints and preferences locked at start | An active match survives leaving the page. Startup cancels it. All terminal matches expire after 30 days. Account deletion removes the match and its history links. |
+| `companion_history_snapshot` | Internal references to the authorized records for one current game | Removed at termination or on deletion of a referenced record. Official programs can receive global records only from opted-in, normally completed official games. Only official programs can receive aggregates. A private program can use only its author's permitted personal history. |
+| `companion_programs`, `companion_program_versions` | Own private program sources, versions, selected version and diagnostics | Selected and actively pinned versions remain available. Other versions are pruned to the newest eight at upload and expire after 30 days. Deleting an unused named program or the account removes its source and versions. |
 
-AI callbacks, cancellation, financial settlement, memory extraction and deletion share the game's authoritative transaction. AI games do not create original PvP ranking or newcomer-task facts. Free games use a history sequence without fabricating ledger operations.
+The host selects up to 100 personal and 1,000 compatible global records from the last 30 days. Deduplicated, uncompressed records share one 128 MiB allowance for the match. Completed private games can supply eligible personal history. Active games, abandonment, system cancellation, program errors and technical substitution never contribute to global history. [Game companions](ai-players.md)
+
+### AI challenge data
+
+The retired paid challenges keep these historical records under their existing permissions. Their features do not enter companion memory or the global pool.
+
+| Family | Account export | Retention and deletion |
+| --- | --- | --- |
+| `game_ai_preferences`, `game_ai_memories` | Own legacy preferences and eligible manual-bid features with version and window | The preference follows the account. Old samples expire under their original 1–30 day and 1–100 match limits. Parent cleanup and account deletion cascade. |
+| `game_ai_sessions`, `game_duel_history` | Own match summary, memory setting, policy version, action sources and first-clear result | The snapshot and ordering row follow the 30-day match. Anonymous traces omit memory, original IDs, exact times and account links. |
+| `game_ai_clears` and existing continuity eligibility | Own historical completion, reward and safe receipt | The clear receipt follows the account. Minimal keyed eligibility remains independently after deletion or match expiry to prevent a second reward for the same Discord identity. |
+| Legacy queues and administrative policy tables | Previously accepted terms under the owner's retained game history | Startup clears waiting entries. Existing administrative definitions keep historical references. |
 
 ## Card collection activity
 

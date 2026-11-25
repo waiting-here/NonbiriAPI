@@ -178,12 +178,12 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 58.
-Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.3 offline tool converts the registered schema 54, 55, 56 and 57 sources. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
+The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 59.
+Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.3 offline tool converts the registered schema 54, 55, 56, 57 and 58 sources. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
 
-`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=58`, `minimum_schema_version=58`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists all four source fingerprints in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
+`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=59`, `minimum_schema_version=59`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists all five source fingerprints in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
 
-Current account export `schema_version=38` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v38.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=39` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v39.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -2715,7 +2715,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v38.json`, with `schema_version:38` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v39.json`, with `schema_version:39` and `generated_at`. All fields below describe that current format. Format 39 adds `companion` to `bidding`, `likes` and `gwent`. It contains the owner's preferences, retained matches and visible seat state, their setup constraints and submitted actions, and their retained private program sources, versions and diagnostics. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -3156,9 +3156,11 @@ Registration and ban changes recheck the blacklist within the identity transacti
 
 Model-discovery status (`GET /admin/api/limited-activities/picture-book/models/refresh/{operationID}`) may include `http_status`, an integer from 100 through 599, on failed operations when retained diagnostic metadata is available. The field is omitted otherwise. This administrator-only projection does not return response bodies, provider messages, headers or credentials.
 
-### AI challenge extensions
+### Game companions
 
-Bidding Duel adds session-authenticated AI offers, preferences and unpaid admission, plus administrator-only player/strategy configuration and previews. Exact routes, DTOs, bounds and errors are specified in [AI players](ai-players.md). Existing duel state and history add optional `economy`, `ai` and `action_sources`; round records add `sources`. `mode=ai` uses `economy=ai_challenge`. Bot profiles have `kind=ai`; administrative participants have `kind=bot`. Free terminal records have an empty operation ID and ledger sequence `0`; pagination uses a separate persistent history order. Old signed history cursors must be restarted after this upgrade. Export v13 adds the AI families under the player's `bidding.ai`, with no private strategy or AI seed.
+Authenticated players can challenge the built-in opponent or a private program they own in Bidding, Likes and Gwent. The same-game slot covers human admission and companion play. The player API uses `/api/games/{game}/companion`, and administrators manage each game's availability and official program versions under `/admin/api/games/{game}/companion`. New matches are free. Historical paid challenges keep their original records and settled first-clear awards. [Routes, payloads and replay](ai-players.md#http)
+
+Returning players resume the same match while the service remains up. At startup, unfinished games and queues are cancelled. Existing payments and holds are refunded or released by source. Committed results remain available. Whale Haven production, visits and employment continue under their normal schedules.
 
 ## Collectible-card activity
 
