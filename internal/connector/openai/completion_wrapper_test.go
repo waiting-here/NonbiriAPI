@@ -118,6 +118,39 @@ func TestFlattenSinkHoldsToolsUntilValidatedTerminal(t *testing.T) {
 	}
 }
 
+func TestFlattenSinkKeepsReasoningAndIsolatesCombinedUsage(t *testing.T) {
+	out := httptest.NewRecorder()
+	sink := NewFlattenSink(out, 1<<20, 1<<20, nil)
+	defer sink.Clear()
+	ordinary := `{"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"before ","reasoning_content":"first thought"},"finish_reason":null},{"index":1,"delta":{"role":"assistant","content":"ordinary","reasoning_content":{"vendor":"opaque"}},"finish_reason":"stop"}]}`
+	combined := `{"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"content":"after ","reasoning_content":"tool thought","tool_calls":[{"index":0,"id":"call","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"},{"index":2,"delta":{"role":"assistant","content":"peer answer","reasoning_content":"peer thought"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`
+	for _, data := range []string{ordinary, combined, "[DONE]"} {
+		frame := []byte("data: " + data + "\n\n")
+		if n, err := sink.Write(frame); err != nil || n != len(frame) {
+			t.Fatalf("wrote %d of %d bytes: %v", n, len(frame), err)
+		}
+	}
+	if want := "data: " + ordinary + "\n\n"; out.Body.String() != want {
+		t.Fatalf("buffered choice escaped before completion: %s", out.Body)
+	}
+	if err := sink.Complete(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	frames := strings.Split(strings.TrimSuffix(out.Body.String(), "\n\n"), "\n\n")
+	if len(frames) != 5 || frames[4] != "data: [DONE]" || strings.Contains(out.Body.String(), `"tool_calls"`) {
+		t.Fatalf("expected ordinary, content, finish, usage and DONE frames: %s", out.Body)
+	}
+	if strings.Count(out.Body.String(), "first thought") != 1 || !strings.Contains(frames[1], `"reasoning_content":"tool thought"`) || !strings.Contains(frames[1], `"reasoning_content":"peer thought"`) || !strings.Contains(frames[1], "mx_tool") || strings.Contains(frames[1], `"index":1`) {
+		t.Fatalf("rewritten content lost or repeated choice data: %s", frames[1])
+	}
+	if strings.Contains(frames[2], `"index":1`) || strings.Count(frames[2], `"finish_reason":"stop"`) != 2 {
+		t.Fatalf("wrong choice finishes: %s", frames[2])
+	}
+	if !strings.Contains(frames[3], `"choices":[]`) || !strings.Contains(frames[3], `"total_tokens":7`) {
+		t.Fatalf("wrong usage frame: %s", frames[3])
+	}
+}
+
 func TestFlattenSinkRejectsGeneratedSecretAndOversizedFrame(t *testing.T) {
 	for _, limit := range []int{1 << 20, 100} {
 		out := httptest.NewRecorder()

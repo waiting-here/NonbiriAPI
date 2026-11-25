@@ -68,9 +68,20 @@ func (s *FlattenSink) Write(frame []byte) (n int, err error) {
 	}
 	s.tools = s.tools || tools
 	if s.tools {
-		if usage, ok := root["usage"]; ok && !bytes.Equal(bytes.TrimSpace(usage), []byte("null")) {
+		if usage, ok := root["usage"]; ok && !isJSONNull(usage) {
 			clear(s.usage)
-			s.usage = append([]byte(nil), frame...)
+			if bytes.Equal(bytes.TrimSpace(root["choices"]), []byte("[]")) {
+				s.usage = append(s.usage[:0], frame...)
+			} else {
+				payload, err := isolatedUsageChunk(root, usage)
+				if err != nil {
+					return 0, err
+				}
+				s.usage = append(s.usage[:0], "data: "...)
+				s.usage = append(s.usage, payload...)
+				s.usage = append(s.usage, '\n', '\n')
+				clear(payload)
+			}
 		}
 		return len(frame), nil
 	}
