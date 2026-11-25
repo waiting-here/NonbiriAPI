@@ -400,6 +400,8 @@ type StreamToolDelta struct {
 type StreamChoiceState struct {
 	contentBuffer       *strings.Builder
 	pendingReasoning    []byte
+	pendingContinuation []map[string]json.RawMessage
+	roleEmitted         bool
 	Index               int
 	Role                string
 	RoleSeen            bool
@@ -414,8 +416,8 @@ type StreamChoiceState struct {
 func MarkStreamContentEmitted(states map[int]*StreamChoiceState) {
 	for _, state := range states {
 		state.EmittedContentBytes = len(state.Content)
-		clear(state.pendingReasoning)
-		state.pendingReasoning = state.pendingReasoning[:0]
+		state.roleEmitted = state.RoleSeen
+		state.clearPendingReasoning()
 		if state.FinishSeen {
 			state.FinishEmitted = true
 		}
@@ -453,8 +455,9 @@ func ClearStreamStates(states map[int]*StreamChoiceState) {
 		clear([]byte(state.Content))
 		state.Content = ""
 		state.contentBuffer = nil
-		clear(state.pendingReasoning)
+		state.clearPendingReasoning()
 		state.pendingReasoning = nil
+		state.pendingContinuation = nil
 		for _, tool := range state.Tools {
 			clear([]byte(tool.ID))
 			clear([]byte(tool.Name))
@@ -537,10 +540,7 @@ func AccumulateStreamChunk(data []byte, states map[int]*StreamChoiceState) (map[
 				state.Content = state.contentBuffer.String()
 			}
 		}
-		var reasoning string
-		if JsonString(delta["reasoning_content"], &reasoning) {
-			state.pendingReasoning = append(state.pendingReasoning, reasoning...)
-		}
+		state.accumulateReasoning(delta)
 		callsRaw, ok := delta["tool_calls"]
 		if !ok {
 			continue

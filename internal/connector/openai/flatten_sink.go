@@ -146,7 +146,18 @@ func (s *FlattenSink) Complete(writeTimeout time.Duration) error {
 		}
 		defer clear(content)
 		defer clear(finish)
-		for _, data := range [][]byte{content, finish} {
+		finalBytes := int64(len(content) + len(finish) + 16 + len(s.usage) + len("data: [DONE]\n\n"))
+		continuation, err := tooltext.StreamContinuationFrames(s.first, s.states, s.maxFrame, s.limit-s.written-finalBytes)
+		if err != nil {
+			s.projectionErr = err
+			return err
+		}
+		defer func() {
+			for _, data := range continuation {
+				clear(data)
+			}
+		}()
+		for _, data := range append(continuation, content, finish) {
 			if len(data) == 0 {
 				continue
 			}
