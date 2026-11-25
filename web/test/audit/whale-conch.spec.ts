@@ -110,14 +110,19 @@ test('conch draws explain eaten candy and stored items after reloading the haven
         await draw.click();
         const response = page.waitForResponse(
           (r) =>
-            r.request().method() === 'POST' && new URL(r.url()).pathname === apiBase + '/actions',
+            r.request().method() === 'POST' &&
+            new URL(r.url()).pathname === apiBase + '/actions' &&
+            r.request().postDataJSON()?.type === 'spin_conch_gacha',
         );
         await page
           .getByRole('alertdialog')
           .getByRole('button', { name: candy ? '确认' : 'Confirm', exact: true })
           .click();
-        const result: Profile = await (await response).json();
-        expect(result.conch_reward).toBe(candy ? 'affection_candy' : 'wardrobe_coupon');
+        expect((await response).status()).toBe(200);
+        const result: Profile = await api(apiBase + '/profile');
+        expect(result.snapshot.logs.find((entry) => entry.kind === 'gacha')?.conchReward).toBe(
+          candy ? 'affection_candy' : 'wardrobe_coupon',
+        );
         expect(result.snapshot.whale.tempEmotion?.line).toContain(
           candy ? '海盐牛奶糖' : '深海裁缝海螺券',
         );
