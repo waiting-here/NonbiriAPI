@@ -30,6 +30,7 @@ type responseChatState struct {
 	extra                                       json.RawMessage
 	calls                                       []responseChatCall
 	finish                                      string
+	finishes                                    chatStreamFinishes
 	usage                                       Usage
 	usageRaw                                    json.RawMessage
 	sequence                                    int
@@ -82,7 +83,18 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 		return nil
 	}
 	choice, ok := systemOneMap(choices[0])
-	if !ok || !bytes.Equal(choice["index"], []byte("0")) || s.finish != "" {
+	if !ok || !bytes.Equal(choice["index"], []byte("0")) {
+		return errInvalidUpstreamResponse
+	}
+	if stream && !s.gateway {
+		hasUsage := root["usage"] != nil && !isJSONNull(root["usage"]) && s.usage.Present
+		probe := chatTrailerProbe{finishes: &s.finishes, root: root, hasUsage: hasUsage}
+		probe.observe(choice, true)
+		if probe.result != ordinaryChatChunk {
+			return nil
+		}
+	}
+	if s.finish != "" {
 		return errInvalidUpstreamResponse
 	}
 	key := "message"
