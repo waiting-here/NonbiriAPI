@@ -525,6 +525,19 @@
         "reasonHelp": "Explain why service is being paused or restored so other administrators can follow up."
       },
       "logs": {
+        "search": {
+          "loading": "Searching request logs…",
+          "long": "Digging through the logs…",
+          "longHint": "This search is taking more than 5 seconds. You can cancel at any time.",
+          "complete": "Search complete",
+          "canceling": "Canceling search…",
+          "canceled": "Search canceled",
+          "cancelError": "Canceling the search failed.",
+          "retryCancel": "Retry cancel",
+          "earlierResults": "Showing earlier results.",
+          "cancel": "Cancel search",
+          "again": "Search again"
+        },
         "stewardTitle": "Request logs",
         "stewardEmpty": "No logs",
         "stewardEmptyBody": "No visible records match the current filters.",

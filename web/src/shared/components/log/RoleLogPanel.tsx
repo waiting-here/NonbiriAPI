@@ -15,7 +15,6 @@ import { Button } from '@shared/components/ui/Button';
 import { Link, useLocation } from 'react-router';
 import { charityManagementPath, withLogContext } from './managementNavigation';
 import { clearStationSession } from '@shared/charityManagement';
-import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { formatCredits } from '../../../user/games/common/strict';
 import { Fold, Note, StatusBadge } from '@shared/components/ui';
@@ -34,6 +33,7 @@ import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapsh
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -64,6 +64,7 @@ import { LogFilters, LogSearch, type LogFilterField } from './LogFilters';
 import { LogOriginIdentity } from './LogOriginIdentity';
 import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
 import { LogTable, type LogColumn } from './LogTable';
+import { LogSearchFeedback } from './LogSearchFeedback';
 import {
   numberedLogKeys,
   useRoleLogDetailPage,
@@ -646,14 +647,15 @@ function ScopedRoleLogPanel({
     LOG_DEFAULT_PAGE_SIZE,
     scopeReady && accountID ? role + ':' + accountID : '',
   );
-  const [windowEnd, setWindowEnd] = useState(() => Math.floor(Date.now() / 1000));
-  useEffect(() => {
-    if (!urlState.range) return;
-    const updateWindow = () => setWindowEnd(Math.floor(Date.now() / 1000));
-    updateWindow();
-    window.addEventListener('focus', updateWindow);
-    return () => window.removeEventListener('focus', updateWindow);
-  }, [urlState.range]);
+  const [relativeWindow, setRelativeWindow] = useState(() => ({
+    range: urlState.range,
+    end: Math.floor(Date.now() / 1000),
+  }));
+  if (relativeWindow.range !== urlState.range) {
+    setRelativeWindow({ range: urlState.range, end: Math.floor(Date.now() / 1000) });
+  }
+  const windowEnd = relativeWindow.end;
+  const setWindowEnd = (end: number) => setRelativeWindow({ range: urlState.range, end });
   const filter = useMemo(() => {
     const next = validateLogFilter(role, urlState.filters);
     const from = urlState.range
@@ -716,6 +718,17 @@ function ScopedRoleLogPanel({
   const observerEnabled = enabled && scopeReady && !revoked;
   const listEnabled = observerEnabled && !invalidFilter;
   const logs = useRoleLogsPage(role, accountID, pager.page, pager.pageSize, filter, listEnabled);
+  const refreshOnFocus = useEffectEvent(() => {
+    if (!logs.settledOrdinaryResult()) return;
+    const now = Math.floor(Date.now() / 1000);
+    if (now !== windowEnd) setWindowEnd(now);
+  });
+  useEffect(() => {
+    if (!urlState.range) return;
+    const refresh = () => refreshOnFocus();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [urlState.range]);
   const detail = useRoleLogDetailPage(
     role,
     accountID,
@@ -916,7 +929,8 @@ function ScopedRoleLogPanel({
         next.delete('attempt_page');
         next.delete('attempt_page_size');
         next.delete(ATTEMPT_SEQ_PARAM);
-        const actualPage = logs.data?.pagination.page;
+        const actualPage =
+          logs.searchStatus === 'complete' ? logs.data?.pagination.page : undefined;
         if (actualPage !== undefined) next.set('page', actualPage);
         next.set('page_size', String(pager.pageSize));
         return next;
@@ -937,7 +951,7 @@ function ScopedRoleLogPanel({
       const next = new URLSearchParams(previous);
       if (!alertOrigin) next.delete('return_to');
       next.set('request_id', id);
-      const actualPage = logs.data?.pagination.page;
+      const actualPage = logs.searchStatus === 'complete' ? logs.data?.pagination.page : undefined;
       if (actualPage !== undefined) next.set('page', actualPage);
       next.set('page_size', String(pager.pageSize));
       next.delete('attempt_page');
@@ -955,6 +969,20 @@ function ScopedRoleLogPanel({
     },
     keepFilters?: readonly string[],
   ) => {
+    const nextEnd =
+      next.range && next.range === urlState.range ? Math.floor(Date.now() / 1000) : windowEnd;
+    if (nextEnd !== windowEnd) setWindowEnd(nextEnd);
+    const currentFilters =
+      nextEnd === windowEnd &&
+      next.range === urlState.range &&
+      next.fromUnix === urlState.fromUnix &&
+      next.toUnix === urlState.toUnix &&
+      JSON.stringify(validateLogFilter(role, next.filters)) ===
+        JSON.stringify(validateLogFilter(role, urlState.filters));
+    if (!invalidFilter && currentFilters && pager.page === '1') {
+      if (logs.searchStatus === 'canceled') logs.refresh();
+      if (logs.searchStatus === 'error') logs.retry();
+    }
     setSelectedID(null);
     patchUrlState({ ...next, page: 1 }, { clearDetail: true, keepFilters });
   };
@@ -1417,7 +1445,9 @@ function ScopedRoleLogPanel({
     );
 
   const pageData = invalidFilter ? undefined : retainedLogData;
-  const listBusy = logs.isFetching;
+  const listBusy = logs.isFetching || logs.searchStatus === 'canceling';
+  const listComplete = logs.searchStatus === 'complete';
+  const hasRows = Boolean(pageData?.data.length);
   const selectedIndex = pageData?.data.findIndex((row) => row.id === selectedID) ?? -1;
   const exportMenu = !invalidFilter ? (
     <details className="nb-more log-export">
@@ -1651,7 +1681,7 @@ function ScopedRoleLogPanel({
                   onClick={() => {
                     const now = Math.floor(Date.now() / 1000);
                     if (urlState.range && now !== windowEnd) setWindowEnd(now);
-                    else void logs.refetch();
+                    else logs.refresh();
                   }}
                 >
                   {t('common.refresh')}
@@ -1667,21 +1697,17 @@ function ScopedRoleLogPanel({
           </p>
         ) : null}
         {!invalidFilter ? (
-          <QueryFeedback
-            query={{
-              ...logs,
-              data: pageData,
-              retained: logs.data === undefined && pageData !== undefined,
-            }}
+          <LogSearchFeedback
+            state={logs.searchStatus}
+            hasEarlierResults={!listComplete && hasRows}
+            error={logs.error}
+            onCancel={logs.cancel}
+            onRetry={logs.retry}
+            onSearchAgain={logs.refresh}
           />
         ) : null}
-        {invalidFilter ? null : logs.error && !pageData ? (
-          <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-        ) : pageData ? (
+        {pageData && (hasRows || listComplete) ? (
           <div className="ops-stack" aria-busy={listBusy}>
-            {logs.error ? (
-              <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-            ) : null}
             {pageData.data.length === 0 ? (
               <EmptyState title={empty} body={emptyBody} />
             ) : (
@@ -1708,23 +1734,19 @@ function ScopedRoleLogPanel({
             )}
             <PagePagination
               metadata={pageData.pagination}
-              requestedPage={logs.data === undefined ? undefined : pager.page}
+              requestedPage={listComplete && !logs.isPlaceholderData ? pager.page : undefined}
               busy={listBusy}
               onPageChange={(page) => {
-                if (logs.error && page === pager.page) void logs.refetch();
+                if (logs.error && page === pager.page) logs.retry();
                 else pager.setPage(page);
               }}
               onPageSizeChange={(size) => {
-                if (logs.error && size === pager.pageSize) void logs.refetch();
+                if (logs.error && size === pager.pageSize) logs.retry();
                 else pager.setPageSize(size);
               }}
             />
           </div>
-        ) : logs.isPending ? (
-          <LoadingState />
-        ) : (
-          <LoadingState />
-        )}
+        ) : null}
         {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       </InspectionWorkspace>
     </Card>
