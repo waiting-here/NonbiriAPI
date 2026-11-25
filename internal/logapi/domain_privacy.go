@@ -16,18 +16,22 @@ type attemptPrivacySource struct {
 	mainstream bool
 }
 
+// An uncorrelated membership check lets SQLite build the current channel URL
+// set once per branch, even when a page includes hundreds of attempts.
+const activeChannelBaseURLs = `SELECT ce.canonical_base_url FROM mainstream_channels m
+ JOIN mainstream_channel_entries ce ON ce.channel_id=m.id
+ WHERE m.state='active' AND m.enabled=1 AND ce.enabled=1`
+
 // Both branches are restricted to already authorized log roots. Completed
 // attempts retain their own endpoint snapshot; an unfinished attempt can use
 // only its exact active claim's endpoint metadata, never another attempt's URL.
 const completedPrivacySources = `SELECT a.request_log_id,a.attempt_seq,a.canonical_base_url,
- EXISTS(SELECT 1 FROM mainstream_channels m JOIN mainstream_channel_entries ce ON ce.channel_id=m.id
- WHERE m.state='active' AND m.enabled=1 AND ce.enabled=1 AND ce.canonical_base_url=a.canonical_base_url)
+ a.canonical_base_url IN (` + activeChannelBaseURLs + `)
  FROM request_attempts a
  WHERE a.request_log_id IN (`
 
 const activePrivacySources = `SELECT l.id,c.attempt_seq,COALESCE(t.canonical_base_url,s.canonical_base_url),
- EXISTS(SELECT 1 FROM mainstream_channels m JOIN mainstream_channel_entries ce ON ce.channel_id=m.id
- WHERE m.state='active' AND m.enabled=1 AND ce.enabled=1 AND ce.canonical_base_url=COALESCE(t.canonical_base_url,s.canonical_base_url))
+ COALESCE(COALESCE(t.canonical_base_url,s.canonical_base_url) IN (` + activeChannelBaseURLs + `),0)
  FROM request_logs l JOIN dispatch_claims c ON c.logical_request_id=l.logical_request_id AND c.state='dispatched'
  LEFT JOIN dispatch_claim_targets t ON t.claim_id=c.id
  LEFT JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
