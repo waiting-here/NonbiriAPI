@@ -1,0 +1,507 @@
+{
+  "protocol": "nonbiri.decision/1",
+  "game": "gwent",
+  "mode": "standard",
+  "rules_hash": "ebe112b5afb43a1b3657bc2b3a6ff1d21f46de51af19c98cd7f7f49907d22c9b",
+  "decision_id": "practice/1",
+  "seat": 1,
+  "round": 1,
+  "phase": "turn",
+  "view": {
+    "version": 1,
+    "round": 1,
+    "phase": "turn",
+    "turn": 1,
+    "self": {
+      "faction": "openai",
+      "lives": 2,
+      "passed": false,
+      "hand_count": 9,
+      "deck_count": 24,
+      "grave": [
+        {
+          "id": "openai_restore",
+          "name": "OpenAI Checkpoint",
+          "faction": "openai",
+          "type": "unit",
+          "row": "siege",
+          "abilities": [
+            "medic"
+          ],
+          "maxCopies": 3,
+          "image": "assets/cards/units/openai_restore-simple-v1.webp",
+          "category": "troop",
+          "starterCopies": 3,
+          "instance_id": 50,
+          "base_power": 2,
+          "power": 2
+        }
+      ],
+      "leader": {
+        "id": "openai_leader",
+        "name": "OpenAI Core",
+        "faction": "openai",
+        "type": "leader",
+        "row": "leader",
+        "abilities": [
+          "leader_openai"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/leaders/openai_leader-cg-v1.webp",
+        "thumbnail": "assets/cards/leaders/thumbnails/openai_leader-cg-v1-300.webp",
+        "category": "prototype",
+        "starterCopies": 0,
+        "instance_id": 36,
+        "base_power": 0,
+        "power": 0
+      },
+      "leader_available": true,
+      "boost": 0,
+      "shield": false
+    },
+    "enemy": {
+      "faction": "gemini",
+      "lives": 2,
+      "passed": false,
+      "hand_count": 8,
+      "deck_count": 24,
+      "grave": [
+        {
+          "id": "chain_of_thought",
+          "name": "Chain of Thought",
+          "faction": "neutral",
+          "type": "skill",
+          "row": "special",
+          "abilities": [
+            "chain_of_thought"
+          ],
+          "maxCopies": 1,
+          "image": "assets/cards/specials/chain_of_thought-cg-v1.webp",
+          "thumbnail": "assets/cards/specials/thumbnails/chain_of_thought-cg-v1-300.webp",
+          "category": "technique",
+          "starterCopies": 1,
+          "instance_id": 26,
+          "base_power": 0,
+          "power": 0
+        },
+        {
+          "id": "model_pruning",
+          "name": "Model Pruning",
+          "faction": "neutral",
+          "type": "skill",
+          "row": "special",
+          "abilities": [
+            "scorch"
+          ],
+          "maxCopies": 1,
+          "image": "assets/cards/specials/model_pruning-cg-v1.webp",
+          "thumbnail": "assets/cards/specials/thumbnails/model_pruning-cg-v1-300.webp",
+          "category": "technique",
+          "starterCopies": 1,
+          "instance_id": 25,
+          "base_power": 0,
+          "power": 0
+        }
+      ],
+      "leader": {
+        "id": "gemini_leader",
+        "name": "Gemini Core",
+        "faction": "gemini",
+        "type": "leader",
+        "row": "leader",
+        "abilities": [
+          "leader_gemini"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/leaders/gemini_leader-cg-v1.webp",
+        "thumbnail": "assets/cards/leaders/thumbnails/gemini_leader-cg-v1-300.webp",
+        "category": "prototype",
+        "starterCopies": 0,
+        "instance_id": 1,
+        "base_power": 0,
+        "power": 0
+      },
+      "leader_available": true,
+      "boost": 5,
+      "shield": false
+    },
+    "hand": [
+      {
+        "id": "openai_restore",
+        "name": "OpenAI Checkpoint",
+        "faction": "openai",
+        "type": "unit",
+        "row": "siege",
+        "abilities": [
+          "medic"
+        ],
+        "maxCopies": 3,
+        "image": "assets/cards/units/openai_restore-simple-v1.webp",
+        "category": "troop",
+        "starterCopies": 3,
+        "instance_id": 51,
+        "base_power": 2,
+        "power": 2
+      },
+      {
+        "id": "safety_layer",
+        "name": "Safety Layer",
+        "faction": "neutral",
+        "type": "skill",
+        "row": "special",
+        "abilities": [
+          "safety_layer"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/specials/safety_layer-cg-v1.webp",
+        "thumbnail": "assets/cards/specials/thumbnails/safety_layer-cg-v1-300.webp",
+        "category": "technique",
+        "starterCopies": 1,
+        "instance_id": 62,
+        "base_power": 0,
+        "power": 0
+      },
+      {
+        "id": "compute_surge",
+        "name": "Compute Surge",
+        "faction": "neutral",
+        "type": "skill",
+        "row": "special",
+        "abilities": [
+          "horn"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/specials/compute_surge-cg-v1.webp",
+        "thumbnail": "assets/cards/specials/thumbnails/compute_surge-cg-v1-300.webp",
+        "category": "technique",
+        "starterCopies": 1,
+        "instance_id": 59,
+        "base_power": 0,
+        "power": 0
+      },
+      {
+        "id": "openai_astra_reason",
+        "name": "OpenAI 推理核心",
+        "faction": "openai",
+        "type": "unit",
+        "row": "close",
+        "abilities": [],
+        "maxCopies": 3,
+        "image": "assets/cards/units/support-batch1/openai_astra_reason-support-v1.webp",
+        "thumbnail": "assets/cards/units/support-batch1/openai_astra_reason-support-v1-preview-300.webp",
+        "category": "troop",
+        "starterCopies": 3,
+        "instance_id": 65,
+        "base_power": 9,
+        "power": 9
+      },
+      {
+        "id": "data_noise",
+        "name": "Data Noise",
+        "faction": "neutral",
+        "type": "weather",
+        "row": "weather",
+        "abilities": [
+          "fog"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/specials/data_noise-cg-v1.webp",
+        "thumbnail": "assets/cards/specials/thumbnails/data_noise-cg-v1-300.webp",
+        "category": "technique",
+        "starterCopies": 1,
+        "instance_id": 56,
+        "base_power": 0,
+        "power": 0
+      },
+      {
+        "id": "openai_scout",
+        "name": "OpenAI Data Scout",
+        "faction": "openai",
+        "type": "unit",
+        "row": "close",
+        "abilities": [
+          "spy"
+        ],
+        "maxCopies": 3,
+        "image": "assets/cards/units/openai_scout-simple-v1.webp",
+        "category": "troop",
+        "starterCopies": 3,
+        "instance_id": 48,
+        "base_power": 5,
+        "power": 5
+      },
+      {
+        "id": "network_storm",
+        "name": "Network Storm",
+        "faction": "neutral",
+        "type": "weather",
+        "row": "weather",
+        "abilities": [
+          "storm",
+          "fog",
+          "rain"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/specials/network_storm-cg-v1.webp",
+        "thumbnail": "assets/cards/specials/thumbnails/network_storm-cg-v1-300.webp",
+        "category": "technique",
+        "starterCopies": 1,
+        "instance_id": 57,
+        "base_power": 0,
+        "power": 0
+      },
+      {
+        "id": "cold_start",
+        "name": "Cold Start",
+        "faction": "neutral",
+        "type": "weather",
+        "row": "weather",
+        "abilities": [
+          "frost"
+        ],
+        "maxCopies": 1,
+        "image": "assets/cards/specials/cold_start-cg-v1.webp",
+        "thumbnail": "assets/cards/specials/thumbnails/cold_start-cg-v1-300.webp",
+        "category": "technique",
+        "starterCopies": 1,
+        "instance_id": 55,
+        "base_power": 0,
+        "power": 0
+      },
+      {
+        "id": "openai_scout",
+        "name": "OpenAI Data Scout",
+        "faction": "openai",
+        "type": "unit",
+        "row": "close",
+        "abilities": [
+          "spy"
+        ],
+        "maxCopies": 3,
+        "image": "assets/cards/units/openai_scout-simple-v1.webp",
+        "category": "troop",
+        "starterCopies": 3,
+        "instance_id": 47,
+        "base_power": 5,
+        "power": 5
+      }
+    ],
+    "board": [
+      {
+        "side": "enemy",
+        "row": "close",
+        "total": 0,
+        "weather": false,
+        "cards": []
+      },
+      {
+        "side": "enemy",
+        "row": "ranged",
+        "total": 0,
+        "weather": false,
+        "cards": []
+      },
+      {
+        "side": "enemy",
+        "row": "siege",
+        "total": 0,
+        "weather": false,
+        "cards": []
+      },
+      {
+        "side": "self",
+        "row": "close",
+        "total": 0,
+        "weather": false,
+        "cards": []
+      },
+      {
+        "side": "self",
+        "row": "ranged",
+        "total": 0,
+        "weather": false,
+        "cards": []
+      },
+      {
+        "side": "self",
+        "row": "siege",
+        "total": 0,
+        "weather": false,
+        "cards": []
+      }
+    ],
+    "weather": [],
+    "legal_actions": [
+      {
+        "kind": "play",
+        "card": 51,
+        "row": "siege"
+      },
+      {
+        "kind": "play",
+        "card": 62
+      },
+      {
+        "kind": "play",
+        "card": 59,
+        "row": "close"
+      },
+      {
+        "kind": "play",
+        "card": 59,
+        "row": "ranged"
+      },
+      {
+        "kind": "play",
+        "card": 59,
+        "row": "siege"
+      },
+      {
+        "kind": "play",
+        "card": 65,
+        "row": "close"
+      },
+      {
+        "kind": "play",
+        "card": 56
+      },
+      {
+        "kind": "play",
+        "card": 48,
+        "row": "close"
+      },
+      {
+        "kind": "play",
+        "card": 57
+      },
+      {
+        "kind": "play",
+        "card": 55
+      },
+      {
+        "kind": "play",
+        "card": 47,
+        "row": "close"
+      },
+      {
+        "kind": "leader"
+      },
+      {
+        "kind": "pass"
+      }
+    ],
+    "rounds": []
+  },
+  "space": {
+    "kind": "enumerated",
+    "examples": [
+      {
+        "kind": "play",
+        "card": 51,
+        "row": "siege"
+      },
+      {
+        "kind": "play",
+        "card": 62
+      },
+      {
+        "kind": "play",
+        "card": 59,
+        "row": "close"
+      },
+      {
+        "kind": "play",
+        "card": 59,
+        "row": "ranged"
+      },
+      {
+        "kind": "play",
+        "card": 59,
+        "row": "siege"
+      },
+      {
+        "kind": "play",
+        "card": 65,
+        "row": "close"
+      },
+      {
+        "kind": "play",
+        "card": 56
+      },
+      {
+        "kind": "play",
+        "card": 48,
+        "row": "close"
+      },
+      {
+        "kind": "play",
+        "card": 57
+      },
+      {
+        "kind": "play",
+        "card": 55
+      },
+      {
+        "kind": "play",
+        "card": 47,
+        "row": "close"
+      },
+      {
+        "kind": "leader"
+      },
+      {
+        "kind": "pass"
+      }
+    ]
+  },
+  "recent": [
+    {
+      "action": {
+        "kind": "redraw",
+        "card": 58
+      },
+      "phase": "mulligan",
+      "round": 1,
+      "seat": 1
+    },
+    {
+      "action": {
+        "kind": "redraw",
+        "card": 52
+      },
+      "phase": "mulligan",
+      "round": 1,
+      "seat": 1
+    },
+    {
+      "action": {
+        "kind": "play",
+        "card": 26
+      },
+      "phase": "turn",
+      "round": 1,
+      "seat": 0
+    },
+    {
+      "action": {
+        "kind": "play",
+        "card": 50,
+        "row": "siege"
+      },
+      "phase": "turn",
+      "round": 1,
+      "seat": 1
+    },
+    {
+      "action": {
+        "kind": "play",
+        "card": 25
+      },
+      "phase": "turn",
+      "round": 1,
+      "seat": 0
+    }
+  ],
+  "memory": "",
+  "budget_ms": 20000
+}

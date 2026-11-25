@@ -3,6 +3,7 @@ module github.com/waiting-here/NonbiriAPI
 go 1.26.11
 
 require (
+	github.com/tetratelabs/wazero v1.12.0
 	golang.org/x/sys v0.49.0
 	modernc.org/libc v1.79.0
 	modernc.org/sqlite v1.61.1

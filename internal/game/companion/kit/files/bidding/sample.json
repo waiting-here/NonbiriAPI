@@ -1,0 +1,146 @@
+{
+  "protocol": "nonbiri.decision/1",
+  "game": "bidding",
+  "mode": "standard",
+  "rules_hash": "14501d8183eaf5ac593d664298d38a055d6a0c0b2b7b1f9d1f1765159f65c7d2",
+  "decision_id": "practice/1",
+  "seat": 1,
+  "round": 1,
+  "phase": "bid",
+  "view": {
+    "dealer": 0,
+    "hand_remaining": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ]
+    ],
+    "played": [
+      [],
+      []
+    ],
+    "rewards": [
+      {
+        "round": 1,
+        "side": 0,
+        "rank": 9,
+        "multiplier": 2,
+        "status": "pool",
+        "owner": null
+      },
+      {
+        "round": 1,
+        "side": 1,
+        "rank": 13,
+        "multiplier": 1,
+        "status": "pool",
+        "owner": null
+      }
+    ],
+    "joker_available": [
+      false,
+      true
+    ],
+    "pool_points": 31,
+    "scores": [
+      0,
+      0
+    ],
+    "own_selected_card": null
+  },
+  "space": {
+    "kind": "enumerated",
+    "examples": [
+      {
+        "card": 1,
+        "kind": "bid"
+      },
+      {
+        "card": 2,
+        "kind": "bid"
+      },
+      {
+        "card": 3,
+        "kind": "bid"
+      },
+      {
+        "card": 4,
+        "kind": "bid"
+      },
+      {
+        "card": 5,
+        "kind": "bid"
+      },
+      {
+        "card": 6,
+        "kind": "bid"
+      },
+      {
+        "card": 7,
+        "kind": "bid"
+      },
+      {
+        "card": 8,
+        "kind": "bid"
+      },
+      {
+        "card": 9,
+        "kind": "bid"
+      },
+      {
+        "card": 10,
+        "kind": "bid"
+      },
+      {
+        "card": 11,
+        "kind": "bid"
+      },
+      {
+        "card": 12,
+        "kind": "bid"
+      },
+      {
+        "card": 13,
+        "kind": "bid"
+      }
+    ]
+  },
+  "recent": [
+    {
+      "action": {
+        "kind": "joker",
+        "use": true
+      },
+      "round": 1,
+      "seat": 0
+    }
+  ],
+  "memory": "",
+  "budget_ms": 20000
+}
