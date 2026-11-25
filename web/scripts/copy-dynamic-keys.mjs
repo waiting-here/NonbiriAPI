@@ -151,19 +151,6 @@ const dynamicCopyKeys = [
       'The helper receives the finite CharityState union; this leaf is one explicitly reviewed output.',
     ),
   ),
-  // Common charity review decisions are finite.
-  ...[
-    'common.operations.charity.decision.approve',
-    'common.operations.charity.decision.reject',
-  ].map((key) =>
-    entry(
-      'common',
-      key,
-      charityManagement,
-      't(`common.operations.charity.decision.${item.review_result.decision}`)',
-      'The decision value is the closed approve/reject review union.',
-    ),
-  ),
   // Common charity reviewer roles are finite.
   ...['common.operations.charity.role.admin', 'common.operations.charity.role.steward'].map((key) =>
     entry(
