@@ -22,10 +22,13 @@ type Performance struct {
 
 type performanceKey struct{ route, method string }
 type performanceSeries struct {
-	count, failed, canceled, active, peak int64
-	total, first                          latencyHistogram
-	activeSince                           time.Time
-	activeTime                            time.Duration
+	count, failed, canceled, deadlines, active, peak int64
+	slowCount                                        int64
+	slowMax                                          time.Duration
+	slowShape                                        *LogReadShape
+	total, first                                     latencyHistogram
+	activeSince                                      time.Time
+	activeTime                                       time.Duration
 }
 
 // Accumulate concurrent elapsed time in this window, including unfinished work.
@@ -77,20 +80,23 @@ func (h latencyHistogram) percentile(count, percent int64) int64 {
 }
 
 type PerformanceRow struct {
-	Route        string `json:"route"`
-	Method       string `json:"method,omitempty"`
-	Completed    int64  `json:"completed"`
-	ServerErrors int64  `json:"server_errors,omitempty"`
-	Failures     int64  `json:"failures,omitempty"`
-	Canceled     int64  `json:"canceled,omitempty"`
-	Active       int64  `json:"active"`
-	Peak         int64  `json:"peak"`
-	ActiveMS     int64  `json:"active_ms"`
-	P50MS        int64  `json:"p50_ms"`
-	P95MS        int64  `json:"p95_ms"`
-	P99MS        int64  `json:"p99_ms"`
-	MaxMS        int64  `json:"max_ms"`
-	FirstP95MS   int64  `json:"first_response_p95_ms,omitempty"`
+	Route        string        `json:"route"`
+	Method       string        `json:"method,omitempty"`
+	Completed    int64         `json:"completed"`
+	ServerErrors int64         `json:"server_errors,omitempty"`
+	Failures     int64         `json:"failures,omitempty"`
+	Canceled     int64         `json:"canceled,omitempty"`
+	Deadlines    int64         `json:"deadlines,omitempty"`
+	SlowCount    int64         `json:"slow_count,omitempty"`
+	SlowestShape *LogReadShape `json:"slowest_shape,omitempty"`
+	Active       int64         `json:"active"`
+	Peak         int64         `json:"peak"`
+	ActiveMS     int64         `json:"active_ms"`
+	P50MS        int64         `json:"p50_ms"`
+	P95MS        int64         `json:"p95_ms"`
+	P99MS        int64         `json:"p99_ms"`
+	MaxMS        int64         `json:"max_ms"`
+	FirstP95MS   int64         `json:"first_response_p95_ms,omitempty"`
 }
 
 type HTTPPerformance struct {
@@ -128,7 +134,19 @@ func NewPerformance() *Performance {
 	return &Performance{series: make(map[performanceKey]*performanceSeries)}
 }
 
+type performanceResult struct {
+	failed, canceled, deadline bool
+	shape                      *LogReadShape
+}
+
 func (p *Performance) begin(key performanceKey) func(time.Duration, time.Duration, bool, bool) {
+	finish := p.beginSample(key)
+	return func(total, first time.Duration, failed, canceled bool) {
+		finish(total, first, performanceResult{failed: failed, canceled: canceled})
+	}
+}
+
+func (p *Performance) beginSample(key performanceKey) func(time.Duration, time.Duration, performanceResult) {
 	p.mu.Lock()
 	s := p.series[key]
 	if s == nil {
@@ -143,7 +161,7 @@ func (p *Performance) begin(key performanceKey) func(time.Duration, time.Duratio
 		p.http.Peak = max(p.http.Peak, p.http.Active)
 	}
 	p.mu.Unlock()
-	return func(total, first time.Duration, failed, canceled bool) {
+	return func(total, first time.Duration, result performanceResult) {
 		p.mu.Lock()
 		s.accrue(time.Now())
 		s.active--
@@ -152,11 +170,21 @@ func (p *Performance) begin(key performanceKey) func(time.Duration, time.Duratio
 			p.http.Active--
 			p.http.Completed++
 		}
-		if failed {
+		if result.failed {
 			s.failed++
 		}
-		if canceled {
+		if result.canceled {
 			s.canceled++
+		}
+		if result.deadline {
+			s.deadlines++
+		}
+		if result.shape != nil && total >= slowLogPhase {
+			s.slowCount++
+			if total > s.slowMax {
+				s.slowMax = total
+				s.slowShape = result.shape
+			}
 		}
 		s.total.add(total)
 		if key.method != "" {
@@ -222,7 +250,7 @@ func (p *Performance) drain() ([]PerformanceRow, HTTPPerformance) {
 		s.accrue(now)
 		row := PerformanceRow{
 			Route: key.route, Method: key.method, Completed: s.count,
-			ServerErrors: s.failed, Canceled: s.canceled, Active: s.active, Peak: s.peak,
+			ServerErrors: s.failed, Canceled: s.canceled, Deadlines: s.deadlines, SlowCount: s.slowCount, SlowestShape: s.slowShape, Active: s.active, Peak: s.peak,
 			ActiveMS: s.activeTime.Milliseconds(),
 			P50MS:    s.total.percentile(s.count, 50), P95MS: s.total.percentile(s.count, 95),
 			P99MS: s.total.percentile(s.count, 99), MaxMS: s.total.max.Milliseconds(),
@@ -404,6 +432,11 @@ func charityManagementRoute(path string) string {
 
 // Log metrics use fixed templates; filters and request identifiers are excluded.
 func logQueryRoute(path string) string {
+	for _, root := range []string{"/api/log-searches/", "/api/steward/log-searches/", "/admin/api/log-searches/"} {
+		if id, ok := strings.CutPrefix(path, root); ok && id != "" && !strings.Contains(id, "/") {
+			return root + "{id}"
+		}
+	}
 	for _, root := range []string{"/api/logs", "/api/steward/logs", "/admin/api/logs"} {
 		if path == root {
 			return root

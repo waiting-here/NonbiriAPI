@@ -54,7 +54,13 @@ func authorizePageAccount(ctx context.Context, tx *sql.Tx, role string, actorID,
 	var allowed int
 	var err error
 	if role == "admin" {
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM users WHERE is_admin=1 AND (is_banned=0 OR banned_until<=?)`, now).Scan(&allowed)
+		query := `SELECT 1 FROM users WHERE is_admin=1 AND (is_banned=0 OR banned_until<=?)`
+		args := []any{now}
+		if actorID > 0 {
+			query += " AND id=?"
+			args = append(args, actorID)
+		}
+		err = tx.QueryRowContext(ctx, query, args...).Scan(&allowed)
 	} else {
 		err = tx.QueryRowContext(ctx, `SELECT 1 FROM users WHERE id=? AND is_admin=0 AND (is_banned=0 OR banned_until<=?)`, actorID, now).Scan(&allowed)
 	}
@@ -90,19 +96,10 @@ func logPageQuery(ctx context.Context, reader logReadQueryer, selection, countSe
 	return selection + order + ` LIMIT ? OFFSET ?`, append(args, requested.Size, offset), &metadata, nil
 }
 
-func logListPageQuery(ctx context.Context, reader logReadQueryer, columns, join, where string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
-	const order = ` ORDER BY l.started_at DESC,l.id DESC`
-	selection, args, metadata, err := logPageQuery(ctx, reader,
-		`SELECT l.id FROM request_logs l `+where,
-		`SELECT COUNT(*) FROM request_logs l `+where, order, args, requested, limit)
-	if err != nil {
-		return "", nil, nil, err
-	}
-	// Apply the page window before projecting charges and caller history. A
-	// selective attempt filter may require sorting its matches; that work must
-	// not evaluate correlated display columns for every matching request.
-	return `WITH log_page AS MATERIALIZED (` + selection + `) SELECT ` + columns +
-		` FROM log_page p JOIN request_logs l ON l.id=p.id` + join + order, args, metadata, nil
+const logListOrder = ` ORDER BY l.started_at DESC,l.id DESC`
+
+func logIDPageQuery(ctx context.Context, reader logReadQueryer, where string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+	return logPageQuery(ctx, reader, `SELECT l.id,l.started_at FROM request_logs l `+where, `SELECT COUNT(*) FROM request_logs l `+where, logListOrder, args, requested, limit)
 }
 
 // Export selection has the same narrow-page boundary as interactive lists.

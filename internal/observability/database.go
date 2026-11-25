@@ -47,8 +47,8 @@ func LogReadPhase(ctx context.Context, role, phase string) func(error) {
 		return func(error) {}
 	}
 	switch phase {
-	case "acquire", "authorize", "models", "count", "rows":
-		return boundedOperationTimer(ctx, "log_read."+role+"."+phase)
+	case "acquire", "authorize", "models", "count", "rows", "ids", "projection":
+		return logPhaseTimer(ctx, "log_read."+role+"."+phase)
 	default:
 		return func(error) {}
 	}
