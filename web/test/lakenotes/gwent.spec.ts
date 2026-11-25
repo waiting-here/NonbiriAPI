@@ -28,6 +28,14 @@ async function enableCompanion(admin: BrowserContext, game: 'bidding' | 'likes' 
   expect(enabled.ok(), await enabled.text()).toBe(true);
 }
 
+async function activeMatchID(user: BrowserContext, path: string): Promise<string> {
+  const home = await api(user, path);
+  expect(home.ok(), 'companion state HTTP ' + home.status()).toBe(true);
+  const { active } = await home.json();
+  expect(active?.id).toEqual(expect.any(String));
+  return active.id;
+}
+
 async function actionUI(page: Page, arena: FrameLocator, current: Match, action: Action) {
   await expect
     .poll(() => arena.locator('html').getAttribute('data-observed-decision'))
@@ -66,7 +74,7 @@ async function actionUI(page: Page, arena: FrameLocator, current: Match, action:
       }
     })(),
   ]);
-  expect(response.ok(), await response.text()).toBe(true);
+  expect(response.ok(), 'decision HTTP ' + response.status()).toBe(true);
   expect(response.request().postDataJSON()).toEqual({ decision_id: current.decision_id, action });
 }
 
@@ -103,14 +111,16 @@ test('native Gwent deck selection, simultaneous decisions, reconnect and free se
       ),
       arena.locator('#launch-play').click(),
     ]);
-    expect(created.ok(), await created.text()).toBe(true);
+    expect(created.ok(), 'start HTTP ' + created.status()).toBe(true);
     expect(created.request().postDataJSON()).toMatchObject({
       constraints: { faction: 'deepseek' },
       setup: { faction: 'claude' },
     });
-    const id = (await created.json()).id;
+    const id = await activeMatchID(user, base);
     await page.reload();
     await expect(arena.locator('#battle')).toBeVisible({ timeout: 30000 });
+    if (process.env.NONBIRI_VISUAL_DIR)
+      await page.screenshot({ path: process.env.NONBIRI_VISUAL_DIR + '/companion-real-gwent.png' });
     let steps = 0;
     while (steps < 180) {
       let current!: Match;
@@ -118,7 +128,7 @@ test('native Gwent deck selection, simultaneous decisions, reconnect and free se
         .poll(
           async () => {
             const response = await api(user, base + '/matches/' + id);
-            expect(response.ok(), await response.text()).toBe(true);
+            expect(response.ok(), 'decision HTTP ' + response.status()).toBe(true);
             current = await response.json();
             return current.status !== 'active' || Boolean(current.decision_id);
           },
@@ -181,10 +191,10 @@ for (const game of ['bidding', 'likes'] as const) {
           ),
           page.getByRole('button', { name: 'Start free match' }).click(),
         ]);
-        expect(created.ok(), await created.text()).toBe(true);
+        expect(created.ok(), 'start HTTP ' + created.status()).toBe(true);
         if (game === 'likes')
           expect(created.request().postDataJSON().constraints.role).toBeTruthy();
-        const id = (await created.json()).id;
+        const id = await activeMatchID(user, base);
         await page.reload();
         const path = base + '/matches/' + id + '/actions';
         const actionResponse = () =>
@@ -197,18 +207,22 @@ for (const game of ['bidding', 'likes'] as const) {
           await expect(bid.or(joker).first()).toBeVisible();
           if (await joker.isVisible()) {
             const [result] = await Promise.all([actionResponse(), joker.click()]);
-            expect(result.ok(), await result.text()).toBe(true);
+            expect(result.ok(), 'action HTTP ' + result.status()).toBe(true);
           }
           await bid.click();
         } else {
           await page.locator('button[data-guide^="cast:"]:enabled').first().click();
         }
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: process.env.NONBIRI_VISUAL_DIR + '/companion-real-' + game + '.png',
+          });
         const lock =
           game === 'likes'
             ? page.locator('button[data-guide="lock"]')
             : page.getByRole('button', { name: /lock in bid/i });
         const [result] = await Promise.all([actionResponse(), lock.click()]);
-        expect(result.ok(), await result.text()).toBe(true);
+        expect(result.ok(), 'action HTTP ' + result.status()).toBe(true);
         expect(result.request().postDataJSON().action.kind).toBe(game === 'likes' ? 'plan' : 'bid');
         await page.getByRole('button', { name: 'Abandon match', exact: true }).click();
         await page
