@@ -5,11 +5,43 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 )
+
+// Holding the only reader isolates startup validation from mutation work.
+func TestStandaloneRecoveryValidationUsesCallerBudget(t *testing.T) {
+	fixture := newFixture(t)
+	reader := fixture.store.ReadDB()
+	reader.SetMaxOpenConns(1)
+	held, err := reader.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	before := reader.Stats().WaitCount
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { result <- fixture.service.RecoverBeforeListen(ctx) }()
+		synctest.Wait()
+		if reader.Stats().WaitCount != before+1 {
+			t.Fatal("validation did not wait for the occupied reader")
+		}
+		time.Sleep(3 * time.Second)
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("validation error after caller canceled: %v", err)
+		}
+	})
+	if fixture.service.recovered.Load() || fixture.service.recoveryValidated.Load() {
+		t.Fatal("canceled validation marked recovery ready")
+	}
+}
 
 func TestRecoverBeforeListenAtUsesFrozenDeadlineAndExactBatches(t *testing.T) {
 	fixture := newFixture(t)
