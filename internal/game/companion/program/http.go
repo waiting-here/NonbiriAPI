@@ -49,6 +49,10 @@ func (s *Service) RegisterRoutes(game string, r host.Registrars) error {
 		{"GET", "", "programs", true}, {"POST", "/settings", "settings", true}, {"POST", "/versions", "upload", true}, {"POST", "/activate", "activate", true},
 	} {
 		err := register(route.method, route.path, route.admin, func(w http.ResponseWriter, req *http.Request, user int64) {
+			if !runner.UploadsEnabledFor(game) && route.op != "settings" && (route.op != "programs" || req.URL.RawQuery != "") {
+				writeError(w, runner.ErrUploadsDisabled)
+				return
+			}
 			if route.method == "GET" {
 				s.get(w, req, game, route.op, user)
 				return
@@ -65,6 +69,7 @@ func (s *Service) RegisterRoutes(game string, r host.Registrars) error {
 func writeError(w http.ResponseWriter, err error) {
 	w.Header().Set("Cache-Control", "no-store")
 	httperr.WriteMapped(w, err,
+		httperr.Mapping{Err: runner.ErrUploadsDisabled, Code: httperr.CodeForbidden, Message: "Only the built-in companion is available in this release."},
 		httperr.Mapping{Err: authz.ErrMFARequired, Code: httperr.CodeMFARequired, Message: "MFA verification is required."},
 		httperr.Mapping{Err: authz.ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
 		httperr.Mapping{Err: resources.ErrUnauthorized, Code: httperr.CodeUnauthorized, Message: "authentication required"},
@@ -99,7 +104,15 @@ func (s *Service) read(ctx context.Context, game string, user int64, name string
 	if name != "" {
 		return s.source(ctx, tx, user, game, name, version)
 	}
-	return s.overview(ctx, tx, user, game)
+	out, err := s.overview(ctx, tx, user, game)
+	if err != nil || user > 0 {
+		return out, err
+	}
+	return struct {
+		index
+		GlobalUploads bool `json:"upload_global_enabled"`
+		GameUploads   bool `json:"upload_game_enabled"`
+	}{out, runner.UploadsEnabled, runner.GameUploadsEnabled(game)}, nil
 }
 
 func (s *Service) get(w http.ResponseWriter, req *http.Request, game, op string, user int64) {

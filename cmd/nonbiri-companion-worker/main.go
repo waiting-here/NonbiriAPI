@@ -16,6 +16,10 @@ import (
 )
 
 func main() {
+	if !runner.UploadsEnabled {
+		fmt.Fprintln(os.Stderr, runner.ErrUploadsDisabled)
+		os.Exit(3)
+	}
 	if len(os.Args) != 2 {
 		os.Exit(3)
 	}

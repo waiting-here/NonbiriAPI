@@ -17,6 +17,9 @@ import (
 type Client struct{ Path string }
 
 func Configured() Client {
+	if !UploadsEnabled {
+		return Client{}
+	}
 	path := os.Getenv("NONBIRI_COMPANION_WORKER")
 	if !filepath.IsAbs(path) {
 		return Client{}
@@ -29,6 +32,9 @@ func Configured() Client {
 }
 
 func (c Client) Compile(ctx context.Context, source string) ([]byte, string, error) {
+	if !UploadsEnabled {
+		return nil, "", ErrUploadsDisabled
+	}
 	if c.Path == "" {
 		return nil, "", ErrWorker
 	}
@@ -59,6 +65,9 @@ func (c Client) Compile(ctx context.Context, source string) ([]byte, string, err
 type History func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 
 func (c Client) Decide(ctx context.Context, job Job, history History) (json.RawMessage, error) {
+	if !UploadsEnabled {
+		return nil, ErrUploadsDisabled
+	}
 	if c.Path == "" {
 		return nil, ErrWorker
 	}

@@ -65,6 +65,13 @@ func (s *Service) ResolveTx(ctx context.Context, tx *sql.Tx, userID int64, game,
 	if !enabled {
 		return b, resources.ErrUnavailable
 	}
+	if !runner.UploadsEnabledFor(game) {
+		if !b.Official {
+			return b, runner.ErrUploadsDisabled
+		}
+		b.Version = 0
+		return b, nil
+	}
 	if !b.Official {
 		b.OwnerID = userID
 		err = tx.QueryRowContext(ctx, `SELECT id,active_version FROM companion_programs WHERE user_id=? AND game=? AND name=?`, userID, game, name).Scan(&b.ProgramID, &b.Version)
@@ -90,6 +97,9 @@ func (s *Service) Decide(ctx context.Context, b Binding, request, catalog json.R
 	}
 	if b.Official && b.Name == builtin && b.OwnerID == 0 && b.Version == 0 {
 		return official.Decide(ctx, b.Game, request)
+	}
+	if !runner.UploadsEnabledFor(b.Game) {
+		return nil, runner.ErrUploadsDisabled
 	}
 	if b.Version < 1 || b.Official != (b.OwnerID == 0) || b.Official != (b.Name == builtin) {
 		return nil, resources.ErrInvalidRequest
@@ -131,10 +141,14 @@ type sourceVersion struct {
 }
 
 func (s *Service) overview(ctx context.Context, tx *sql.Tx, user int64, game string) (index, error) {
-	out := index{Enabled: true, Upload: s.worker.Path != "", Programs: []entry{}, Official: entry{Name: builtin, Difficulties: []int{1}, Versions: []Version{{Version: 0, Status: "ready"}}}}
+	out := index{Enabled: true, Upload: runner.UploadsEnabledFor(game) && s.worker.Path != "", Programs: []entry{}, Official: entry{Name: builtin, Difficulties: []int{1}, Versions: []Version{{Version: 0, Status: "ready"}}}}
 	err := tx.QueryRowContext(ctx, `SELECT enabled,active_version FROM companion_programs WHERE game=? AND user_id IS NULL`, game).Scan(&out.Enabled, &out.Official.Version)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, err
+	}
+	if !runner.UploadsEnabledFor(game) {
+		out.Official.Version = 0
+		return out, nil
 	}
 	var owner any
 	if user > 0 {
