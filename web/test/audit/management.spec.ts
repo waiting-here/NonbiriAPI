@@ -313,7 +313,7 @@ test('level 5 reads accounts and retains the lower-user ban boundary', async ({ 
     await expect(page.getByLabel(copy.lightRPMLimit, { exact: true })).toBeEnabled();
     await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
-    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: copy.ban, exact: true })).toHaveCount(0);
     const unban = await context.request.post(state.user_url + root + '/unban', {
       headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
@@ -390,7 +390,11 @@ test('administrator follows retained request identity through deletion history a
     const history = dialog.getByRole('link', { name: 'View deletion history' });
     await expect(history).toHaveAttribute(
       'href',
-      '/users?deleted=' + state.management.history_record_id,
+      '/users?' +
+        new URLSearchParams({
+          deleted: state.management.history_record_id,
+          log_context: 'request_id=' + state.management.request_ids[0],
+        }),
     );
     await history.click();
     await expect(page.getByRole('heading', { name: 'Deleted account', exact: true })).toBeVisible();

@@ -175,6 +175,9 @@ async function deleteRule(page: Page, actor: Session, panel: Locator, pattern: s
       new URL(value.url()).pathname === actor.prefix + rulesPath,
   );
   await ruleRow(panel, pattern).getByRole('button', { name: labels.remove, exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: labels.remove });
+  await expect(confirmation).toContainText(pattern);
+  await confirmation.getByRole('button', { name: labels.remove, exact: true }).click();
   expect((await response).status()).toBe(204);
   await expect(ruleRow(panel, pattern)).toHaveCount(0);
 }
@@ -407,6 +410,10 @@ test('a separate pending donation needs manual approval and keeps its receipt ou
         new URL(response.url()).pathname === actor.prefix + donationPath + '/pending-review',
     );
     await page.getByRole('button', { name: connectionCopy.approveAllUses, exact: true }).click();
+    await page
+      .getByRole('alertdialog', { name: connectionCopy.approveAllUses })
+      .getByRole('button', { name: connectionCopy.approveAllUses, exact: true })
+      .click();
     const response = await reviewed;
     expect(response.status()).toBe(200);
     expect(response.request().postDataJSON().uses).toEqual(

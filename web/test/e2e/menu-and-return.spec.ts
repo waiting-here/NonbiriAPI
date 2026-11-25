@@ -66,6 +66,10 @@ for (const width of [1024, 390]) {
     await expect(menu).toBeHidden();
     await trigger.click();
     await remove.click();
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Remove from blacklist', exact: true })
+      .click();
     await expect.poll(() => writes).toBe(1);
     await expect(trigger).toHaveCount(0);
   });
