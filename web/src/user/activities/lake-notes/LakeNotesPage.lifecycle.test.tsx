@@ -166,6 +166,35 @@ test('returning to a cached cast adopts the latest saved revision before resumin
   await waitFor(() => expect(screen.getByTestId('controller-revision')).toHaveTextContent('2'));
   expect(screen.getByTestId('controller-status')).toHaveTextContent('paused');
 });
+test.each(['first read', 'retry'])(
+  'returning after a restart clears the cached paused cast on %s',
+  async (read) => {
+    server = fixture();
+    server.cast.paused = server.cast.state.paused = true;
+    server.cast.readonly = true;
+    const client = sessionClient();
+    client.setQueryData(lakeKeys(account), structuredClone(server.profile));
+    const afterRestart = { ...server.profile, revision: '3', cast: null };
+    if (read === 'retry') profileCall.mockRejectedValueOnce(new Error('temporarily unavailable'));
+    profileCall.mockResolvedValueOnce(afterRestart);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <LakeNotesPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    if (read === 'retry')
+      fireEvent.click(await screen.findByRole('button', { name: 'common.retry' }));
+    await waitFor(() => expect(client.getQueryData(lakeKeys(account))).toEqual(afterRestart));
+    expect(screen.getByTestId('controller-revision')).toBeEmptyDOMElement();
+    server = fixture();
+    fireEvent.click(screen.getByText('cast fixture'));
+    await waitFor(() =>
+      expect(screen.getByTestId('controller-status')).toHaveTextContent('running'),
+    );
+  },
+);
 test('the actual page controller saves and publishes after StrictMode cleanup and setup', async () => {
   server = fixture();
   const client = sessionClient();
