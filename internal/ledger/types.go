@@ -43,6 +43,8 @@ const (
 	KindFishingSettle        Kind = "fishing_settle"
 	KindFishingRelease       Kind = "fishing_release"
 	KindLinkLinkEntry        Kind = "linklink_entry"
+	KindLinkLinkRefund       Kind = "linklink_refund"
+	KindRPSRefund            Kind = "rps_refund"
 	KindRPSQueueReserve      Kind = "rps_queue_reserve"
 	KindRPSQueueRelease      Kind = "rps_queue_release"
 	KindRPSSessionStart      Kind = "rps_session_start"

@@ -228,10 +228,10 @@ func TestRecoveryPrecedesWorkerAndCatchesAbsoluteDeadline(t *testing.T) {
 	if err := fixture.service.RecoverBeforeListen(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.continuation.calls.Load() != 1 {
-		t.Fatalf("system timeout continuation calls = %d, want 1", fixture.continuation.calls.Load())
+	if fixture.continuation.calls.Load() != 0 {
+		t.Fatalf("system timeout continuation calls = %d, want 0", fixture.continuation.calls.Load())
 	}
-	if fixture.scalar(`SELECT COUNT(*) FROM game_linklink_sessions`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_linklink_summaries WHERE terminal_reason='timed_out'`) != 1 || fixture.scalar(`SELECT COUNT(*) FROM game_online_leases WHERE session_id=?`, started.State.SessionID) != 0 {
+	if fixture.scalar(`SELECT COUNT(*) FROM game_linklink_sessions`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_linklink_summaries WHERE terminal_reason='cancelled'`) != 1 || fixture.scalar(`SELECT COUNT(*) FROM game_online_leases WHERE session_id=?`, started.State.SessionID) != 0 {
 		t.Fatal("pre-listener recovery did not converge the expired session")
 	}
 	fixture.service.workerInterval = time.Millisecond
@@ -240,7 +240,7 @@ func TestRecoveryPrecedesWorkerAndCatchesAbsoluteDeadline(t *testing.T) {
 	}
 }
 
-func TestRestartRecoveryPreservesActiveAuthorityAndPrunesOldHealthLease(t *testing.T) {
+func TestRestartCancelsPartiallyPlayedGameAndPrunesLease(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("restart-recovery", testFunding)
 	started, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Spec: game.LinkLinkSpec10x10, IdempotencyKey: fixture.key(105)})
@@ -260,7 +260,7 @@ func TestRestartRecoveryPreservesActiveAuthorityAndPrunesOldHealthLease(t *testi
 	}); err != nil {
 		t.Fatal(err)
 	}
-	before := fixture.sessionBytes(started.State.SessionID)
+
 	if err := fixture.service.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -283,18 +283,12 @@ func TestRestartRecoveryPreservesActiveAuthorityAndPrunesOldHealthLease(t *testi
 	if err := restarted.RecoverBeforeListen(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if after := fixture.sessionBytes(started.State.SessionID); !reflect.DeepEqual(after, before) {
-		t.Fatalf("restart recovery changed active authority: before=%+v after=%+v", before, after)
-	}
-	if fixture.scalar(`SELECT COUNT(*) FROM game_online_leases WHERE session_id=?`, started.State.SessionID) != 0 {
-		t.Fatal("restart recovery retained an old health-epoch lease")
-	}
 	current, err := restarted.Read(context.Background(), ReadInput{UserID: userID, SessionBinding: binding})
-	if err != nil || current.State == nil || current.Summary != nil || current.State.Revision != matched.State.Revision || current.State.Deadline != matched.State.Deadline || !reflect.DeepEqual(current.State.Board, matched.State.Board) {
-		t.Fatalf("restarted state = (%+v,%v), want %+v", current, err, matched.State)
+	if err != nil || current.State != nil || current.Summary == nil || current.Summary.TerminalReason != TerminalCancelled || current.Summary.PairsRemoved != matched.State.PairsRemoved {
+		t.Fatal(current, err)
 	}
-	if fixture.scalar(`SELECT COUNT(*) FROM game_linklink_summaries WHERE session_id=?`, started.State.SessionID) != 0 {
-		t.Fatal("restart recovery terminalized an unexpired session")
+	if fixture.scalar("SELECT COUNT(*) FROM game_online_leases WHERE session_id=?", started.State.SessionID) != 0 {
+		t.Fatal("stale lease")
 	}
 	if err := restarted.StartWorker(context.Background()); err != nil {
 		t.Fatal(err)

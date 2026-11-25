@@ -35,6 +35,8 @@ func (s *Service) Module() *host.Module {
 	return &host.Module{
 		ValidatePersistedState: s.validate,
 		RecoverBeforeListen: func(ctx context.Context, now int64, limit int, deadline time.Time) (host.WorkResult, error) {
+			s.recoveryMu.Lock()
+			defer s.recoveryMu.Unlock()
 			r, err := s.work(ctx, now, limit, deadline, !s.recovered.Load())
 			if err == nil && !r.More {
 				s.recovered.Store(true)
@@ -122,7 +124,7 @@ func (s *Service) work(ctx context.Context, now int64, limit int, deadline time.
 		}
 		var id string
 		var user int64
-		err = tx.QueryRowContext(ctx, `SELECT id,user_id FROM game_catch_sessions WHERE status IN ('playing','paused') AND (expires_at<=? OR (? AND status='playing')) ORDER BY expires_at,id LIMIT 1`, now, restart).Scan(&id, &user)
+		err = tx.QueryRowContext(ctx, `SELECT id,user_id FROM game_catch_sessions WHERE status IN ('playing','paused') AND (expires_at<=? OR ?) ORDER BY expires_at,id LIMIT 1`, now, restart).Scan(&id, &user)
 		if errors.Is(err, sql.ErrNoRows) {
 			tx.Rollback()
 			return out, nil
@@ -134,14 +136,11 @@ func (s *Service) work(ctx context.Context, now int64, limit int, deadline time.
 				previous := r.Revision
 				r.Revision++
 				r.LastHash = nil
-				if now >= r.ExpiresAt {
-					err = s.finish(ctx, tx, &r, "abandoned", previous, now)
-				} else {
-					r.Status = "paused"
-					r.AnchorTick = r.State.Tick
-					r.AnchorMS = now * 1000
-					err = s.save(ctx, tx, &r, previous, now, "")
+				status := "abandoned"
+				if restart {
+					status = "cancelled"
 				}
+				err = s.finish(ctx, tx, &r, status, previous, now)
 			}
 		}
 		if err == nil {
@@ -154,7 +153,7 @@ func (s *Service) work(ctx context.Context, now int64, limit int, deadline time.
 		}
 		out.Processed++
 	}
-	err := s.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_catch_sessions WHERE status IN ('playing','paused') AND (expires_at<=? OR (? AND status='playing')))`, now, restart).Scan(&out.More)
+	err := s.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_catch_sessions WHERE status IN ('playing','paused') AND (expires_at<=? OR ?))`, now, restart).Scan(&out.More)
 	return out, err
 }
 func (s *Service) startWorker(ctx context.Context) error {

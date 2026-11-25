@@ -25,7 +25,7 @@ func (s *Service) Module() *host.Module {
 		Available:      available, ReadyTx: func(context.Context, *sql.Tx) bool { return true },
 		ConfigurationChangedTx: func(ctx context.Context, tx *sql.Tx, before, after game.ConfigValue) error {
 			if before.Enabled() && !after.Enabled() {
-				return s.pauseTx(ctx, tx, s.now().UnixNano(), "", nil, false)
+				return s.pauseTx(ctx, tx, s.now().UnixNano(), "", nil)
 			}
 			return nil
 		},

@@ -21,6 +21,7 @@ func TestFishingMixedPaymentAndOriginalRelease(t *testing.T) {
 		{"game-debt", 3_000_000, -1_000, 500_000, -1_000, false, false},
 		{"insufficient", 1_000_000, 1_000_000, 1_000_000, 1_000_000, false, true},
 		{"release", 2_000_000, 1_000_000, 2_000_000, 1_000_000, true, false},
+		{"restart", 2_000_000, 1_000_000, 2_000_000, 1_000_000, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := newGameFixture(t, &scriptedSource{})
@@ -61,19 +62,35 @@ func TestFishingMixedPaymentAndOriginalRelease(t *testing.T) {
 				if err != nil || result != nil || pending == nil || pending.RulesVersion != 2 || pending.Payment != (game.Payment{General: "1500", Game: "1000"}) {
 					t.Fatalf("pending=%+v err=%v", pending, err)
 				}
-				tx, err := fixture.database.BeginTx(ctx, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := fixture.service.Lifecycle().PrepareDeleteTx(ctx, tx, user, fixture.clock.Load()); err != nil {
-					_ = tx.Rollback()
-					t.Fatal(err)
-				}
-				if err := tx.Commit(); err != nil {
-					t.Fatal(err)
+				if tc.name == "restart" {
+					for range 2 {
+						fixture.service.recovered.Store(false)
+						if err := fixture.service.RecoverBeforeListen(ctx); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if fixture.scalar("SELECT count(*) FROM game_fishing_batches WHERE state='released'") != 1 || fixture.scalar("SELECT count(*) FROM credit_operations WHERE kind='fishing_release'") != 1 {
+						t.Fatal("missing cancellation")
+					}
+				} else {
+					tx, err := fixture.database.BeginTx(ctx, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := fixture.service.Lifecycle().PrepareDeleteTx(ctx, tx, user, fixture.clock.Load()); err != nil {
+						_ = tx.Rollback()
+						t.Fatal(err)
+					}
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
 				}
 				fixture.service.beforeSettlement = nil
-				if _, err := fixture.service.settle(ctx, pending.BatchID, user, fixture.clock.Load(), false); !errors.Is(err, ErrNotFound) {
+				wantError := ErrNotFound
+				if tc.name == "restart" {
+					wantError = ErrConflict
+				}
+				if _, err := fixture.service.settle(ctx, pending.BatchID, user, fixture.clock.Load(), false); !errors.Is(err, wantError) {
 					t.Fatalf("late settlement=%v", err)
 				}
 			} else {

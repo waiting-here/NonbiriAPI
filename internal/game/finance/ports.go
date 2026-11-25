@@ -88,6 +88,7 @@ type QueueOnboardingTransfer struct {
 }
 
 type RPS interface {
+	CancelSession(context.Context, *sql.Tx, string, ledger.Meta, Mutation) error
 	TransferOnboarding(context.Context, *sql.Tx, QueueOnboardingTransfer) error
 	ReleaseOnboarding(context.Context, *sql.Tx, int64) error
 	QueueReserve(context.Context, *sql.Tx, Entry, AccountMutation) (int64, error)

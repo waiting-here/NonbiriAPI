@@ -84,7 +84,7 @@ at most 4,096 waiters. Queue entry and each split or double reserve actual payme
 sources atomically; normal per-hand returns become General Credits after the
 frozen fees, while cancellation refunds the original sources. The game starts
 disabled and adds no newcomer rewards. Completed players explicitly rejoin at
-the tail. Restart cancels only an unsettled table and preserves unseated waiters;
+the tail. Restart cancels unsettled tables and clears waiting entries, refunding all original payment sources;
 maintenance releases waiters and undealt seats while dealt tables finish. Bans
 auto-stand dealt hands; deletion removes identity and finishes those hands without
 cancelling other seats or recreating a wallet. Account export includes owner-safe queue,

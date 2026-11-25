@@ -430,7 +430,7 @@ FROM game_rps_summaries s JOIN game_rps_summary_seats seat ON seat.session_id=s.
 			_ = rows.Close()
 			return UserExport{}, nil, err
 		}
-		seat.OwnBuyInGeneral, seat.OwnBuyInGame, seat.OwnReturnedGeneral, err = terminalFunding(summary.RulesVersion, generalRaw, gameRaw, nil, seat.OwnBuyIn, seat.OwnCashOut, sign, wide[0])
+		seat.OwnBuyInGeneral, seat.OwnBuyInGame, seat.OwnReturnedGeneral, err = terminalFunding(summary.TerminalReason == TerminalServerRestart, summary.RulesVersion, generalRaw, gameRaw, nil, seat.OwnBuyIn, seat.OwnCashOut, sign, wide[0])
 		if err != nil {
 			_ = rows.Close()
 			return UserExport{}, nil, err

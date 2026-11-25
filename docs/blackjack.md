@@ -32,7 +32,7 @@
 
 默认规则的长期预期收益为负。牌序由安全随机洗牌决定，不根据玩家输赢调整。旁观者可看公开牌局；在座玩家可发送限频的预设表情，没有自由聊天。页面展示发牌、点数、爆牌及到账变化，减少动态模式保留全部数值。
 
-断线和关页不暂停。重启取消尚未正常结算的整桌，所有投入原币退还且不抽水；候补继续排队，已提交结果不回滚。维护或关闭游戏释放候补及未发牌席位，已发牌局继续完成。被封禁的席位自动停牌；删号去除身份并继续收尾，不影响其他玩家，不能再入钱包的款项按对应积分种类计入外部账户。
+断线和关页不暂停。重启取消尚未正常结算的整桌，所有投入原币退还且不抽水；候补同时离队并按原支付来源退款，已提交结果不回滚。维护或关闭游戏释放候补及未发牌席位，已发牌局继续完成。被封禁的席位自动停牌；删号去除身份并继续收尾，不影响其他玩家，不能再入钱包的款项按对应积分种类计入外部账户。
 
 本人近期 30 天历史可在页面查阅。之后仅管理员保留去身份的牌局事实；个人导出包含本人安全的排队、付款和牌局记录。导出不含其他人的付款来源、身份或未揭示底牌。游戏使用专属入口插画和发牌、翻牌、加倍、分牌、自然二十一点及爆牌音效；音效默认关闭，在当前浏览器记住选择，进入后台暂停。
 
@@ -58,7 +58,7 @@ Gross returns per hand are zero for a loss, one stake for a push, two for a win 
 
 Spectators see public cards. Seated players can send rate-limited preset emotes; there is no free chat. Dealing, scores, busts and payouts have motion feedback, with all values preserved in reduced-motion mode.
 
-Disconnecting does not pause play. Restart cancels an unsettled table and refunds all original assets without fees, preserves waiting entries and never rolls back committed results. Maintenance or closure refunds waiters and undealt seats while dealt tables finish. Banned seats stand automatically; deleted identities are detached without cancelling others, and unavailable payouts go to the appropriate external asset account.
+Disconnecting does not pause play. Restart cancels an unsettled table and refunds all original assets without fees, clears and refunds waiting entries and never rolls back committed results. Maintenance or closure refunds waiters and undealt seats while dealt tables finish. Banned seats stand automatically; deleted identities are detached without cancelling others, and unavailable payouts go to the appropriate external asset account.
 
 Personal history remains available for 30 days, followed by administrator-only anonymous game facts. Account export includes the user's safe queue, payment and game records without other players' identities, funding sources or hidden dealer cards. The game has a dedicated cover and dealing, reveal, double, split, natural and bust effects. Sound starts off, remembers this browser's choice and pauses in the background.
 

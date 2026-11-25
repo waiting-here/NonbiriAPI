@@ -62,19 +62,21 @@ func TestFishingLifecycleRecoveryIsBoundedAndRestartSafe(t *testing.T) {
 	if after := fishingCapacityHeadroom(t, fixture.database); after.Cmp(beforeCapacity) != 0 {
 		t.Fatalf("capacity headroom changed: before=%s after=%s", beforeCapacity, after)
 	}
-	if got := fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_settle'`); got != 3 {
-		t.Fatalf("settlement operations = %d", got)
+	if got := fixture.scalar("SELECT count(*) FROM credit_operations WHERE kind='fishing_release'"); got != 3 {
+		t.Fatal(got)
 	}
-	if got := fixture.scalar(`SELECT COUNT(*) FROM game_fishing_rank_facts WHERE aggregate_applied=1`); got != 3 {
-		t.Fatalf("rank facts = %d", got)
+	if fixture.scalar("SELECT count(*) FROM game_fishing_rank_facts") != 0 {
+		t.Fatal("cancelled cast ranked")
 	}
-
-	for index, userID := range users {
-		state, stateErr := fixture.service.FishingState(context.Background(), userID)
-		if stateErr != nil || state.SettlementPending != nil || state.Unrevealed == nil ||
-			state.Unrevealed.BatchID != batches[index] {
-			t.Fatalf("committed authority %d = (%#v,%v)", index, state, stateErr)
+	for _, user := range users {
+		state, err := fixture.service.FishingState(context.Background(), user)
+		if err != nil || state.SettlementPending != nil || state.Unrevealed != nil {
+			t.Fatal(state, err)
 		}
+	}
+	committed, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: users[0], Bait: "worm", Count: 1, IdempotencyKey: validTestKey(850)})
+	if err != nil || committed == nil {
+		t.Fatal(committed, err)
 	}
 	again, err := fixture.service.RecoverBeforeListenAt(context.Background(), decisionNow, 100, deadline)
 	if err != nil || again != (RecoveryResult{}) {
@@ -98,16 +100,19 @@ func TestFishingLifecycleRecoveryIsBoundedAndRestartSafe(t *testing.T) {
 		t.Fatalf("restart recovery = (%+v,%v) recovered=%v", restartResult, err, restarted.recovered.Load())
 	}
 	state, err := restarted.FishingState(context.Background(), users[0])
-	if err != nil || state.Unrevealed == nil || state.Unrevealed.BatchID != batches[0] {
+	if err != nil || state.Unrevealed == nil || state.Unrevealed.BatchID != committed.BatchID {
 		t.Fatalf("restart unrevealed authority = (%#v,%v)", state, err)
 	}
-	if got := fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE state='committed' AND revealed_at IS NULL`); got != 3 {
+	if got := fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE state='committed' AND revealed_at IS NULL`); got != 1 {
 		t.Fatalf("restart changed reveal state: %d", got)
 	}
 }
 
 func TestFishingLifecycleRecoverySchedulesFailuresAndExhaustion(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{})
+	if err := fixture.service.RecoverBeforeListen(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	firstUser := fixture.seedUser("lifecycle-retry", fixtureFunding)
 	secondUser := fixture.seedUser("lifecycle-exhaust", fixtureFunding)
@@ -169,6 +174,9 @@ func TestFishingLifecycleRecoverySchedulesFailuresAndExhaustion(t *testing.T) {
 
 func TestFishingLifecycleRecoveryUsesFrozenTimeAndBudget(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{})
+	if err := fixture.service.RecoverBeforeListen(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	userID := fixture.seedUser("lifecycle-frozen-time", fixtureFunding)
 	_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{

@@ -30,6 +30,7 @@ const (
 	TerminalCompleted = "completed"
 	TerminalTimedOut  = "timed_out"
 	TerminalAbandoned = "abandoned"
+	TerminalCancelled = "cancelled"
 )
 
 var (

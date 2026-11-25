@@ -66,7 +66,7 @@ func managementEffect(method, pattern string) ManagementEffect {
 			return ManagementDiscovery
 		case "donation-keys/models/refresh/selection", "donation-keys/failure-streak-reset/selection", "announcements/{id}/preview", "inactivity-policy/preview", "rewards/preview", "limited-activities/fat-fish/levels/validate", "limited-activities/picture-book/models/check", "management-operations/cleanup/prepare":
 			return ManagementRead
-		case "games/bidding/ai/preview", "games/bidding/history/export", "games/gwent/history/export", "games/blackjack/history/export", "games/likes/history/export":
+		case "games/bidding/history/export", "games/gwent/history/export", "games/blackjack/history/export", "games/likes/history/export":
 			return ManagementRead
 		}
 	}

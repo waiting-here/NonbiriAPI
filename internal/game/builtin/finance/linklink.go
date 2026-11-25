@@ -69,14 +69,42 @@ func (port linkLinkPort) Terminal(ctx context.Context, tx *sql.Tx, sessionID str
 	}
 	var spec, reason string
 	var version int
-	var terminalAt, price int64
-	if err := tx.QueryRowContext(ctx, `SELECT a.spec,a.rules_version,s.terminal_reason,s.terminal_at,a.price_milli
+	var terminalAt, price, gamePaid int64
+	if err := tx.QueryRowContext(ctx, `SELECT a.spec,a.rules_version,s.terminal_reason,s.terminal_at,a.price_milli,a.game_paid_milli
 FROM game_linklink_sessions a JOIN game_linklink_summaries s ON s.session_id=a.id AND s.user_id=a.user_id
-WHERE a.id=? AND a.user_id=? AND a.rules_version=s.rules_version AND a.spec=s.spec`, sessionID, userID).Scan(&spec, &version, &reason, &terminalAt, &price); err != nil {
+WHERE a.id=? AND a.user_id=? AND a.rules_version=s.rules_version AND a.spec=s.spec`, sessionID, userID).Scan(&spec, &version, &reason, &terminalAt, &price, &gamePaid); err != nil {
 		return err
 	}
 	if terminalAt != now {
 		return ledger.ErrInvalidPlan
+	}
+	if reason == "cancelled" {
+		if version == 2 {
+			if err := port.release(ctx, tx, onboardingParent{column: "linklink_session_id", id: sessionID}, userID); err != nil {
+				return err
+			}
+		}
+		if price == 0 {
+			return nil
+		}
+		wallets, err := walletAccounts(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		platforms, err := codedAccounts(ctx, tx, "platform")
+		if err != nil {
+			return err
+		}
+		op, err := db.GenerateOpaqueID("op_")
+		if err != nil {
+			return err
+		}
+		plan, err := ledger.NewLinkLinkRefund(ledger.Meta{OperationID: op, CreatedAt: now}, sessionID, wallets, platforms, ledger.Payment{General: ledger.AmountFromMilli(price - gamePaid), Game: ledger.AmountFromMilli(gamePaid)})
+		if err != nil {
+			return err
+		}
+		_, err = ledger.Apply(ctx, tx, plan)
+		return err
 	}
 	if reason != "completed" && reason != "timed_out" && reason != "abandoned" {
 		return ledger.ErrInvalidPlan

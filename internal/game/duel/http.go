@@ -60,9 +60,6 @@ func (s *Service) RegisterRoutes(user resources.UserRouteRegistrar, continuation
 	if err := s.registerLoadoutRoutes(user); err != nil {
 		return err
 	}
-	if err := s.registerAIRoutes(user); err != nil {
-		return err
-	}
 	for _, route := range s.descriptor.Routes {
 		if route.Station != "user" || !route.Continuation || route.Pattern == base+"/randomness/{id}" {
 			continue
@@ -175,6 +172,9 @@ func (s *Service) PublicCatalog() (json.RawMessage, error) {
 	design := ""
 	schema := 0
 	for _, mode := range s.descriptor.Modes {
+		if mode == "ai" {
+			continue
+		}
 		c, err := s.rules.Catalog(mode)
 		if err != nil {
 			return nil, err

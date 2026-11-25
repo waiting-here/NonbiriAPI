@@ -355,7 +355,7 @@ func validateSessionHeader(record sessionRecord) error {
 func validTerminalReason(reason string) bool {
 	switch reason {
 	case TerminalQuickResolved, TerminalStandardRoundLimit, TerminalStandardInsufficient,
-		TerminalDeathmatchExhausted, TerminalUltimateResolved, TerminalFreeTieLimit:
+		TerminalDeathmatchExhausted, TerminalUltimateResolved, TerminalFreeTieLimit, TerminalServerRestart:
 		return true
 	default:
 		return false

@@ -106,26 +106,8 @@ func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID,
 		if record.State != "reserved" {
 			continue
 		}
-		zero := db.EncodeU128(db.U128{})
-		consumeErr := service.finance.Release(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, CreatedAt: at}, ResourceID: record.ID, UserID: userID, Amount: ledger.AmountFromMilli(record.EntryTotal), GamePaid: ledger.AmountFromMilli(record.GamePaid)}, func(ctx context.Context, tx *sql.Tx) error {
-			if _, deleteErr := tx.ExecContext(ctx, `DELETE FROM game_fishing_outcomes WHERE batch_id=?`, record.ID); deleteErr != nil {
-				return classifyDB(deleteErr)
-			}
-			result, updateErr := tx.ExecContext(ctx, `UPDATE game_fishing_batches SET state='released',ledger_rows_remaining=?,attempt_count=0,next_attempt_at=NULL,last_error_class=NULL,retry_exhausted=0,settled_at=? WHERE id=? AND user_id=? AND state='reserved'`, zero, at, record.ID, userID)
-			if updateErr != nil {
-				return classifyDB(updateErr)
-			}
-			changed, _ := result.RowsAffected()
-			if changed != 1 {
-				return ErrConflict
-			}
-			if _, deleteErr := tx.ExecContext(ctx, `DELETE FROM game_fishing_batches WHERE id=? AND user_id=? AND state='released'`, record.ID, userID); deleteErr != nil {
-				return classifyDB(deleteErr)
-			}
-			return nil
-		})
-		if consumeErr != nil {
-			return mapLedger(consumeErr)
+		if err := service.releaseBatch(ctx, tx, record, at); err != nil {
+			return err
 		}
 	}
 	for _, query := range []string{`DELETE FROM game_fishing_rank_facts WHERE user_id=?`, `DELETE FROM game_fishing_rank_aggregates WHERE user_id=?`, `DELETE FROM game_fishing_best WHERE user_id=?`, `DELETE FROM game_fishing_batches WHERE user_id=?`} {
@@ -134,6 +116,63 @@ func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID,
 		}
 	}
 	return nil
+}
+
+func (service *Service) releaseBatch(ctx context.Context, tx *sql.Tx, record batchRecord, at int64) error {
+	zero := db.EncodeU128(db.U128{})
+	return mapLedger(service.finance.Release(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, CreatedAt: at}, ResourceID: record.ID, UserID: record.UserID, Amount: ledger.AmountFromMilli(record.EntryTotal), GamePaid: ledger.AmountFromMilli(record.GamePaid)}, func(ctx context.Context, tx *sql.Tx) error {
+		if _, deleteErr := tx.ExecContext(ctx, `DELETE FROM game_fishing_outcomes WHERE batch_id=?`, record.ID); deleteErr != nil {
+			return classifyDB(deleteErr)
+		}
+		result, updateErr := tx.ExecContext(ctx, `UPDATE game_fishing_batches SET state='released',ledger_rows_remaining=?,attempt_count=0,next_attempt_at=NULL,last_error_class=NULL,retry_exhausted=0,settled_at=? WHERE id=? AND user_id=? AND state='reserved'`, zero, at, record.ID, record.UserID)
+		if updateErr != nil {
+			return classifyDB(updateErr)
+		}
+		changed, _ := result.RowsAffected()
+		if changed != 1 {
+			return ErrConflict
+		}
+		return nil
+	}))
+}
+
+// Cancel every uncommitted reservation, including exhausted or future retries.
+// Settled batches remain available for the original reveal and acknowledgement.
+func (service *Service) cancelReserved(ctx context.Context, now int64, limit int) (RecoveryResult, error) {
+	tx, err := service.database.BeginTx(ctx, nil)
+	if err != nil {
+		return RecoveryResult{}, classifyDB(err)
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, "SELECT "+batchColumns+" FROM game_fishing_batches WHERE state='reserved' ORDER BY id LIMIT ?", limit)
+	if err != nil {
+		return RecoveryResult{}, classifyDB(err)
+	}
+	var records []batchRecord
+	for rows.Next() {
+		r, err := scanBatch(rows)
+		if err != nil {
+			rows.Close()
+			return RecoveryResult{}, err
+		}
+		records = append(records, r)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return RecoveryResult{}, classifyDB(err)
+	}
+	for _, r := range records {
+		if err := service.releaseBatch(ctx, tx, r, now); err != nil {
+			return RecoveryResult{}, err
+		}
+		if r.RetryExhausted {
+			if _, err = tx.ExecContext(ctx, `UPDATE admin_alerts SET resolved=1,resolved_at=? WHERE kind='fishing_retry_exhausted' AND ref=? AND resolved=0`, now, r.ID); err != nil {
+				return RecoveryResult{}, err
+			}
+		}
+	}
+	return RecoveryResult{Processed: len(records), More: len(records) == limit}, classifyDB(tx.Commit())
 }
 
 // ExportUser preserves the package-local lifecycle seam for existing callers.

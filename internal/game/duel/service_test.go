@@ -391,6 +391,22 @@ func TestRealLikesSettlementDeadlineSurrenderAndReplay(t *testing.T) {
 	}
 	f.ledger()
 }
+func (f *fixture) restartService() {
+	f.t.Helper()
+	if err := f.s.Close(); err != nil {
+		f.t.Fatal(err)
+	}
+	var err error
+	if f.rules.ID() == "bidding" {
+		f.s, err = bidding.New(f.options)
+	} else {
+		f.s, err = duel.New(f.options)
+	}
+	if err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 func TestSameDeviceWaitsAndRestartRefundsOnce(t *testing.T) {
 	f := newFixture(t, "bidding")
 	f.enqueue(0, 0)
@@ -399,6 +415,7 @@ func TestSameDeviceWaitsAndRestartRefundsOnce(t *testing.T) {
 	if f.read(0).Queue == nil || f.read(1).Queue == nil {
 		t.Fatal("same device matched")
 	}
+	f.restartService()
 	for range 2 {
 		if _, err := f.s.RecoverBeforeListenAt(f.ctx, 100, 100, time.Now().Add(2*time.Second)); err != nil {
 			t.Fatal(err)
@@ -409,6 +426,7 @@ func TestSameDeviceWaitsAndRestartRefundsOnce(t *testing.T) {
 	}
 	f.ledger()
 	state := f.matched()
+	f.restartService()
 	if _, err := f.s.RecoverBeforeListenAt(f.ctx, 100, 100, time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}

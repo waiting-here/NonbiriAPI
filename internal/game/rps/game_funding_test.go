@@ -163,11 +163,8 @@ func TestQueueMatchKeepsRuleVersionsSeparate(t *testing.T) {
 }
 
 func TestMixedStandardInputsTerminalRetryAndOriginalFunding(t *testing.T) {
-	for _, deleted := range []bool{false, true} {
-		name := "surviving"
-		if deleted {
-			name = "deidentified"
-		}
+	for _, name := range []string{"surviving", "deidentified", "restart"} {
+		deleted := name == "deidentified"
 		t.Run(name, func(t *testing.T) {
 			fixture := newRPSFixture(t)
 			fixture.setRPSConfig(true, 1_000, PumpsBP{Platform: 9_000})
@@ -248,6 +245,10 @@ func TestMixedStandardInputsTerminalRetryAndOriginalFunding(t *testing.T) {
 				t.Fatal("failed terminal committed money or pending facts")
 			}
 			fixture.assertLedgerRecovery()
+			if name == "restart" {
+				fixture.assertMixedRestartAfterCuts(record.ID, users)
+				return
+			}
 			deletedUser := int64(0)
 			if deleted {
 				deletedUser = *processing.Seats[surrender].UserID
@@ -472,4 +473,65 @@ func TestMixedCancelWaitsForMatchCommitOrRollback(t *testing.T) {
 			fixture.assertLedgerRecovery()
 		})
 	}
+}
+
+func (f *rpsFixture) assertMixedRestartAfterCuts(id string, users []int64) {
+	f.t.Helper()
+	ctx := context.Background()
+	balance := func(code string, asset ledger.Asset) int64 {
+		tx := f.mustReadTx()
+		defer tx.Rollback()
+		var account int64
+		if err := tx.QueryRow("SELECT id FROM credit_accounts WHERE code=? AND asset_type=?", code, asset).Scan(&account); err != nil {
+			f.t.Fatal(code, asset, err)
+		}
+		a, err := ledger.ReadAccount(ctx, tx, account)
+		if err != nil {
+			f.t.Fatal(code, asset, err)
+		}
+		return a.Balance.Big().Int64()
+	}
+	const platform = "platform"
+	posted := balance(platform, ledger.General)
+	if posted <= 0 || f.scalar("SELECT count(*) FROM credit_operations WHERE source_id=? AND kind='rps_round_cut'", id) == 0 {
+		f.t.Fatal("no posted cuts", posted)
+	}
+	type position struct {
+		asset                      ledger.Asset
+		original, escrow, external int64
+	}
+	positions := []position{{asset: ledger.General, original: 6000}, {asset: ledger.Game, original: 9000}}
+	for i, p := range positions {
+		positions[i].escrow = balance("rps-session:"+id, p.asset)
+		positions[i].external = balance("external", p.asset)
+	}
+	for range 2 {
+		if err := f.service.Close(); err != nil {
+			f.t.Fatal(err)
+		}
+		f.service = f.newService(8)
+		if err := f.service.RecoverBeforeListen(ctx); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	for _, user := range users {
+		f.assertWallets(user, 4000, 3000)
+	}
+	for _, p := range positions {
+		if b := balance("rps-session:"+id, p.asset); b != 0 {
+			f.t.Fatal(p.asset, b)
+		}
+		delta := balance("external", p.asset) - p.external
+		if delta != p.escrow-p.original {
+			f.t.Fatalf("%s escrow=%d wallet refunds=%d clearing delta=%d", p.asset, p.escrow, p.original, delta)
+		}
+		f.t.Logf("%s escrow=%d wallet refunds=%d clearing delta=%d", p.asset, p.escrow, p.original, delta)
+	}
+	if got := balance(platform, ledger.General); got != posted {
+		f.t.Fatal("posted cut changed", posted, got)
+	}
+	if f.scalar("SELECT count(*) FROM game_onboarding_holds") != 0 || f.scalar("SELECT count(*) FROM game_onboarding_completions") != 0 || f.scalar("SELECT count(*) FROM game_rps_fun_stats") != 0 || f.scalar("SELECT count(*) FROM credit_operations WHERE kind='rps_refund' AND source_id=?", id) != 1 {
+		f.t.Fatal("incorrect cancellation facts")
+	}
+	f.assertLedgerRecovery()
 }

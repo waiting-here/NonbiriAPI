@@ -75,7 +75,9 @@ type Cast struct {
 	Reward                   *TreasureReward `json:"reward,omitempty"`
 }
 
-func (c Cast) Terminal() bool { return c.Phase == "success" || c.Phase == "failed" }
+func (c Cast) Terminal() bool {
+	return c.Phase == "success" || c.Phase == "failed" || c.Phase == "cancelled"
+}
 func cloneCast(c Cast) Cast {
 	if c.Fish != nil {
 		f := *c.Fish

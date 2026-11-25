@@ -29,7 +29,7 @@ The browser renders immediately from the same deterministic rules used by Go.
 Only ordered inputs are submitted: the server checks the current revision, elapsed
 time and legal movement, simulates the result and settles it atomically. Pausing
 and reconnecting preserve the last accepted state. A session expires 30 minutes
-after creation, including paused time; restart recovery pauses active play.
+after creation, including paused time. A server restart cancels both active and paused sessions, returns the ticket to its original payment sources and awards no clear.
 
 Authenticated browser routes under `/api/games/steady-catch`:
 

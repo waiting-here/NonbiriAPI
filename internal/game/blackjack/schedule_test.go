@@ -37,13 +37,14 @@ func TestThirtySecondBoundariesDoNotCreateEmptyOrMissedTables(t *testing.T) {
 	}
 	f.s.Close()
 	f.s = f.service()
-	if h = f.read(0); h.Table != nil || h.You.State != "waiting" {
-		t.Fatal("restart changed waiting entry", h)
+	if h = f.read(0); h.Table != nil || h.You != nil {
+		t.Fatal("restart retained a waiting entry", h)
 	}
+	receipt = f.join(0)
 	f.clock.Store(240)
 	h = f.read(0)
 	if h.Table == nil || h.Table.StartedAt != 240 || h.You.ID != receipt.ID || h.Deadline != 245 {
-		t.Fatal("current window did not admit the original entry", h)
+		t.Fatal("current window did not admit the new entry", h)
 	}
 	var n int
 	if err := f.db.QueryRow("SELECT COUNT(*) FROM game_blackjack_sessions").Scan(&n); err != nil || n != 1 {
@@ -84,9 +85,8 @@ func TestQuickStakeHashChangesPreserveAcceptedTermsAndReplay(t *testing.T) {
 	}
 	f.s.Close()
 	f.s = f.service()
-	after, _ = json.Marshal(f.read(0).You)
-	if !bytes.Equal(terms, after) {
-		t.Fatal("restart changed accepted terms")
+	if f.read(0).You != nil {
+		t.Fatal("accepted stake not released on restart")
 	}
 	f.recovery()
 }
