@@ -4,12 +4,11 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## Unreleased
+## 1.4.3 — 2026-11-25
 
 - Add free human-versus-companion matches for Bidding Duel, Likes Duel and AI Gwent. Each includes one local opponent, seat-based replay, optional private C++17 programs and separate choices for personal memory and contributing anonymized official-game history.
 - Cancel unfinished games and clear waiting queues on service restart. Refund charged entries to their original sources or release outstanding holds. Preserve completed results, past first-clear receipts and Whale Haven's continuing activity.
 - Advance storage to schema 59 and account export to format 39. The standalone upgrader accepts exact schemas 54 through 58. Exports include retained companion matches, player preferences and the owner's private program sources and diagnostics.
-
 - Native Chat clients receive separate answer and reasoning strings for
   Mistral-style text and thinking blocks in JSON and streaming responses.
 - Chat also recognizes scalar reasoning aliases, typed reasoning details and
@@ -28,7 +27,9 @@ Each version entry describes its source and compatibility boundary; a release ta
   errors reported by an upstream retain the donated key's current failure count,
   including after protocol conversion or request adaptation.
 - Preserve fractions of a percent in charity discount reservations and settlement.
-  Schema 57 includes the corresponding offline upgrade from schema 56.
+- Continue long request-log searches in the background. Users, stewards and
+  administrators can cancel a running search and page through its results.
+  An index speeds up searches for caller errors.
 - Improve service setup, donation review, permission and limit editing, operations,
   request logs and station assistant approvals. Mobile navigation, keyboard focus,
   draft recovery and on-demand loading cover both stations.
