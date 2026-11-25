@@ -86,7 +86,7 @@ func mapDuelRounds(values []duel.RoundView) []lifecycle.DuelRoundExport {
 	return out
 }
 func mapDuelExport(v duel.Export) lifecycle.DuelExport {
-	out := lifecycle.DuelExport{AI: mapAIExport(v.AI), CurrentRounds: mapDuelRounds(v.CurrentRounds), History: make([]lifecycle.DuelMatchExport, len(v.History))}
+	out := lifecycle.DuelExport{Companion: v.Companion, AI: mapAIExport(v.AI), CurrentRounds: mapDuelRounds(v.CurrentRounds), History: make([]lifecycle.DuelMatchExport, len(v.History))}
 	for _, item := range v.Loadouts {
 		out.Loadouts = append(out.Loadouts, lifecycle.DuelLoadoutExport{Slot: item.Slot, Revision: item.Revision, Mode: item.Mode, Loadout: append([]byte(nil), item.Loadout...), UpdatedAt: item.UpdatedAt})
 	}

@@ -9,6 +9,7 @@ import (
 // These fields pin the personal projection independently of live response DTOs.
 // Rule JSON has already passed the game's participant-specific visibility filter.
 type DuelExport struct {
+	Companion     json.RawMessage     `json:"companion,omitempty"`
 	Competitive   *DuelRatingExport   `json:"competitive,omitempty"`
 	AI            *DuelAIExport       `json:"ai,omitempty"`
 	Queue         *DuelQueueExport    `json:"queue"`

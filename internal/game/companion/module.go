@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"sync/atomic"
@@ -108,13 +109,6 @@ func (s *Service) Attach(id string, module *host.Module) *host.Module {
 		if err != nil {
 			return nil, end, err
 		}
-		c, err := s.export(ctx, tx, id, user, now, limit)
-		if err != nil {
-			if end != nil {
-				end.Abort()
-			}
-			return nil, nil, err
-		}
 		v, ok := old.(duel.Export)
 		if !ok {
 			if end != nil {
@@ -122,10 +116,14 @@ func (s *Service) Attach(id string, module *host.Module) *host.Module {
 			}
 			return nil, nil, host.ErrInvariant
 		}
-		return struct {
-			duel.Export
-			Companion any `json:"companion"`
-		}{v, c}, end, nil
+		v.Companion, err = s.export(ctx, tx, id, user, now, limit)
+		if err != nil {
+			if end != nil {
+				end.Abort()
+			}
+			return nil, nil, err
+		}
+		return v, end, nil
 	}
 	module.PrepareDeleteTx = func(ctx context.Context, tx *sql.Tx, user, now int64) (host.Finalizer, error) {
 		var active string
@@ -210,7 +208,7 @@ func (s *Service) CancelDecisions(ids []string) {
 		s.cancelGame(id)
 	}
 }
-func (s *Service) export(ctx context.Context, tx *sql.Tx, game string, user, now int64, limit int) (any, error) {
+func (s *Service) export(ctx context.Context, tx *sql.Tx, game string, user, now int64, limit int) (json.RawMessage, error) {
 	p, err := getPrefs(ctx, tx, user, game)
 	if err != nil {
 		return nil, err
@@ -256,7 +254,10 @@ func (s *Service) export(ctx context.Context, tx *sql.Tx, game string, user, now
 		}
 		items = append(items, item)
 	}
-	return Obj{"preferences": p, "programs": programs, "matches": items}, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(Obj{"preferences": p, "programs": programs, "matches": items})
 }
 
 // Cancel a worker only once the surrounding account deletion commits.

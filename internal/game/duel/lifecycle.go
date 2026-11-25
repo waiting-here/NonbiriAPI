@@ -332,13 +332,14 @@ func (s *Service) Retain(ctx context.Context, now int64, limit int, deadline tim
 }
 
 type Export struct {
-	Competitive   *rating.Export `json:"competitive,omitempty"`
-	AI            *AIExport      `json:"ai,omitempty"`
-	Queue         *Queue         `json:"queue"`
-	Current       *State         `json:"current"`
-	CurrentRounds []RoundView    `json:"current_rounds"`
-	History       []ExportMatch  `json:"history"`
-	Loadouts      []LoadoutItem  `json:"loadouts,omitempty"`
+	Companion     json.RawMessage `json:"companion,omitempty"`
+	Competitive   *rating.Export  `json:"competitive,omitempty"`
+	AI            *AIExport       `json:"ai,omitempty"`
+	Queue         *Queue          `json:"queue"`
+	Current       *State          `json:"current"`
+	CurrentRounds []RoundView     `json:"current_rounds"`
+	History       []ExportMatch   `json:"history"`
+	Loadouts      []LoadoutItem   `json:"loadouts,omitempty"`
 }
 type ExportMatch struct {
 	Detail      HistoryDetail       `json:"detail"`
