@@ -865,7 +865,8 @@
         "createdUpdated": "Created / updated",
         "decision": {
           "approve": "Approve",
-          "reject": "Reject"
+          "reject": "Reject",
+          "force_reject": "Forcibly rejected"
         },
         "decisionLabel": "Decision",
         "deidentified": "Deidentified",

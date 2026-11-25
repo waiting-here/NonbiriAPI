@@ -110,11 +110,17 @@ import { KeyLimitSummary } from './KeyRoutingLimits';
 import { ManagedKeyLimitsControl, type ManagedKeyLimitsAuthority } from './ManagedKeyLimitsControl';
 import { KeyRateLimitTime } from './KeyRateLimitTime';
 import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { MarkdownText } from './MarkdownText';
 import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { TimeInput } from './TimeInput';
 
 type ManagedDonation = AdminDonation | StewardDonation;
+const reviewDecisionCopy = {
+  approve: 'common.operations.charity.decision.approve',
+  reject: 'common.operations.charity.decision.reject',
+  force_reject: 'common.operations.charity.decision.force_reject',
+} as const satisfies Record<NonNullable<ManagedDonation['review_result']>['decision'], string>;
 const approvalOriginCopy = {
   none: 'common.donationReview.origin.none',
   auto: 'common.donationReview.origin.auto',
@@ -873,6 +879,7 @@ function DonationReview({
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const { t: reviewDecision } = useRegisteredCopy(reviewDecisionCopy);
   const reviewPager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'donation-review-keys',
@@ -1030,7 +1037,7 @@ function DonationReview({
             <>
               <dt>{t('common.operations.charity.review')}</dt>
               <dd>
-                {t(`common.operations.charity.decision.${item.review_result.decision}`)} ·{' '}
+                {reviewDecision(item.review_result.decision)} ·{' '}
                 {item.review_result.reason} · {formatDateTime(item.review_result.reviewed_at)}
               </dd>
             </>

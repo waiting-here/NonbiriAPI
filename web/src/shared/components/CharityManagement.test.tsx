@@ -387,6 +387,47 @@ function installDonationFetch(initial: AdminDonation) {
 
 const operationKeyPattern = /^[A-Za-z0-9_-]{22,128}$/;
 
+describe('donation review result copy', () => {
+  it.each([
+    ['admin', 'en', 'approve', 'Approve'],
+    ['admin', 'en', 'reject', 'Reject'],
+    ['admin', 'en', 'force_reject', 'Forcibly rejected'],
+    ['admin', 'zh', 'approve', '批准'],
+    ['admin', 'zh', 'reject', '驳回'],
+    ['admin', 'zh', 'force_reject', '强制驳回'],
+    ['steward', 'en', 'approve', 'Approve'],
+    ['steward', 'en', 'reject', 'Reject'],
+    ['steward', 'en', 'force_reject', 'Forcibly rejected'],
+    ['steward', 'zh', 'approve', '批准'],
+    ['steward', 'zh', 'reject', '驳回'],
+    ['steward', 'zh', 'force_reject', '强制驳回'],
+  ] as const)(
+    'shows %s %s %s with the reason',
+    async (frame, locale, decision, expected) => {
+      installDonationFetch({
+        ...approvedDonation(
+          managedKey({
+            charity_state: decision === 'approve' ? 'available' : 'ended',
+            ended_reason: decision === 'approve' ? null : 'terminated',
+          }),
+        ),
+        status: decision === 'approve' ? 'approved' : 'rejected',
+        review_result: { decision, reason: 'Review finding', reviewed_at: 10 },
+      });
+      await renderWithProviders(<SessionBackedManagement frame={frame} />, {
+        station: frame === 'admin' ? 'admin' : 'user',
+        role: frame === 'admin' ? 'admin' : 'level6',
+        locale,
+        route: '/?charity_section=donations&donation_id=1',
+      });
+      const label = await screen.findByText(locale === 'zh' ? '审核结果' : 'Review', {
+        selector: 'dt',
+      });
+      expect(label.nextElementSibling).toHaveTextContent(`${expected} · Review finding ·`);
+    },
+  );
+});
+
 describe('donation review source context', () => {
   it.each(['admin', 'level5', 'level6'] as const)(
     'shows classifications and current labels for %s',

@@ -865,7 +865,8 @@
         "createdUpdated": "创建时间 / 更新时间",
         "decision": {
           "approve": "批准",
-          "reject": "驳回"
+          "reject": "驳回",
+          "force_reject": "强制驳回"
         },
         "decisionLabel": "审核决定",
         "deidentified": "已去标识",
