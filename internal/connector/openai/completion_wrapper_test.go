@@ -48,7 +48,7 @@ func TestCompletionWrapperExactShapeAndUsage(t *testing.T) {
 				t.Fatalf("result=%+v body=%s", result, out.Body)
 			}
 			if tc.ok {
-				expectedUsage, _ := validateCompletion([]byte(validCompletion))
+				expectedUsage, _, _ := validateCompletion([]byte(validCompletion))
 				if result.Usage != expectedUsage || result.StreakDisposition != contract.StreakSuccess || result.FailureOrigin != contract.OriginNone {
 					t.Fatalf("facts=%+v", result)
 				}
