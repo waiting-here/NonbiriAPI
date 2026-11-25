@@ -187,8 +187,8 @@ func (r *Repository) collectSearchIDs(ctx context.Context, scope logSearchScope,
 	return translateReadError(ctx, tx.Commit())
 }
 
-func (r *Repository) readSearchPage(ctx context.Context, scope logSearchScope, ids []int64, metadata pagination.Metadata, decisionNow int64) (any, error) {
-	if ctx == nil || r == nil || !scope.valid() || len(ids) > maximumLimit || decisionNow < 0 || decisionNow > maxUnixSecond {
+func (r *Repository) readSearchPage(ctx context.Context, scope logSearchScope, window func(now int64) ([]int64, pagination.Metadata, error)) (any, error) {
+	if ctx == nil || r == nil || !scope.valid() || window == nil {
 		return nil, ErrInvalid
 	}
 	now, err := r.decisionNow()
@@ -201,20 +201,27 @@ func (r *Repository) readSearchPage(ctx context.Context, scope logSearchScope, i
 		return nil, err
 	}
 	defer tx.Rollback()
-	// The read pool may have been busy since the manager determined the window.
+	// Waiting for the authorized snapshot may cross a retention boundary.
+	// Count, choose the window and project using one decision time.
 	now, err = r.decisionNow()
 	if err != nil {
 		return nil, err
 	}
-	decisionNow = max(decisionNow, now)
+	ids, metadata, err := window(now)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) > maximumLimit {
+		return nil, ErrInvalid
+	}
 	var page any
 	switch scope.role {
 	case "user":
-		page, err = projectLogPage(ctx, tx, scope, ids, &metadata, decisionNow, userProjection)
+		page, err = projectLogPage(ctx, tx, scope, ids, &metadata, now, userProjection)
 	case "steward":
-		page, err = projectLogPage(ctx, tx, scope, ids, &metadata, decisionNow, managementProjection[StewardLogRow]())
+		page, err = projectLogPage(ctx, tx, scope, ids, &metadata, now, managementProjection[StewardLogRow]())
 	case "admin":
-		page, err = projectLogPage(ctx, tx, scope, ids, &metadata, decisionNow, managementProjection[AdminLogRow]())
+		page, err = projectLogPage(ctx, tx, scope, ids, &metadata, now, managementProjection[AdminLogRow]())
 	}
 	if err != nil {
 		return nil, err

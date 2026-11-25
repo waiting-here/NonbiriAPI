@@ -11,6 +11,10 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
+func fixedSearchWindow(ids []int64, meta pagination.Metadata) func(int64) ([]int64, pagination.Metadata, error) {
+	return func(int64) ([]int64, pagination.Metadata, error) { return ids, meta, nil }
+}
+
 func TestLogSearchSnapshotAndCurrentProjection(t *testing.T) {
 	f, reader := newSeparateLogReaders(t, logReadAuthFunc(func(ctx context.Context, tx *sql.Tx, role string, id int64) error {
 		return authorizePageAccount(ctx, tx, role, id, 1_000_000)
@@ -46,7 +50,7 @@ func TestLogSearchSnapshotAndCurrentProjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	pageIDs := ids[offset : offset+int64(request.Size)]
-	entry, err := f.repo.readSearchPage(ctx, scope, pageIDs, metadata, f.clock.Now().Unix())
+	entry, err := f.repo.readSearchPage(ctx, scope, fixedSearchWindow(pageIDs, metadata))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,22 +60,23 @@ func TestLogSearchSnapshotAndCurrentProjection(t *testing.T) {
 		t.Fatal(page)
 	}
 	// Membership and order are fixed, while the visible fields are current.
-	entry, err = f.repo.readSearchPage(ctx, scope, []int64{100}, metadata, f.clock.Now().Unix())
+	entry, err = f.repo.readSearchPage(ctx, scope, fixedSearchWindow([]int64{100}, metadata))
 	if err != nil || *entry.(Page[UserLogRow]).Data[0].(UserSelfLogRow).CallerStatus != 202 {
 		t.Fatal(entry, err)
 	}
 	f.mustExec("UPDATE request_logs SET user_id=? WHERE id=100", logUserTwo)
-	if _, err = f.repo.readSearchPage(ctx, scope, []int64{100}, metadata, f.clock.Now().Unix()); !errors.Is(err, ErrSearchExpired) {
+	if _, err = f.repo.readSearchPage(ctx, scope, fixedSearchWindow([]int64{100}, metadata)); !errors.Is(err, ErrSearchExpired) {
 		t.Fatal("owner change", err)
 	}
-	if _, err = f.repo.readSearchPage(ctx, scope, pageIDs, metadata, 1010+requestLogRetentionSeconds); !errors.Is(err, ErrSearchExpired) {
+	f.clock.Advance(time.Duration(1010+requestLogRetentionSeconds-f.clock.Now().Unix()) * time.Second)
+	if _, err = f.repo.readSearchPage(ctx, scope, fixedSearchWindow(pageIDs, metadata)); !errors.Is(err, ErrSearchExpired) {
 		t.Fatal("retention boundary", err)
 	}
 	f.mustExec("UPDATE users SET is_banned=1 WHERE id=?", logUserOne)
 	if err = f.repo.authorizeSearch(ctx, scope); !errors.Is(err, ErrForbidden) {
 		t.Fatal("status authorization", err)
 	}
-	if _, err = f.repo.readSearchPage(ctx, scope, nil, metadata, f.clock.Now().Unix()); !errors.Is(err, ErrForbidden) {
+	if _, err = f.repo.readSearchPage(ctx, scope, fixedSearchWindow(nil, metadata)); !errors.Is(err, ErrForbidden) {
 		t.Fatal("empty-page authorization", err)
 	}
 	if n := reader.Stats().InUse; n != 0 {
@@ -105,7 +110,7 @@ func TestLogSearchHistoricalModelsAndIndependentAttemptMatches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		page, err := f.repo.readSearchPage(ctx, scope, ids, meta, f.clock.Now().Unix())
+		page, err := f.repo.readSearchPage(ctx, scope, fixedSearchWindow(ids, meta))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -133,13 +138,13 @@ func TestLogSearchPrivacyAndCanceledCollection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry, err := f.repo.readSearchPage(t.Context(), scope, []int64{1}, meta, f.clock.Now().Unix())
+	entry, err := f.repo.readSearchPage(t.Context(), scope, fixedSearchWindow([]int64{1}, meta))
 	if err != nil || entry.(Page[UserLogRow]).Data[0].(UserSelfLogRow).Model != "[redacted]/[redacted]" {
 		t.Fatal(entry, err)
 	}
 	f.mustExec("INSERT INTO mainstream_channels VALUES('registered',1,'active')")
 	f.mustExec("INSERT INTO mainstream_channel_entries VALUES(1,'registered','openai-compatible','https://api.example.com/v1',1)")
-	entry, err = f.repo.readSearchPage(t.Context(), scope, []int64{1}, meta, f.clock.Now().Unix())
+	entry, err = f.repo.readSearchPage(t.Context(), scope, fixedSearchWindow([]int64{1}, meta))
 	if err != nil || entry.(Page[UserLogRow]).Data[0].(UserSelfLogRow).Model != "example/[redacted]" {
 		t.Fatal(entry, err)
 	}
@@ -183,7 +188,7 @@ func TestLogSearchUsesCallerBudgetAfterPromotion(t *testing.T) {
 	if err := f.repo.collectSearchIDs(ctx, scope, filter, func(int64, int64) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.repo.readSearchPage(ctx, scope, []int64{1}, metadata, f.clock.Now().Unix()); err != nil {
+	if _, err := f.repo.readSearchPage(ctx, scope, fixedSearchWindow([]int64{1}, metadata)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.repo.ListUser(ctx, logUserOne, filter); err != nil {
@@ -193,7 +198,34 @@ func TestLogSearchUsesCallerBudgetAfterPromotion(t *testing.T) {
 		t.Fatal(budgets)
 	}
 	cancel()
-	if _, err := f.repo.readSearchPage(ctx, scope, []int64{1}, metadata, f.clock.Now().Unix()); !errors.Is(err, context.Canceled) {
+	if _, err := f.repo.readSearchPage(ctx, scope, fixedSearchWindow([]int64{1}, metadata)); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
+	}
+}
+
+func TestLogSearchSelectsWindowAfterAuthorization(t *testing.T) {
+	const expiry = 110 + requestLogRetentionSeconds
+	clock := newLogTestClock(expiry - 1)
+	f, _ := newSeparateLogReaders(t, logReadAuthFunc(func(ctx context.Context, tx *sql.Tx, role string, id int64) error {
+		clock.Advance(time.Second)
+		return authorizePageAccount(ctx, tx, role, id, clock.Now().Unix())
+	}))
+	f.repo.now = clock.Now
+	page, err := f.repo.readSearchPage(t.Context(), logSearchScope{role: "user", actorID: logUserOne}, func(now int64) ([]int64, pagination.Metadata, error) {
+		// The older completed row just expired while obtaining the snapshot.
+		ids := []int64{6}
+		if now < expiry {
+			ids = append(ids, 1)
+		}
+		meta, _, err := pagination.Default().Window(int64(len(ids)))
+		return ids, meta, err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := page.(Page[UserLogRow])
+	requireLogPagination(t, result.Pagination, 1, 20, 1)
+	if len(result.Data) != 1 || result.Data[0].(UserSelfLogRow).ID != f.pendingID {
+		t.Fatal(result)
 	}
 }
