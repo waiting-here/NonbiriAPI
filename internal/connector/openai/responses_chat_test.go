@@ -15,6 +15,35 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
+func TestResponsesChatTypedTextWithinConversionSubset(t *testing.T) {
+	const content = `[{"type":"text","text":"two "},{"type":"text","text":"parts"}]`
+	const thought = `[{"type":"thinking","thinking":[{"type":"text","text":"thought"}]}]`
+	for _, stream := range []bool{false, true} {
+		for _, tc := range []struct {
+			name, content string
+			accepted      bool
+		}{
+			{"text", content, true},
+			{"thinking", thought, false},
+			{"reference", `[{"type":"text","text":"see note","citations":[12]}]`, false},
+		} {
+			t.Run(fmt.Sprintf("%s/stream=%t", tc.name, stream), func(t *testing.T) {
+				message := `{"role":"assistant","content":` + tc.content + `}`
+				data := `{"id":"c","object":"chat.completion","created":1,"choices":[{"index":0,"message":` + message + `,"finish_reason":"stop"}]}`
+				if stream {
+					data = strings.TrimSpace(strings.TrimPrefix(chatResponseChunk(message, `"stop"`, `null`), "data: "))
+				}
+				state := responseChatState{model: "public"}
+				defer state.clear()
+				err := state.consume([]byte(data), stream)
+				if (err == nil) != tc.accepted || tc.accepted && (state.text != "two parts" || state.reasoning != "") {
+					t.Fatalf("text=%q reasoning=%q error=%v", state.text, state.reasoning, err)
+				}
+			})
+		}
+	}
+}
+
 func TestResponsesChatFiniteCompilation(t *testing.T) {
 	body := `{"model":"public/m","instructions":"system rules","input":[{"role":"user","content":[{"type":"input_text","text":"look"},{"type":"input_image","image_url":"data:image/png;base64,YQ==","detail":"low"}]},{"type":"function_call","call_id":"call1","name":"lookup","arguments":"{}"},{"type":"function_call_output","call_id":"call1","output":"result"}],"tools":[{"type":"function","name":"lookup","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}],"tool_choice":{"type":"function","name":"lookup"},"parallel_tool_calls":false,"max_output_tokens":13,"temperature":0.4,"top_p":0.9,"text":{"format":{"type":"json_schema","name":"result","schema":{"type":"object","properties":{"answer":{"type":"string"}}}}},"stream":true}`
 	request := inferenceRequestForTest(t, contract.OperationResponses, body)

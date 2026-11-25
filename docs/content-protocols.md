@@ -22,6 +22,23 @@ passthrough routes; the upstream determines whether it accepts the extension.
 Translated routes retain fields that have a lossless mapping and report fields
 they cannot represent instead of silently removing them.
 
+On native Chat routes, a response `content` array made entirely of text and
+readable Mistral-style thinking blocks is projected into two strings. The
+outer text blocks form `content`. Text nested inside `thinking` forms
+`reasoning_content`. The same mapping applies to each streaming delta.
+For example, a thinking-only delta has an empty answer. A subsequent delta
+can carry both the last piece of reasoning and the first piece of the answer.
+Clients can append each field separately through the end of the stream.
+
+Native Chat keeps a content array intact when it carries an image, reference,
+non-null signature, unfamiliar part data or conflicting reasoning. Clients that
+keep provider-specific history can send structured assistant messages back to
+the native Chat service. For example, for an unsigned Mistral turn with thinking
+followed by an answer, place the returned thinking text in
+`{"type":"thinking","thinking":[{"type":"text","text":"…"}]}`, then append the
+answer as `{"type":"text","text":"…"}` in the assistant's `content` array.
+[Mistral describes streaming and multi-turn history in its reasoning guide.](https://docs.mistral.ai/inference/conversations/reasoning)
+
 ## Gemini Chat
 
 Google's OpenAI-compatible Chat API uses

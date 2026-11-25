@@ -179,6 +179,7 @@ When Responses uses the Chat service, input supports inline text and URL/data
 images, `instructions`, complete function-call/output history, function tools
 and choice, `max_output_tokens`, `temperature`, `top_p`, `parallel_tool_calls`
 and representable `text.format` values (`text`, `json_object`, `json_schema`).
+Text-only content blocks in Chat replies also map to Responses output text.
 Omitted Responses function `strict` uses supported strict-schema normalization;
 schemas outside that subset need an explicit representable strict setting.
 Reasoning/compaction items, audio/files, hosted tools, persistent references and

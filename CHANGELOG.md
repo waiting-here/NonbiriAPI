@@ -6,6 +6,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## Unreleased
 
+- Native Chat clients receive separate answer and reasoning strings for
+  Mistral-style text and thinking blocks in JSON and streaming responses.
 - Hungry whales can visit open neighbors for food while both keepers are offline.
   Manual refills ask for confirmation when food would spill. Whale interactions give
   immediate feedback, and tailor coupons are consumed only when the price drops.

@@ -91,6 +91,10 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if !ok {
 		return errInvalidUpstreamResponse
 	}
+	if normalizeChatContentParts(message) && !s.gatewayReasoning && message["reasoning_content"] != nil {
+		// The ordinary Chat bridge supports text and cannot replay a reasoning item.
+		return errInvalidUpstreamResponse
+	}
 	if value := message["extra_content"]; value != nil {
 		outer, valid := systemOneMap(value)
 		if !valid || !continuation.ValidExtra(outer, "gateway") || outer["gateway"] == nil {
