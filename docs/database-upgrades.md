@@ -103,7 +103,7 @@ Existing game saves and recorded decisions keep their original rules and facts.
 
 Account export uses format 39. It includes the owner's model
 consumption limits and usage plus Whale Haven balances, home when adopted and
-currency movements. It adds retained companion games, preferences and the owner’s private program sources and diagnostics. The download is `nonbiriapi-account-export-v39.json`.
+currency movements. It adds retained companion games, player actions and preferences. The download is `nonbiriapi-account-export-v39.json`.
 [Account export contract](api-contract.md#9-export-privacy-and-account-deletion)
 [Earlier schema changes](https://github.com/waiting-here/NonbiriAPI/blob/v1.3.12/docs/database-upgrades.md#schema-changes)
 

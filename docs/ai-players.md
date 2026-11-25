@@ -20,23 +20,15 @@ Your history shows how a completed or interrupted game ended. Step through the r
 
 ## Memory and consent
 
-Personalization starts off. You can share eligible personal history with all your opponents in that game, limit it to each opponent or turn it off. Separate memory follows the official style and difficulty or the identity of a named private program across upgrades. Eligible samples continue to accumulate during the 30-day window. Enabling memory later applies to new matches.
+Personalization starts off. You can allow all companions in the same game to use your eligible history, limit it to the same opponent, or turn it off. Separate memory follows the official style and difficulty. Eligible games accumulate during the 30-day retention window. Changing your preference applies to new matches.
 
-Global history requires separate, explicit consent at the start of a game. Only normally completed human games against an official opponent can contribute. The official program can read anonymized complete game records and aggregate counts. Private games, technical substitutions, execution failures, cancelled and abandoned games are excluded. A private program may receive only its author's permitted personal history. Changes to either preference apply at the next start.
+Contributing to global history requires separate, explicit consent when a match starts. Only normally completed games against a built-in opponent qualify. Abandoned or cancelled games and games with a technical substitution or failure are excluded. Official companions can read deidentified eligible records and aggregate counts.
 
-The host selects at most 100 personal and 1,000 compatible global records per match. Unique uncompressed records share a 128 MiB budget across all decisions and reconnects. The account export includes your preferences, retained games and the sources and diagnostics of your own programs. Deleting the account removes these records and their history links.
+Each match selects up to 100 personal and 1,000 compatible global records. Overlapping records count once toward the shared 128 MiB uncompressed limit. Your account export includes your preferences, retained games and actions. Account deletion removes these records and their history links.
 
-## Private programs
+## Program availability
 
-Download the kit from the game to get the C++17 template, public sample input, catalog, JSON header, license and local build instructions. Upload one UTF-8 source file of up to 256 KiB. A successful submission passes a public sample decision before becoming the selected private version. On failure you can inspect the diagnostic and keep playing with the previous ready version. You can switch back to a ready version or delete an unused program.
-
-Each player may keep eight named programs per game. The current version and versions pinned by unfinished matches remain available. Other versions are pruned to the newest eight at upload and expire after 30 days. Storage per game and author is bounded to 4 MiB of source and 32 MiB of compiled modules. The built-in version is available with the main server alone.
-
-### Optional compilation and execution
-
-On a Linux host, install the optional `nonbiri-companion-worker` binary alongside the executable `scripts/companion-worker.sh` launcher. Use a dedicated unprivileged service account with rootless Podman, a user systemd manager and delegated cgroups. Preload the WASI SDK image at the digest in the compiler source under that account. Set `NONBIRI_COMPANION_WORKER` to the launcher's absolute path in the service environment. The server can run with this setting omitted.
-
-Build the companion worker with `CGO_ENABLED=0 go build ./cmd/nonbiri-companion-worker`. The compiler container has no network and receives only the submission and public SDK in a read-only mount. Compilation is serialized with a 90-second budget. Execution uses a separate WASI interpreter process, 128 MiB of guest memory and a 384 MiB process-group cap. The module can read its decision, public rule catalog and authorized history within the same decision budget. A guest cannot access the application's files, database or credentials.
+All three games use the built-in opponent. In v1.4.3 the global upload switch and the individual switches for Bidding, Likes and Gwent are fixed off. The player station hides upload controls. The administrator station shows the switches and the official program controls disabled, with the reason next to them. The companion play setting remains available.
 
 ## HTTP
 
@@ -48,11 +40,8 @@ For `bidding`, `likes` and `gwent`, the player base is `/api/games/{game}/compan
 | POST /matches, GET /matches/{id} | Start a free match or read its current seat view. |
 | POST /matches/{id}/actions, POST /matches/{id}/abandon | Submit the current window's action or end the game. |
 | GET /history, GET /matches/{id}/replay | Read the player's retained games and replay a step. |
-| GET /kit | Download the game's C++17 starter kit. |
-| GET /programs | Read upload availability, the official version and your named programs. Add `name` and `version` to read your own source. |
-| POST /programs | Upload `{name, source}` and receive the version and sample status. |
-| POST /programs/activate, POST /programs/delete | Select a ready version with `{name, version}` or remove a private program with `{name}`. |
+| GET /programs | Read the built-in version and the game's upload availability. |
 
-The administrator base is `/admin/api/games/{game}/companion`. GET lists the enabled state and official versions. POST `/settings` accepts `{enabled}`. POST `/versions` compiles and tests an official source upload. POST `/activate` selects a ready version for future games. Version 0 selects the built-in program. Source and management mutations require an `Idempotency-Key`.
+The administrator base is `/admin/api/games/{game}/companion`. GET reports `upload_global_enabled`, `upload_game_enabled` and effective `upload_available`, all `false` in this release, alongside the game's companion settings. POST `/settings` takes `{enabled}` and an `Idempotency-Key` to turn companion play on or off.
 
 Old ticketed challenge sessions and first-clear receipts remain readable under their existing permissions and retention periods. Their opponents and strategy editor are retired.

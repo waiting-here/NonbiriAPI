@@ -26,7 +26,7 @@ and earn social rewards. Whale coins and conch
 shards also work with site rewards and authorized user-resource management.
 The game and its optional cash-out both start closed. [Whale Haven](docs/api-contract.md#whale-haven)
 
-Bidding Duel, Likes Duel and AI Gwent offer free matches against a built-in opponent or your own C++17 program. Leave a game and return while the server is running, or replay it after it ends. A server restart cancels unfinished matches and clears waiting queues. Whale Haven visits, wages and offline production continue under their existing schedules. [Game companions](docs/ai-players.md)
+Bidding Duel, Likes Duel and AI Gwent offer free matches against their built-in opponents. Leave a game and return while the server is running, or replay it after it ends. A server restart cancels unfinished matches and clears waiting queues. Whale Haven visits, wages and offline production continue under their existing schedules. [Game companions](docs/ai-players.md)
 
 This source tree uses database schema 59 and account export format 39. Use the
 standalone offline upgrader for v1.4.0 through v1.4.2 databases, the schema 54

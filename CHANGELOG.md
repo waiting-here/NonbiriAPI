@@ -6,9 +6,9 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## 1.4.3 — 2026-11-25
 
-- Add free human-versus-companion matches for Bidding Duel, Likes Duel and AI Gwent. Each includes one local opponent, seat-based replay, optional private C++17 programs and separate choices for personal memory and contributing anonymized official-game history.
+- Add free human-versus-companion matches for Bidding Duel, Likes Duel and AI Gwent. Each includes one built-in opponent, seat-based replay and separate choices for personal memory and contributing anonymized official-game history.
 - Cancel unfinished games and clear waiting queues on service restart. Refund charged entries to their original sources or release outstanding holds. Preserve completed results, past first-clear receipts and Whale Haven's continuing activity.
-- Advance storage to schema 59 and account export to format 39. The standalone upgrader accepts exact schemas 54 through 58. Exports include retained companion matches, player preferences and the owner's private program sources and diagnostics.
+- Advance storage to schema 59 and account export to format 39. The standalone upgrader accepts exact schemas 54 through 58. Exports include retained companion matches, decisions and player preferences.
 - Native Chat clients receive separate answer and reasoning strings for
   Mistral-style text and thinking blocks in JSON and streaming responses.
 - Chat also recognizes scalar reasoning aliases, typed reasoning details and

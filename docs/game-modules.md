@@ -108,7 +108,7 @@ its own simulation. Lake Notes owns persistent progression and an in-progress ca
 Both modules participate in the same configuration, account and shutdown boundaries.
 See [Steady Catch](steady-catch.md) and [Lake Notes](lake-notes.md).
 
-The [companion decision interface](ai-players.md) supplies each program with its seat's current view, legal action space and authorized history. One scheduler provides two execution slots for all three games. It starts the 20-second decision clock after queueing. Waiting for the human player releases the slot. The game validates the answer and stores it in the current window. The same rule engine reconstructs replay steps. Built-in opponents work with the main binary. Private uploads and official version upgrades use the optional isolated worker.
+The [companion decision interface](ai-players.md) supplies each program with its seat's current view, legal action space and authorized history. One scheduler provides two execution slots for all three games. It starts the 20-second decision clock after queueing. Waiting for the human player releases the slot. The game validates the answer and stores it in the current window. The same rule engine reconstructs replay steps. The main binary contains all three opponents. The global and per-game upload switches are fixed off in v1.4.3.
 
 Gwent's automatic human-turn choices still use its native scorer. Its separate rating module commits game-scoped competitive records with the terminal result. [AI Gwent](ai-gwent.md)
 

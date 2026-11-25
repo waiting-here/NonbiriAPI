@@ -44,7 +44,7 @@ and outcome visible without movement. It never exposes unrevealed cards.
 
 ## Free companion matches
 
-In Bidding and Likes, choose the built-in companion or one of your own C++17 programs. Bidding uses the 13-round rules. Likes supports quick and standard play, with a separate blind loadout choice. You may require an AI role, harness or particular skills. Both seats lock simultaneous choices privately and reveal them together.
+In Bidding and Likes, choose free companion play to challenge the built-in opponent. Bidding uses the 13-round rules. Likes supports quick and standard play, with a separate blind loadout choice. You may require an AI role, harness or particular skills. Both seats lock simultaneous choices privately and reveal them together.
 
 Companions use the same hidden-information rules as a human at that seat. You can leave and resume while the service is running. Waiting for a player has no timer. An AI decision has 20 seconds from the start of execution, including setup. A failure, invalid move or timeout ends the match. Open the history to replay from your seat. Companion games have no entry payment, first-clear award or ranking. Retired paid challenges retain their existing receipts and historical results. [Companion setup, memory and replay](ai-players.md)
 

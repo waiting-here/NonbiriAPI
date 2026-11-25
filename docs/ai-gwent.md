@@ -13,7 +13,7 @@ clears its local decks in the browser performing the deletion.
 
 The Go server owns the rules, shuffled decks, hidden hands and decisions. Human games give 20 seconds for opening exchanges, 30 for normal turns and 15 for intermediate choices. Three consecutive normal-turn timeouts lose a human match.
 
-In companion play you can choose the built-in opponent or your own program. You can require an AI faction or leave it open. Each side builds its deck independently before playing. The game enforces the same seat visibility at every decision and replay step. Players can close the page and return while the service is running. A program failure, illegal move or 20-second execution timeout ends the match.
+In companion play you face the built-in opponent. You can require an AI faction or leave it open. Each side builds its deck independently before playing. The game enforces the same seat visibility at every decision and replay step. Players can close the page and return while the service is running. A program failure, illegal move or 20-second execution timeout ends the match.
 
 ## Administration and settlement
 
@@ -27,7 +27,7 @@ as general credits. A draw or system cancellation refunds original payment sourc
 without deductions. Terms freeze on admission; later settings do
 not reprice a match. PvP has no separate fixed win reward or newcomer task.
 
-Companion matches are free and do not change Elo or leaderboard totals. First-clear receipts and settled rewards from retired paid challenges keep their historical meaning. [Companion versions, memory and consent](ai-players.md)
+Companion matches are free and do not change Elo or leaderboard totals. First-clear receipts and settled rewards from retired paid challenges keep their historical meaning. [Companion play, memory and consent](ai-players.md)
 
 The 7-day and 30-day boards rank wins, then win rate, then earlier achievement.
 An independent Elo record starts at 1,500 and uses K=32 with the standard 400-point
@@ -43,7 +43,7 @@ the current seat, revision and decision window; the server never sends an oppone
 hidden hand or deck order. Startup cancels unfinished matches and waiting entries, including those from the earlier challenges. System cancellation refunds original payment sources or releases outstanding holds. Previously committed results remain available.
 
 Routes use `/api/games/gwent` for catalog, state, queue, actions, surrender,
-history, randomness proofs and `leaderboard?window=7d|30d`. Companion games, the program kit and owner-only replays use `/api/games/gwent/companion`. Administrator history
+history, randomness proofs and `leaderboard?window=7d|30d`. Companion games and owner-only replays use `/api/games/gwent/companion`. Administrator history
 and ZIP export use `/admin/api/games/gwent/history`. They retain the shared
 [duel authorization and history rules](duel-games.md).
 

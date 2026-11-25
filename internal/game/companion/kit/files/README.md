@@ -1,6 +1,6 @@
 # Companion program kit
 
-Edit `bot.cpp` and upload that single file to the corresponding game's companion page. A C++17 compiler can run the included sample locally:
+Edit `bot.cpp` to experiment with the decision interface. Run the included sample locally with a C++17 compiler.
 
 ```sh
 c++ -std=c++17 -Isdk -I. sdk/main.cpp -o bot

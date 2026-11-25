@@ -2715,7 +2715,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v39.json`, with `schema_version:39` and `generated_at`. All fields below describe that current format. Format 39 adds `companion` to `bidding`, `likes` and `gwent`. It contains the owner's preferences, retained matches and visible seat state, their setup constraints and submitted actions, and their retained private program sources, versions and diagnostics. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v39.json`, with `schema_version:39` and `generated_at`. All fields below describe that current format. Format 39 adds `companion` to `bidding`, `likes` and `gwent`. It contains the owner's preferences, retained matches and visible seat state, their setup constraints and submitted actions. The reserved program list is empty on a new v1.4.3 installation. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -3158,7 +3158,7 @@ Model-discovery status (`GET /admin/api/limited-activities/picture-book/models/r
 
 ### Game companions
 
-Authenticated players can challenge the built-in opponent or a private program they own in Bidding, Likes and Gwent. The same-game slot covers human admission and companion play. The player API uses `/api/games/{game}/companion`, and administrators manage each game's availability and official program versions under `/admin/api/games/{game}/companion`. New matches are free. Historical paid challenges keep their original records and settled first-clear awards. [Routes, payloads and replay](ai-players.md#http)
+Authenticated players can challenge the built-in opponent in Bidding, Likes and Gwent. The same-game slot covers human admission and companion play. The player API uses `/api/games/{game}/companion`, and administrators manage each game's companion availability under `/admin/api/games/{game}/companion`. New matches are free. Historical paid challenges keep their original records and settled first-clear awards. [Routes, payloads and replay](ai-players.md#http)
 
 Returning players resume the same match while the service remains up. At startup, unfinished games and queues are cancelled. Existing payments and holds are refunded or released by source. Committed results remain available. Whale Haven production, visits and employment continue under their normal schedules.
 

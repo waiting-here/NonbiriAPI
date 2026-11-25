@@ -359,7 +359,7 @@ preserve the source and deliberately invoke conversion.
 
 The server validates the current schema before starting workers. Startup cancels unfinished games and clears waiting entries, returning charged entries to their original sources or releasing holds. Committed results stay available. Whale Haven production, visits and wages continue across restarts.
 
-The three built-in game companions run with the main server. For program uploads, deploy the optional Linux worker and its launcher under a dedicated unprivileged account with rootless Podman, a delegated user systemd manager and the pinned WASI SDK image. Set `NONBIRI_COMPANION_WORKER` to the launcher's absolute path. [Companion worker setup](ai-players.md#optional-compilation-and-execution)
+The three game companions run inside the main server. In v1.4.3 the global program-upload switch and each game's upload switch are fixed off. Administrators can enable companion play for each game. [Game companions](ai-players.md)
 
 Use `./nonbiriapi maintenance verify` on a stopped current database or consistent
 copy when a full historical/credential audit is needed. Historical conversion
