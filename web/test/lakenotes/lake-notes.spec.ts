@@ -56,8 +56,8 @@ async function screenshot(page: Page, name: string) {
 }
 test('free permanent play, menus, four exchanges and restart recovery', async ({ browser }) => {
   const admin = await context(browser, true),
-    ctx = await context(browser),
-    page = await ctx.newPage();
+    ctx = await context(browser);
+  let page = await ctx.newPage();
   await page.goto(fixture().user_url + '/games/lake-notes');
   await expect(page.locator('.lake-original #startButton')).toBeDisabled();
   const before = await profile(ctx);
@@ -127,7 +127,10 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
   await page.locator('a[href="/games/lake-notes"]').click();
   await sessionRefresh;
   await expect(page.locator('.lake-original #overlayButton')).toBeVisible();
-  await page.reload();
+  await page.close();
+  page = await ctx.newPage();
+  await page.goto(fixture().user_url + '/games/lake-notes');
+  await expect(page.locator('.lake-original #overlayButton')).toBeVisible();
   const reconnected = (await profile(ctx)).cast;
   expect(reconnected).toMatchObject({ id: saved.id, ack_tick: saved.ack_tick, paused: true });
   expect(reconnected?.state.plan).toEqual(saved.state.plan);
