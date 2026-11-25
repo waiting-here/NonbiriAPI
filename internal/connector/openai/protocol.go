@@ -42,50 +42,55 @@ var (
 // malformed one, which degrades to unknown) from a real all-zero usage object.
 type Usage = connectorcontract.Usage
 
-func validateCompletion(body []byte) (Usage, error) {
+// A nil projection retains the original completion byte for byte.
+func validateCompletion(body []byte) (Usage, []byte, error) {
 	fields, err := decodeJSONObject(body, maxProtocolFields)
 	if err != nil {
-		return Usage{}, errInvalidUpstreamResponse
+		return Usage{}, nil, errInvalidUpstreamResponse
 	}
 	defer clearFields(fields)
 	root := fieldsByName(fields)
 	if hasUpstreamError(root) {
-		return Usage{}, errInvalidUpstreamResponse
+		return Usage{}, nil, errInvalidUpstreamResponse
 	}
 	if !requiredString(root, "id", maxResponseIDRunes, true) ||
 		!exactString(root, "object", "chat.completion") ||
 		!requiredNonNegativeInt(root, "created") ||
 		!requiredString(root, "model", MaxUpstreamModelRunes, true) {
-		return Usage{}, errInvalidUpstreamResponse
+		return Usage{}, nil, errInvalidUpstreamResponse
 	}
-	if err := validateChoices(root["choices"], false); err != nil {
-		return Usage{}, errInvalidUpstreamResponse
+	choices, err := validateChoices(root["choices"], false)
+	if err != nil {
+		return Usage{}, nil, errInvalidUpstreamResponse
 	}
 	// A malformed usage object degrades to unknown; it never invalidates an
 	// otherwise protocol-valid completion.
 	usage, _ := parseUsage(root["usage"])
-	return usage, nil
+	if choices == nil {
+		return usage, nil, nil
+	}
+	root["choices"] = choices
+	projected, err := marshalChatProjection(root)
+	return usage, projected, err
 }
 
 // streamResponseIdentity is local to one upstream attempt. A valid first ID
 // leaves the stream unchanged; only an invalid initial string enables repair.
 type streamResponseIdentity struct {
-	seen  bool
-	id    string
-	bytes int64
+	seen      bool
+	id        string
+	bytes     int64
+	projected bool
 }
 
 func (s *streamResponseIdentity) withinBounds(data []byte, maxEvent, maxLine int, maxStream int64) bool {
 	if len(data) > maxEvent || int64(len(data)) > maxStream {
 		return false
 	}
-	if s.id == "" {
-		return true
-	}
-	// Repair can enlarge a short source ID. Keep each projected data line and
-	// the cumulative repaired frames (including the terminal) bounded as well.
+	// Track earlier frames too: content projection can start midway through
+	// a stream. Ordinary passthrough retains its original ingress limits.
 	size := int64(len(data)) + 8
-	if len(data)+6 > maxLine || size > maxStream-s.bytes-14 {
+	if (s.id != "" || s.projected) && (len(data)+6 > maxLine || size > maxStream-s.bytes-14) {
 		return false
 	}
 	s.bytes += size
@@ -121,7 +126,8 @@ func validateStreamChunk(data []byte, identity *streamResponseIdentity, sourceGu
 		!requiredString(root, "model", MaxUpstreamModelRunes, true) {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
 	}
-	if err := validateChoices(root["choices"], true); err != nil {
+	choices, err := validateChoices(root["choices"], true)
+	if err != nil {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
 	}
 	usage, err := parseUsage(root["usage"])
@@ -149,33 +155,37 @@ func validateStreamChunk(data []byte, identity *streamResponseIdentity, sourceGu
 			identity.id = "chatcmpl-" + rand.Text()
 		}
 		identity.seen = true
-		if identity.id != "" {
+		identity.projected = identity.projected || choices != nil
+	}
+	if choices != nil || identity != nil && identity.id != "" {
+		clear(compact.Bytes())
+		compact.Reset()
+		var rewritten bytes.Buffer
+		rewritten.Grow(len(data))
+		rewritten.WriteByte('{')
+		for i, field := range fields {
+			if i != 0 {
+				rewritten.WriteByte(',')
+			}
+			name, _ := json.Marshal(field.name)
+			rewritten.Write(name)
+			rewritten.WriteByte(':')
+			switch {
+			case field.name == "choices" && choices != nil:
+				rewritten.Write(choices)
+			case field.name == "id" && identity != nil && identity.id != "":
+				value, _ := json.Marshal(identity.id)
+				rewritten.Write(value)
+			default:
+				rewritten.Write(field.value)
+			}
+		}
+		rewritten.WriteByte('}')
+		err := json.Compact(&compact, rewritten.Bytes())
+		clear(rewritten.Bytes())
+		if err != nil {
 			clear(compact.Bytes())
-			compact.Reset()
-			var rewritten bytes.Buffer
-			rewritten.Grow(len(data))
-			rewritten.WriteByte('{')
-			for i, field := range fields {
-				if i != 0 {
-					rewritten.WriteByte(',')
-				}
-				name, _ := json.Marshal(field.name)
-				rewritten.Write(name)
-				rewritten.WriteByte(':')
-				if field.name == "id" {
-					value, _ := json.Marshal(identity.id)
-					rewritten.Write(value)
-				} else {
-					rewritten.Write(field.value)
-				}
-			}
-			rewritten.WriteByte('}')
-			err := json.Compact(&compact, rewritten.Bytes())
-			clear(rewritten.Bytes())
-			if err != nil {
-				clear(compact.Bytes())
-				return nil, Usage{}, false, errInvalidUpstreamResponse
-			}
+			return nil, Usage{}, false, errInvalidUpstreamResponse
 		}
 	}
 	return compact.Bytes(), usage, malformed, nil
@@ -221,56 +231,66 @@ func requiredNonNegativeInt(root map[string]json.RawMessage, name string) bool {
 	return json.Unmarshal(raw, &value) == nil && value >= 0
 }
 
-func validateChoices(raw json.RawMessage, stream bool) error {
+func validateChoices(raw json.RawMessage, stream bool) ([]byte, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '[' {
-		return errInvalidUpstreamResponse
+		return nil, errInvalidUpstreamResponse
 	}
 	var choices []json.RawMessage
 	if err := json.Unmarshal(trimmed, &choices); err != nil {
 		clearRawMessages(choices)
-		return errInvalidUpstreamResponse
+		return nil, errInvalidUpstreamResponse
 	}
+	defer clearRawMessages(choices)
 	if len(choices) > maxChoices || (!stream && len(choices) == 0) {
-		clearRawMessages(choices)
-		return errInvalidUpstreamResponse
+		return nil, errInvalidUpstreamResponse
 	}
-	for _, rawChoice := range choices {
-		fields, err := decodeJSONObject(rawChoice, maxProtocolFields)
+	field := "message"
+	if stream {
+		field = "delta"
+	}
+	changed := false
+	for i, rawChoice := range choices {
+		projected, err := validateChoice(rawChoice, field)
 		if err != nil {
-			clearRawMessages(choices)
-			return errInvalidUpstreamResponse
+			return nil, err
 		}
-		choice := fieldsByName(fields)
-		valid := requiredNonNegativeInt(choice, "index")
-		if valid {
-			if stream {
-				valid = requiredJSONObject(choice["delta"])
-			} else {
-				valid = requiredJSONObject(choice["message"])
-			}
-		}
-		clearFields(fields)
-		if !valid {
-			clearRawMessages(choices)
-			return errInvalidUpstreamResponse
+		if projected != nil {
+			clear(rawChoice)
+			choices[i] = projected
+			changed = true
 		}
 	}
-	clearRawMessages(choices)
-	return nil
+	if !changed {
+		return nil, nil
+	}
+	return marshalChatProjection(choices)
 }
 
-func requiredJSONObject(raw json.RawMessage) bool {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return false
-	}
-	fields, err := decodeJSONObject(trimmed, maxProtocolFields)
+func validateChoice(raw json.RawMessage, field string) ([]byte, error) {
+	fields, err := decodeJSONObject(raw, maxProtocolFields)
 	if err != nil {
-		return false
+		return nil, errInvalidUpstreamResponse
 	}
-	clearFields(fields)
-	return true
+	defer clearFields(fields)
+	choice := fieldsByName(fields)
+	if !requiredNonNegativeInt(choice, "index") {
+		return nil, errInvalidUpstreamResponse
+	}
+	fields, err = decodeJSONObject(choice[field], maxProtocolFields)
+	if err != nil {
+		return nil, errInvalidUpstreamResponse
+	}
+	defer clearFields(fields)
+	message := fieldsByName(fields)
+	if !normalizeChatContentParts(message) {
+		return nil, nil
+	}
+	choice[field], err = marshalChatProjection(message)
+	if err != nil {
+		return nil, errInvalidUpstreamResponse
+	}
+	return marshalChatProjection(choice)
 }
 
 // parseUsage normalizes one usage object into the neutral four buckets.

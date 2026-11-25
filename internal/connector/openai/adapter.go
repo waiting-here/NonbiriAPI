@@ -376,31 +376,44 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 		result.ErrorDetail = errorContext.Parse(body)
 		return result
 	}
-	usage, err := validateCompletion(body)
+	usage, projected, err := validateCompletion(body)
 	if err != nil {
 		inner, wrapperErr := unwrapCompletion(body)
 		if wrapperErr != nil {
 			return upstreamFailure("upstream response was invalid", response.StatusCode)
 		}
 		// Scan the complete wrapper before dropping its outer representation.
-		if guard.ContainsJSON(body, body) {
+		if guard.containsSourceJSON(body) {
 			clear(inner)
 			return upstreamFailure("upstream response was rejected", response.StatusCode)
 		}
 		clear(body)
 		body = inner
 		defer clear(body)
-		usage, err = validateCompletion(body)
+		usage, projected, err = validateCompletion(body)
 	}
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
-	if guard.ContainsJSON(body, body) {
-		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
-		return upstreamFailure("upstream response was rejected", response.StatusCode)
+	if projected != nil {
+		defer clear(projected)
+		// Scan the source independently: the wire guard sees the joined
+		// strings and must not concatenate them with the original message.
+		if guard.containsSourceJSON(body) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
+			return upstreamFailure("upstream response was rejected", response.StatusCode)
+		}
+		if int64(len(projected)) > a.maxJSONResponseBytes {
+			return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
+		}
+		body = projected
 	}
 	if policy.FlattenToolCalls {
+		if guard.containsSourceJSON(body) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
+			return upstreamFailure("upstream response was rejected", response.StatusCode)
+		}
 		flattened, ferr := flattenCompletion(body)
 		if ferr != nil {
 			return upstreamFailure("upstream response was invalid", response.StatusCode)
@@ -411,9 +424,12 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 		if int64(len(body)) > a.maxJSONResponseBytes {
 			return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 		}
-		if guard.ContainsJSON(body, body) {
-			return upstreamFailure("upstream response was rejected", response.StatusCode)
+	}
+	if guard.ContainsJSON(body, body) {
+		if projected == nil && !policy.FlattenToolCalls {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		}
+		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
 	defer func() {
 		result = connectorcontract.ProtocolSucceeded(result)

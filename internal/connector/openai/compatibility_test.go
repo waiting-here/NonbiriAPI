@@ -134,7 +134,7 @@ func TestOpenAIUsageTotalMismatchKeepsValidatedBuckets(t *testing.T) {
 				t.Fatalf("valid buckets and mismatch = %+v, %v", usage, err)
 			}
 			completion := []byte(`{"id":"x","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{}}],"usage":` + raw + `}`)
-			if usage, err := validateCompletion(completion); err != nil || !usage.Present || !usage.TotalMismatch {
+			if usage, _, err := validateCompletion(completion); err != nil || !usage.Present || !usage.TotalMismatch {
 				t.Fatalf("completion usage = %+v, %v", usage, err)
 			}
 			chunk := []byte(`{"id":"x","object":"chat.completion.chunk","created":1,"model":"m","choices":[],"usage":` + raw + `}`)
