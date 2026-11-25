@@ -1,7 +1,7 @@
 import { renderHistoricalLogs as renderWithProviders } from '../../../../test/unit/logSupport';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installJsonFetchFixtures } from '../../../../test/unit/support';
+import { installJsonFetchFixtures, type JsonFetchFixture } from '../../../../test/unit/support';
 import { RoleLogPanel } from './RoleLogPanel';
 import type { LogRole } from './data';
 
@@ -211,4 +211,88 @@ describe('role log time filters', () => {
     expect(fromInput).toHaveValue(localTo.slice(0, 16));
     expect(toInput).toHaveValue(localFrom.slice(0, 16));
   });
+});
+
+it('advances a relative range on focus while preserving searches that have handed off', async () => {
+  let seconds = to;
+  vi.spyOn(Date, 'now').mockImplementation(() => seconds * 1000);
+  const listPath = (end: number) => `/api/logs?from=${end - 900}&to=${end}&page=1&page_size=20`;
+  const body = {
+    data: [row('user')],
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+  };
+  const receipt = { status: 'running', search_id: 'relative-search' };
+  const searchPath = '/api/log-searches/relative-search';
+  const poll = searchPath + '?page=1&page_size=20';
+  const requests: JsonFetchFixture[] = [to, to + 180, to + 240].map((end) => ({
+    method: 'GET',
+    path: listPath(end),
+    body,
+  }));
+  requests.push({ method: 'GET', path: listPath(to + 60), body: receipt, status: 202 });
+  const fetchMock = installJsonFetchFixtures([
+    {
+      method: 'GET',
+      path: '/api/time-zones',
+      body: { version: 'go1.26.6-zoneinfo', zones: ['UTC'] },
+    },
+    ...requests,
+  ]);
+  const mocked = fetchMock.getMockImplementation()!;
+  let finishSearch!: (response: Response) => void;
+  const pending = new Promise<Response>((resolve) => {
+    finishSearch = resolve;
+  });
+  fetchMock.mockImplementation((path, options?: RequestInit) => {
+    if (path === poll) return pending;
+    if (path === searchPath && options?.method === 'DELETE') {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    return mocked(path, options);
+  });
+  const listCalls = () =>
+    fetchMock.mock.calls
+      .map(([path]) => String(path))
+      .filter((path) => path.startsWith('/api/logs?'));
+
+  const view = await renderWithProviders(<RoleLogPanel role="user" accountId="viewer" />, {
+    station: 'user',
+    role: 'user',
+    route: '/logs?range=15m',
+  });
+  await screen.findByText('Search complete');
+  expect(listCalls()).toEqual([listPath(to)]);
+
+  seconds = to + 60;
+  fireEvent.focus(window);
+  await screen.findByText('Digging through the logs…');
+  await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path === poll)).toBe(true));
+  seconds = to + 120;
+  fireEvent.focus(window);
+  expect(listCalls()).toEqual([listPath(to), listPath(to + 60)]);
+  await act(async () =>
+    finishSearch(
+      new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } }),
+    ),
+  );
+  await screen.findByText('Search complete');
+
+  seconds = to + 180;
+  fireEvent.focus(window);
+  expect(listCalls()).toEqual([listPath(to), listPath(to + 60)]);
+  await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
+  await waitFor(() => expect(listCalls()).toContain(listPath(to + 180)));
+  await screen.findByText('Search complete');
+
+  seconds = to + 240;
+  await view.user.click(screen.getByRole('button', { name: 'Last 15 minutes' }));
+  await waitFor(() =>
+    expect(listCalls()).toEqual([
+      listPath(to),
+      listPath(to + 60),
+      listPath(to + 180),
+      listPath(to + 240),
+    ]),
+  );
 });

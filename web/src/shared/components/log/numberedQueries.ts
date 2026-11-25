@@ -5,8 +5,15 @@ import {
   logAttemptSequence,
   normalizeFailureSummary,
 } from './managementFailures';
-import { useQuery, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
-import { ApiError } from '@shared/query/http';
+import {
+  hashKey,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiError, apiFetch, isApiError } from '@shared/query/http';
 import { decoded, queryPath } from '@shared/operations/api';
 import { array, invalidResponse, oneOf, record, type CursorPage } from '@shared/operations/wire';
 import {
@@ -375,6 +382,177 @@ export function normalizeRoleLogDetail(
   return normalizedDetail(value, role, windowInput(attemptPage, attemptPageSize));
 }
 
+function listPath(role: LogRole, window: LogPageWindow, filters: LogFiltersValue): string {
+  return `${ROLE_PATHS[role]}?${pageQuery(role, window, requestFilter(role, filters))}`;
+}
+
+function searchPath(role: LogRole, id: string): string {
+  return `${ROLE_PATHS[role].replace(/\/logs$/, '/log-searches')}/${encodeURIComponent(id)}`;
+}
+
+const LONG_SEARCH_MS = 5_000;
+const HANDOFF_GRACE_MS = 5_000;
+const SEARCH_POLL_MS = 1_000;
+
+function decodeSearchPage(value: unknown, role: LogRole, window: LogPageWindow) {
+  if (value && typeof value === 'object' && 'status' in value && value.status === 'running') {
+    const id = 'search_id' in value ? value.search_id : undefined;
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(id)) invalidResponse('log search');
+    return { id };
+  }
+  return { page: normalizedPage(value, `${role} logs`, window, roleRowDecoder(role)) };
+}
+
+function deleteSearch(role: LogRole, id: string): Promise<void> {
+  return apiFetch<void>(searchPath(role, id), { method: 'DELETE', keepalive: true });
+}
+
+async function startSearch(
+  role: LogRole,
+  path: string,
+  window: LogPageWindow,
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted();
+  const started = performance.now();
+  const request = new AbortController();
+  let grace: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const stop = () => {
+    // Once handoff is due, accept a late receipt so we can release the server search.
+    if (performance.now() - started < LONG_SEARCH_MS) request.abort();
+    else grace = globalThis.setTimeout(() => request.abort(), HANDOFF_GRACE_MS);
+  };
+  signal.addEventListener('abort', stop, { once: true });
+  try {
+    return await decoded(path, (value) => decodeSearchPage(value, role, window), {
+      signal: request.signal,
+      headers: { Prefer: 'respond-async' },
+    });
+  } finally {
+    signal.removeEventListener('abort', stop);
+    globalThis.clearTimeout(grace);
+  }
+}
+
+function waitForSearch(signal: AbortSignal) {
+  signal.throwIfAborted();
+  return new Promise<void>((resolve, reject) => {
+    const cancel = () => {
+      globalThis.clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = globalThis.setTimeout(() => {
+      signal.removeEventListener('abort', cancel);
+      resolve();
+    }, SEARCH_POLL_MS);
+    signal.addEventListener('abort', cancel, { once: true });
+  });
+}
+
+function lostSearch(error: unknown): boolean {
+  return (
+    isApiError(error) &&
+    (error.status === 404 || error.status === 410 || error.code === 'refresh_required')
+  );
+}
+
+function createSearchSession(role: LogRole, scope: string, invalidate: () => void) {
+  let lifetime = new AbortController();
+  let job:
+    { id: string; pending: boolean; cancelRequested?: true; deletion?: Promise<void> } | undefined;
+  const release = () => {
+    if (!job) return;
+    const { id, deletion } = job;
+    job = undefined;
+    // The server expires searches whose cancellation could not be delivered.
+    void (deletion ?? deleteSearch(role, id)).catch(() => {});
+    invalidate();
+  };
+
+  return {
+    scope,
+    release,
+    hasJob: () => job !== undefined,
+    async cancel() {
+      if (!job) return;
+      const current = job;
+      current.cancelRequested = true;
+      current.deletion ??= deleteSearch(role, current.id);
+      try {
+        await current.deletion;
+      } catch (error) {
+        if (!isApiError(error) || (error.status !== 404 && error.status !== 410)) throw error;
+      } finally {
+        delete current.deletion;
+      }
+      if (job === current) {
+        job = undefined;
+        invalidate();
+      }
+    },
+    close: () => {
+      lifetime.abort();
+      lifetime = new AbortController();
+      release();
+    },
+    async read(
+      page: string,
+      pageSize: PageSize,
+      filters: LogFiltersValue,
+      requestSignal: AbortSignal,
+      showLong: () => void,
+    ): Promise<NumberedLogPage> {
+      const signal = AbortSignal.any([requestSignal, lifetime.signal]);
+      const window = windowInput(page, pageSize);
+      if (job?.cancelRequested) release();
+      let recovered = false;
+      for (;;) {
+        signal.throwIfAborted();
+        if (!job) {
+          const result = await startSearch(role, listPath(role, window, filters), window, signal);
+          if (signal.aborted && result.id) void deleteSearch(role, result.id).catch(() => {});
+          signal.throwIfAborted();
+          if (result.page) return result.page;
+          job = { id: result.id, pending: true };
+          // Cached pages from before handoff describe a different set of matches.
+          invalidate();
+        }
+
+        const current = job;
+        const path = queryPath(searchPath(role, current.id), { page, page_size: pageSize });
+        if (current.pending) showLong();
+        try {
+          for (;;) {
+            const result = await decoded(path, (value) => decodeSearchPage(value, role, window), {
+              signal,
+            });
+            signal.throwIfAborted();
+            if (result.page) {
+              current.pending = false;
+              return result.page;
+            }
+            if (result.id !== current.id) invalidResponse('log search identity');
+            current.pending = true;
+            showLong();
+            await waitForSearch(signal);
+          }
+        } catch (error) {
+          signal.throwIfAborted();
+          if (!lostSearch(error)) {
+            // A broken connection does not invalidate a server search.
+            if (!isApiError(error) || error.code !== 'network_error') release();
+            throw error;
+          }
+          job = undefined;
+          invalidate();
+          if (recovered) throw error;
+          recovered = true;
+        }
+      }
+    },
+  };
+}
+
 export async function getRoleLogsPage(
   role: LogRole,
   page: string,
@@ -383,9 +561,8 @@ export async function getRoleLogsPage(
   signal?: AbortSignal,
 ): Promise<NumberedLogPage> {
   const window = windowInput(page, pageSize);
-  const safeFilters = requestFilter(role, filters);
   return decoded(
-    `${ROLE_PATHS[role]}?${pageQuery(role, window, safeFilters)}`,
+    listPath(role, window, filters),
     (value) => normalizedPage(value, `${role} logs`, window, roleRowDecoder(role)),
     { signal },
   );
@@ -462,6 +639,10 @@ function sameScopePlaceholder<T>(prefix: QueryKey) {
     previousData !== undefined && hasPrefix(previousQuery, prefix) ? previousData : undefined;
 }
 
+type LogCancellationStatus = 'canceling' | 'canceled' | 'cancel-error';
+
+export type LogSearchStatus = 'loading' | 'long' | 'complete' | 'error' | LogCancellationStatus;
+
 export function useRoleLogsPage(
   role: LogRole,
   accountId: string,
@@ -469,15 +650,98 @@ export function useRoleLogsPage(
   pageSize: PageSize,
   filters: LogFiltersValue,
   enabled = true,
-): UseQueryResult<NumberedLogPage, Error> {
-  const prefix = [...numberedLogKeys.root(role), 'page', accountId] as const;
-  return useQuery<NumberedLogPage, Error>({
-    queryKey: numberedLogKeys.list(role, accountId, page, pageSize, filters),
-    queryFn: ({ signal }) => getRoleLogsPage(role, page, pageSize, filters, signal),
-    enabled: enabled && Boolean(accountId) && isPageNumber(page) && isPageSize(pageSize),
+) {
+  const client = useQueryClient();
+  const prefix = useMemo(
+    () => [...numberedLogKeys.root(role), 'page', accountId] as const,
+    [role, accountId],
+  );
+  const scope = hashKey([prefix, filters, enabled]);
+  const search = useMemo(
+    () =>
+      createSearchSession(role, scope, () => {
+        void client.invalidateQueries({ queryKey: prefix, refetchType: 'none' });
+      }),
+    [client, prefix, role, scope],
+  );
+  useEffect(() => search.close, [search]);
+
+  const queryKey = numberedLogKeys.list(role, accountId, page, pageSize, filters);
+  const windowKey = hashKey([page, pageSize]);
+  const [long, setLong] = useState<{ scope: typeof search; window: string }>();
+  const [cancellation, setCancellation] = useState<{
+    scope: typeof search;
+    window: string;
+    status: LogCancellationStatus;
+  }>();
+  const cancelStatus =
+    cancellation?.scope === search && cancellation.window === windowKey
+      ? cancellation.status
+      : undefined;
+  const query = useQuery<NumberedLogPage, Error>({
+    queryKey,
+    queryFn: async ({ signal }) => {
+      setLong(undefined);
+      let announcedLong = false;
+      const showLong = () => {
+        if (signal.aborted || announcedLong) return;
+        announcedLong = true;
+        setLong({ scope: search, window: windowKey });
+      };
+      const timer = globalThis.setTimeout(showLong, LONG_SEARCH_MS);
+      try {
+        return await search.read(page, pageSize, filters, signal, showLong);
+      } finally {
+        globalThis.clearTimeout(timer);
+      }
+    },
+    enabled:
+      enabled && !cancelStatus && Boolean(accountId) && isPageNumber(page) && isPageSize(pageSize),
     placeholderData: sameScopePlaceholder<NumberedLogPage>(prefix),
+    networkMode: 'always',
     retry: false,
   });
+  // Leaving a canceled page via history starts a search for that requested window.
+  if (cancellation && !cancelStatus) setCancellation(undefined);
+
+  const searchStatus: LogSearchStatus =
+    cancelStatus ??
+    (query.isFetching
+      ? long?.scope === search && long.window === windowKey
+        ? 'long'
+        : 'loading'
+      : query.error
+        ? 'error'
+        : query.data
+          ? 'complete'
+          : 'loading');
+
+  return {
+    ...query,
+    searchStatus,
+    settledOrdinaryResult: () =>
+      searchStatus === 'complete' &&
+      !search.hasJob() &&
+      client.isFetching({ queryKey, exact: true }) === 0,
+    retry: () => void query.refetch(),
+    refresh: () => {
+      search.release();
+      setCancellation(undefined);
+      void query.refetch();
+    },
+    cancel: () => {
+      if (!query.isFetching && cancelStatus !== 'cancel-error') return;
+      const intent = { scope: search, window: windowKey, status: 'canceling' } as const;
+      setCancellation(intent);
+      void client.cancelQueries({ queryKey, exact: true });
+      const settle = (status: LogCancellationStatus) =>
+        setCancellation((current) => (current === intent ? { ...intent, status } : current));
+      void search.cancel().then(
+        () => settle('canceled'),
+        () => settle('cancel-error'),
+      );
+    },
+  };
 }
 
 export function useRoleLogDetailPage(

@@ -525,6 +525,19 @@
         "reasonHelp": "说明暂停或恢复服务的原因，便于其他管理员接手。"
       },
       "logs": {
+        "search": {
+          "loading": "正在检索请求日志…",
+          "long": "正在埋头翻日志…",
+          "longHint": "检索已超过 5 秒，还在继续。你可以随时取消。",
+          "complete": "检索完成",
+          "canceling": "正在取消检索…",
+          "canceled": "检索已取消",
+          "cancelError": "取消检索失败。",
+          "retryCancel": "重试取消",
+          "earlierResults": "当前显示的是上一次的结果。",
+          "cancel": "取消检索",
+          "again": "重新检索"
+        },
         "stewardTitle": "请求日志",
         "stewardEmpty": "没有日志",
         "stewardEmptyBody": "当前筛选范围内没有可见记录。",
