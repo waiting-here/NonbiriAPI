@@ -19,7 +19,6 @@
   border-radius: 1rem;
   padding: clamp(0.8rem, 2vw, 1.7rem);
   line-height: 1.5;
-  max-width: 88rem;
   margin: auto;
   overflow-wrap: anywhere;
 }
