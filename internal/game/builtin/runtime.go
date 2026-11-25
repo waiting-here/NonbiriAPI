@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/game/blackjack"
 	builtinconfig "github.com/waiting-here/NonbiriAPI/internal/game/builtin/config"
 	builtinfinance "github.com/waiting-here/NonbiriAPI/internal/game/builtin/finance"
+	"github.com/waiting-here/NonbiriAPI/internal/game/companion"
 	"github.com/waiting-here/NonbiriAPI/internal/game/duel"
 	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/game/gwent"
@@ -98,6 +99,7 @@ func New(options Options) (*Runtime, error) {
 	runtime := &Runtime{}
 	duels := map[string]*duel.Service{}
 	var blackjackService *blackjack.Service
+	var companions *companion.Service
 	duelFactory := func(descriptor game.ModuleDescriptor, rules duel.Rules) host.Factory {
 		return func(shared host.Services) (*host.Module, error) {
 			financial, err := builtinfinance.ForModule(descriptor.ID)
@@ -126,7 +128,10 @@ func New(options Options) (*Runtime, error) {
 				return nil, err
 			}
 			duels[descriptor.ID] = service
-			return service.Module(), nil
+			if companions == nil {
+				companions = companion.New(shared)
+			}
+			return companions.Attach(descriptor.ID, service.Module()), nil
 		}
 	}
 	likesRules, err := likes.NewRules()
@@ -244,6 +249,13 @@ func New(options Options) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
+		ids, err := companions.CancelUserTx(ctx, tx, user, now)
+		if err != nil {
+			if finish != nil {
+				finish(false)
+			}
+			return nil, err
+		}
 		end, err := blackjackService.CancelUserTx(ctx, tx, user, now)
 		if err != nil {
 			if finish != nil {
@@ -252,6 +264,9 @@ func New(options Options) (*Runtime, error) {
 			return nil, err
 		}
 		return func(committed bool) {
+			if committed {
+				companions.CancelDecisions(ids)
+			}
 			if finish != nil {
 				finish(committed)
 			}
