@@ -177,3 +177,17 @@ func TestLogAttemptFilterPlanUsesIndependentIndexedSets(t *testing.T) {
 		t.Log(plan.String())
 	}
 }
+
+// Inspect the actual candidate query together with the historical combined
+// projection for the index comparisons in this package.
+func logListPageQuery(ctx context.Context, reader logReadQueryer, columns, join, where string, args []any, requested *pagination.Request, limit int) (string, []any, *pagination.Metadata, error) {
+	selection, args, metadata, err := logIDPageQuery(ctx, reader, where, args, requested, limit)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	// Apply the page window before projecting charges and caller history. A
+	// selective attempt filter may require sorting its matches; that work must
+	// not evaluate correlated display columns for every matching request.
+	return `WITH log_page AS MATERIALIZED (` + selection + `) SELECT ` + columns +
+		` FROM log_page p JOIN request_logs l ON l.id=p.id` + join + logListOrder, args, metadata, nil
+}
