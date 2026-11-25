@@ -210,7 +210,7 @@ export function LakeScene({
             : c
               ? c.bitePreparationRemaining > 0
                 ? translate('bitePreparation')
-                : translate(c.phase as 'waiting' | 'playing' | 'success' | 'failed')
+                : translate(c.phase as 'waiting' | 'playing' | 'success' | 'failed' | 'cancelled')
               : translate('idle');
       const amount = Math.floor((c?.progress ?? 0.3) * 100 + 0.5);
       fill.style.height = amount + '%';

@@ -774,8 +774,8 @@ export function GamesPage() {
           <Link className="nb-btn nb-btn--secondary" to="/games/lake-notes/periods">
             {t('admin.lakeNotes.title')}
           </Link>
-          <Link className="nb-btn nb-btn--secondary" to="/games/ai">
-            {t('admin.games.aiPlayersTitle')}
+          <Link className="nb-btn nb-btn--secondary" to="/games/companions">
+            {t('common.companion.adminTitle')}
           </Link>
           {config.data?.bidding && config.data.likes ? (
             <Link className="nb-btn nb-btn--secondary" to="/games/history">

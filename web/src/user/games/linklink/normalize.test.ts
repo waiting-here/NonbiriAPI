@@ -79,6 +79,22 @@ describe('LinkLink authoritative projection', () => {
     ).toBeNull();
   });
 
+  it('shows a cancelled board with its original ticket and no score', () => {
+    const summary = normalizeLinkLinkSummary({
+      session_id: id,
+      spec: '6x8',
+      price: '3',
+      terminal_reason: 'cancelled',
+      started_at: 1_800_000_000,
+      deadline: 1_800_000_150,
+      terminal_at: 1_800_000_020,
+      pairs_removed: 2,
+      total_pairs: 24,
+      score: null,
+    });
+    expect(summary).toMatchObject({ terminalReason: 'cancelled', score: null, price: '3' });
+  });
+
   it('renders server-provided duration and score without recomputing business rules', () => {
     const wrongDuration = active();
     wrongDuration.deadline += 1;

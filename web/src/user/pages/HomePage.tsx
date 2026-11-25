@@ -708,7 +708,10 @@ function GamesSection({ accountId, adapters }: { accountId: string; adapters: Ho
                 <Link
                   key={`${item.route_id}:${item.kind}:${item.resource_id}`}
                   className="core-choice"
-                  to={GAME_PATHS[item.route_id]}
+                  to={
+                    GAME_PATHS[item.route_id] +
+                    (/^(bidc|likc|gwtc)_/.test(item.resource_id) ? '?opponent=companion' : '')
+                  }
                 >
                   <strong>{t(GAME_LABELS[item.route_id])}</strong>
                   <StatusBadge tone={item.kind === 'continue' ? 'accent' : 'neutral'}>

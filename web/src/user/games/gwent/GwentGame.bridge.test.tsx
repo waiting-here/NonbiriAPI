@@ -31,14 +31,6 @@ const deck = {
   leader: 'openai_leader',
   cards: [{ id: 'openai_gpt4', count: 1 }],
 };
-const offer = {
-  terms: {
-    ticket: '0',
-    ai: { bot_id: 'bot_AAAAAAAAAAAAAAAAAAAAAA', bot_name: 'Challenge', bot_loadout: deck },
-  },
-  terms_hash: 'a'.repeat(64),
-  completed: false,
-};
 const context: DuelLobbyContext = {
   config: {
     enabled: true,
@@ -69,40 +61,31 @@ const dispatch = (
     ),
   );
 async function mount() {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(
-      async () =>
-        new Response(JSON.stringify({ enabled: true, bots: [offer] }), {
-          headers: { 'Content-Type': 'application/json' },
-        }),
-    ),
-  );
   const result = await renderWithProviders(<GwentGame {...context} />, { station: 'user' });
   const frame = result.container.querySelector('iframe')!;
   const send = vi.spyOn(frame.contentWindow!, 'postMessage');
   await waitFor(() => {
     dispatch(frame, { type: 'ready' });
-    expect(send.mock.calls.some(([message]) => message.snapshot?.ai?.bots.length)).toBe(true);
+    expect(send.mock.calls.some(([message]) => message.snapshot?.config?.modes?.standard)).toBe(
+      true,
+    );
   });
   return { result, frame, send };
 }
 describe('original arena platform bridge', () => {
-  it('uses the displayed challenge terms and retains the queued deck on rematch', async () => {
+  it('uses the displayed player match terms and retains the queued deck on rematch', async () => {
     mocks.current = null;
     const { frame } = await mount();
     dispatch(frame, {
       type: 'queue',
-      mode: 'ai',
-      termsHash: offer.terms_hash,
-      botID: offer.terms.ai.bot_id,
+      mode: 'standard',
+      termsHash: context.config.modes.standard.termsHash,
       deck,
     });
     expect(mocks.run).toHaveBeenLastCalledWith({
       kind: 'queue',
-      mode: 'ai',
-      termsHash: offer.terms_hash,
-      botID: offer.terms.ai.bot_id,
+      mode: 'standard',
+      termsHash: context.config.modes.standard.termsHash,
       loadout: deck,
     });
     dispatch(frame, { type: 'rematch' });
@@ -162,9 +145,8 @@ describe('original arena platform bridge', () => {
     mocks.run.mockClear();
     dispatch(frame, {
       type: 'queue',
-      mode: 'ai',
+      mode: 'standard',
       termsHash: 'old-price',
-      botID: offer.terms.ai.bot_id,
       deck,
     });
     expect(mocks.run).not.toHaveBeenCalled();

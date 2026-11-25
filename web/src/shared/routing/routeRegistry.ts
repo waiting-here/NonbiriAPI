@@ -645,8 +645,8 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     registered: true,
   }),
   admin({
-    id: 'admin-game-ai',
-    path: '/games/ai',
+    id: 'admin-game-companions',
+    path: '/games/companions',
     access: 'admin',
     layout: 'wide',
     registered: true,

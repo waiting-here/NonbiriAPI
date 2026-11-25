@@ -1187,8 +1187,7 @@
         "modeRequiresStake": "启用{{mode}}需要开启三人猜拳，并设置大于 0 的基础投入。",
         "changedElsewhere": "游戏设置已在其他位置修改。你的输入仍保留，请恢复最新设置后重新编辑。",
         "feeRange": "{{field}}须为 0 至 99.99%，最多两位小数。"
-      },
-      "aiPlayersTitle": "AI 玩家与策略"
+      }
     },
     "activities": {
       "nav": "活动",

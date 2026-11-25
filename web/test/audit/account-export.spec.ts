@@ -62,7 +62,7 @@ test('account page downloads the current export with personal session-header set
     const page = await context.newPage();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const filename = 'nonbiriapi-account-export-v38.json';
+    const filename = 'nonbiriapi-account-export-v39.json';
     const [, download] = await Promise.all([
       page
         .waitForResponse(
@@ -89,7 +89,7 @@ test('account page downloads the current export with personal session-header set
       user: { id: string };
       models: { id: string; session_headers: unknown }[];
     };
-    expect(exported.schema_version).toBe(38);
+    expect(exported.schema_version).toBe(39);
     const quota = state.management.model_quotas;
     const donated = exported.donations.find((donation) => donation.id === quota.donation_id);
     const key = donated?.keys.find((key) => key.id === quota.key_id);

@@ -616,13 +616,15 @@ function PendingResult({
         <div className="rps-result-hero" key={result.sessionID}>
           <h2>
             {text(
-              result.terminalReason === 'free_tie_limit'
-                ? 'rps.result.ascension'
-                : creditsToMilli(result.ownWalletNet, true) > 0n
-                  ? 'rps.result.win'
-                  : creditsToMilli(result.ownWalletNet, true) < 0n
-                    ? 'rps.result.loss'
-                    : 'rps.result.tie',
+              result.terminalReason === 'server_restart'
+                ? 'rps.result.reason.server_restart'
+                : result.terminalReason === 'free_tie_limit'
+                  ? 'rps.result.ascension'
+                  : creditsToMilli(result.ownWalletNet, true) > 0n
+                    ? 'rps.result.win'
+                    : creditsToMilli(result.ownWalletNet, true) < 0n
+                      ? 'rps.result.loss'
+                      : 'rps.result.tie',
             )}
           </h2>
           {result.terminalReason === 'free_tie_limit' ? (

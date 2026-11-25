@@ -354,6 +354,38 @@ describe('RPS strict viewer projection', () => {
     expect(() => normalizeRPSHome(idle)).toThrow(/enabled base/i);
   });
 
+  it('keeps a restart cancellation and its original funding in the pending result', () => {
+    const restored = normalizeRPSHome({
+      kind: 'pending_result',
+      result: {
+        session_id: sessionID,
+        mode: 'quick',
+        terminal_reason: 'server_restart',
+        rules_version: 2,
+        own_seat_no: 0,
+        own_input: '5',
+        own_returned: '5',
+        own_wallet_net: '0',
+        own_buy_in: '5',
+        own_cash_out: '5',
+        own_buy_in_general: '2',
+        own_buy_in_game: '3',
+        own_returned_general: '2',
+        seats: [0, 1, 2].map((seat_no) => ({ seat_no, result: 'tie', gesture: null })),
+        created_at: 1_800_000_000,
+      },
+    });
+    expect(restored).toMatchObject({
+      kind: 'pending_result',
+      result: {
+        terminalReason: 'server_restart',
+        ownWalletNet: '0',
+        ownBuyInGame: '3',
+        ownReturnedGeneral: '2',
+      },
+    });
+  });
+
   it('requires the private pending-result outcome to match the own wallet-net sign', () => {
     const pending = {
       kind: 'pending_result',

@@ -110,14 +110,12 @@ for (const theme of ['light', 'dark']) {
         path = url.pathname;
       if (path === '/api/games') return route.fulfill({ json: snapshot });
       if (path === '/api/games/gwent/state') return route.fulfill({ json: state });
-      if (path === '/api/games/gwent/ai')
-        return route.fulfill({ json: { enabled: false, bots: [] } });
       if (path.includes('/randomness/')) return route.fulfill({ json: { proof: null } });
       if (path.endsWith('/catalog'))
         return route.fulfill({
           json: {
             content_hash: contentHash,
-            modes: { standard: { rules_version: 1, cards }, ai: { rules_version: 1, cards } },
+            modes: { standard: { rules_version: 1, cards } },
           },
         });
       if (path.endsWith('/actions')) {

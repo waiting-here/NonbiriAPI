@@ -390,10 +390,10 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
         resource_id: opaqueID(
           record.resource_id,
           state === 'waiting'
-            ? typeof record.resource_id === 'string' && record.resource_id.startsWith('gaq_')
-              ? 'gaq_'
-              : 'gwtq_'
-            : 'gwt_',
+            ? 'gwtq_'
+            : typeof record.resource_id === 'string' && record.resource_id.startsWith('gwtc_')
+              ? 'gwtc_'
+              : 'gwt_',
           'gwent resource',
         ),
       };
@@ -446,10 +446,10 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
         resource_id: opaqueID(
           record.resource_id,
           state === 'waiting'
-            ? typeof record.resource_id === 'string' && record.resource_id.startsWith('aiq_')
-              ? 'aiq_'
-              : 'bidq_'
-            : 'bid_',
+            ? 'bidq_'
+            : typeof record.resource_id === 'string' && record.resource_id.startsWith('bidc_')
+              ? 'bidc_'
+              : 'bid_',
           'bidding resource',
         ),
       };
@@ -462,7 +462,11 @@ function normalizeHomeContinue(value: unknown): HomeGameSummary {
         state,
         resource_id: opaqueID(
           record.resource_id,
-          state === 'waiting' ? 'likq_' : 'lik_',
+          state === 'waiting'
+            ? 'likq_'
+            : typeof record.resource_id === 'string' && record.resource_id.startsWith('likc_')
+              ? 'likc_'
+              : 'lik_',
           'likes resource',
         ),
       };

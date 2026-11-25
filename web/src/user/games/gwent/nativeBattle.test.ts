@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import frameHTML from '../../../../public/assets/gwent/interface/index.html?raw';
 import cards from '../../../../public/assets/gwent/interface/src/cards/cards.json';
-import abilities from './abilities.json';
 import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 const battlePath = '../../../../public/assets/gwent/interface/battle.js';
 const viewPath = '../../../../public/assets/gwent/interface/src/ui/battlefield.js';
@@ -14,7 +13,6 @@ installNativeDialog();
 beforeEach(() => {
   document.body.innerHTML = new DOMParser().parseFromString(frameHTML, 'text/html').body.innerHTML;
   document.documentElement.dataset.motion = 'reduced';
-  (globalThis as unknown as { ability_dict: typeof abilities }).ability_dict = abilities;
   installDecisionTimer();
 });
 function fixture(spy = false) {

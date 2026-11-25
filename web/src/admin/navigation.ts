@@ -197,7 +197,7 @@ const SEARCH_PAGES: Partial<
     subpages: [
       { labelKey: 'admin.audit.gameHistory', routeId: 'admin-game-history' },
       { labelKey: 'admin.navigation.whaleHaven', routeId: 'admin-whale-haven' },
-      { labelKey: 'admin.games.aiPlayersTitle', routeId: 'admin-game-ai' },
+      { labelKey: 'common.companion.adminTitle', routeId: 'admin-game-companions' },
       { labelKey: 'admin.lakeNotes.title', routeId: 'admin-lake-notes' },
       { labelKey: 'admin.navigation.blackjackHistory', routeId: 'admin-blackjack-history' },
     ],

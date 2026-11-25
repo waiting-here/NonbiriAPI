@@ -83,7 +83,7 @@ export function BiddingControls({
   onAction,
   onSelect,
 }: {
-  readonly state: DuelState<BiddingView, never, never>;
+  readonly state: Pick<DuelState<BiddingView, never, never>, 'view' | 'you' | 'locked' | 'phase'>;
   readonly blocked: boolean;
   readonly onAction: (action: BiddingAction) => void;
   readonly onSelect?: () => void;

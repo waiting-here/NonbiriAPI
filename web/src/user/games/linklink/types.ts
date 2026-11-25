@@ -39,7 +39,7 @@ export interface LinkLinkSummary {
   readonly sessionID: string;
   readonly spec: LinkLinkSpec;
   readonly price: string;
-  readonly terminalReason: 'completed' | 'timed_out' | 'abandoned';
+  readonly terminalReason: 'completed' | 'timed_out' | 'abandoned' | 'cancelled';
   readonly startedAt: number;
   readonly deadline: number;
   readonly terminalAt: number;

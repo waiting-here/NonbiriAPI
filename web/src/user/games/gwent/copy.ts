@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import abilities from './abilities.json';
+import abilities from '../../../../public/assets/gwent/interface/src/cards/ability-text.json';
 import type { CardDefinition, Faction } from './types';
 
 export function useGwentText() {

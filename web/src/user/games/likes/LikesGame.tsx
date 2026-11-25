@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { GameToolbar } from '../common/GameToolbar';
 import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
@@ -408,6 +409,11 @@ export function LikesGame(context: DuelLobbyContext) {
           />
         </div>
       </header>
+      {!current && !queue && !tutorial && (
+        <Link className="nb-btn nb-btn--secondary" to="?opponent=companion">
+          {t('common.companion.entry')}
+        </Link>
+      )}
       {context.onboarding && (
         <OnboardingCard game="likes" progress={context.onboarding} compactNote />
       )}
