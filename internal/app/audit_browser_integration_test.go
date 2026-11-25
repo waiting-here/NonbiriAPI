@@ -61,6 +61,9 @@ func TestAuditBrowserFixture(t *testing.T) {
 	}))
 	defer f.upstream.Close()
 	proxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.Header.Get("X-Fixture-Slow-Log-Search") == "1" && strings.HasSuffix(r.URL.Path, "/logs") {
+			delayBrowserLogRead(t, f, r)
+		}
 		f.app.Load().handler.ServeHTTP(w, r)
 	})
 	users, admins := httptest.NewUnstartedServer(proxy), httptest.NewUnstartedServer(proxy)

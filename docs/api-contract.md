@@ -385,6 +385,29 @@ Decisions uses the existing CallerKey, ownership, admission, original-input clie
 
 All routes in this section require a user session unless marked anonymous.
 
+**Long-running request log searches.** The numbered lists at `/api/logs`,
+`/api/steward/logs` and `/admin/api/logs` accept the optional
+`Prefer: respond-async` request header. A completed list returns the usual
+`200` page with its exact count. When the five-second foreground budget
+expires, the server queues the same filters and returns `202 Accepted` with
+`{"status":"running","search_id":"…"}` and `Retry-After: 1`.
+
+Replace the final `logs` in the list path with `log-searches/{search_id}`
+and poll with `GET`. Supply `page` and `page_size` to retrieve any numbered
+window. Each poll returns a running receipt or a complete, role-scoped page.
+The worker captures matching IDs in chronological order, newest first. Later
+insertions enter a new search. Entries reaching their retention deadline leave
+the result, including its total. Each read checks current authorization and
+projects the page with the current display rules.
+
+The originating session can discard its own result with `DELETE` on the
+same resource, receiving `204`. This also releases ongoing work if the
+account's log grant changes. The service runs one collection at a time and
+retains up to two searches per account and eight overall. A full active
+queue returns `429` with `Retry-After`. Idle results expire after five
+minutes and service restart clears them. On `404` or `409 refresh_required`,
+start a fresh list request with the desired filters.
+
 Request-log and Debug model-call `route_kind` values use `openai_` or `charity_` followed by one of the 16 operation names in §3.4, including `responses_compact`, `responses_input_tokens`, `rerank` and `systemone`. Discovery retains `model_discovery`. Debug accepts registered model-call kinds only. Log clients using a closed enum must handle the complete set. Existing model/status/time filters, pagination, role-specific projections and exports include every registered operation. Personal and charity records retain their corresponding privacy boundary; these ordinary request logs do not store prompts, vectors, uploaded files or generated media. The separate administrator-only assistant request history in §7.8 deliberately retains complete model input and responses.
 
 Request and attempt `usage` may add optional `search_units`, `modalities` and

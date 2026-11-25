@@ -44,6 +44,9 @@ func RegisterUserRoutes(registrar UserRouteRegistrar, repository *Repository) er
 	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/logs/export.json", api.userExportJSON); err != nil {
 		return err
 	}
+	if err := api.registerUserSearchRoutes(registrar, "/api/log-searches/{search_id}", "user"); err != nil {
+		return err
+	}
 	return registrar.RegisterUserRoute(http.MethodGet, "/api/logs/{id}", api.userDetail)
 }
 
@@ -62,6 +65,9 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, repository *Repository,
 		return err
 	}
 	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs/export.json", api.stewardExportJSON); err != nil {
+		return err
+	}
+	if err := api.registerUserSearchRoutes(registrar, "/api/steward/log-searches/{search_id}", "steward"); err != nil {
 		return err
 	}
 	return registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs/{id}", api.stewardDetail)
@@ -89,24 +95,16 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, repository *Repository) 
 			return err
 		}
 	}
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		if err := registrar.RegisterAdminRoute(method, "/admin/api/log-searches/{search_id}", http.HandlerFunc(api.adminSearch)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (api *HTTPAPI) userList(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !requireNoBody(writer, request) {
-		return
-	}
-	filter, err := parseListFilter(request.URL.RawQuery, "user", false)
-	if err != nil {
-		writeLogError(writer, err)
-		return
-	}
-	page, err := api.repository.ListUser(request.Context(), principal.UserID, filter)
-	if err != nil {
-		writeLogError(writer, err)
-		return
-	}
-	writeLogJSON(writer, http.StatusOK, page)
+	api.listLogs(writer, request, logSearchScope{role: "user", actorID: principal.UserID})
 }
 
 func (api *HTTPAPI) userDetail(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -127,20 +125,7 @@ func (api *HTTPAPI) userDetail(writer http.ResponseWriter, request *http.Request
 }
 
 func (api *HTTPAPI) adminList(writer http.ResponseWriter, request *http.Request) {
-	if !requireNoBody(writer, request) {
-		return
-	}
-	filter, err := parseListFilter(request.URL.RawQuery, "admin", false)
-	if err != nil {
-		writeLogError(writer, err)
-		return
-	}
-	page, err := api.repository.ListAdmin(request.Context(), filter)
-	if err != nil {
-		writeLogError(writer, err)
-		return
-	}
-	writeManagementLogJSON(writer, http.StatusOK, page)
+	api.listLogs(writer, request, adminSearchScope(request.Context()))
 }
 
 func (api *HTTPAPI) adminDetail(writer http.ResponseWriter, request *http.Request) {
@@ -161,20 +146,7 @@ func (api *HTTPAPI) adminDetail(writer http.ResponseWriter, request *http.Reques
 }
 
 func (api *HTTPAPI) stewardList(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
-	if !api.authorizeSteward(writer, request, principal.UserID) || !requireNoBody(writer, request) {
-		return
-	}
-	filter, err := parseListFilter(request.URL.RawQuery, "steward", false)
-	if err != nil {
-		writeLogError(writer, err)
-		return
-	}
-	page, err := api.repository.ListSteward(request.Context(), principal.UserID, filter, api.steward)
-	if err != nil {
-		writeLogError(writer, err)
-		return
-	}
-	writeManagementLogJSON(writer, http.StatusOK, page)
+	api.listLogs(writer, request, logSearchScope{role: "steward", actorID: principal.UserID, steward: api.steward})
 }
 
 func (api *HTTPAPI) stewardDetail(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {

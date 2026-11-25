@@ -25,6 +25,10 @@ func DescribeRoute(method, pattern string) (Metadata, bool) {
 	if path == pattern {
 		return Metadata{}, false
 	}
+	if method == http.MethodDelete && path == "log-searches/{search_id}" {
+		// Releasing a private read result does not change managed resources.
+		return Metadata{}, false
+	}
 	if strings.HasPrefix(path, "auth/") || path == "logout" || path == "login" || strings.HasPrefix(path, "management-operations/cleanup/prepare") {
 		return Metadata{}, false
 	}

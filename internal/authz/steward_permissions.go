@@ -335,7 +335,7 @@ func StewardRoutePermission(method, path string) string {
 		return "pressure.read"
 	case strings.HasPrefix(p, "diagnostics"), strings.HasPrefix(p, "logs/diagnostic"), strings.Contains(p, "/headers"), strings.Contains(p, "/errors"), strings.HasSuffix(p, "/source"):
 		return "diagnostics.read"
-	case strings.HasPrefix(p, "logs"):
+	case strings.HasPrefix(p, "logs"), p == "log-searches/{search_id}":
 		return "logs.read"
 	case strings.HasPrefix(p, "announcements"):
 		if read {

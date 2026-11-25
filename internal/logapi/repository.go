@@ -36,6 +36,7 @@ type CursorKeyDeriver interface {
 }
 
 type Repository struct {
+	searches   logSearchRegistry
 	db         *sql.DB
 	readDB     *sql.DB
 	readAuth   ReadAuthorizer
