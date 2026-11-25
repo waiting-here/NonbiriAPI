@@ -59,7 +59,7 @@ func validateCompletion(body []byte) (Usage, []byte, error) {
 		!requiredString(root, "model", MaxUpstreamModelRunes, true) {
 		return Usage{}, nil, errInvalidUpstreamResponse
 	}
-	choices, err := validateChoices(root["choices"], false)
+	choices, err := validateChoices(root["choices"], false, nil)
 	if err != nil {
 		return Usage{}, nil, errInvalidUpstreamResponse
 	}
@@ -81,6 +81,7 @@ type streamResponseIdentity struct {
 	id        string
 	bytes     int64
 	projected bool
+	finishes  chatStreamFinishes
 }
 
 func (s *streamResponseIdentity) withinBounds(data []byte, maxEvent, maxLine int, maxStream int64) bool {
@@ -126,16 +127,20 @@ func validateStreamChunk(data []byte, identity *streamResponseIdentity, sourceGu
 		!requiredString(root, "model", MaxUpstreamModelRunes, true) {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
 	}
-	choices, err := validateChoices(root["choices"], true)
-	if err != nil {
-		return nil, Usage{}, false, errInvalidUpstreamResponse
-	}
 	usage, err := parseUsage(root["usage"])
 	// The malformed flag lets the stream loop poison the whole request's
 	// usage (invalid individual buckets must never yield billable values)
 	// while the otherwise valid chunk still forwards to the client.
 	malformed := errors.Is(err, errUsageMalformed)
 	if err != nil && !malformed {
+		return nil, Usage{}, false, errInvalidUpstreamResponse
+	}
+	var probe *chatTrailerProbe
+	if identity != nil {
+		probe = &chatTrailerProbe{finishes: &identity.finishes, root: root, hasUsage: usage.Present}
+	}
+	choices, err := validateChoices(root["choices"], true, probe)
+	if err != nil {
 		return nil, Usage{}, false, errInvalidUpstreamResponse
 	}
 
@@ -151,6 +156,13 @@ func validateStreamChunk(data []byte, identity *streamResponseIdentity, sourceGu
 		return nil, Usage{}, false, errStreamSourceRejected
 	}
 	if identity != nil {
+		switch probe.result {
+		case separateChatUsage:
+			choices = []byte("[]")
+		case duplicateChatUsage:
+			clear(compact.Bytes())
+			return nil, usage, malformed, nil
+		}
 		if repairInitial {
 			identity.id = "chatcmpl-" + rand.Text()
 		}
@@ -231,7 +243,7 @@ func requiredNonNegativeInt(root map[string]json.RawMessage, name string) bool {
 	return json.Unmarshal(raw, &value) == nil && value >= 0
 }
 
-func validateChoices(raw json.RawMessage, stream bool) ([]byte, error) {
+func validateChoices(raw json.RawMessage, stream bool, probe *chatTrailerProbe) ([]byte, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '[' {
 		return nil, errInvalidUpstreamResponse
@@ -251,7 +263,7 @@ func validateChoices(raw json.RawMessage, stream bool) ([]byte, error) {
 	}
 	changed := false
 	for i, rawChoice := range choices {
-		projected, err := validateChoice(rawChoice, field)
+		projected, err := validateChoice(rawChoice, field, probe, len(choices) == 1)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +279,7 @@ func validateChoices(raw json.RawMessage, stream bool) ([]byte, error) {
 	return marshalChatProjection(choices)
 }
 
-func validateChoice(raw json.RawMessage, field string) ([]byte, error) {
+func validateChoice(raw json.RawMessage, field string, probe *chatTrailerProbe, onlyChoice bool) ([]byte, error) {
 	fields, err := decodeJSONObject(raw, maxProtocolFields)
 	if err != nil {
 		return nil, errInvalidUpstreamResponse
@@ -283,6 +295,7 @@ func validateChoice(raw json.RawMessage, field string) ([]byte, error) {
 	}
 	defer clearFields(fields)
 	message := fieldsByName(fields)
+	probe.observe(choice, onlyChoice)
 	if !normalizeChatContentParts(message) {
 		return nil, nil
 	}

@@ -534,6 +534,10 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
 		}
+		if compact == nil {
+			usage = usageState.observe(chunkUsage, chunkUsageMalformed)
+			continue
+		}
 		if !identity.withinBounds(compact, a.maxSSEEventBytes, a.maxSSELineBytes, a.maxStreamBytes) {
 			clear(compact)
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
@@ -715,6 +719,10 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 		if err != nil {
 			return failure("upstream stream chunk was invalid")
+		}
+		if compact == nil {
+			usage = usageState.observe(chunkUsage, chunkMalformed)
+			continue
 		}
 		if !identity.withinBounds(compact, a.maxSSEEventBytes, a.maxSSELineBytes, a.maxStreamBytes) {
 			clear(compact)
