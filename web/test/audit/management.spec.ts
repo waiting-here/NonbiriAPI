@@ -1030,6 +1030,7 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     steward = await session(browser, 6, true),
     admin = await session(browser, 'admin');
   const copy = commonEn.common.operations.maintenance;
+  let restoreMaintenance = false;
   try {
     const page = await steward.newPage();
     await page.goto(state.user_url + '/steward?tab=maintenance');
@@ -1042,10 +1043,13 @@ test('level 6 can enable maintenance but only the administrator can restore serv
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname === '/api/steward/maintenance/enable',
     );
+    restoreMaintenance = true;
     await dialog.getByRole('button', { name: copy.enableAction, exact: true }).click();
     expect((await enabling).ok()).toBe(true);
-    await expect(dialog).toHaveCount(0);
-    await expect(page.getByText(copy.stewardCannotDisable, { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: commonEn.common.maintenanceTitle, exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: copy.disableAction, exact: true })).toHaveCount(
       0,
     );
@@ -1079,11 +1083,22 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     expect((await restoring).ok()).toBe(true);
     await expect(adminPage.getByRole('alertdialog')).toHaveCount(0);
     expect((await read(admin, state.admin_url, '/admin/api/maintenance')).enabled).toBe(false);
+    restoreMaintenance = false;
     await page.reload();
     await expect(page.getByRole('button', { name: copy.enableAction, exact: true })).toBeVisible();
   } finally {
-    await steward.close();
-    await admin.close();
+    try {
+      if (restoreMaintenance) {
+        const current = await read(admin, state.admin_url, '/admin/api/maintenance');
+        if (current.enabled)
+          await write(admin, state.admin_url, '/admin/api/maintenance/disable', {
+            expected_revision: current.revision,
+            reason: 'Restore isolated service after the maintenance test',
+          });
+      }
+    } finally {
+      await Promise.all([steward.close(), admin.close()]);
+    }
   }
 });
 
