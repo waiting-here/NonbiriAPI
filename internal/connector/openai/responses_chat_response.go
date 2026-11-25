@@ -13,6 +13,11 @@ type responseChatCall struct {
 	id, name, arguments string
 	argumentsBuffer     *strings.Builder
 }
+
+// Canonical items use "rs_". A disjoint prefix preserves the source field
+// when a plain Chat reasoning alias is sent through Responses and replayed.
+const chatReasoningAliasIDPrefix = "rsalias_"
+
 type responseChatState struct {
 	textBuffer, refusalBuffer, reasoningBuffer  strings.Builder
 	id                                          string
@@ -20,7 +25,8 @@ type responseChatState struct {
 	model                                       string
 	text, refusal                               string
 	reasoning                                   string
-	gatewayReasoning                            bool
+	reasoningField                              string
+	gateway                                     bool
 	extra                                       json.RawMessage
 	calls                                       []responseChatCall
 	finish                                      string
@@ -83,17 +89,18 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if stream {
 		key = "delta"
 	}
-	allowed := []string{"role", "content", "refusal", "tool_calls", "annotations"}
-	if s.gatewayReasoning {
-		allowed = append(allowed, "reasoning_content", "extra_content")
+	allowed := []string{"role", "content", "reasoning_content", "refusal", "tool_calls", "annotations"}
+	if s.gateway {
+		allowed = append(allowed, "extra_content")
+	} else {
+		allowed = append(allowed, "reasoning")
 	}
 	message, ok := decisionObject(choice[key], allowed...)
 	if !ok {
 		return errInvalidUpstreamResponse
 	}
-	if normalizeChatContentParts(message) && !s.gatewayReasoning && message["reasoning_content"] != nil {
-		// The ordinary Chat bridge supports text and cannot replay a reasoning item.
-		return errInvalidUpstreamResponse
+	if s.gateway {
+		normalizeChatContentParts(message)
 	}
 	if value := message["extra_content"]; value != nil {
 		outer, valid := systemOneMap(value)
@@ -108,15 +115,32 @@ func (s *responseChatState) consume(raw []byte, stream bool) error {
 	if annotations := message["annotations"]; annotations != nil && !isJSONNull(annotations) && !bytes.Equal(annotations, []byte("[]")) {
 		return errInvalidUpstreamResponse
 	}
-	channels := map[string]*strings.Builder{"content": &s.textBuffer, "refusal": &s.refusalBuffer}
-	if s.gatewayReasoning {
-		channels["reasoning_content"] = &s.reasoningBuffer
+	channels := map[string]*strings.Builder{"content": &s.textBuffer, "refusal": &s.refusalBuffer, "reasoning_content": &s.reasoningBuffer}
+	if !s.gateway {
+		channels["reasoning"] = &s.reasoningBuffer
 	}
 	for name, dst := range channels {
 		if value := message[name]; value != nil && !isJSONNull(value) {
+			// Ordinary history replays reasoning as a scalar field. Only text
+			// parts can be flattened without losing a provider's reasoning format.
+			if !s.gateway && name == "content" && value[0] == '[' {
+				if !visitJSONArray(value, func(raw []byte) bool {
+					part, ok := chatPartFields(raw)
+					return ok && appendChatText(dst, part)
+				}) {
+					return errInvalidUpstreamResponse
+				}
+				continue
+			}
 			text, ok := decisionString(value, 0, int(DefaultMaxStreamBytes))
 			if !ok {
 				return errInvalidUpstreamResponse
+			}
+			if dst == &s.reasoningBuffer && text != "" {
+				if s.reasoningField != "" && name != s.reasoningField {
+					return errInvalidUpstreamResponse
+				}
+				s.reasoningField = name
 			}
 			dst.WriteString(text)
 		}
@@ -220,8 +244,13 @@ func (s *responseChatState) status() string {
 	}
 	return "in_progress"
 }
-func (s *responseChatState) messageID() string   { return "msg_" + s.id }
-func (s *responseChatState) reasoningID() string { return "rs_" + s.id }
+func (s *responseChatState) messageID() string { return "msg_" + s.id }
+func (s *responseChatState) reasoningID() string {
+	if s.reasoningField == "reasoning" {
+		return chatReasoningAliasIDPrefix + s.id
+	}
+	return "rs_" + s.id
+}
 func (s *responseChatState) reasoningItem() map[string]any {
 	item := map[string]any{"id": s.reasoningID(), "type": "reasoning", "summary": []any{}, "content": []any{map[string]string{"type": "reasoning_text", "text": s.reasoning}}, "status": s.status()}
 	if s.extra != nil && len(s.outputKinds()) > 0 && s.outputKinds()[0] == "reasoning" {

@@ -6,10 +6,67 @@ import (
 	"strings"
 )
 
-// normalizeChatContentParts projects a validated message or delta containing
-// only text and readable thinking. Unknown parts and replay metadata keep the
-// complete original array. The caller owns the message map.
+// normalizeChatContentParts projects a validated message or delta for clients
+// that read string channels. The original reasoning fields remain available
+// to clients that replay structured or signed history.
 func normalizeChatContentParts(message map[string]json.RawMessage) bool {
+	changed := false
+	current := bytes.TrimSpace(message["reasoning_content"])
+	if len(current) == 0 || isJSONNull(current) || bytes.Equal(current, []byte(`""`)) {
+		if text := chatReasoningText(message); text != "" {
+			message["reasoning_content"], _ = marshalChatProjection(text)
+			changed = true
+		}
+	}
+	return normalizeChatContentArray(message) || changed
+}
+
+// chatReasoningText reads only the native alternative representations. A
+// nonempty structured representation is authoritative even when it contains
+// only opaque data or a late signature; its scalar mirror must not be added.
+func chatReasoningText(message map[string]json.RawMessage) string {
+	for _, field := range []string{"reasoning_details", "thinking_blocks"} {
+		raw := bytes.TrimSpace(message[field])
+		if len(raw) == 0 || isJSONNull(raw) {
+			continue
+		}
+		var text strings.Builder
+		nonempty := false
+		valid := visitJSONArray(raw, func(raw []byte) bool {
+			nonempty = true
+			part, ok := chatPartFields(raw)
+			if !ok {
+				return true
+			}
+			var value json.RawMessage
+			switch {
+			case field == "reasoning_details" && exactString(part, "type", "reasoning.text"):
+				value = part["text"]
+			case field == "reasoning_details" && exactString(part, "type", "reasoning.summary"):
+				value = part["summary"]
+			case field == "thinking_blocks" && exactString(part, "type", "thinking"):
+				value = part["thinking"]
+			}
+			var fragment string
+			if jsonString(value, &fragment) {
+				text.WriteString(fragment)
+			}
+			return true
+		})
+		if !valid || nonempty {
+			return text.String()
+		}
+	}
+	var text string
+	if jsonString(message["reasoning"], &text) {
+		return text
+	}
+	return ""
+}
+
+// Convert content arrays only when every block can be represented. A signed
+// block, citation or unknown part keeps its position in the original array.
+func normalizeChatContentArray(message map[string]json.RawMessage) bool {
 	content := bytes.TrimSpace(message["content"])
 	if len(content) == 0 || content[0] != '[' {
 		return false
@@ -40,6 +97,11 @@ func normalizeChatContentParts(message map[string]json.RawMessage) bool {
 			default:
 				return false
 			}
+		}
+		var thinking string
+		if jsonString(part["thinking"], &thinking) {
+			reasoning.WriteString(thinking)
+			return true
 		}
 		return visitJSONArray(part["thinking"], func(raw []byte) bool {
 			text, ok := chatPartFields(raw)
