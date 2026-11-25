@@ -30,6 +30,34 @@ For example, a thinking-only delta has an empty answer. A subsequent delta
 can carry both the last piece of reasoning and the first piece of the answer.
 Clients can append each field separately through the end of the stream.
 
+The same native Chat route recognizes the following message and delta shapes on
+any configured endpoint. The model ID and hostname do not select a parser.
+
+| Returned shape | Chat projection |
+| --- | --- |
+| `reasoning_content` string | Keep the supplied reasoning. This is used by DeepSeek, Kimi and Qwen. |
+| `reasoning` string | Also expose its text in `reasoning_content`. Groq parsed mode, vLLM and Ollama's OpenAI-compatible endpoint use this shape. |
+| `reasoning_details[]` | Read `text` from `reasoning.text` and `summary` from `reasoning.summary` in array order. Keep each complete detail, including IDs, indexes, signatures and encrypted entries. |
+| `thinking_blocks[]` | Read `thinking` from typed `thinking` entries. Keep the native blocks, including signatures and `redacted_thinking` data, for clients that replay history. |
+| Unsigned `content[]` thinking blocks | Accept both nested text parts and a string-valued `thinking` field. Ordinary text parts form the answer. |
+
+An existing nonempty `reasoning_content` takes precedence. A structured detail
+or thinking block supplies the readable projection in preference to its scalar
+mirror. A signature or encrypted block alone supplies no display text. Text in
+ordinary `content`, including literal `<think>` tags, remains answer text.
+Keep the original fields required by the upstream when constructing native
+Chat history. Provider references include [Groq parsed output](https://console.groq.com/docs/reasoning),
+[OpenRouter reasoning details](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens),
+[LiteLLM thinking blocks](https://github.com/BerriAI/litellm/blob/main/litellm/llms/anthropic/chat/handler.py)
+and [Qwen reasoning summaries and encrypted history](https://www.alibabacloud.com/help/en/model-studio/cot-summary).
+
+Some Chat streams repeat their finished choice in the final usage frame.
+For a matching choice and finish reason with an empty delta, the platform
+delivers the accounting snapshot separately. Identical final accounting and
+metadata can be omitted after they have already been sent. Changed usage
+details or additional response metadata are retained.
+[OpenRouter streaming reference](https://github.com/OpenRouterTeam/docs/blob/main/api_reference/streaming.mdx)
+
 Native Chat keeps a content array intact when it carries an image, reference,
 non-null signature, unfamiliar part data or conflicting reasoning. Clients that
 keep provider-specific history can send structured assistant messages back to
@@ -102,9 +130,15 @@ Configure the complete API mount, for example `https://api.openai.com/v1`. Authe
 
 Chat messages map to Responses input messages and function-call/output items. Supported controls include function tools, tool choice, parallel tools, temperature, top-p, reasoning effort, cache key/retention and text/JSON/JSON-schema response formats. Omitted function `strict` remains false instead of acquiring the Responses default. Chat output-token limits map to `max_output_tokens`. Stop sequences, penalties, logit bias and multiple candidates are incompatible. User images may use HTTPS or data URLs; the platform does not fetch them. Native extensions support only `reasoning.summary` and `text.verbosity`.
 
-Responses reasoning items are returned in the bounded project extension `message.extra_content.openai.reasoning`. This is an array of complete `reasoning` items containing their ID, summary and optional encrypted content/status. Each encrypted string is limited to 64 KiB and the extension to 1 MiB/128 items. A client must retain this extension for a stateless reasoning/tool round trip. It is inserted before that assistant's text and function calls on the next request. Reasoning appearing after ordinary output cannot be faithfully projected and fails. These fields are translated only by Responses candidates and are never stored as a platform conversation. `reasoning_content`, when returned, is the concatenated summary; replay must match the retained reasoning items.
+Responses reasoning items are returned in `message.extra_content.openai.reasoning` with their IDs, summary, typed `content`, optional signature, encrypted content and status. Each signature or ciphertext is bounded to 64 KiB. The complete extension, including its source binding, is bounded to 1 MiB and 128 items. Keep it for the next stateless reasoning or tool call. The connector replays the original items before the corresponding assistant text and calls. Each item's nonempty summary supplies its visible `reasoning_content`. An item with no readable summary uses its `content[].text` of type `reasoning_text`. SSE forwards summary deltas as they arrive and releases raw reasoning at item completion when the item has no readable summary. The displayed reasoning must match the retained items on replay. [Responses reasoning item schema](https://github.com/openai/openai-python/blob/main/src/openai/types/responses/response_reasoning_item.py)
 
-Output supports assistant text/refusal, function calls and reasoning summaries. Unsupported output items, annotations requiring another modality or malformed tool arguments fail instead of disappearing. Streaming validates response identity, increasing sequence numbers, item/content indexes and add/delta/done lifecycles. An item-done event may omit its index when its unique ID identifies an already added item. A valid `response.completed` or `response.incomplete` may omit object/status/output: the terminal kind supplies object/status, and completed matching item snapshots supply omitted output. Explicit empty output stays empty; nonempty terminal output must match collected items. `response.completed` maps to `stop` or `tool_calls`; `response.incomplete` still needs a supported reason to map to `length` or `content_filter`. A missing reason cannot be invented for Chat. Failed events, missing terminal events and open items at termination fail. The connector emits the caller's Chat terminator only after validation.
+Streaming validates response identity, increasing sequence numbers, item/content indexes and completed part lifecycles. A complete `response.output_item.done` can supply an entire item. An omitted index is resolved by ID or unambiguous arrival order. Some streams first supply the full `output` at `response.completed` or `response.incomplete`. That snapshot delivers the answer, refusal, reasoning and indexed tool calls exactly once. A sparse terminal can supply its status through the event type and its output through previously completed items. A nonempty terminal output must agree with the collected items. Incomplete responses require a supported reason to produce `length` or `content_filter`. Unsupported items or annotations, malformed tools, contradictory snapshots and unfinished items fail validation.
+
+Both the summary and raw reasoning can use indexed text events directly or include explicit part wrappers. An omitted wrapper does not delay a readable summary delta. The completed item must agree with all observed text. [Ollama streaming implementation](https://github.com/ollama/ollama/blob/main/openai/responses.go)
+
+A single self-contained terminal event can carry the response identity and full
+output. An optional trailing SSE `[DONE]` marker is accepted after the semantic
+terminal. EOF or a marker alone cannot complete the request.
 
 Usage uses `input_tokens - cached_tokens - cache_write_tokens`, separate cache buckets and `output_tokens`. Reasoning tokens are already included in output and are not added again. Invalid bucket details or overflow make usage unknown. A contradictory total is a diagnostic flag, not a substitute for valid buckets.
 
@@ -129,6 +163,16 @@ SSE line, including its envelope and any smaller configured limit, fails
 explicitly. OpenAI reasoning arrays can be split at complete-item boundaries
 and aggregate without repeating items or concatenating the source token.
 The full response still has its existing JSON/SSE total limits.
+
+Forced Chat transport keeps typed reasoning details in source order. Compatible
+text increments can extend the current detail. A completed signature or an opaque
+block retains its boundary. A standalone `encrypted_content` snapshot is sent
+whole between reasoning and the answer. Tool-to-text streaming releases pending
+reasoning metadata once the upstream stream has completed successfully.
+When a large response mirrors the same readable text in several fields,
+fragments carry those mirrors together so clients that select a fallback
+field see each fragment once. Conflicting ciphertext snapshots or ambiguous
+block boundaries that exceed a line budget produce a conversion error.
 
 Chat audio conversion decodes each independently encoded `audio.data` fragment,
 joins its bytes and encodes the final result once. Transcript text accumulates;

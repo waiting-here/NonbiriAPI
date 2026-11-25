@@ -8,6 +8,12 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 - Native Chat clients receive separate answer and reasoning strings for
   Mistral-style text and thinking blocks in JSON and streaming responses.
+- Chat also recognizes scalar reasoning aliases, typed reasoning details and
+  thinking blocks on third-party endpoints. JSON/SSE conversion preserves
+  signed and encrypted history. Responses streams deliver answers supplied
+  only in their final snapshot. Repeated empty finish choices on usage frames
+  deliver one terminal result. Gateway v4 accepts heartbeats during generation.
+  Station assistant prefills preserve signed replies for later tool calls.
 - Hungry whales can visit open neighbors for food while both keepers are offline.
   Manual refills ask for confirmation when food would spill. Whale interactions give
   immediate feedback, and tailor coupons are consumed only when the price drops.
