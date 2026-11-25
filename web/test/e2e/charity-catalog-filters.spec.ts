@@ -356,7 +356,9 @@ for (const locale of ['zh', 'en'] as const) {
 
 for (const width of [390, 1440]) {
   test(
-    'charity tabs retain the catalog and keep the board visible at ' + width + 'px',
+    'charity tabs retain the catalog and show the leaderboard with shared models at ' +
+      width +
+      'px',
     async ({ context, page }) => {
       const fixture = createCatalogFixture();
       const setup = await installCatalogFixture(
@@ -393,11 +395,12 @@ for (const width of [390, 1440]) {
         name: 'Search model name or public description',
       });
       await expect(catalog).toBeVisible();
+      await expect(board).toBeVisible();
       await search.fill('Retained search draft');
       for (const tab of ['My donations', 'Donate my keys']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
         await expect(catalog).toBeHidden();
-        await expect(board).toBeVisible();
+        await expect(board).toBeHidden();
         await assertNoHorizontalOverflow(page);
       }
       await page.getByRole('tab', { name: 'Shared models', exact: true }).click();

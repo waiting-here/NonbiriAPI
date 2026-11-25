@@ -946,6 +946,8 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await expect(picker.locator('.charity-binding-selection')).toContainText('Reviewed key note');
   const selected = picker.locator('.charity-binding-selection__list > li');
   const responses = selected.getByRole('checkbox', { name: 'Responses', exact: true });
+  await expect(responses).not.toBeChecked();
+  await responses.check();
   await expect(responses).toBeChecked();
   await responses.uncheck();
   await expect(responses).not.toBeChecked();

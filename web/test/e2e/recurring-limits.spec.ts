@@ -440,7 +440,8 @@ test.describe('recurring limits in the complete charity pages', () => {
               : ['1,234 tokens', '56 tokens', '831,210 tokens', '832,500 tokens'];
           await expect(card.locator('.recurring-limits__metrics dd')).toHaveText(expected);
           const summary = card.locator('.recurring-limits__summary-text');
-          for (const value of expected) await expect(summary).toContainText(value);
+          const progress = `${expected[0]} / ${expected[3]}`;
+          await expect(summary).toContainText(progress);
           await expect(card.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0.15');
           const numberBounds = await card
             .locator('.recurring-limits__metrics dd')
@@ -472,7 +473,7 @@ test.describe('recurring limits in the complete charity pages', () => {
           await toggle.click();
           await expect(toggle).toHaveAttribute('aria-expanded', 'false');
           await expect(card.locator('.recurring-limits__metrics')).toHaveCount(0);
-          for (const value of expected) await expect(summary).toContainText(value);
+          await expect(summary).toContainText(progress);
           await toggle.click();
           await card
             .getByRole('combobox', { name: locale === 'zh' ? '计量维度' : 'Measure', exact: true })
@@ -510,7 +511,9 @@ test.describe('recurring limits in the complete charity pages', () => {
     await expect(
       editor.getByRole('button', { name: 'Save recurring limits', exact: true }),
     ).toBeDisabled();
-    await editor.getByLabel('Time zone', { exact: true }).fill('Asia/Kolkata');
+    const zone = editor.getByRole('combobox', { name: 'Time zone', exact: true });
+    await zone.fill('Asia/Kol');
+    await zone.press('ArrowDown');
     await page.getByRole('option', { name: 'Asia/Kolkata', exact: true }).click();
     await expect(editor).toContainText('UTC+5:30');
     await expect(editor).toContainText('changes structure');
@@ -539,7 +542,7 @@ test.describe('recurring limits in the complete charity pages', () => {
     expect(flow.state.writes[0]?.key).toMatch(/^[A-Za-z0-9_-]{22,128}$/);
     await editor.getByRole('button', { name: /^Collapse rule:/ }).click();
     await expect(editor.locator('.recurring-limits__summary-text')).toContainText(
-      'Remaining: 150 calls',
+      '0 calls / 150 calls',
     );
     await flow.check('quota-admin-1280-light-en');
     await page.setViewportSize({ width: 320, height: 900 });
