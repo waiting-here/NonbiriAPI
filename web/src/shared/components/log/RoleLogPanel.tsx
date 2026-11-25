@@ -651,24 +651,32 @@ function ScopedRoleLogPanel({
     range: urlState.range,
     end: Math.floor(Date.now() / 1000),
   }));
-  if (relativeWindow.range !== urlState.range) {
-    setRelativeWindow({ range: urlState.range, end: Math.floor(Date.now() / 1000) });
-  }
+  const relativeWindowReady = relativeWindow.range === urlState.range;
+  useEffect(() => {
+    if (relativeWindowReady) return;
+    const update = window.setTimeout(() => {
+      setRelativeWindow({ range: urlState.range, end: Math.floor(Date.now() / 1000) });
+    }, 0);
+    return () => window.clearTimeout(update);
+  }, [relativeWindowReady, urlState.range]);
   const windowEnd = relativeWindow.end;
   const setWindowEnd = (end: number) => setRelativeWindow({ range: urlState.range, end });
+  const appliedFilters = useMemo(
+    () => validateLogFilter(role, urlState.filters),
+    [role, urlState.filters],
+  );
   const filter = useMemo(() => {
-    const next = validateLogFilter(role, urlState.filters);
     const from = urlState.range
       ? windowEnd - relativeLogSeconds[urlState.range]
       : urlState.fromUnix;
     const to = urlState.range ? windowEnd : urlState.toUnix;
     return {
-      ...next,
+      ...appliedFilters,
       ...(from === undefined ? {} : { from }),
       ...(to === undefined ? {} : { to }),
     } satisfies LogFiltersValue;
-  }, [role, urlState.filters, urlState.fromUnix, urlState.toUnix, urlState.range, windowEnd]);
-  const filterKey = useMemo(() => JSON.stringify(filter), [filter]);
+  }, [appliedFilters, urlState.fromUnix, urlState.toUnix, urlState.range, windowEnd]);
+  const filterKey = JSON.stringify(urlState.range ? [urlState.range, appliedFilters] : filter);
   const pager = useUrlPagePager({
     station: pageStation,
     listType: 'logs',
@@ -716,7 +724,7 @@ function ScopedRoleLogPanel({
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
   const observerEnabled = enabled && scopeReady && !revoked;
-  const listEnabled = observerEnabled && !invalidFilter;
+  const listEnabled = observerEnabled && !invalidFilter && (!urlState.range || relativeWindowReady);
   const logs = useRoleLogsPage(role, accountID, pager.page, pager.pageSize, filter, listEnabled);
   const refreshOnFocus = useEffectEvent(() => {
     if (!logs.settledOrdinaryResult()) return;
@@ -977,8 +985,7 @@ function ScopedRoleLogPanel({
       next.range === urlState.range &&
       next.fromUnix === urlState.fromUnix &&
       next.toUnix === urlState.toUnix &&
-      JSON.stringify(validateLogFilter(role, next.filters)) ===
-        JSON.stringify(validateLogFilter(role, urlState.filters));
+      JSON.stringify(validateLogFilter(role, next.filters)) === JSON.stringify(appliedFilters);
     if (!invalidFilter && currentFilters && pager.page === '1') {
       if (logs.searchStatus === 'canceled') logs.refresh();
       if (logs.searchStatus === 'error') logs.retry();

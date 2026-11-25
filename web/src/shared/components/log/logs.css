@@ -458,6 +458,12 @@
   min-height: 2.5rem;
 }
 
+.log-search-feedback .nb-btn[aria-disabled='true'] {
+  color: var(--nb-color-disabled-text);
+  background: var(--nb-color-disabled-bg);
+  cursor: wait;
+}
+
 .log-search-feedback[data-log-search-state='loading'] {
   border-inline-start-color: var(--nb-color-accent);
 }
