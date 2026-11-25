@@ -30,3 +30,19 @@ func TestRuleGrantRevocationBetweenAdmissionAndEffectsPreventsBan(t *testing.T) 
 		t.Fatalf("revoked policy applied effects: %+v %v gates=%d games=%d", decision, err, f.gateCalls, f.gameCalls)
 	}
 }
+
+func TestMatchingRulesKeepSeparateEditorAuthority(t *testing.T) {
+	f := newGuardFixture(t)
+	duration := int64(3600)
+	allowed := f.rule("Timed restriction", "Client/", true, &duration)
+	revoked := f.rule("Permanent restriction", "Client/", true, nil)
+	f.exec(`UPDATE client_rule_auto_bans SET actor_user_id=? WHERE rule_id=?`, f.user, revoked)
+	decision, err := f.service.CheckCall(f.context("self", "Client/1"), f.user, "provider/model", testNow)
+	if err != nil || !decision.Banned || decision.Until == nil || *decision.Until != testNow+duration {
+		t.Fatalf("mixed authority decision %+v: %v", decision, err)
+	}
+	const countLabels = `SELECT count(*) FROM automatic_reason_rule_labels WHERE owner_kind='user_ban' AND owner_id=CAST(? AS TEXT) AND rule_id=?`
+	if f.scalar(countLabels, f.user, allowed) != 1 || f.scalar(countLabels, f.user, revoked) != 0 {
+		t.Fatal("evidence included the wrong rule")
+	}
+}

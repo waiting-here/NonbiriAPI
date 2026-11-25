@@ -177,6 +177,17 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 		return ErrClosed
 	}
 	now := service.now().UTC().Unix()
+	// Full-state validation uses the caller's startup budget. The two-second
+	// deadline below bounds a single mutation batch.
+	service.recoveryMu.Lock()
+	var validationErr error
+	if !service.recoveryValidated.Load() {
+		validationErr = service.ValidatePersistedState(ctx)
+	}
+	service.recoveryMu.Unlock()
+	if validationErr != nil {
+		return validationErr
+	}
 	for {
 		result, err := service.RecoverBeforeListenAt(ctx, now, workerBatchSize, time.Now().Add(2*time.Second))
 		if err != nil {
