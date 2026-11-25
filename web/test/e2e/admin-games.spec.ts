@@ -521,85 +521,40 @@ for (const scenario of [
   });
 }
 
-import { aiAdminFixture } from '../fixtures/aiPlayers';
-
 for (const width of [390, 1440]) {
-  test('AI strategy editor previews and publishes at ' + width, async ({ context, page }) => {
+  test('admin selects the official companion version at ' + width, async ({ context, page }) => {
     const errors = await prepare(context, page, {
       current: structuredClone(INITIAL_CONFIG),
       patches: [],
     });
     await page.setViewportSize({ width, height: 900 });
-    const data = aiAdminFixture(),
-      writes: Record<string, unknown>[] = [];
-    await page.route('**/admin/api/games/bidding/ai**', async (route) => {
-      const req = route.request(),
-        path = new URL(req.url()).pathname;
-      if (path.endsWith('/preview'))
-        return route.fulfill({
-          json: {
-            candidates: [{ id: 'bid-2', score: 0.2, probability: 1, guaranteed_win: false }],
-            matched_rule: 0,
-            filter_empty: false,
-            memory_weight: 0,
-          },
-        });
-      if (path.endsWith('/policies')) {
-        const body = req.postDataJSON();
-        writes.push(body);
-        return route.fulfill({
-          json: {
-            ...data.policies[0],
-            ...body,
-            id: 'aip_BBBBBBBBBBBBBBBBBBBBBQ',
-            revision: '1',
-            version: 1,
-          },
-        });
+    const official = {
+      name: 'official',
+      version: 0,
+      difficulties: [1],
+      versions: [
+        { version: 0, status: 'ready', created_at: 0 },
+        { version: 1, status: 'ready', created_at: 100 },
+      ],
+    };
+    const state = { enabled: true, upload_available: true, official, programs: [] };
+    await page.route('**/admin/api/games/*/companion**', async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') {
+        expect(request.headers()['idempotency-key']).toBeTruthy();
+        expect(new URL(request.url()).pathname).toBe('/admin/api/games/likes/companion/activate');
+        expect(request.postDataJSON()).toEqual({ version: 1 });
+        official.version = 1;
       }
-      return route.fulfill({ json: data });
+      return route.fulfill({ json: state });
     });
-    await page.goto(ADMIN_ORIGIN + '/games');
-    await page.getByRole('link', { name: 'AI players and strategies' }).click();
-    const dialog = page.getByRole('region', { name: 'AI players and strategies', exact: true });
-    await expect(page.getByRole('heading', { name: 'AI players and strategies' })).toBeVisible();
-    await dialog.getByRole('button', { name: 'Duplicate', exact: true }).click();
-    await dialog
-      .getByRole('spinbutton', { name: 'Preserve strong cards', exact: true })
-      .fill('0.95');
-    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
-    await dialog.getByRole('button', { name: 'Preview choices', exact: true }).click();
-    await expect(dialog.getByText('Matched rule 1')).toBeVisible();
-    await expect(dialog.getByText('100.0%')).toBeVisible();
-    if (process.env.NONBIRI_VISUAL_DIR)
-      await page.screenshot({
-        path: process.env.NONBIRI_VISUAL_DIR + '/ai-editor-' + width + '.png',
-        fullPage: true,
-      });
-    const overflow = await dialog.evaluate((root) =>
-      [root, ...root.querySelectorAll<HTMLElement>('*')]
-        .filter((el) => {
-          const style = getComputedStyle(el);
-          const visuallyHidden =
-            style.clip === 'rect(0px, 0px, 0px, 0px)' || style.clipPath === 'inset(50%)';
-          return !visuallyHidden && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1;
-        })
-        .map((el) => ({
-          tag: el.tagName,
-          class: el.className,
-          width: el.clientWidth,
-          content: el.scrollWidth,
-          columns: getComputedStyle(el).gridTemplateColumns,
-        })),
+    await page.goto(ADMIN_ORIGIN + '/games/companions');
+    await page.getByRole('tab', { name: 'Turn-based battle', exact: true }).click();
+    await page.getByRole('button', { name: 'Activate version' }).click();
+    await expect.poll(() => official.version).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
     );
-    expect(overflow).toEqual([]);
-    await dialog.getByRole('button', { name: 'Save strategy version', exact: true }).click();
-    await expect(dialog.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
-    expect(writes).toHaveLength(1);
-    expect(
-      (writes[0].definition as { parameters: { hand_value: number } }).parameters.hand_value,
-    ).toBe(0.95);
-    await page.getByRole('link', { name: 'Back to game settings', exact: true }).click();
     errors.assertNone();
   });
 }

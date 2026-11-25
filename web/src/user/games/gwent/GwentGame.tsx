@@ -1,15 +1,13 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { ApiError } from '@shared/query/http';
-import type { AITerms, AIHome } from '@shared/aiPlayers';
+import type { Match } from '../companion/api';
 import { useUserSession } from '../../data';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useDuel, readHistory, readDetail, readRounds, type DuelIntent } from '../common/duel/api';
 import { DuelDialog } from '../common/duel/Dialog';
 import type { DuelLobbyContext, Page, DuelRound } from '../common/duel/types';
 import { useDuelText } from '../common/duel/copy';
-import { gameRequest } from '../common/request';
 import { spendableGameCredits } from '../common/spendable';
 import { formatCredits } from '../common/strict';
 import { RandomnessProof } from '../common/RandomnessProof';
@@ -19,24 +17,29 @@ import { useGwentText } from './copy';
 import '../common/duel/duel.css';
 import './gwent.css';
 
-type GwentAITerms = AITerms & { bot_loadout: Deck };
-type GwentAIHome = Omit<AIHome, 'bots'> & {
-  bots: (Omit<AIHome['bots'][number], 'terms'> & { terms: { ticket: string; ai: GwentAITerms } })[];
-};
+export interface GwentCompanion {
+  match?: Match;
+  busy: boolean;
+  readOnly?: boolean;
+  opponent: string;
+  onStart?: (deck: Deck) => void;
+  onAction?: (action: Action) => void;
+  onAbandon?: () => void;
+  onRefresh?: () => void;
+}
 const channel = 'nonbiri.gwent';
-export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLobbyContext) {
+export function GwentGame({
+  config,
+  wallets,
+  accepting,
+  refreshWallets,
+  companion,
+}: DuelLobbyContext & { companion?: GwentCompanion }) {
   const t = useGwentText(),
     text = useDuelText(),
     navigate = useNavigate();
   const account = useUserSession(false);
-  const duel = useDuel(gwentCodec, refreshWallets);
-  const ai = useQuery({
-    queryKey: ['user', 'games', 'gwent', 'ai'],
-    queryFn: async ({ signal }) =>
-      (await gameRequest<GwentAIHome>('/api/games/gwent/ai', { signal, expectedStatuses: [200] }))
-        .data,
-    refetchInterval: 5000,
-  });
+  const duel = useDuel(gwentCodec, refreshWallets, !companion);
   const frame = useRef<HTMLIFrameElement>(null);
   const readSequence = useRef(0);
   const lastIntent = useRef<Extract<DuelIntent, { kind: 'queue' }> | null>(null);
@@ -54,7 +57,7 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
       terminal: boolean;
       accountID: string | null;
     } | null>(null);
-  const home = duel.query.data,
+  const home = companion ? undefined : duel.query.data,
     current = home?.current,
     queue = home?.queue;
   const remaining = useAuthoritativeCountdown(
@@ -63,7 +66,7 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
     home?.serverNow ?? 0,
     duel.refresh,
   );
-  const error = duel.error ?? duel.query.error;
+  const error = companion ? null : (duel.error ?? duel.query.error);
   const feedback = duel.uncertain
     ? text('common.theResponseIsUnconfirmedRetryTheSame')
     : error instanceof ApiError && error.code === 'insufficient_credits'
@@ -74,10 +77,37 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
   const snapshot = {
     accountID: account.data?.user.id ?? null,
     config,
-    home: home ?? null,
-    ai: ai.data ?? null,
+    home: companion
+      ? {
+          current:
+            companion.match && 'self' in companion.match.view
+              ? {
+                  id: companion.match.id,
+                  phase: companion.match.phase,
+                  phaseSeq: companion.match.decision_id,
+                  decisionID: companion.match.decision_id,
+                  you: companion.match.seat,
+                  profiles: [0, 1].map((seat) =>
+                    seat === companion.match!.seat
+                      ? { kind: 'anonymous' }
+                      : { kind: 'ai', displayName: companion.opponent },
+                  ),
+                  view: {
+                    ...companion.match.view,
+                    ...(!companion.readOnly && companion.match.decision_id
+                      ? {}
+                      : { legal_actions: [], choice: null }),
+                  },
+                }
+              : null,
+          queue: null,
+          latestResult: null,
+        }
+      : (home ?? null),
+    companion: !!companion,
+    readOnly: companion?.readOnly,
     accepting,
-    blocked: duel.blocked,
+    blocked: companion?.busy ?? duel.blocked,
     uncertain: duel.uncertain,
     canRematch: rematchFor?.accountID === (account.data?.user.id ?? null),
     remaining,
@@ -143,17 +173,34 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
       setRankings(true);
       return;
     }
+    if (message.type === 'companion-entry' && !companion) {
+      navigate('?opponent=companion');
+      return;
+    }
+    if (companion) {
+      if (message.type === 'retry') companion.onRefresh?.();
+      if (!companion.busy && !companion.readOnly) {
+        if (message.type === 'companion-start') companion.onStart?.(message.deck);
+        if (companion.match && message.id === companion.match.id) {
+          if (
+            message.type === 'action' &&
+            companion.match.decision_id &&
+            message.decisionID === companion.match.decision_id
+          )
+            companion.onAction?.(message.action);
+          if (message.type === 'surrender') companion.onAbandon?.();
+        }
+      }
+      return;
+    }
     if (message.type === 'retry') {
       if (duel.uncertain) duel.retry();
       else duel.refresh();
-      void ai.refetch();
       return;
     }
     if (message.type === 'queue') {
-      const displayedHash =
-        message.mode === 'standard'
-          ? config.modes.standard.termsHash
-          : ai.data?.bots.find((bot) => bot.terms.ai.bot_id === message.botID)?.terms_hash;
+      if (message.mode !== 'standard') return;
+      const displayedHash = config.modes.standard?.termsHash;
       if (!displayedHash || message.termsHash !== displayedHash) {
         setBridgeError(
           t(
@@ -162,32 +209,17 @@ export function GwentGame({ config, wallets, accepting, refreshWallets }: DuelLo
           ),
         );
         duel.refresh();
-        void ai.refetch();
         return;
       }
       setBridgeError(null);
       setRematchFor({ accountID: snapshot.accountID });
-      if (message.mode === 'standard') {
-        lastIntent.current = {
-          kind: 'queue',
-          mode: 'standard',
-          termsHash: message.termsHash,
-          loadout: message.deck as Deck,
-        };
-        duel.run(lastIntent.current);
-      } else if (message.mode === 'ai') {
-        const offer = ai.data?.bots.find((bot) => bot.terms.ai.bot_id === message.botID);
-        if (offer) {
-          lastIntent.current = {
-            kind: 'queue',
-            mode: 'ai',
-            botID: offer.terms.ai.bot_id,
-            termsHash: message.termsHash,
-            loadout: message.deck as Deck,
-          };
-          duel.run(lastIntent.current);
-        }
-      }
+      lastIntent.current = {
+        kind: 'queue',
+        mode: 'standard',
+        termsHash: displayedHash,
+        loadout: message.deck as Deck,
+      };
+      duel.run(lastIntent.current);
       return;
     }
     if (message.type === 'rematch' && lastIntent.current) {

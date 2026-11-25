@@ -108,12 +108,12 @@ async function renderHomeDashboard(
 }
 
 describe('home independent capability states', () => {
-  it('renders all new games and AI queues from a successful mixed HTTP summary', async () => {
+  it('renders all games and active companion matches from a successful mixed HTTP summary', async () => {
     const envelope = canonicalEnvelope();
     const entries = [
       ['linklink', 'game-linklink', 'll_', 'active', '/games/linklink'],
-      ['bidding', 'game-bidding', 'aiq_', 'waiting', '/games/bidding'],
-      ['gwent', 'game-gwent', 'gaq_', 'waiting', '/games/gwent'],
+      ['bidding', 'game-bidding', 'bidc_', 'active', '/games/bidding?opponent=companion'],
+      ['gwent', 'game-gwent', 'gwtc_', 'active', '/games/gwent?opponent=companion'],
       ['lakenotes', 'game-lake-notes', 'lnc_', 'active', '/games/lake-notes'],
       ['steadycatch', 'game-steady-catch', 'sc_', 'active', '/games/steady-catch'],
     ];

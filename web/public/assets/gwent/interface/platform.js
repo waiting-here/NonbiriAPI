@@ -1,5 +1,5 @@
 import { deckStorage } from './storage.js';
-/* global window, document, localStorage, ResizeObserver, game, GameState */
+/* global window, document, localStorage, ResizeObserver */
 import { boot } from './src/main.js';
 import { suspendSound, closeSound } from './src/ui/animation.js';
 import { PlatformBattle } from './battle.js';
@@ -10,29 +10,11 @@ let runtime = null,
   latest = null,
   booting = false,
   platformActive = false,
-  paused = false,
   lastCurrent = null,
   lastResult = null;
 const send = (message) => window.parent.postMessage({ channel, ...message }, origin);
-const pending = [];
 const host = {
   send,
-  inspectDeck(deck) {
-    if (!deck) return;
-    const cards = [deck.leader, ...deck.cards.flatMap((entry) => Array(entry.count).fill(entry.id))]
-      .map((id) => runtime.catalog.find((card) => card.id === id) ?? runtime.battle.catalog.get(id))
-      .filter(Boolean);
-    runtime.battle.inspect(cards, '挑战冻结卡组 · 整场沿用');
-  },
-  startDemo() {
-    platformActive = false;
-    runtime.battle.stopReplay();
-    runtime.battle.replaying = false;
-    runtime.battle.view = null;
-    runtime.battle.resultActive = false;
-    document.getElementById('result-proof').hidden = true;
-    runtime.battle.cache.clear();
-  },
   returnLobby() {
     platformActive = false;
     runtime.setup.update(latest);
@@ -58,25 +40,11 @@ async function initialize(snapshot) {
     const result = await boot(deckStorage(snapshot.accountID, localStorage), host);
     const battle = new PlatformBattle(result.arena, result.catalog, host);
     runtime = { ...result, battle };
-    const arena = result.arena,
-      render = arena.view.render.bind(arena.view),
-      label = arena.label.bind(arena),
-      delay = arena.delay.bind(arena),
-      fail = arena.fail.bind(arena);
-    arena.view.render = () =>
-      platformActive && latest?.home?.current ? battle.render(latest) : render();
-    arena.label = (player) =>
-      player.platformSide
-        ? `${player.deck.faction}（${player.platformSide === 'self' ? '己方' : '对手'}）`
-        : label(player);
-    arena.delay = async (ms) => {
-      while (paused && !platformActive) await new Promise((resolve) => pending.push(resolve));
-      if (platformActive) throw new Error('Local demonstration stopped');
-      await delay(ms);
+    const arena = result.arena;
+    arena.view.render = () => {
+      if (platformActive && latest?.home?.current) battle.render(latest);
     };
-    arena.fail = (error) => {
-      if (!platformActive) fail(error);
-    };
+    arena.label = (player) => (player.platformSide === 'self' ? '己方' : '对手');
     document.getElementById('platform-history').onclick = () => send({ type: 'history' });
     document.getElementById('platform-rankings').onclick = () => send({ type: 'rankings' });
     document.getElementById('platform-back').onclick = (event) => {
@@ -85,16 +53,13 @@ async function initialize(snapshot) {
         send({ type: 'back' });
       }
     };
-    const originalCards = document.getElementById('view-cards').onclick;
-    document.getElementById('view-cards').onclick = () =>
-      platformActive
-        ? battle.inspect(
-            result.catalog.filter((card) =>
-              [battle.view.self.faction, 'neutral'].includes(card.faction),
-            ),
-            '卡牌图鉴',
-          )
-        : originalCards();
+    document.getElementById('view-cards').onclick = () => {
+      const faction = battle.view?.self?.faction ?? document.getElementById('player-faction').value;
+      battle.inspect(
+        result.catalog.filter((card) => [faction, 'neutral'].includes(card.faction)),
+        '卡牌图鉴',
+      );
+    };
     const refresh = document.createElement('button');
     refresh.type = 'button';
     refresh.className = 'ghost-button';
@@ -129,13 +94,7 @@ function apply(snapshot) {
   if (current) {
     lastCurrent = current.id;
     if (runtime.battle.replaying) return;
-    if (!platformActive) {
-      runtime.arena.clock.stop();
-      runtime.arena.matchAbort.abort();
-      runtime.arena.finished = true;
-      game.state = GameState.END_SCREEN;
-      platformActive = true;
-    }
+    platformActive = true;
     runtime.battle.replaying = false;
     runtime.battle.stopReplay();
     runtime.battle.render(snapshot);
@@ -159,9 +118,7 @@ window.addEventListener('message', (event) => {
   if (message.type === 'snapshot') apply(message.snapshot);
   else if (message.type === 'viewport') viewport(message.viewport);
   else if (message.type === 'visibility') {
-    paused = !message.visible;
-    if (!paused) while (pending.length) pending.shift()();
-    if (paused) {
+    if (!message.visible) {
       runtime?.battle.stopReplayTimer();
       suspendSound();
     }
@@ -174,11 +131,7 @@ window.addEventListener('message', (event) => {
 });
 window.addEventListener('pagehide', () => {
   closeSound();
-  paused = false;
-  while (pending.length) pending.shift()();
   runtime?.observer.disconnect();
-  runtime?.arena.clock.stop();
-  runtime?.arena.matchAbort.abort();
   runtime?.battle.stopReplay();
   document.getAnimations().forEach((animation) => animation.cancel());
 });

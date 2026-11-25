@@ -2,146 +2,127 @@ import { expect, test } from './test';
 import { collectConsoleViolations, mockPublicConfig, mockRoleSession } from './support';
 import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
-import { aiTerms } from '../fixtures/aiPlayers';
-import { setControlChecked } from '../controls';
+import { biddingViewWire } from '../../src/user/games/bidding/testFixtures';
+import type { Match, Preferences } from '../../src/user/games/companion/api';
 
-for (const { width, theme } of [390, 1440].flatMap((width) =>
-  ['light', 'dark'].map((theme) => ({ width, theme })),
-)) {
-  test(
-    'AI selection, unpaid admission and memory at ' + width + ' in ' + theme,
-    async ({ page }) => {
-      const errors = collectConsoleViolations(page);
-      await page.addInitScript((theme) => {
-        localStorage.setItem('nb.theme', theme);
-        localStorage.setItem('nb.lang', 'en');
-      }, theme);
-      await mockRoleSession(page, 'user', 'user');
-      await mockPublicConfig(page, 'user');
-      await page.setViewportSize({ width, height: 900 });
-      const snapshot = gamesSnapshotWire();
-      snapshot.bidding.enabled = true;
-      let memory = true,
-        queued = false;
-      const writes: unknown[] = [];
-      const now = Math.floor(Date.now() / 1000),
-        id = 'aiq_AAAAAAAAAAAAAAAAAAAAAA';
-      await page.route('**/api/games**', async (route) => {
-        const req = route.request(),
-          path = new URL(req.url()).pathname;
-        if (path === '/api/games') return route.fulfill({ json: snapshot });
-        if (path === '/api/games/bidding/ai')
-          return route.fulfill({
-            json: {
-              enabled: true,
-              bots: ['Patient', 'Balanced', 'Aggressive', 'Comeback'].map((name, index) => ({
-                terms: {
-                  ticket: '0',
-                  ai: {
-                    ...aiTerms,
-                    bot_id:
-                      index === 0
-                        ? aiTerms.bot_id
-                        : 'bot_' + String.fromCharCode(66 + index).repeat(22),
-                    bot_name: name,
-                  },
-                },
-                terms_hash: 'a'.repeat(64),
-                completed: false,
-                memory_enabled: memory,
-                memory_samples: 0,
-              })),
-            },
-          });
-        if (path === '/api/games/bidding/ai/preference') {
-          const body = req.postDataJSON();
-          memory = body.memory_enabled;
-          return route.fulfill({ json: body });
-        }
-        if (path === '/api/games/bidding/queue' && req.method() === 'POST') {
-          writes.push(req.postDataJSON());
-          queued = true;
-          return route.fulfill({
-            status: 202,
-            json: { queue_id: id, revision: '1', deadline: now + 120 },
-          });
-        }
-        if (path.endsWith('/' + id) && req.method() === 'DELETE') {
-          queued = false;
-          return route.fulfill({ status: 204 });
-        }
-        if (path === '/api/games/bidding/state')
-          return route.fulfill({
-            json: {
-              server_now: now,
-              current: null,
-              latest_result: null,
-              queue: queued
-                ? {
-                    id,
-                    revision: '1',
-                    mode: 'ai',
-                    deadline: now + 120,
-                    ticket: '0',
-                    payment: { general: '0', game: '0' },
-                    rules_version: 1,
-                    terms_hash: 'a'.repeat(64),
-                    economy: 'ai_challenge',
-                    ai: aiTerms,
-                    position: 1,
-                  }
-                : null,
-            },
-          });
-        return route.fallback();
-      });
-      await page.goto(USER_ORIGIN + '/games/bidding');
-      const opponentType = page.getByRole('radiogroup', { name: 'Opponent type', exact: true });
-      const ai = opponentType.getByRole('radio', { name: 'AI players', exact: true });
-      await expect(
-        opponentType.getByRole('radio', { name: 'Player matches', exact: true }),
-      ).toBeChecked();
-      await expect(page.locator('.bid-ai-card')).toHaveCount(0);
-      await setControlChecked(ai, true);
-      const choices = page.getByRole('group', { name: 'Choose an AI opponent', exact: true });
-      await expect(choices.getByRole('button')).toHaveCount(4);
-      await choices.getByRole('button', { name: /Comeback/ }).click();
-      await expect(page.getByRole('heading', { name: 'Comeback', exact: true })).toBeVisible();
-      await choices.getByRole('button', { name: /Patient/ }).click();
-      await expect(page.getByRole('heading', { name: 'Patient', exact: true })).toBeVisible();
-      await expect(page.locator('.bid-ai-card')).toHaveCount(1);
-      await expect(page.locator('.bid-ai-card')).toContainText('First-generation AI player');
-      const card = page.locator('.bid-ai-card');
-      expect(
-        await card.evaluate((node) => {
-          const style = getComputedStyle(node);
-          return style.color !== style.backgroundColor && node.scrollWidth <= node.clientWidth + 1;
-        }),
-      ).toBe(true);
-      if (process.env.NONBIRI_VISUAL_DIR) {
-        await card.scrollIntoViewIfNeeded();
-        await page.screenshot({
-          path: process.env.NONBIRI_VISUAL_DIR + '/ai-players-' + theme + '-' + width + '.png',
-          fullPage: true,
+for (const width of [390, 1440])
+  for (const theme of ['light', 'dark']) {
+    test(
+      'free companion restores a locked bid and keeps consent independent at ' +
+        width +
+        ' ' +
+        theme,
+      async ({ page }) => {
+        const errors = collectConsoleViolations(page);
+        await page.addInitScript((theme) => {
+          localStorage.setItem('nb.theme', theme);
+          localStorage.setItem('nb.lang', 'en');
+        }, theme);
+        await mockRoleSession(page, 'user', 'user');
+        await mockPublicConfig(page, 'user');
+        await page.setViewportSize({ width, height: 900 });
+        const snapshot = gamesSnapshotWire();
+        snapshot.games_enabled = true;
+        snapshot.bidding.enabled = true;
+        const prefs: Preferences = { memory: 'none', contribute: false };
+        let active: Match | null = null,
+          latest: Match | null = null;
+        const path = '/api/games/bidding/companion';
+        await page.route('**/api/games**', async (route) => {
+          const req = route.request(),
+            p = new URL(req.url()).pathname;
+          if (p === '/api/games') return route.fulfill({ json: snapshot });
+          if (p === '/api/games/bidding/state')
+            return route.fulfill({
+              json: { server_now: 11, queue: null, current: null, latest_result: null },
+            });
+          if (p === path) return route.fulfill({ json: { preferences: prefs, active, latest } });
+          if (p === path + '/programs')
+            return route.fulfill({
+              json: {
+                enabled: true,
+                upload_available: false,
+                official: { name: 'official', version: 0, difficulties: [1] },
+                programs: [],
+              },
+            });
+          if (p === path + '/preferences') {
+            Object.assign(prefs, req.postDataJSON());
+            return route.fulfill({ json: prefs });
+          }
+          if (p === path + '/matches') {
+            expect(req.headers()['idempotency-key']).toBeTruthy();
+            expect(req.postDataJSON()).toEqual({
+              mode: 'standard',
+              program: 'official',
+              difficulty: 1,
+              constraints: {},
+            });
+            active = {
+              id: 'match-1',
+              game: 'bidding',
+              mode: 'standard',
+              status: 'active',
+              program: 'official',
+              version: 0,
+              difficulty: 1,
+              seat: 0,
+              created_at: 11,
+              ended_at: 0,
+              winner: null,
+              scores: [0, 0],
+              reason: '',
+              phase: 'bid',
+              round: 1,
+              ai_state: 'thinking',
+              decision_id: 'move-1',
+              space: { kind: 'enumerated', examples: [] },
+              view: biddingViewWire(),
+            };
+            return route.fulfill({ json: active });
+          }
+          if (p.endsWith('/actions') && active) {
+            expect(req.postDataJSON()).toEqual({
+              decision_id: 'move-1',
+              action: { kind: 'bid', card: 3 },
+            });
+            active.decision_id = '';
+            active.view.own_selected_card = 3;
+            return route.fulfill({ json: active });
+          }
+          if (p.endsWith('/abandon') && active) {
+            latest = { ...active, status: 'abandoned', reason: 'abandoned' };
+            active = null;
+            return route.fulfill({ json: latest });
+          }
+          return route.fallback();
         });
-      }
-      const toggle = page.getByRole('switch', { name: 'Use match memory' });
-      await toggle.locator('xpath=ancestor::label[1]').click();
-      await expect(toggle).not.toBeChecked();
-      await page.getByRole('button', { name: 'Challenge', exact: true }).click();
-      await expect(page.getByText('WAITING FOR AI MATCH')).toBeVisible();
-      expect(writes).toEqual([
-        { mode: 'ai', bot_id: aiTerms.bot_id, expected_terms_hash: 'a'.repeat(64) },
-      ]);
-      await expect(page.getByText(/No ticket is charged before admission/)).toBeVisible();
-      await page.getByRole('button', { name: 'Leave queue', exact: true }).click();
-      await setControlChecked(ai, true);
-      await expect(page.getByRole('button', { name: 'Challenge', exact: true })).toBeEnabled();
-      await expect(toggle).not.toBeChecked();
-      expect(
-        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-      ).toBe(true);
-      errors.assertNone();
-    },
-  );
-}
+        await page.goto(USER_ORIGIN + '/games/bidding');
+        await page.getByRole('link', { name: 'Free AI companion' }).click();
+        await page.getByText('Memory and sharing', { exact: true }).click();
+        await page.getByLabel('Personal match memory', { exact: true }).selectOption('opponent');
+        await expect.poll(() => prefs.memory).toBe('opponent');
+        expect(prefs.contribute).toBe(false);
+        await page.getByRole('button', { name: 'Start free match' }).click();
+        await expect(page.getByRole('status').filter({ hasText: 'AI is thinking' })).toBeVisible();
+        await page.getByRole('button', { name: /bid.*\(3\)/i }).click();
+        await page.getByRole('button', { name: /lock in bid/i }).click();
+        await page.reload();
+        await expect(page.getByRole('button', { name: /bid.*\(3\)/i })).toBeDisabled();
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await page.screenshot({
+            path: process.env.NONBIRI_VISUAL_DIR + '/companion-' + theme + '-' + width + '.png',
+          });
+        await page.getByRole('button', { name: 'Abandon match', exact: true }).click();
+        await page
+          .getByRole('alertdialog')
+          .getByRole('button', { name: 'Abandon match', exact: true })
+          .click();
+        await expect(page.getByText('Match abandoned', { exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        errors.assertNone();
+      },
+    );
+  }

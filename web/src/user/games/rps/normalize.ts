@@ -50,6 +50,7 @@ const EVENT_KINDS = [
   'terminal',
 ] as const;
 const TERMINAL_REASONS = [
+  'server_restart',
   'quick_resolved',
   'standard_round_limit',
   'standard_insufficient_balance',

@@ -308,10 +308,6 @@ async function serveStation(request, response, station) {
       send(response, 200, 'application/json', JSON.stringify({ enabled: false, entered: false }));
       return;
     }
-    if (request.method === 'GET' && url.pathname === '/api/games/bidding/ai') {
-      send(response, 200, 'application/json', JSON.stringify({ enabled: false, bots: [] }));
-      return;
-    }
     if (request.method === 'GET' && url.pathname === '/api/games/likes/loadouts') {
       send(response, 200, 'application/json', JSON.stringify({ capacity: 10, slots: [] }));
       return;

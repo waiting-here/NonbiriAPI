@@ -1187,8 +1187,7 @@
         "modeRequiresStake": "To enable {{mode}}, enable Rock Paper Scissors and set a positive base stake.",
         "changedElsewhere": "Game settings changed elsewhere. Your draft is retained; restore the latest settings before editing again.",
         "feeRange": "{{field}} must be between 0 and 99.99%, with at most two decimal places."
-      },
-      "aiPlayersTitle": "AI players and strategies"
+      }
     },
     "activities": {
       "nav": "Activities",

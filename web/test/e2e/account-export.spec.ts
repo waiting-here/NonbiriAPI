@@ -28,7 +28,7 @@ for (const locale of ['en', 'zh'] as const) {
       document.cookie = 'nb_elevated=synthetic_export_capability; Path=/; SameSite=Lax';
     }, locale);
     const exportedDocument = {
-      schema_version: 30,
+      schema_version: 39,
       generated_at: 1_700_000_000,
       user: { id: '1' },
     };
@@ -40,7 +40,7 @@ for (const locale of ['en', 'zh'] as const) {
       await route.fulfill({
         headers: {
           'content-type': 'application/json',
-          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v30.json"',
+          'content-disposition': 'attachment; filename="nonbiriapi-account-export-v39.json"',
           'cache-control': 'no-store',
         },
         body: JSON.stringify(exportedDocument),
@@ -49,7 +49,7 @@ for (const locale of ['en', 'zh'] as const) {
     const pending = page.waitForEvent('download');
     await page.goto(`${USER_ORIGIN}/account`);
     const download = await pending;
-    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v30.json');
+    expect(download.suggestedFilename()).toBe('nonbiriapi-account-export-v39.json');
     expect(JSON.parse(await readFile((await download.path())!, 'utf8'))).toEqual(exportedDocument);
     expect(requests).toBe(1);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);

@@ -1,0 +1,33 @@
+.companion-page {
+  margin-inline: auto;
+  max-width: var(--nb-content-wide);
+}
+.companion-heading,
+.companion-match-head,
+.companion-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--nb-space-3);
+}
+.companion-panel,
+.companion-match-head {
+  background: var(--nb-color-surface);
+  border: 1px solid var(--nb-color-border);
+  padding: var(--nb-space-4);
+  border-radius: var(--nb-radius-card);
+}
+.companion-panel > button {
+  justify-self: start;
+  align-self: start;
+}
+.companion-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 20rem;
+  overflow: auto;
+}
+.companion-page h1 {
+  font-size: var(--nb-font-size-2xl);
+}

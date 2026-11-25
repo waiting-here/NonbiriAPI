@@ -330,11 +330,12 @@ describe('core wire normalizers', () => {
     };
     const added = [
       ['bidding', 'game-bidding', 'bidq_', 'waiting'],
-      ['bidding', 'game-bidding', 'aiq_', 'waiting'],
+      ['bidding', 'game-bidding', 'bidc_', 'active'],
       ['likes', 'game-likes', 'lik_', 'active'],
+      ['likes', 'game-likes', 'likc_', 'active'],
       ['blackjack', 'game-blackjack', 'bjt_', 'active'],
       ['gwent', 'game-gwent', 'gwtq_', 'waiting'],
-      ['gwent', 'game-gwent', 'gaq_', 'waiting'],
+      ['gwent', 'game-gwent', 'gwtc_', 'active'],
       ['gwent', 'game-gwent', 'gwt_', 'active'],
       ['lakenotes', 'game-lake-notes', 'lnc_', 'active'],
       ['steadycatch', 'game-steady-catch', 'sc_', 'active'],
@@ -346,7 +347,7 @@ describe('core wire normalizers', () => {
     }));
     expect(
       normalizeHomeGameSummary({ ...valid, continue: [...valid.continue, ...added] }),
-    ).toHaveLength(14);
+    ).toHaveLength(15);
     for (const item of added) {
       expect(() =>
         normalizeHomeGameSummary({

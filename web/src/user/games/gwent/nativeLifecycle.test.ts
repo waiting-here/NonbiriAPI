@@ -2,7 +2,6 @@ import { act, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import frameHTML from '../../../../public/assets/gwent/interface/index.html?raw';
 import cards from '../../../../public/assets/gwent/interface/src/cards/cards.json';
-import abilities from './abilities.json';
 import { installNativeDialog } from '../../../../test/unit/nativeDialog';
 const viewPath = '../../../../public/assets/gwent/interface/src/ui/battlefield.js';
 const { ArenaView } = await import(viewPath);
@@ -35,7 +34,6 @@ installNativeDialog();
 it('keeps an active-match replay through snapshots, resumes play on return and shows a restored result', async () => {
   document.body.innerHTML = new DOMParser().parseFromString(frameHTML, 'text/html').body.innerHTML;
   document.documentElement.dataset.motion = 'reduced';
-  vi.stubGlobal('ability_dict', abilities);
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -43,8 +41,6 @@ it('keeps an active-match replay through snapshots, resumes play on return and s
       disconnect() {}
     },
   );
-  vi.stubGlobal('game', { state: 'idle' });
-  vi.stubGlobal('GameState', { END_SCREEN: 'ended' });
   const posted = vi.spyOn(window, 'postMessage');
   const platformPath = '../../../../public/assets/gwent/interface/platform.js';
   await import(platformPath);

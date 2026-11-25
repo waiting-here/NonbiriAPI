@@ -15,7 +15,7 @@ export interface CastView {
   generation: string;
   revision: string;
   ack_tick: number;
-  phase: 'waiting' | 'playing' | 'success' | 'failed';
+  phase: 'waiting' | 'playing' | 'success' | 'failed' | 'cancelled';
   paused: boolean;
   readonly: boolean;
   recovery_action?: 'resume' | 'closed';
@@ -172,5 +172,6 @@ export const controlInput = (cast: CastView): ControlInput => ({
   generation: cast.generation,
   expected_revision: cast.revision,
 });
-export const terminalPhase = (phase: string) => phase === 'success' || phase === 'failed';
+export const terminalPhase = (phase: string) =>
+  phase === 'success' || phase === 'failed' || phase === 'cancelled';
 export const lakeKeys = (account: string) => ['user', 'lake-notes', account] as const;

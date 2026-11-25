@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { useGamesSnapshot } from '../snapshot';
 import { isMaintenance } from '../request';
@@ -11,9 +12,13 @@ const Bidding = lazy(async () => ({
 }));
 const Likes = lazy(async () => ({ default: (await import('../../likes/LikesGame')).LikesGame }));
 const Gwent = lazy(async () => ({ default: (await import('../../gwent/GwentGame')).GwentGame }));
+const Companion = lazy(async () => ({
+  default: (await import('../../companion/CompanionPage')).CompanionPage,
+}));
 const unavailable: DuelConfig = { enabled: false, available: false, modes: {} };
 
 function DuelPage({ game }: { readonly game: DuelGame }) {
+  const [params] = useSearchParams();
   const snapshot = useGamesSnapshot();
   const { refetch } = snapshot;
   const refreshWallets = useCallback(() => refetch(), [refetch]);
@@ -48,7 +53,9 @@ function DuelPage({ game }: { readonly game: DuelGame }) {
           </>
         }
       >
-        {game === 'gwent' ? (
+        {params.get('opponent') === 'companion' ? (
+          <Companion key={game} game={game} context={context} />
+        ) : game === 'gwent' ? (
           <Gwent {...context} />
         ) : game === 'bidding' ? (
           <Bidding {...context} />
