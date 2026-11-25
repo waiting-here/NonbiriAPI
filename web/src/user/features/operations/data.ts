@@ -30,7 +30,11 @@ interface IssueCommon {
   id: string;
   state: 'current' | 'closed';
   safe_detail: string;
-  deep_link: { route_id: 'endpoint-detail' | 'models'; resource_id: string } | null;
+  deep_link: {
+    route_id: 'endpoint-detail' | 'models';
+    resource_id: string;
+    key_id?: string;
+  } | null;
   first_seen_at: number;
   last_seen_at: number;
   count: string;
@@ -139,12 +143,19 @@ export function normalizeIssue(value: unknown): Issue {
 
   let deepLink: Issue['deep_link'] = null;
   if (root.deep_link !== null) {
-    const link = record(root.deep_link, ['route_id', 'resource_id'], 'issue deep link');
+    const link = record(root.deep_link, ['route_id', 'resource_id', 'key_id'], 'issue deep link', [
+      'route_id',
+      'resource_id',
+    ]);
     const routeID = oneOf(link.route_id, ['endpoint-detail', 'models'] as const, 'issue route id');
     const resourceID = decimalID(link.resource_id, 'issue resource id');
     if ((resourceKind === 'model') !== (routeID === 'models'))
       invalidResponse('issue deep link route');
-    deepLink = { route_id: routeID, resource_id: resourceID };
+    const key =
+      link.key_id === undefined ? undefined : decimalID(link.key_id, 'issue endpoint key id');
+    if (key && (resourceKind !== 'endpoint_key' || root.state !== 'current'))
+      invalidResponse('issue endpoint key');
+    deepLink = { route_id: routeID, resource_id: resourceID, ...(key ? { key_id: key } : {}) };
   }
   const state = oneOf(root.state, ['current', 'closed'] as const, 'issue state');
   const closedAt = nullableUnixSecond(root.closed_at, 'issue close time');

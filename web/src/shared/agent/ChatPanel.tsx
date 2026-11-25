@@ -1,7 +1,8 @@
 import { compactInstructions, roleLabels } from './presentation';
-import { Fragment, memo, useCallback, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { CopyValue } from '@shared/components/CopyValue';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { LoadingState } from '@shared/components/States';
 import { Button, Field, Fold, Note, Panel, PanelBody, PanelHead } from '@shared/components/ui';
@@ -78,6 +79,13 @@ export const ChatMessage = memo(function ChatMessage({
         </strong>
         <AgentTime value={message.created_at} />
         {!message.active ? <span>{t('common.agent.archived')}</span> : null}
+        {message.role === 'assistant' && message.content ? (
+          <CopyValue
+            value={message.content}
+            label={t('common.agent.roles.assistant')}
+            showValue={false}
+          />
+        ) : null}
         {editable ? (
           <Button variant="ghost" onClick={() => onEdit?.(message)}>
             {t('common.agent.editRegenerate')}
@@ -126,6 +134,10 @@ export function ChatPanel({
         : false,
   });
   const [draft, setDraft] = useState('');
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const follow = useRef(false);
+  const opened = useRef(false);
+  const [replaceDraft, setReplaceDraft] = useState<AgentMessage | null>(null);
   const [editing, setEditing] = useState<AgentMessage | null>(null);
   const [older, setOlder] = useState<AgentMessage[]>([]);
   const [olderPlans, setOlderPlans] = useState<AgentPlan[]>([]);
@@ -215,10 +227,47 @@ export function ChatPanel({
     return { plansByMessage, unattachedPlans };
   }, [plans, rows, query.data?.job]);
   const lastUser = useMemo(() => [...rows].reverse().find((row) => row.role === 'user'), [rows]);
-  const edit = useCallback((message: AgentMessage) => {
+  const loadEdit = useCallback((message: AgentMessage) => {
     setEditing(message);
     setDraft(message.content);
+    setReplaceDraft(null);
+    requestAnimationFrame(() => {
+      composer.current?.focus({ preventScroll: true });
+      composer.current?.scrollIntoView?.({ block: 'center' });
+    });
   }, []);
+  const edit = useCallback(
+    (message: AgentMessage) => {
+      if (composer.current?.value.trim() && composer.current.value !== message.content)
+        setReplaceDraft(message);
+      else loadEdit(message);
+    },
+    [loadEdit],
+  );
+  useEffect(() => {
+    if (!active || query.isPending || !composer.current) return;
+    const check = () => {
+      const box = composer.current?.getBoundingClientRect();
+      follow.current = Boolean(box && box.top <= window.innerHeight + 64 && box.bottom >= 0);
+    };
+    if (!opened.current) {
+      opened.current = true;
+      composer.current.scrollIntoView?.({ block: 'nearest' });
+    }
+    check();
+    window.addEventListener('scroll', check, { capture: true, passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      window.removeEventListener('scroll', check, true);
+      window.removeEventListener('resize', check);
+    };
+  }, [active, query.isPending]);
+  const tailId = rows.at(-1)?.id;
+  const tailText = rows.at(-1)?.content;
+  useEffect(() => {
+    if (active && tailId && follow.current)
+      composer.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [active, tailId, tailText]);
   const locked =
     operation.isPending || operation.outcome === 'unknown' || Boolean(operation.refreshError);
   const { enabled = false, generation: chatGeneration, job } = query.data ?? {};
@@ -335,6 +384,22 @@ export function ChatPanel({
                 <AgentMarkdown>{query.data.summary}</AgentMarkdown>
               </Fold>
             ) : null}
+            <div className="agent-transcript" role="log" aria-label={t('common.agent.chat')}>
+              {query.data.has_older && more ? (
+                <Button variant="secondary" disabled={olderBusy} onClick={() => void loadOlder()}>
+                  {t('common.agent.loadOlder')}
+                </Button>
+              ) : null}
+              {olderError ? (
+                <AgentError error={olderError} onRetry={() => void loadOlder()} />
+              ) : null}
+              {!rows.length ? (
+                <AgentEmpty body={t('common.agent.chatEmpty')} />
+              ) : (
+                renderedHistory.messages
+              )}
+            </div>
+            {renderedHistory.unattachedPlans}
             {query.data.job ? (
               <div className="agent-job">
                 <AgentState
@@ -363,28 +428,12 @@ export function ChatPanel({
                   </>
                 ) : null}
                 {query.data.job.error ? (
-                  <Fold title={t('common.agent.failureDetails')}>
-                    <p>{query.data.job.error}</p>
-                  </Fold>
+                  <p className="field-error" role="alert">
+                    {t('common.agent.failureDetails')} · {query.data.job.error}
+                  </p>
                 ) : null}
               </div>
             ) : null}
-            <div className="agent-transcript" role="log" aria-label={t('common.agent.chat')}>
-              {query.data.has_older && more ? (
-                <Button variant="secondary" disabled={olderBusy} onClick={() => void loadOlder()}>
-                  {t('common.agent.loadOlder')}
-                </Button>
-              ) : null}
-              {olderError ? (
-                <AgentError error={olderError} onRetry={() => void loadOlder()} />
-              ) : null}
-              {!rows.length ? (
-                <AgentEmpty body={t('common.agent.chatEmpty')} />
-              ) : (
-                renderedHistory.messages
-              )}
-            </div>
-            {renderedHistory.unattachedPlans}
             {editing ? (
               <Note>
                 <p>{t('common.agent.editingHelp')}</p>
@@ -403,7 +452,7 @@ export function ChatPanel({
               className="agent-composer nb-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!enabled || !draft.trim() || locked) return;
+                if (!enabled || !draft.trim() || locked || (running && !editing)) return;
                 operation.mutate({
                   kind: editing ? 'edit' : 'send',
                   id: editing?.id,
@@ -419,7 +468,19 @@ export function ChatPanel({
                 {(props) => (
                   <textarea
                     {...props}
+                    ref={composer}
                     rows={4}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== 'Enter' ||
+                        !(event.ctrlKey || event.metaKey) ||
+                        event.nativeEvent.isComposing ||
+                        event.keyCode === 229
+                      )
+                        return;
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }}
                     value={draft}
                     disabled={locked || !enabled}
                     onChange={(event) => setDraft(event.target.value)}
@@ -428,6 +489,17 @@ export function ChatPanel({
               </Field>
               {compactDraft ? <Note>{t('common.agent.compactCommandHelp')}</Note> : null}
               <div className="nb-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={locked || !enabled || Boolean(running) || compactDraft}
+                  onClick={() => {
+                    setDraft((current) => '/compact ' + current);
+                    composer.current?.focus();
+                  }}
+                >
+                  /compact
+                </Button>
                 <Button
                   variant="primary"
                   type="submit"
@@ -463,9 +535,24 @@ export function ChatPanel({
         ) : null}
       </PanelBody>
       <ConfirmDialog
+        open={Boolean(replaceDraft)}
+        title={t('common.agent.editRegenerate')}
+        description={t('common.agent.replaceMessageDraft')}
+        confirmLabel={t('common.agent.editRegenerate')}
+        onCancel={() => setReplaceDraft(null)}
+        onConfirm={() => {
+          if (replaceDraft) loadEdit(replaceDraft);
+        }}
+      />
+      <ConfirmDialog
+        danger
         open={confirmClear}
         title={t('common.agent.clearChat')}
-        description={t('common.agent.clearHelp')}
+        description={
+          draft.trim()
+            ? t('common.agent.clearHelp') + ' ' + t('common.agent.clearDraftHelp')
+            : t('common.agent.clearHelp')
+        }
         confirmLabel={t('common.agent.clearChat')}
         busy={operation.isPending}
         onCancel={() => setConfirmClear(false)}

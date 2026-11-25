@@ -17,3 +17,15 @@ See web/public/assets/fatfish/NOTICE.md and its bundled license text.
 The embedded time zone archive is compiled from the public-domain IANA
 Time Zone Database. Its source and pinned digest are recorded in
 internal/calendar/NOTICE.md.
+
+The C++17 companion examples include JSON for Modern C++ by Niels
+Lohmann, distributed under the MIT License. The full license and copyright
+notice are in internal/game/companion/kit/files/sdk/LICENSE.nlohmann and in
+sdk/LICENSE.nlohmann inside each game kit.
+
+The companion worker source uses wazero, licensed under the Apache
+License, Version 2.0. Upstream attribution follows.
+wazero
+Copyright 2020-2023 wazero authors
+The full license is included in cmd/nonbiri-companion-worker/LICENSE.wazero. See also
+https://github.com/tetratelabs/wazero/blob/v1.12.0/LICENSE

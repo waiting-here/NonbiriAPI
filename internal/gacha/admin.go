@@ -128,7 +128,7 @@ func (s *Service) AdminConfig(ctx context.Context, actor int64) (Configuration, 
 }
 func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input AdminInput) (Configuration, error) {
 	var out Configuration
-	if input.ExpectedRevision < 0 || input.ExpectedRevision >= maxBalance {
+	if input.ExpectedRevision < 0 || input.ExpectedRevision >= maxBalance || (input.DeleteID != "" && input.Kind != "delete_pool" && input.Kind != "delete_preset") {
 		return out, ErrInvalid
 	}
 	at, err := s.now()
@@ -235,7 +235,7 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 			return out, ErrConflict
 		} else {
 			var recorded bool
-			if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_pool_statistics WHERE pool_id=?)", pool.ID).Scan(&recorded); err != nil {
+			if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_pool_statistics WHERE pool_id=?) OR EXISTS(SELECT 1 FROM gacha_config_events WHERE target=?)", pool.ID, pool.ID).Scan(&recorded); err != nil {
 				return out, err
 			}
 			if recorded {
@@ -279,6 +279,15 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return out, e
 		}
+		if errors.Is(e, sql.ErrNoRows) {
+			var recorded bool
+			if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM gacha_config_events WHERE target=?)", "preset:"+p.ID).Scan(&recorded); err != nil {
+				return out, err
+			}
+			if recorded {
+				return out, ErrConflict
+			}
+		}
 		if e == nil {
 			var previous Pool
 			if err = json.Unmarshal([]byte(previousRaw), &previous); err != nil {
@@ -293,6 +302,47 @@ func (s *Service) AdminSave(ctx context.Context, actor int64, key string, input 
 		_, err = tx.ExecContext(ctx, `INSERT INTO gacha_presets(id,name,config,revision) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,config=excluded.config,revision=excluded.revision`, p.ID, p.Name, jsonText(p.Pool), revision)
 		target = "preset:" + p.ID
 		stored = p
+	case "delete_pool", "delete_preset":
+		if input.ExpectedRevision < 1 || input.EntryEnabled != nil || input.Rules != nil || input.Shop != nil || input.Pool != nil || input.Preset != nil {
+			return out, ErrInvalid
+		}
+		id := input.DeleteID
+		var result sql.Result
+		if input.Kind == "delete_pool" {
+			if !db.ValidateOpaqueID(id, "gp_") {
+				return out, ErrInvalid
+			}
+			target = id
+			// An incomplete publication history cannot prove the pool was always private.
+			result, err = tx.ExecContext(ctx, `DELETE FROM gacha_pools WHERE id=? AND revision=?
+ AND json_extract(config,'$.published')=0
+ AND (SELECT count(DISTINCT revision) FROM gacha_config_events WHERE target=? AND revision BETWEEN 1 AND ?)=?
+ AND NOT EXISTS (SELECT 1 FROM gacha_config_events WHERE target=? AND json_extract(config,'$.published')=1)
+ AND NOT EXISTS (SELECT 1 FROM gacha_pool_statistics WHERE pool_id=? AND (total_draws<>zeroblob(16) OR participant_count<>zeroblob(16)))
+ AND NOT EXISTS (SELECT 1 FROM gacha_card_statistics WHERE pool_id=?)
+ AND NOT EXISTS (SELECT 1 FROM gacha_pool_participants WHERE pool_id=?)
+ AND NOT EXISTS (SELECT 1 FROM gacha_draws WHERE json_extract(receipt,'$.pool_id')=?)`,
+				id, input.ExpectedRevision, id, input.ExpectedRevision, input.ExpectedRevision, id, id, id, id, id)
+		} else {
+			if !db.ValidateOpaqueID(id, "gt_") || builtInPreset(id) {
+				return out, ErrInvalid
+			}
+			target = "preset:" + id
+			// Loading a preset copies its configuration into the pool.
+			result, err = tx.ExecContext(ctx, "DELETE FROM gacha_presets WHERE id=? AND revision=?", id, input.ExpectedRevision)
+		}
+		if err != nil {
+			return out, err
+		}
+		if affected, e := result.RowsAffected(); e != nil || affected != 1 {
+			return out, ErrConflict
+		}
+		if input.Kind == "delete_pool" {
+			if _, err = tx.ExecContext(ctx, "DELETE FROM gacha_pool_statistics WHERE pool_id=?", id); err != nil {
+				return out, err
+			}
+		}
+		stored = map[string]bool{"deleted": true}
 	default:
 		return out, ErrInvalid
 	}

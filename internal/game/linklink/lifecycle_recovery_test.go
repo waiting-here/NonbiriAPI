@@ -5,14 +5,49 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 )
 
+// Holding the only reader isolates startup validation from mutation work.
+func TestStandaloneRecoveryValidationUsesCallerBudget(t *testing.T) {
+	fixture := newFixture(t)
+	reader := fixture.store.ReadDB()
+	reader.SetMaxOpenConns(1)
+	held, err := reader.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	before := reader.Stats().WaitCount
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { result <- fixture.service.RecoverBeforeListen(ctx) }()
+		synctest.Wait()
+		if reader.Stats().WaitCount != before+1 {
+			t.Fatal("validation did not wait for the occupied reader")
+		}
+		time.Sleep(3 * time.Second)
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("validation error after caller canceled: %v", err)
+		}
+	})
+	if fixture.service.recovered.Load() || fixture.service.recoveryValidated.Load() {
+		t.Fatal("canceled validation marked recovery ready")
+	}
+}
+
 func TestRecoverBeforeListenAtUsesFrozenDeadlineAndExactBatches(t *testing.T) {
 	fixture := newFixture(t)
+	if err := fixture.service.RecoverBeforeListen(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	deadlines := make([]int64, 0, 2)
 	for index := 0; index < 2; index++ {
 		userID, _ := fixture.seedUser("bounded-recovery-"+string(rune('a'+index)), testFunding)
@@ -112,29 +147,21 @@ func TestRecoverBeforeListenAtRestartCleansLeaseAndIsRepeatable(t *testing.T) {
 	secondLeaseBatch, err := restarted.RecoverBeforeListenAt(
 		context.Background(), testNow, 1, time.Now().Add(time.Minute),
 	)
-	if err != nil || secondLeaseBatch.Processed != 1 || secondLeaseBatch.More {
-		t.Fatalf("second lease recovery = (%+v,%v)", secondLeaseBatch, err)
+	if err != nil || secondLeaseBatch.Processed != 1 || !secondLeaseBatch.More {
+		t.Fatal(secondLeaseBatch, err)
 	}
-	if fixture.scalar(`SELECT COUNT(*) FROM game_online_leases WHERE session_id IN (?,?)`, started.State.SessionID, other.State.SessionID) != 0 ||
-		fixture.scalar(`SELECT COUNT(*) FROM game_linklink_sessions WHERE id IN (?,?)`, started.State.SessionID, other.State.SessionID) != 2 {
-		t.Fatal("restart lease cleanup changed active game authority")
+	for range 2 {
+		if _, err = restarted.RecoverBeforeListenAt(context.Background(), testNow, 1, time.Now().Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fixture.scalar("SELECT COUNT(*) FROM game_linklink_summaries WHERE terminal_reason='cancelled' AND score IS NULL") != 2 {
+		t.Fatal("missing cancellation receipts")
+	}
+	if fixture.scalar("SELECT COUNT(*) FROM credit_operations WHERE kind='linklink_refund'") != 2 {
+		t.Fatal("missing original-asset refunds")
 	}
 
-	timeoutBatch, err := restarted.RecoverBeforeListenAt(
-		context.Background(), started.State.Deadline, 1, time.Now().Add(time.Minute),
-	)
-	if err != nil || timeoutBatch.Processed != 1 || timeoutBatch.More {
-		t.Fatalf("timeout recovery = (%+v,%v)", timeoutBatch, err)
-	}
-	replayed, err := restarted.RecoverBeforeListenAt(
-		context.Background(), started.State.Deadline, 1, time.Now().Add(time.Minute),
-	)
-	if err != nil || replayed != (RecoveryResult{}) {
-		t.Fatalf("repeat recovery = (%+v,%v)", replayed, err)
-	}
-	if fixture.scalar(`SELECT COUNT(*) FROM game_linklink_summaries WHERE session_id=? AND terminal_at=?`, started.State.SessionID, started.State.Deadline) != 1 {
-		t.Fatal("restart recovery was not exactly-once repeatable")
-	}
 }
 
 type failingRecoveryContinuation struct{ err error }
@@ -149,6 +176,9 @@ func (continuation failingRecoveryContinuation) AuthorizeContinuation(
 
 func TestRecoverBeforeListenAtMaintenanceRollbackAndRetry(t *testing.T) {
 	fixture := newFixture(t)
+	if err := fixture.service.RecoverBeforeListen(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	userID, _ := fixture.seedUser("bounded-maintenance", testFunding)
 	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(320),

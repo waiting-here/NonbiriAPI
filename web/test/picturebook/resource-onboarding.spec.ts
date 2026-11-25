@@ -106,7 +106,7 @@ async function newService(page: Page, name: string, recoverLost = false) {
     keyLabel: key.note || key.display_head + '…' + key.display_tail,
   });
   await expect(
-    panel.locator('summary').filter({ hasText: servicesCopy('en').manualModels }),
+    panel.getByRole('tab', { name: servicesCopy('en').manualModels, exact: true }),
   ).toBeVisible();
   if (recoverLost) {
     await expect(
@@ -212,16 +212,18 @@ async function manual(page: Page, upstream: string, prefix: string, locale: Loca
   const c = connectionCopy(locale),
     meta = resources.get(page)!;
   const core = (locale === 'zh' ? zh : en).user.core;
-  const fold = page.locator('details').filter({
-    has: page.locator(':scope > summary').filter({ hasText: servicesCopy(locale).manualModels }),
-  });
-  if ((await fold.getAttribute('open')) === null) await fold.locator(':scope > summary').click();
-  const modelInput = fold.getByLabel(core['endpoints.manualModel'], { exact: true });
+  const setup = page.locator('.service-key-models');
+  const labels = servicesCopy(locale);
+  await setup.getByRole('tab', { name: labels.manualModels, exact: true }).click();
+  const list = setup.getByRole('tabpanel', { name: labels.manualModels, exact: true });
+  const manage = list.getByRole('button', { name: labels.manageManualModels, exact: true });
+  if (await manage.isVisible()) await manage.click();
+  const modelInput = list.getByLabel(core['endpoints.manualModel'], { exact: true });
   await modelInput.fill(upstream);
-  await fold.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
+  await list.getByRole('button', { name: core['endpoints.manualAdd'], exact: true }).click();
   await expect
     .poll(async () => {
-      const check = fold.getByRole('button', {
+      const check = list.getByRole('button', {
         name: sharedCopy(locale).outcome.recheck,
         exact: true,
       });
@@ -229,14 +231,8 @@ async function manual(page: Page, upstream: string, prefix: string, locale: Loca
       return modelInput.inputValue();
     })
     .toBe('');
-  await page
-    .locator('.service-key-models')
-    .getByRole('tab', { name: servicesCopy(locale).manualModels, exact: true })
-    .click();
-  await page
-    .locator('.service-key-models')
-    .getByRole('checkbox', { name: upstream, exact: true })
-    .check();
+  await list.getByRole('button', { name: labels.chooseManualModels, exact: true }).click();
+  await list.getByRole('checkbox', { name: upstream, exact: true }).check();
   const row = page.locator('details').filter({
     has: page
       .locator(':scope > summary strong')
@@ -353,7 +349,6 @@ async function existing(page: Page, name: string, locale: Locale = 'en') {
   ).toBeVisible();
 }
 
-test.describe.configure({ mode: 'serial' });
 test('optional setup connects selected models in one action and shows real relationships and structured debug messages', async ({
   browser,
 }) => {

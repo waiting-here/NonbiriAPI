@@ -1,5 +1,8 @@
 /* eslint-disable */
-import { ArenaEngine } from './game/engine.js';
+import { ArenaView } from './ui/battlefield.js';
+import { DeckStore } from './cards/decks.js';
+import { installDecisionTimer } from './ui/decision-timer.js';
+import { loadPreferences } from './ui/settings.js';
 import { models } from './ai/models.js';
 import { cardElement } from './ui/card.js';
 import { tone } from './ui/animation.js';
@@ -14,7 +17,17 @@ export async function boot(storage, host) {
   const response = await fetch('src/cards/cards.json');
   if (!response.ok) throw Error('卡牌数据加载失败');
   const catalog = await response.json(),
-    arena = new ArenaEngine(catalog, storage);
+    preferences = loadPreferences(localStorage),
+    arena = {
+      catalog,
+      decks: new DeckStore(catalog, storage),
+      preferences,
+      speed: preferences.speed,
+      label: (player) => models[player.deck.faction].short,
+    };
+  applyMotion(preferences.motion);
+  installDecisionTimer();
+  arena.view = new ArenaView(arena);
   const playerSelect = document.getElementById('player-faction'),
     opponentSelect = document.getElementById('opponent-faction');
   for (const select of [playerSelect, opponentSelect])
@@ -98,37 +111,9 @@ export async function boot(storage, host) {
     deckEditor.updateSummary();
   };
   updateFaction();
-  document.getElementById('launch-play').onclick = () => arena.start('play');
-  document.getElementById('launch-watch').onclick = () => arena.start('watch');
-  document.getElementById('arena-pass').onclick = () => arena.command('pass');
-  document.getElementById('arena-leader').onclick = () => arena.command('leader');
-  document.getElementById('arena-concede').onclick = () => arena.command('concede');
-  document.getElementById('inspect-hand').onclick = () =>
-    arena.view.chooseCards(
-      player_me.hand,
-      0,
-      () => {},
-      () => true,
-      true,
-      '手牌详情 · 查看效果与触发时机',
-    );
-  document.querySelectorAll('.arena-row').forEach((element) =>
-    element.addEventListener('click', (event) => {
-      if (event.target.closest('button') || !arena.view.selection) return;
-      const card = arena.view.selection,
-        row = board.getRow(
-          { abilities: [] },
-          element.dataset.row,
-          element.dataset.side === 'me' ? player_me : player_op,
-        );
-      arena.act(card, row);
-    }),
-  );
   document
     .getElementById('arena-dialog')
     .addEventListener('cancel', (event) => event.preventDefault());
-  document.getElementById('rematch').onclick = () => arena.start(arena.mode);
-  document.getElementById('return-lobby').onclick = () => arena.lobby();
   const speed = document.getElementById('arena-speed');
   speed.value = String(arena.speed);
   speed.onchange = (event) => {
@@ -157,23 +142,9 @@ export async function boot(storage, host) {
     tone();
   };
   updateSound();
-  document.getElementById('view-cards').onclick = () =>
-    arena.view.chooseCards(
-      {
-        cards: catalog
-          .filter((card) => [playerSelect.value, 'neutral'].includes(card.faction))
-          .map((data) => new Card(card_dict[arena.index.get(data.id)], player_me)),
-      },
-      0,
-      () => {},
-      () => true,
-      true,
-      '卡牌图鉴 · ' + models[playerSelect.value].short,
-    );
   document.getElementById('view-rules').onclick = () => showRulesGuide(arena);
   document.getElementById('loading-label').hidden = true;
   document.getElementById('launch-play').disabled = false;
-  document.getElementById('launch-watch').disabled = false;
   const setup = new PlatformSetup(arena, deckEditor, host);
   return { arena, setup, catalog };
 }

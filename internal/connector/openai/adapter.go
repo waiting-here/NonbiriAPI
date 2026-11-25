@@ -15,6 +15,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/tooltext"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/requestadaptation"
@@ -274,7 +275,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, safetyMaterial}, sentSecrets...)...)
 	clear(safetyMaterial)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), InputLengthErrors: true, Rules: smartbackoff.RulesFromContext(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()
@@ -301,9 +302,6 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxJSONResponseBytes, StreamBytes: a.maxStreamBytes, LineBytes: a.maxSSELineBytes, EventBytes: a.maxSSEEventBytes})
 	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
-	if err == nil {
-		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
-	}
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}
@@ -379,31 +377,44 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 		result.ErrorDetail = errorContext.Parse(body)
 		return result
 	}
-	usage, err := validateCompletion(body)
+	usage, projected, err := validateCompletion(body)
 	if err != nil {
 		inner, wrapperErr := unwrapCompletion(body)
 		if wrapperErr != nil {
 			return upstreamFailure("upstream response was invalid", response.StatusCode)
 		}
 		// Scan the complete wrapper before dropping its outer representation.
-		if guard.ContainsJSON(body, body) {
+		if guard.containsSourceJSON(body) {
 			clear(inner)
 			return upstreamFailure("upstream response was rejected", response.StatusCode)
 		}
 		clear(body)
 		body = inner
 		defer clear(body)
-		usage, err = validateCompletion(body)
+		usage, projected, err = validateCompletion(body)
 	}
 	if err != nil {
 		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
-	if guard.ContainsJSON(body, body) {
-		upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
-		return upstreamFailure("upstream response was rejected", response.StatusCode)
+	if projected != nil {
+		defer clear(projected)
+		// Scan the source independently: the wire guard sees the joined
+		// strings and must not concatenate them with the original message.
+		if guard.containsSourceJSON(body) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
+			return upstreamFailure("upstream response was rejected", response.StatusCode)
+		}
+		if int64(len(projected)) > a.maxJSONResponseBytes {
+			return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
+		}
+		body = projected
 	}
 	if policy.FlattenToolCalls {
+		if guard.containsSourceJSON(body) {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
+			return upstreamFailure("upstream response was rejected", response.StatusCode)
+		}
 		flattened, ferr := flattenCompletion(body)
 		if ferr != nil {
 			return upstreamFailure("upstream response was invalid", response.StatusCode)
@@ -414,9 +425,12 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 		if int64(len(body)) > a.maxJSONResponseBytes {
 			return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 		}
-		if guard.ContainsJSON(body, body) {
-			return upstreamFailure("upstream response was rejected", response.StatusCode)
+	}
+	if guard.ContainsJSON(body, body) {
+		if projected == nil && !policy.FlattenToolCalls {
+			upstreamerror.CaptureEvent(ctx, response.StatusCode, response.Header.Get("Content-Type"), body)
 		}
+		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
 	defer func() {
 		result = connectorcontract.ProtocolSucceeded(result)
@@ -521,6 +535,10 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
 		}
+		if compact == nil {
+			usage = usageState.observe(chunkUsage, chunkUsageMalformed)
+			continue
+		}
 		if !identity.withinBounds(compact, a.maxSSEEventBytes, a.maxSSELineBytes, a.maxStreamBytes) {
 			clear(compact)
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
@@ -593,6 +611,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 	controller := http.NewResponseController(writer)
 	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 	committed := false
+	var written int64
 	failure := func(diagnostic string) AttemptResult {
 		return a.streamProtocolFailure(writer, controller, committed, usage, diagnostic)
 	}
@@ -602,6 +621,9 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 		wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
 		committed = committed || wrote
+		if writeErr == nil {
+			written += int64(len(frame))
+		}
 		return wrote, writeErr
 	}
 	for {
@@ -649,31 +671,30 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 					clear(finish)
 					return failure("upstream stream chunk exceeded protocol bounds")
 				}
-				contentFrame := append([]byte("data: "), content...)
-				contentFrame = append(contentFrame, '\n', '\n')
-				if _, writeErr := writeFrame(contentFrame, content); writeErr != nil {
-					clear(contentFrame)
-					clear(content)
-					clear(finish)
-					if errors.Is(writeErr, errFlattenStreamRejected) {
-						return failure("upstream stream was rejected")
-					}
-					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
+				defer clear(content)
+				defer clear(finish)
+				finalBytes := int64(len(content) + len(finish) + 16 + len(usageFrame) + len("data: [DONE]\n\n"))
+				maxFrame := min(a.maxSSEEventBytes+8, a.maxSSELineBytes+2)
+				continuation, err := tooltext.StreamContinuationFrames(firstRoot, states, maxFrame, a.maxStreamBytes-written-finalBytes)
+				if err != nil {
+					return failure("upstream stream chunk exceeded protocol bounds")
 				}
-				clear(contentFrame)
-				clear(content)
-				finishFrame := append([]byte("data: "), finish...)
-				finishFrame = append(finishFrame, '\n', '\n')
-				if _, writeErr := writeFrame(finishFrame, finish); writeErr != nil {
-					clear(finishFrame)
-					clear(finish)
-					if errors.Is(writeErr, errFlattenStreamRejected) {
-						return failure("upstream stream was rejected")
+				defer func() {
+					for _, data := range continuation {
+						clear(data)
 					}
-					return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
+				}()
+				for _, data := range append(continuation, content, finish) {
+					frame := append(append([]byte("data: "), data...), '\n', '\n')
+					_, writeErr := writeFrame(frame, data)
+					clear(frame)
+					if writeErr != nil {
+						if errors.Is(writeErr, errFlattenStreamRejected) {
+							return failure("upstream stream was rejected")
+						}
+						return connectorcontract.ConfirmedSuccess(sinkFailureWithCommit(committed, usage), response.StatusCode)
+					}
 				}
-				clear(finishFrame)
-				clear(finish)
 			}
 			if len(usageFrame) > 0 {
 				if _, writeErr := writeFrame(usageFrame, streamFramePayload(usageFrame)); writeErr != nil {
@@ -702,6 +723,10 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 		if err != nil {
 			return failure("upstream stream chunk was invalid")
+		}
+		if compact == nil {
+			usage = usageState.observe(chunkUsage, chunkMalformed)
+			continue
 		}
 		if !identity.withinBounds(compact, a.maxSSEEventBytes, a.maxSSELineBytes, a.maxStreamBytes) {
 			clear(compact)

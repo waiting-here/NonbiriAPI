@@ -75,6 +75,12 @@ VALUES(?,?,'openai-compatible','https://example.com/v1','pending_review','comple
 			t.Fatalf("case window=%+v rows=%d", page.Pagination, len(page.Data))
 		}
 	}
+	reportID := fmt.Sprintf("rpc_%021dA", 1)
+	window := pagination.Request{Page: 1, Size: 10}
+	filtered, err := e.repository.searchCases(t.Context(), admin, "", "", 10, &window, reportID, true)
+	if err != nil || filtered.Pagination.TotalItems != "1" || len(filtered.Data) != 1 || filtered.Data[0].ID != reportID {
+		t.Fatalf("pending search %+v err=%v", filtered, err)
+	}
 	t.Logf("%d complete report cases, four page sizes: %s", count, time.Since(start))
 	rows, err := e.store.DB().Query(`EXPLAIN QUERY PLAN SELECT `+caseSummaryColumns+` FROM report_cases
 WHERE (?='' OR status=?) AND (status IN ('pending_indexing','pending_review','approved_processing') OR created_at+?>?)

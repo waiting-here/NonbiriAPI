@@ -97,7 +97,8 @@ async function mount(connectionOnly = false) {
     { station: 'admin', role: 'admin' },
   );
   view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'synthetic' } });
-  await screen.findByText('Synthetic account', { exact: false });
+  if (connectionOnly) await screen.findByText('Synthetic account', { exact: false });
+  else await screen.findByRole('button', { name: common.common.edit });
   return view;
 }
 describe('Model source settings', () => {
@@ -460,4 +461,70 @@ describe('ChatGPT connection transfer', () => {
     });
     expect(screen.queryByText('Late account', { exact: false })).not.toBeInTheDocument();
   });
+});
+
+it('keeps a pasted source key when local JSON validation fails and drops it when leaving the editor', async () => {
+  const { user } = await mount();
+  await user.click(screen.getByRole('button', { name: common.common.edit }));
+  const editor = screen.getByRole('form', { name: text.editSource });
+  const secret = within(editor).getByLabelText(common.common.connections.secret);
+  await user.type(secret, 'local-only-secret');
+  await user.click(within(editor).getByText(common.common.agent.advanced, { selector: 'strong' }));
+  const extra = within(editor).getByLabelText(common.common.agent.extraParameters);
+  await user.clear(extra);
+  await user.type(extra, 'broken');
+  await user.click(within(editor).getByRole('button', { name: common.common.save }));
+  expect(await within(editor).findByRole('alert')).toBeVisible();
+  expect(secret).toHaveValue('local-only-secret');
+  expect(mocks.save).not.toHaveBeenCalled();
+  await user.click(within(editor).getByRole('button', { name: common.common.close }));
+  await user.click(screen.getByRole('button', { name: common.common.edit }));
+  expect(screen.getByLabelText(common.common.connections.secret)).toHaveValue('');
+});
+it('preserves a locally edited binding on a newer revision, then saves against the confirmed revision', async () => {
+  const { user, queryClient } = await mount();
+  const binding = screen.getByRole('combobox', { name: text.scopes.admin_chat });
+  await user.selectOptions(binding, '1');
+  const form = binding.closest('form')!;
+  config = {
+    ...config,
+    bindings: [{ scope: 'admin_chat', actor_id: '0', driver_id: '0', revision: '2' }],
+  };
+  await act(async () => {
+    queryClient.setQueryData(['admin', 'ai', 'synthetic', 'drivers'], config);
+  });
+  expect(binding).toHaveValue('1');
+  const keep = await within(form).findByRole('button', { name: common.common.agent.keepDraft });
+  expect(within(form).getByRole('button', { name: common.common.save })).toBeDisabled();
+  await user.click(keep);
+  await user.click(within(form).getByRole('button', { name: common.common.save }));
+  await waitFor(() =>
+    expect(mocks.binding).toHaveBeenCalledWith(
+      expect.objectContaining({ driver_id: '1', expected_revision: '2' }),
+      expect.any(AbortSignal),
+    ),
+  );
+});
+it('confirms the ChatGPT account before disconnection and offers copyable commands for both helper builds', async () => {
+  mocks.logout.mockImplementation(async () => ({
+    connected: false,
+    revision: '3',
+    remote_revocation_confirmed: true,
+  }));
+  const { user } = await mount(true);
+  const disconnect = screen.getByRole('button', { name: text.disconnect });
+  await user.click(disconnect);
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('Synthetic account');
+  await user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', { name: common.common.cancel }),
+  );
+  expect(mocks.logout).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: text.signIn }));
+  expect(screen.getByRole('button', { name: 'Copy Windows' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Copy macOS / Linux' })).toBeVisible();
+  await user.click(disconnect);
+  await user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', { name: text.disconnect }),
+  );
+  await waitFor(() => expect(mocks.logout).toHaveBeenCalledWith('2', expect.any(AbortSignal)));
 });

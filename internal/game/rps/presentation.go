@@ -102,7 +102,7 @@ func presentationTransfers(buyInRaw, cashOutRaw []byte, sign int, magnitude db.U
 
 // terminalFunding uses original buy-in and wallet cash-out facts, never the
 // cumulative returns from individual rounds. Historical unknowns stay null.
-func terminalFunding(version int, generalRaw, gameRaw, returnedRaw []byte, buyIn, cashOut *string, sign int, magnitude db.U128) (*string, *string, *string, error) {
+func terminalFunding(cancelled bool, version int, generalRaw, gameRaw, returnedRaw []byte, buyIn, cashOut *string, sign int, magnitude db.U128) (*string, *string, *string, error) {
 	if version != 1 && version != 2 {
 		return nil, nil, nil, ErrInvariant
 	}
@@ -137,6 +137,9 @@ func terminalFunding(version int, generalRaw, gameRaw, returnedRaw []byte, buyIn
 		if buyIn != nil && *buyIn != formatMilli(total.Big()) || cashOut != nil && *cashOut != *returnedText {
 			return nil, nil, nil, ErrInvariant
 		}
+	}
+	if cancelled {
+		returnedText = generalText
 	}
 	if returnedRaw != nil {
 		returned, err := db.DecodeU128(returnedRaw)

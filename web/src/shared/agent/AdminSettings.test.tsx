@@ -72,12 +72,23 @@ beforeEach(() => {
   mocks.models.mockResolvedValue(['synthetic-model']);
   mocks.putSettings.mockImplementation(async (input) => ({ ...settings, ...input, revision: '1' }));
 });
-async function mount() {
+async function mount(section: 'legacy' | 'conversation' | 'tools' = 'conversation') {
   const view = await renderWithProviders(<AdminSettings account="synthetic" active />, {
     station: 'admin',
     role: 'admin',
   });
   view.queryClient.setQueryData(['admin', 'session'], { admin: { username: 'synthetic' } });
+  if (section === 'legacy')
+    await view.user.click(
+      screen.getByText(common.common.agent.drivers.legacy, { selector: 'strong' }),
+    );
+  else
+    await view.user.click(
+      screen.getByRole('tab', {
+        name:
+          section === 'tools' ? common.common.agent.toolsTitle : common.common.agent.chatAndReview,
+      }),
+    );
   return view;
 }
 describe('Agent administrator settings', () => {
@@ -87,7 +98,7 @@ describe('Agent administrator settings', () => {
       extra_parameters: { reasoning_effort: 'low', seed: 7 },
     });
     mocks.putDriver.mockImplementation(async (input) => ({ ...driver, ...input, revision: '1' }));
-    const view = await mount();
+    const view = await mount('legacy');
     const effort = await screen.findByRole('combobox', {
       name: common.common.agent.reasoningEffort.label,
     });
@@ -116,7 +127,7 @@ describe('Agent administrator settings', () => {
       order.push('discover');
       return ['synthetic-model'];
     });
-    const view = await mount();
+    const view = await mount('legacy');
     await view.user.type(
       await screen.findByLabelText(common.common.connections.entryURL),
       'https://driver.example/v1',
@@ -195,9 +206,8 @@ describe('Agent administrator settings', () => {
     expect(toggle).toBeChecked();
   });
   it('saves custom tool instructions without changing other tools or message templates', async () => {
-    const view = await mount();
-    await screen.findByLabelText('Automatic review mode');
-    await view.user.click(screen.getByText(common.common.agent.toolsTitle, { selector: 'strong' }));
+    const view = await mount('tools');
+    await screen.findByRole('switch', { name: common.common.agent.tools.charity_binding_presets });
     expect(
       screen.getByRole('switch', { name: common.common.agent.tools.charity_binding_presets }),
     ).toBeChecked();
@@ -260,7 +270,7 @@ describe('Agent administrator settings', () => {
   });
   it('does not publish a late driver reload after leaving the page', async () => {
     let finish!: (value: DriverSettings) => void;
-    const view = await mount();
+    const view = await mount('legacy');
     await screen.findByLabelText(common.common.connections.entryURL);
     mocks.driver.mockReturnValue(
       new Promise((resolve) => {
@@ -273,4 +283,31 @@ describe('Agent administrator settings', () => {
     await act(async () => finish({ ...driver, revision: '9', model: 'late model' }));
     expect(view.queryClient.getQueryData(['admin', 'ai', 'synthetic', 'driver'])).toEqual(driver);
   });
+});
+
+it('retains a tool draft when saving chat settings and clears its unsent search key on leaving Tools', async () => {
+  const { user } = await mount('tools');
+  const toggle = await screen.findByRole('switch', {
+    name: common.common.agent.tools.charity_binding_presets,
+  });
+  await user.click(toggle);
+  await user.click(screen.getByText(common.common.agent.webSearch, { selector: 'strong' }));
+  const secret = screen.getByLabelText(common.common.agent.searchKey);
+  await user.type(secret, 'temporary-search-key');
+  await user.click(screen.getByRole('tab', { name: common.common.agent.chatAndReview }));
+  const chat = await screen.findByRole('switch', { name: common.common.agent.chatEnabled });
+  await user.click(chat);
+  await user.click(within(chat.closest('form')!).getByRole('button', { name: common.common.save }));
+  await waitFor(() => expect(mocks.putSettings).toHaveBeenCalledOnce());
+  expect(mocks.putSettings.mock.calls[0]?.[0]).toMatchObject({
+    chat_enabled: true,
+    tools: settings.tools,
+  });
+  expect(mocks.putSettings.mock.calls[0]?.[0]).not.toHaveProperty('search_api_key');
+  await user.click(screen.getByRole('tab', { name: common.common.agent.toolsTitle }));
+  expect(
+    await screen.findByRole('switch', { name: common.common.agent.tools.charity_binding_presets }),
+  ).not.toBeChecked();
+  await user.click(screen.getByText(common.common.agent.webSearch, { selector: 'strong' }));
+  expect(screen.getByLabelText(common.common.agent.searchKey)).toHaveValue('');
 });

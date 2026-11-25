@@ -269,8 +269,8 @@ function EconomyCard({ accountId }: { accountId: string }) {
 }
 
 function useHomeOnboarding(accountId: string, sessionReady: boolean) {
-  const clientDone = useOnboardingFlag('client');
-  const hidden = useOnboardingFlag('hidden');
+  const clientDone = useOnboardingFlag(accountId, 'client');
+  const hidden = useOnboardingFlag(accountId, 'hidden');
   const enabled = sessionReady && !hidden;
   const key = useCallerKey(accountId, enabled);
   const firstPage = { page: '1', pageSize: 10 } as const;
@@ -288,7 +288,7 @@ function useHomeOnboarding(accountId: string, sessionReady: boolean) {
   const keyDone = Boolean(key.data?.metadata);
   const modelDone = Boolean(models.data?.data.length || charity.data?.models.length);
   const complete = keyDone && modelDone && clientDone;
-  return { hidden, keyDone, modelDone, clientDone, complete };
+  return { accountId, hidden, keyDone, modelDone, clientDone, complete };
 }
 
 function OnboardingChecklist({
@@ -356,13 +356,17 @@ function OnboardingChecklist({
       state: stateOf(2),
       title: t('user.home.clientStep'),
       description: clientDone ? undefined : t('user.home.clientHelp'),
-      children: clientDone ? null : <ApiAddressCopy />,
+      children: <ApiAddressCopy accountId={progress.accountId} />,
       action: guide(button(2)),
       doneAction: guide(quiet),
     },
   ];
   const hide = (
-    <button className={quiet} type="button" onClick={() => markOnboarding('hidden')}>
+    <button
+      className={quiet}
+      type="button"
+      onClick={() => markOnboarding(progress.accountId, 'hidden')}
+    >
       {t('user.home.hide')}
     </button>
   );
@@ -388,14 +392,12 @@ function OnboardingChecklist({
           {hide}
         </div>
       </div>
-      {!complete ? (
-        <Stepper
-          className="home-checklist"
-          label={t('user.home.getStarted')}
-          doneLabel={t('user.home.stepDone')}
-          steps={steps}
-        />
-      ) : null}
+      <Stepper
+        className="home-checklist"
+        label={t('user.home.getStarted')}
+        doneLabel={t('user.home.stepDone')}
+        steps={steps}
+      />
     </section>
   );
 }
@@ -706,7 +708,10 @@ function GamesSection({ accountId, adapters }: { accountId: string; adapters: Ho
                 <Link
                   key={`${item.route_id}:${item.kind}:${item.resource_id}`}
                   className="core-choice"
-                  to={GAME_PATHS[item.route_id]}
+                  to={
+                    GAME_PATHS[item.route_id] +
+                    (/^(bidc|likc|gwtc)_/.test(item.resource_id) ? '?opponent=companion' : '')
+                  }
                 >
                   <strong>{t(GAME_LABELS[item.route_id])}</strong>
                   <StatusBadge tone={item.kind === 'continue' ? 'accent' : 'neutral'}>
@@ -735,7 +740,6 @@ export function HomeDashboard({
   const { t: text } = useRegisteredCopy(pageCopyKeys);
   const onboarding = useHomeOnboarding(user.id, sessionReady);
   const [guideRequested, setGuideRequested] = useState(false);
-  const guideFirst = !onboarding.complete || guideRequested;
   const guide = onboarding.hidden ? null : (
     <OnboardingChecklist progress={onboarding} focusOnShow={guideRequested} />
   );
@@ -752,7 +756,7 @@ export function HomeDashboard({
                 className="nb-btn nb-btn--ghost nb-btn--sm"
                 onClick={() => {
                   setGuideRequested(true);
-                  markOnboarding('hidden', false);
+                  markOnboarding(user.id, 'hidden', false);
                 }}
               >
                 {text('user.home.showGuide')}
@@ -762,7 +766,7 @@ export function HomeDashboard({
         />
         <WhaleHavenEntry enabled={sessionReady} />
       </div>
-      {guideFirst ? guide : null}
+      {guide}
       <div className="home-daily">
         <EconomyCard accountId={user.id} />
         <CheckinSection accountId={user.id} adapters={adapters} />
@@ -774,7 +778,6 @@ export function HomeDashboard({
         sessionReady={sessionReady}
       />
       <GamesSection accountId={user.id} adapters={adapters} />
-      {guideFirst ? null : guide}
     </div>
   );
 }

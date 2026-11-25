@@ -44,7 +44,7 @@
 }
 .nb-pager button[aria-current='page'] {
   background: var(--nb-color-accent);
-  color: var(--nb-color-on-accent);
+  color: var(--nb-color-accent-contrast);
   font-weight: var(--nb-font-weight-semibold);
 }
 .nb-pager button:disabled {
@@ -78,6 +78,7 @@
   display: none;
 }
 @media (width <= 40rem) {
+  .pagination.nb-pager .nb-pager__mobile { display: inline; }
   .pagination.nb-pager .nb-pager__size {
     display: flex;
   }

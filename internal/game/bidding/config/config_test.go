@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -143,10 +144,15 @@ func TestDescriptorIsIndependentAndClosed(t *testing.T) {
 	if err := registry.Seal(); err != nil {
 		t.Fatal(err)
 	}
-	if descriptor.ID != "bidding" || descriptor.Version != 1 || descriptor.StableOrder != 3 || len(descriptor.Onboarding) != 4 || len(descriptor.Routes) != 21 {
+	if descriptor.ID != "bidding" || descriptor.Version != 1 || descriptor.StableOrder != 3 || len(descriptor.Onboarding) != 4 {
 		t.Fatal("incorrect module contract")
 	}
-	for _, id := range []string{"bid_AAAAAAAAAAAAAAAAAAAAAA", "bidq_AAAAAAAAAAAAAAAAAAAAAA", "aiq_AAAAAAAAAAAAAAAAAAAAAA"} {
+	for _, suffix := range []string{"/companion", "/companion/matches/{id}/replay"} {
+		if !slices.Contains(descriptor.Routes, game.RouteDeclaration{Station: "user", Method: "GET", Pattern: "/api/games/bidding" + suffix}) {
+			t.Fatalf("missing companion route %s", suffix)
+		}
+	}
+	for _, id := range []string{"bidc_AAAAAAAAAAAAAAAAAAAAAA", "bid_AAAAAAAAAAAAAAAAAAAAAA", "bidq_AAAAAAAAAAAAAAAAAAAAAA", "aiq_AAAAAAAAAAAAAAAAAAAAAA"} {
 		if !descriptor.ValidResource(id) {
 			t.Fatalf("valid resource rejected: %s", id)
 		}

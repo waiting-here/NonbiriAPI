@@ -469,7 +469,25 @@ func (r *Runtime) userEnvelopeTx(ctx context.Context, tx *sql.Tx, userID int64, 
 	if err != nil {
 		return UserEnvelope{}, err
 	}
-	return UserEnvelope{User: User{StewardPermissions: permissions, ID: strconv.FormatInt(u.id, 10), Username: u.username, Avatar: stringPtr(u.avatar), AvatarURL: discordAvatarURL(u.discordID, u.avatar), GuildNick: stringPtr(u.guildNick), GuildAvatarURL: stringPtr(u.guildAvatarURL), Lang: u.lang, IsBanned: u.isBanned && (!u.bannedUntil.Valid || u.bannedUntil.Int64 > now), BannedUntil: nullableFuture(u.bannedUntil, now), CharitySuspendedUntil: nullableFuture(u.charityUntil, now), EndpointLimit: nullableDecimal(u.endpointLimit), EffectiveEndpointLimit: effectiveLimit(u.endpointLimit, endpointDefault), RPMLimit: nullableDecimal(u.rpmLimit), EffectiveRPMLimit: effectiveLimit(u.rpmLimit, rpmDefault), ConcurrencyLimit: nullableDecimal(u.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(u.concurrencyLimit, concurrencyDefault), LightRPMLimit: nullableDecimal(u.lightRPMLimit), EffectiveLightRPMLimit: effectiveLimit(u.lightRPMLimit, lightRPMDefault), LightConcurrencyLimit: nullableDecimal(u.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(u.lightConcurrencyLimit, lightConcurrencyDefault), GlobalRPMLimit: nullableDecimal(u.globalRPMLimit), EffectiveGlobalRPMLimit: effectiveLimit(u.globalRPMLimit, globalRPMDefault), Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()), EffectiveLevel: effective, LevelDisplayName: display, GameProfilePublic: u.gamePublic, CharityProfilePublic: u.charityPublic, AutomaticRestrictions: restrictions, CreatedAt: u.createdAt, UpdatedAt: u.updatedAt, Usage: UsageSummary{TotalRequests: values[0].Decimal(), TotalUncachedInputTokens: values[1].Decimal(), TotalCacheWriteInputTokens: values[2].Decimal(), TotalCacheReadInputTokens: values[3].Decimal(), TotalOutputTokens: values[4].Decimal(), TotalPromptTokens: prompt.String(), TotalCompletionTokens: values[4].Decimal(), TotalUnknownUsageRequests: values[5].Decimal()}}}, nil
+	var blocked []string
+	if effective == 5 {
+		for _, limit := range []struct {
+			field, grant, ceiling string
+			value                 int64
+		}{
+			{"endpoint_limit", "users.profile", "users.endpoint_limit_max", endpointDefault},
+			{"rpm_limit", "users.limits", "users.rpm_limit_max", rpmDefault},
+			{"light_rpm_limit", "users.limits", "users.rpm_limit_max", lightRPMDefault},
+			{"global_rpm_limit", "users.limits", "users.rpm_limit_max", globalRPMDefault},
+			{"concurrency_limit", "users.limits", "users.concurrency_limit_max", concurrencyDefault},
+			{"light_concurrency_limit", "users.limits", "users.concurrency_limit_max", lightConcurrencyDefault},
+		} {
+			if permissions.Permissions[limit.grant] && !permissions.AllowsUserLimit(limit.ceiling, limit.value) {
+				blocked = append(blocked, limit.field)
+			}
+		}
+	}
+	return UserEnvelope{User: User{BlockedInheritedLimits: blocked, StewardPermissions: permissions, ID: strconv.FormatInt(u.id, 10), Username: u.username, Avatar: stringPtr(u.avatar), AvatarURL: discordAvatarURL(u.discordID, u.avatar), GuildNick: stringPtr(u.guildNick), GuildAvatarURL: stringPtr(u.guildAvatarURL), Lang: u.lang, IsBanned: u.isBanned && (!u.bannedUntil.Valid || u.bannedUntil.Int64 > now), BannedUntil: nullableFuture(u.bannedUntil, now), CharitySuspendedUntil: nullableFuture(u.charityUntil, now), EndpointLimit: nullableDecimal(u.endpointLimit), EffectiveEndpointLimit: effectiveLimit(u.endpointLimit, endpointDefault), RPMLimit: nullableDecimal(u.rpmLimit), EffectiveRPMLimit: effectiveLimit(u.rpmLimit, rpmDefault), ConcurrencyLimit: nullableDecimal(u.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(u.concurrencyLimit, concurrencyDefault), LightRPMLimit: nullableDecimal(u.lightRPMLimit), EffectiveLightRPMLimit: effectiveLimit(u.lightRPMLimit, lightRPMDefault), LightConcurrencyLimit: nullableDecimal(u.lightConcurrencyLimit), EffectiveLightConcurrencyLimit: effectiveLimit(u.lightConcurrencyLimit, lightConcurrencyDefault), GlobalRPMLimit: nullableDecimal(u.globalRPMLimit), EffectiveGlobalRPMLimit: effectiveLimit(u.globalRPMLimit, globalRPMDefault), Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()), EffectiveLevel: effective, LevelDisplayName: display, GameProfilePublic: u.gamePublic, CharityProfilePublic: u.charityPublic, AutomaticRestrictions: restrictions, CreatedAt: u.createdAt, UpdatedAt: u.updatedAt, Usage: UsageSummary{TotalRequests: values[0].Decimal(), TotalUncachedInputTokens: values[1].Decimal(), TotalCacheWriteInputTokens: values[2].Decimal(), TotalCacheReadInputTokens: values[3].Decimal(), TotalOutputTokens: values[4].Decimal(), TotalPromptTokens: prompt.String(), TotalCompletionTokens: values[4].Decimal(), TotalUnknownUsageRequests: values[5].Decimal()}}}, nil
 }
 
 func (r *Runtime) readUserEnvelope(ctx context.Context, userID int64) (UserEnvelope, error) {

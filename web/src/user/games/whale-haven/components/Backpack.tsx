@@ -1,4 +1,4 @@
-import { useWhaleText } from '../copy';
+import { conchRewardCopy, useWhaleText } from '../copy';
 import { useState } from 'react';
 import { Amount } from '@shared/components/Amount';
 import { Sparkles } from './Icons';
@@ -81,6 +81,10 @@ export function Backpack({
 
   const shards = snapshot.wallet.conchShards ?? 0;
   const pullCost = values.conch_cost_shards;
+  const recentDraw = conchRewardCopy(
+    snapshot.logs.find((entry) => entry.kind === 'gacha')?.conchReward,
+    t,
+  );
 
   return (
     <>
@@ -217,6 +221,14 @@ export function Backpack({
           </span>
         </div>
 
+        {recentDraw && (
+          <p className="wh-detail">
+            <strong>{t(`最近抽到${recentDraw.name}`, `Last draw · ${recentDraw.name}`)}</strong>
+            {' · '}
+            {recentDraw.destination}
+          </p>
+        )}
+
         <div className="conch-gacha-hero">
           <div className="conch-gacha-hero__art">
             <img
@@ -233,12 +245,28 @@ export function Backpack({
             </p>
             <div className="conch-gacha-prizes">
               {CONCH_GACHA_POOL.map((g) => (
-                <span key={g.id} className="conch-prize-pill" title={g.description}>
-                  {g.artwork ? <img src={getSceneAssetUrl(g.artwork)} alt="" /> : g.emoji}
-                  {g.name.split('（')[0].split(' ×')[0]}
+                <span key={g.id} className="conch-prize-pill" title={t(...g.description)}>
+                  {g.artwork ? (
+                    <img src={getSceneAssetUrl(g.artwork)} alt="" />
+                  ) : (
+                    <span aria-hidden="true">{g.emoji}</span>
+                  )}
+                  {t(...g.name)}
                 </span>
               ))}
             </div>
+            <p>
+              {t(
+                '抽到海盐牛奶糖时，小鲸会当场吃掉。',
+                'Your whale eats sea salt milk candy as soon as you draw it.',
+              )}
+              {Number.isFinite(values.candy_mood) &&
+                Number.isFinite(values.candy_affection) &&
+                t(
+                  `心情变为 ${values.candy_mood}，羁绊 +${values.candy_affection}。`,
+                  ` Mood becomes ${values.candy_mood} and Bond XP increases by ${values.candy_affection}.`,
+                )}
+            </p>
           </div>
         </div>
 
@@ -260,6 +288,15 @@ export function Backpack({
                   )}
                 </small>
               </UiSwitch>
+              {(values.feed_silver_fish_grams > values.trough_grams ||
+                values.feed_sweet_shrimp_grams > values.trough_grams) && (
+                <small className="wh-detail">
+                  {t(
+                    '自动续饭只用整份装得下的主粮。大份口粮可手动盛入。',
+                    'Refill tickets only use servings that fit. You can add a larger serving by hand.',
+                  )}
+                </small>
+              )}
             </div>
           </div>
 
@@ -296,8 +333,15 @@ export function Backpack({
                 <img src={getSceneAssetUrl('props/buff-tailor-coupon.webp')} alt="" />
               </span>
               <span>
-                已持有 <strong>裁缝海螺券 ×{buffs.wardrobeDiscountCoupons}</strong>
-                ，下次解锁新服装或家具自动省 {values.coupon_discount_bp / 100}% 小鲸币！
+                <strong>
+                  {t('裁缝海螺券', 'Tailor coupon')} ×{buffs.wardrobeDiscountCoupons}
+                </strong>
+                <small className="wh-detail">
+                  {t(
+                    `券面减免 ${values.coupon_discount_bp / 100}%。解锁新衣装或家具时，能省小鲸币才会用券。`,
+                    `${values.coupon_discount_bp / 100}% off new outfits and furnishings. A coupon is used only when it saves coins.`,
+                  )}
+                </small>
               </span>
             </div>
           )}

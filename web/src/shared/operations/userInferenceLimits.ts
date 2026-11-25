@@ -1,3 +1,4 @@
+import type { StewardPermissions } from './stewardPermissions';
 import type { AdminUser, ManagementRole } from './managedUsers';
 
 export const INFERENCE_LIMITS = [
@@ -8,9 +9,26 @@ export const INFERENCE_LIMITS = [
   { key: 'light_concurrency_limit', label: 'management.users.lightConcurrencyLimit', max: 100000 },
 ] as const;
 export type InferenceLimitKey = (typeof INFERENCE_LIMITS)[number]['key'];
+export type ManagedLimitKey = 'endpoint_limit' | InferenceLimitKey;
 export type InferenceLimitDraft = Record<InferenceLimitKey, string>;
 export type InferenceLimitPatch = Partial<Record<InferenceLimitKey, string | null>>;
 
+export function inferenceCeiling(
+  key: InferenceLimitKey,
+  maximum: number,
+  limits?: StewardPermissions['limits'],
+) {
+  return limits
+    ? Math.min(
+        maximum,
+        Number(
+          limits[
+            key.includes('concurrency') ? 'users.concurrency_limit_max' : 'users.rpm_limit_max'
+          ],
+        ),
+      )
+    : maximum;
+}
 export function canEditInferenceLimits(
   user: AdminUser,
   role: ManagementRole,

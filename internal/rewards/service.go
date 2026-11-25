@@ -296,7 +296,14 @@ func cursorValue(cursor string) (int64, error) {
 	return v, nil
 }
 func (s *Service) List(ctx context.Context, actor int64, cursor string) (CampaignPage, error) {
+	return s.list(ctx, actor, cursor, "")
+}
+
+func (s *Service) list(ctx context.Context, actor int64, cursor, kind string) (CampaignPage, error) {
 	out := CampaignPage{Items: []Campaign{}}
+	if kind != "" && kind != "broadcast" && kind != "code" {
+		return out, ErrInvalid
+	}
 	before, err := cursorValue(cursor)
 	if err != nil {
 		return out, err
@@ -309,7 +316,13 @@ func (s *Service) List(ctx context.Context, actor int64, cursor string) (Campaig
 	if err = s.config.Admins.AuthorizeAdmin(ctx, tx, actor); err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT rowid,id FROM reward_campaigns WHERE rowid<? ORDER BY rowid DESC LIMIT 51", before)
+	query := "SELECT rowid,id FROM reward_campaigns WHERE rowid<?"
+	args := []any{before}
+	if kind != "" {
+		query += " AND kind=?"
+		args = append(args, kind)
+	}
+	rows, err := tx.QueryContext(ctx, query+" ORDER BY rowid DESC LIMIT 51", args...)
 	if err != nil {
 		return out, err
 	}

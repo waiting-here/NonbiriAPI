@@ -176,6 +176,17 @@ func (g *responseGuard) ContainsBytes(data []byte) bool {
 	return g.matched
 }
 
+// containsSourceJSON checks one complete source without advancing the wire
+// guard's rolling state with bytes that will be replaced before delivery.
+func (g *responseGuard) containsSourceJSON(data []byte) bool {
+	if g == nil {
+		return false
+	}
+	source := &responseGuard{wire: g.template.clone(), template: g.template.clone(), paths: make(map[string]*sensitiveGuard)}
+	defer source.Clear()
+	return source.ContainsJSON(data, data)
+}
+
 // ContainsJSON scans the exact bytes about to cross the wire and the decoded
 // JSON string values. Array positions are normalized in semantic paths so
 // successive choice/content blocks share one rolling detector. Any malformed,

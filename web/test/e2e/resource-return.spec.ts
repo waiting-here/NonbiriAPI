@@ -252,7 +252,7 @@ test('entry detail keeps connection list return state through nested paging, ref
   expect(new URL(page.url()).searchParams.get('service-endpoint-switch_page')).toBe('2');
   await expect(page.getByRole('heading', { name: endpoint.note, exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Add key', exact: true }).click();
+  await page.getByRole('button', { name: /Add key$/ }).click();
   await page.locator('input[type="password"]').fill(EPHEMERAL_MARKER);
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
 

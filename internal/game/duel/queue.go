@@ -27,10 +27,7 @@ type cancelBody struct {
 }
 
 func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult, error) {
-	if in.Mode == "ai" {
-		return s.enqueueAI(ctx, in)
-	}
-	if in.BotID != "" {
+	if in.Mode == "ai" || in.BotID != "" {
 		return MutationResult{}, ErrInvalidRequest
 	}
 	if s.descriptor.ResolveMode(in.Mode) != nil || len(in.ExpectedTermsHash) != 64 {
@@ -92,7 +89,7 @@ func (s *Service) Enqueue(ctx context.Context, in EnqueueInput) (MutationResult,
 		return MutationResult{}, ErrForbidden
 	}
 	var occupied int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_duel_user_slots WHERE user_id=? AND game_key=?`, in.UserID, s.rules.ID()).Scan(&occupied); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM game_duel_user_slots WHERE user_id=? AND game_key=?) OR EXISTS(SELECT 1 FROM companion_matches WHERE user_id=? AND game=? AND status='active')`, in.UserID, s.rules.ID(), in.UserID, s.rules.ID()).Scan(&occupied); err != nil {
 		return MutationResult{}, err
 	}
 	if occupied != 0 {
@@ -199,9 +196,6 @@ func (s *Service) releaseQueue(ctx context.Context, tx *sql.Tx, q queueRecord, a
 	}))
 }
 func (s *Service) CancelQueue(ctx context.Context, in CancelInput) (MutationResult, error) {
-	if db.ValidateOpaqueID(in.QueueID, s.aiQueuePrefix) {
-		return s.cancelAIQueue(ctx, in)
-	}
 	expected, err := db.ParseU128Decimal(in.ExpectedRevision)
 	if err != nil || expected.Big().Sign() <= 0 || !db.ValidateOpaqueID(in.QueueID, s.queuePrefix) {
 		return MutationResult{}, ErrInvalidRequest

@@ -13,9 +13,8 @@ import { GatewayConnectorLabel } from '@shared/components/GatewayConnectorLabel'
 import { MODEL_TYPES, MODEL_TYPE_LABEL_KEYS, type ModelType } from '@shared/modelTypes';
 import { Button } from '@shared/components/ui/Button';
 import { Link, useLocation } from 'react-router';
-import { charityManagementPath } from './managementNavigation';
+import { charityManagementPath, withLogContext } from './managementNavigation';
 import { clearStationSession } from '@shared/charityManagement';
-import { QueryFeedback } from '@shared/components/QueryFeedback';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
 import { formatCredits } from '../../../user/games/common/strict';
 import { Fold, Note, StatusBadge } from '@shared/components/ui';
@@ -30,13 +29,14 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isApiError, isUnauthorized } from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
+import { useStationSessionSnapshot } from '@shared/query/useStationSessionSnapshot';
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import { attemptHealthSummary } from './attemptHealthText';
@@ -53,6 +53,7 @@ import {
   type LogRole,
   type LogRouteKind,
   type RoleLogRow,
+  type RoleLogAttempt,
 } from './data';
 import { InspectionWorkspace } from './InspectionWorkspace';
 import { listReturnPath } from '@shared/operations/listReturn';
@@ -63,6 +64,7 @@ import { LogFilters, LogSearch, type LogFilterField } from './LogFilters';
 import { LogOriginIdentity } from './LogOriginIdentity';
 import { LogResultBadge, logResult, logResultCopyKey } from './LogResult';
 import { LogTable, type LogColumn } from './LogTable';
+import { LogSearchFeedback } from './LogSearchFeedback';
 import {
   numberedLogKeys,
   useRoleLogDetailPage,
@@ -72,7 +74,7 @@ import {
 import { rejectionDescriptionKeys } from './rejectionDescriptions';
 import { TokenBuckets } from './TokenBuckets';
 import { HeaderFacts } from './HeaderFacts';
-import { useLogUrlState } from './useLogUrlState';
+import { relativeLogSeconds, useLogUrlState, type RelativeLogRange } from './useLogUrlState';
 import { ATTEMPT_SEQ_PARAM, logAttemptSequence } from './managementFailures';
 import {
   AttemptFailureSummary,
@@ -81,6 +83,18 @@ import {
   AttemptService,
   FailureStreak,
 } from './ManagementAttemptFailures';
+
+function failedAttempt(attempt: RoleLogAttempt): boolean {
+  return (
+    (attempt.status_code ?? 0) >= 400 ||
+    Boolean(
+      attempt.error_diagnostics ||
+      (attempt.result_kind === 'synthetic' && attempt.diag) ||
+      (attempt.role !== 'user' &&
+        (attempt.failure_disablement || attempt.health_impact?.streak_effect === 'incremented')),
+    )
+  );
+}
 
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   openai_chat_completions: 'common.operations.logs.route.openaiChatCompletions',
@@ -170,34 +184,36 @@ function useStationScope(
   explicitAccountID: string | undefined,
   explicitScopeReady: boolean | undefined,
 ) {
-  const queryClient = useQueryClient();
-  const sessionKey = useMemo(
-    () => (role === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const)),
-    [role],
-  );
-  const subscribe = useCallback(
-    (notify: () => void) =>
-      queryClient.getQueryCache().subscribe((event) => {
-        if (
-          event.query.queryKey.length === 2 &&
-          event.query.queryKey[0] === sessionKey[0] &&
-          event.query.queryKey[1] === 'session'
-        )
-          notify();
-      }),
-    [queryClient, sessionKey],
-  );
-  const snapshot = useCallback(
-    () => queryClient.getQueryState(sessionKey),
-    [queryClient, sessionKey],
-  );
-  const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const session = useStationSessionSnapshot(role === 'admin' ? 'admin' : 'user');
   const derivedAccountID = sessionIdentity(role, session?.data);
   const accountID = explicitAccountID ?? derivedAccountID ?? '';
   const scopeReady = explicitScopeReady ?? (accountID.length > 0 && !session?.error);
   return { accountID, scopeReady, sessionError: session?.error };
 }
 
+function DiagnosticValue({
+  value,
+  label,
+  onFilter,
+}: {
+  value: string | null | undefined;
+  label: string;
+  onFilter?: (value: string) => void;
+}) {
+  const { t } = useTranslation();
+  return value ? (
+    <span className="ops-actions">
+      <CopyValue value={value} label={label} />
+      {onFilter && (
+        <Button type="button" size="sm" onClick={() => onFilter(value)}>
+          {t('common.logFilterValue')}
+        </Button>
+      )}
+    </span>
+  ) : (
+    <>—</>
+  );
+}
 function AttemptTable({
   detail,
   role,
@@ -211,8 +227,11 @@ function AttemptTable({
   logReturnTo,
   focusAttemptSeq,
   locatingFocus,
+  filterBy,
   canReadModels,
+  readFailureMetadata,
 }: {
+  readFailureMetadata?: string;
   logReturnTo: string;
   detail: NumberedRoleLogDetail;
   role: LogRole;
@@ -225,17 +244,25 @@ function AttemptTable({
   onPageSizeChange: (size: PageSize) => void;
   focusAttemptSeq?: string;
   locatingFocus: boolean;
+  filterBy: (field: string, value: string) => void;
   canReadModels: boolean;
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const location = useLocation();
   const isDiscovery = detail.request.route_kind === 'model_discovery';
   const managedCharityRequest =
     detail.request.role !== 'user' && isCharityRoute(detail.request.route_kind)
       ? detail.request
       : undefined;
   const [previousFocus, setPreviousFocus] = useState(focusAttemptSeq);
-  const [open, setOpen] = useState(isDiscovery || focusAttemptSeq !== undefined);
+  const [open, setOpen] = useState(
+    isDiscovery ||
+      focusAttemptSeq !== undefined ||
+      (detail.request.caller_status ?? 0) >= 400 ||
+      Boolean(detail.request.caller_error_code) ||
+      ('attempts' in detail && detail.attempts.data.some(failedAttempt)),
+  );
   if (focusAttemptSeq !== previousFocus) {
     setPreviousFocus(focusAttemptSeq);
     if (focusAttemptSeq !== undefined) setOpen(true);
@@ -357,7 +384,15 @@ function AttemptTable({
                   )}
                 <div>
                   <dt>{t('logs.endpointBaseUrl')}</dt>
-                  <dd className="mono">{attempt.endpoint_base_url}</dd>
+                  <dd>
+                    <DiagnosticValue
+                      value={attempt.endpoint_base_url}
+                      label={t('logs.endpointBaseUrl')}
+                      onFilter={
+                        role !== 'user' ? (v) => filterBy('endpoint_base_url', v) : undefined
+                      }
+                    />
+                  </dd>
                 </div>
                 {'endpoint_note' in attempt && (attempt.endpoint_note || attempt.key_note) ? (
                   <div>
@@ -369,14 +404,24 @@ function AttemptTable({
                 ) : null}
                 <div>
                   <dt>{t('common.operations.logs.endpointKeyId')}</dt>
-                  <dd className="mono">{attempt.endpoint_key_id ?? '—'}</dd>
+                  <dd>
+                    <DiagnosticValue
+                      value={attempt.endpoint_key_id}
+                      label={t('common.operations.logs.endpointKeyId')}
+                      onFilter={role !== 'user' ? (v) => filterBy('endpoint_key_id', v) : undefined}
+                    />
+                  </dd>
                 </div>
                 <div>
                   <dt>{t('common.operations.logs.connectorModel')}</dt>
                   <dd>
                     <GatewayConnectorLabel value={attempt.connector_type} />
                     <br />
-                    <span className="mono">{attempt.upstream_model_id}</span>
+                    <DiagnosticValue
+                      value={attempt.upstream_model_id}
+                      label={t('common.operations.logs.connectorModel')}
+                      onFilter={role !== 'user' ? (v) => filterBy('upstream_model', v) : undefined}
+                    />
                   </dd>
                 </div>
                 <div>
@@ -433,15 +478,18 @@ function AttemptTable({
                   <div className="ops-actions">
                     <Link
                       className="nb-btn nb-btn--secondary"
-                      to={charityManagementPath(
-                        attempt.role,
-                        managedCharityRequest.charity_model_id,
-                        {
-                          donationID: attempt.donation_id,
-                          keyID: attempt.donation_key_id,
-                        },
+                      to={withLogContext(
+                        charityManagementPath(
+                          attempt.role,
+                          managedCharityRequest.charity_model_id,
+                          {
+                            donationID: attempt.donation_id,
+                            keyID: attempt.donation_key_id,
+                          },
+                        ),
+                        logReturnTo,
                       )}
-                      state={{ logReturnTo }}
+                      state={{ logReturnTo, logPrivate: location.state?.logPrivate }}
                     >
                       {t('common.operations.logs.manageCharityKey')}
                     </Link>
@@ -460,6 +508,7 @@ function AttemptTable({
               ) : null}
               {role !== 'user' ? (
                 <AttemptErrors
+                  readMetadata={readFailureMetadata === attempt.attempt_seq}
                   role={role}
                   requestID={detail.request.id}
                   attempt={Number(attempt.attempt_seq)}
@@ -596,18 +645,38 @@ function ScopedRoleLogPanel({
   const { state: urlState, patch: patchUrlState } = useLogUrlState(
     textParams,
     LOG_DEFAULT_PAGE_SIZE,
+    scopeReady && accountID ? role + ':' + accountID : '',
+  );
+  const [relativeWindow, setRelativeWindow] = useState(() => ({
+    range: urlState.range,
+    end: Math.floor(Date.now() / 1000),
+  }));
+  const relativeWindowReady = relativeWindow.range === urlState.range;
+  useEffect(() => {
+    if (relativeWindowReady) return;
+    const update = window.setTimeout(() => {
+      setRelativeWindow({ range: urlState.range, end: Math.floor(Date.now() / 1000) });
+    }, 0);
+    return () => window.clearTimeout(update);
+  }, [relativeWindowReady, urlState.range]);
+  const windowEnd = relativeWindow.end;
+  const setWindowEnd = (end: number) => setRelativeWindow({ range: urlState.range, end });
+  const appliedFilters = useMemo(
+    () => validateLogFilter(role, urlState.filters),
+    [role, urlState.filters],
   );
   const filter = useMemo(() => {
-    const next = validateLogFilter(role, urlState.filters);
-    const from = urlState.fromUnix;
-    const to = urlState.toUnix;
+    const from = urlState.range
+      ? windowEnd - relativeLogSeconds[urlState.range]
+      : urlState.fromUnix;
+    const to = urlState.range ? windowEnd : urlState.toUnix;
     return {
-      ...next,
+      ...appliedFilters,
       ...(from === undefined ? {} : { from }),
       ...(to === undefined ? {} : { to }),
     } satisfies LogFiltersValue;
-  }, [role, urlState.filters, urlState.fromUnix, urlState.toUnix]);
-  const filterKey = useMemo(() => JSON.stringify(filter), [filter]);
+  }, [appliedFilters, urlState.fromUnix, urlState.toUnix, urlState.range, windowEnd]);
+  const filterKey = JSON.stringify(urlState.range ? [urlState.range, appliedFilters] : filter);
   const pager = useUrlPagePager({
     station: pageStation,
     listType: 'logs',
@@ -655,8 +724,19 @@ function ScopedRoleLogPanel({
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
   const observerEnabled = enabled && scopeReady && !revoked;
-  const listEnabled = observerEnabled && !invalidFilter;
+  const listEnabled = observerEnabled && !invalidFilter && (!urlState.range || relativeWindowReady);
   const logs = useRoleLogsPage(role, accountID, pager.page, pager.pageSize, filter, listEnabled);
+  const refreshOnFocus = useEffectEvent(() => {
+    if (!logs.settledOrdinaryResult()) return;
+    const now = Math.floor(Date.now() / 1000);
+    if (now !== windowEnd) setWindowEnd(now);
+  });
+  useEffect(() => {
+    if (!urlState.range) return;
+    const refresh = () => refreshOnFocus();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [urlState.range]);
   const detail = useRoleLogDetailPage(
     role,
     accountID,
@@ -847,16 +927,18 @@ function ScopedRoleLogPanel({
       ? listReturnPath({ returnTo: searchParams.get('return_to') }, '/alerts')
       : undefined;
   const [lookupReset, setLookupReset] = useState(0);
+  const [jump, setJump] = useState<{ request: string; seq: string }>();
   const clearDetailURL = () => {
     setSearchParams(
       (previous) => {
         const next = new URLSearchParams(previous);
-        next.delete('return_to');
+        if (!alertOrigin) next.delete('return_to');
         next.delete('request_id');
         next.delete('attempt_page');
         next.delete('attempt_page_size');
         next.delete(ATTEMPT_SEQ_PARAM);
-        const actualPage = logs.data?.pagination.page;
+        const actualPage =
+          logs.searchStatus === 'complete' ? logs.data?.pagination.page : undefined;
         if (actualPage !== undefined) next.set('page', actualPage);
         next.set('page_size', String(pager.pageSize));
         return next;
@@ -865,17 +947,19 @@ function ScopedRoleLogPanel({
     );
   };
   const closeDetail = () => {
+    setJump(undefined);
     setSelectedID(null);
     onRequestClose?.();
     clearDetailURL();
   };
   const openDetail = (id: string) => {
+    setJump(undefined);
     setSelectedID(id);
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      next.delete('return_to');
+      if (!alertOrigin) next.delete('return_to');
       next.set('request_id', id);
-      const actualPage = logs.data?.pagination.page;
+      const actualPage = logs.searchStatus === 'complete' ? logs.data?.pagination.page : undefined;
       if (actualPage !== undefined) next.set('page', actualPage);
       next.set('page_size', String(pager.pageSize));
       next.delete('attempt_page');
@@ -889,13 +973,31 @@ function ScopedRoleLogPanel({
       filters: Record<string, string>;
       fromUnix?: number;
       toUnix?: number;
+      range?: RelativeLogRange;
     },
     keepFilters?: readonly string[],
   ) => {
+    const nextEnd =
+      next.range && next.range === urlState.range ? Math.floor(Date.now() / 1000) : windowEnd;
+    if (nextEnd !== windowEnd) setWindowEnd(nextEnd);
+    const currentFilters =
+      nextEnd === windowEnd &&
+      next.range === urlState.range &&
+      next.fromUnix === urlState.fromUnix &&
+      next.toUnix === urlState.toUnix &&
+      JSON.stringify(validateLogFilter(role, next.filters)) === JSON.stringify(appliedFilters);
+    if (!invalidFilter && currentFilters && pager.page === '1') {
+      if (logs.searchStatus === 'canceled') logs.refresh();
+      if (logs.searchStatus === 'error') logs.retry();
+    }
     setSelectedID(null);
     patchUrlState({ ...next, page: 1 }, { clearDetail: true, keepFilters });
   };
 
+  const filterBy = (field: string, value: string) => {
+    if (!textParams.some((name) => name === field)) return;
+    applyFilters({ ...urlState, filters: { ...urlState.filters, [field]: value } });
+  };
   const routeSummary = (route: LogRouteKind) =>
     route === 'model_discovery'
       ? t('common.operations.logs.presentation.models')
@@ -1048,6 +1150,25 @@ function ScopedRoleLogPanel({
         </>
       ),
     },
+    {
+      key: 'elapsed',
+      header: t('common.logDuration'),
+      cell: 'meta',
+      render: (row) => (
+        <>
+          {row.completed_at === null
+            ? '—'
+            : t('common.operations.logs.presentation.seconds', {
+                seconds: row.completed_at - row.started_at,
+              })}
+          {'attempt_count' in row && (
+            <span className="nb-sub">
+              {t('common.operations.logs.attempts')} · {row.attempt_count}
+            </span>
+          )}
+        </>
+      ),
+    },
     { key: 'usage', header: t('logs.tokens'), cell: 'meta', align: 'num', render: usageCell },
     {
       key: 'charge',
@@ -1067,8 +1188,8 @@ function ScopedRoleLogPanel({
       row.charity_model_id ? (
         <Link
           className="nb-btn nb-btn--secondary"
-          to={charityManagementPath(row.role, row.charity_model_id)}
-          state={{ logReturnTo }}
+          to={withLogContext(charityManagementPath(row.role, row.charity_model_id), logReturnTo)}
+          state={{ logReturnTo, logPrivate: location.state?.logPrivate }}
         >
           {t('common.operations.logs.manageCharityModel')}
         </Link>
@@ -1241,7 +1362,13 @@ function ScopedRoleLogPanel({
           {
             label: t('common.operations.logs.callerError'),
             technical: true,
-            value: <span className="mono">{detailRequest.caller_error_code ?? '—'}</span>,
+            value: (
+              <DiagnosticValue
+                value={detailRequest.caller_error_code}
+                label={t('logs.errorCode')}
+                onFilter={(v) => filterBy('error_code', v)}
+              />
+            ),
           },
           {
             label: t('logs.tokens'),
@@ -1325,7 +1452,10 @@ function ScopedRoleLogPanel({
     );
 
   const pageData = invalidFilter ? undefined : retainedLogData;
-  const listBusy = logs.isFetching;
+  const listBusy = logs.isFetching || logs.searchStatus === 'canceling';
+  const listComplete = logs.searchStatus === 'complete';
+  const hasRows = Boolean(pageData?.data.length);
+  const selectedIndex = pageData?.data.findIndex((row) => row.id === selectedID) ?? -1;
   const exportMenu = !invalidFilter ? (
     <details className="nb-more log-export">
       <summary className="nb-btn nb-btn--secondary nb-btn--sm">
@@ -1361,6 +1491,24 @@ function ScopedRoleLogPanel({
         onClose={closeDetail}
         detail={
           <LogReadError value={setRevokedError}>
+            {pageData && selectedIndex >= 0 && (
+              <div className="ops-actions">
+                <Button
+                  type="button"
+                  disabled={selectedIndex === 0}
+                  onClick={() => openDetail(pageData.data[selectedIndex - 1].id)}
+                >
+                  {t('common.logAdjacentPrevious')}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={selectedIndex + 1 >= pageData.data.length}
+                  onClick={() => openDetail(pageData.data[selectedIndex + 1].id)}
+                >
+                  {t('common.logAdjacentNext')}
+                </Button>
+              </div>
+            )}
             {alertOrigin && (
               <Link className="nb-btn nb-btn--secondary" to={alertOrigin}>
                 {t('logs.returnToAlert')}
@@ -1447,13 +1595,31 @@ function ScopedRoleLogPanel({
                         {attemptSummaries.length > 0 && (
                           <ol className="log-attempt-summary" aria-label={t('logs.attemptSummary')}>
                             {attemptSummaries.map((line, index) => (
-                              <li key={index}>{line}</li>
+                              <li key={index}>
+                                {failedAttempt(detailData.attempts.data[index]) ? (
+                                  <button
+                                    type="button"
+                                    className="nb-btn nb-btn--ghost"
+                                    onClick={() =>
+                                      setJump({
+                                        request: detailRequest.id,
+                                        seq: detailData.attempts.data[index].attempt_seq,
+                                      })
+                                    }
+                                  >
+                                    {line}
+                                  </button>
+                                ) : (
+                                  line
+                                )}
+                              </li>
                             ))}
                           </ol>
                         )}
                         <AttemptTable
                           key={detailRequest.id}
                           detail={detailData}
+                          filterBy={filterBy}
                           logReturnTo={logReturnTo}
                           role={role}
                           accountID={accountID}
@@ -1462,7 +1628,12 @@ function ScopedRoleLogPanel({
                           page={attemptPager.page}
                           busy={detail.isFetching}
                           onRefresh={() => void detail.refetch()}
-                          focusAttemptSeq={focusAttemptSeq}
+                          readFailureMetadata={
+                            jump?.request === detailRequest.id ? jump.seq : undefined
+                          }
+                          focusAttemptSeq={
+                            jump?.request === detailRequest.id ? jump.seq : focusAttemptSeq
+                          }
                           locatingFocus={focusAttemptSeq !== undefined && detail.isPlaceholderData}
                           onPageChange={attemptPager.setPage}
                           onPageSizeChange={attemptPager.setPageSize}
@@ -1509,7 +1680,22 @@ function ScopedRoleLogPanel({
             }
             onResetLookup={() => setLookupReset((value) => value + 1)}
             onApply={applyFilters}
-            toolbarActions={role !== 'steward' ? exportMenu : undefined}
+            toolbarActions={
+              <>
+                <Button
+                  type="button"
+                  disabled={listBusy || invalidFilter}
+                  onClick={() => {
+                    const now = Math.floor(Date.now() / 1000);
+                    if (urlState.range && now !== windowEnd) setWindowEnd(now);
+                    else logs.refresh();
+                  }}
+                >
+                  {t('common.refresh')}
+                </Button>
+                {role !== 'steward' ? exportMenu : null}
+              </>
+            }
           />
         </LogSearch>
         {role !== 'user' && filter.endpoint_key_id ? (
@@ -1518,21 +1704,17 @@ function ScopedRoleLogPanel({
           </p>
         ) : null}
         {!invalidFilter ? (
-          <QueryFeedback
-            query={{
-              ...logs,
-              data: pageData,
-              retained: logs.data === undefined && pageData !== undefined,
-            }}
+          <LogSearchFeedback
+            state={logs.searchStatus}
+            hasEarlierResults={!listComplete && hasRows}
+            error={logs.error}
+            onCancel={logs.cancel}
+            onRetry={logs.retry}
+            onSearchAgain={logs.refresh}
           />
         ) : null}
-        {invalidFilter ? null : logs.error && !pageData ? (
-          <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-        ) : pageData ? (
+        {pageData && (hasRows || listComplete) ? (
           <div className="ops-stack" aria-busy={listBusy}>
-            {logs.error ? (
-              <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-            ) : null}
             {pageData.data.length === 0 ? (
               <EmptyState title={empty} body={emptyBody} />
             ) : (
@@ -1559,23 +1741,19 @@ function ScopedRoleLogPanel({
             )}
             <PagePagination
               metadata={pageData.pagination}
-              requestedPage={logs.data === undefined ? undefined : pager.page}
+              requestedPage={listComplete && !logs.isPlaceholderData ? pager.page : undefined}
               busy={listBusy}
               onPageChange={(page) => {
-                if (logs.error && page === pager.page) void logs.refetch();
+                if (logs.error && page === pager.page) logs.retry();
                 else pager.setPage(page);
               }}
               onPageSizeChange={(size) => {
-                if (logs.error && size === pager.pageSize) void logs.refetch();
+                if (logs.error && size === pager.pageSize) logs.retry();
                 else pager.setPageSize(size);
               }}
             />
           </div>
-        ) : logs.isPending ? (
-          <LoadingState />
-        ) : (
-          <LoadingState />
-        )}
+        ) : null}
         {role !== 'user' ? <RawStorageSummary key={`${role}:${accountID}`} role={role} /> : null}
       </InspectionWorkspace>
     </Card>

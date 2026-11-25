@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getHistory, getOperationItems, startCleanup } from './api';
+import { getHistory, getOperationItems, prepareCleanup, startCleanup } from './api';
 
 const target = {
   ordinal: '1',
@@ -247,6 +247,34 @@ describe('management history projections', () => {
     expect(result.snapshot_max_id).toBe('9007199254740995');
     expect(fetch.mock.calls[0]?.[0]).toContain('source=ai_manual');
   });
+  it('uses the exact filter and flag returned by cleanup preparation', async () => {
+    const prepared = {
+      filter: { source: 'web', time_to: 1700000000001 },
+      all: false,
+      cutoff_max_id: '9007199254740993',
+    };
+    const fetch = vi.fn().mockResolvedValue(Response.json(prepared));
+    vi.stubGlobal('fetch', fetch);
+    expect(await prepareCleanup({ source: 'web' })).toEqual(prepared);
+    expect(JSON.parse(fetch.mock.calls[0]?.[1].body as string)).toEqual({
+      filter: { source: 'web' },
+      all: false,
+    });
+  });
+
+  it.each([
+    { filter: { source: 'web' }, all: true },
+    { filter: { future_constraint: 'specific target' }, all: false },
+  ])('rejects an inconsistent or unrepresentable prepared scope', async (scope) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ ...scope, cutoff_max_id: '42' })),
+    );
+    await expect(prepareCleanup({ source: 'web' })).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
   it('submits the reviewed cutoff and supplied recovery identity without widening it', async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(

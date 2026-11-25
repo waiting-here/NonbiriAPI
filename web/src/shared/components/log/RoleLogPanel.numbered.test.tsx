@@ -244,14 +244,21 @@ describe('numbered role log panel', () => {
       timeZoneFixture('/admin/api/time-zones'),
       {
         method: 'GET',
-        path: '/admin/api/logs?page=1&page_size=20',
+        path: '/admin/api/logs?upstream_model=legacy-test-model&page=1&page_size=20',
         body: listBody([adminRow(7)], pagination()),
       },
     ]);
-    const view = await renderWithProviders(<RoleLogPanel role="admin" />, {
-      station: 'admin',
-      role: 'admin',
-    });
+    const view = await renderWithProviders(
+      <>
+        <RoleLogPanel role="admin" />
+        <LocationProbe />
+      </>,
+      {
+        station: 'admin',
+        role: 'admin',
+        route: '/logs?upstream_model=legacy-test-model',
+      },
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     const sessionFetch = vi.fn(async () => ({ admin: { username: 'page-reader' } }));
     await act(async () => {
@@ -262,6 +269,8 @@ describe('numbered role log panel', () => {
       });
     });
     await screen.findByRole('button', { name: 'Details' });
+    expect(queryFromProbe(view.container).has('upstream_model')).toBe(false);
+    expect(screen.getByLabelText('Model used')).toHaveValue('legacy-test-model');
     await act(async () => {
       await view.queryClient.refetchQueries({
         queryKey: ['admin', 'session'],
@@ -717,4 +726,264 @@ it('retries an identical requested log page after a transient failure without cl
   expect(
     fetchMock.mock.calls.filter(([path]) => String(path).includes('/logs?page=2')),
   ).toHaveLength(2);
+});
+
+const runningSearch = (search_id: string) => ({ status: 'running', search_id });
+
+function logSearchFixtures(fixtures: JsonFetchFixture[]) {
+  const fetchMock = installJsonFetchFixtures([
+    timeZoneFixture('/admin/api/time-zones'),
+    ...fixtures,
+  ]);
+  const resolveFixture = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((input, init?: RequestInit) =>
+    init?.method === 'DELETE'
+      ? Promise.resolve(new Response(null, { status: 204 }))
+      : resolveFixture(input, init),
+  );
+  return {
+    fetchMock,
+    calls: (prefix: string, method = 'GET') =>
+      fetchMock.mock.calls
+        .filter(
+          ([path, options]) =>
+            String(path).startsWith(prefix) && (options.method ?? 'GET') === method,
+        )
+        .map(([path]) => String(path)),
+  };
+}
+
+it('reuses completed search results when changing page windows and refreshes from the list', async () => {
+  const first = {
+    method: 'GET',
+    path: '/admin/api/logs?page=1&page_size=20',
+    status: 202,
+    body: runningSearch('large-search'),
+  };
+  const searchPath = '/admin/api/log-searches/large-search';
+  const firstPoll: JsonFetchFixture = {
+    method: 'GET',
+    path: searchPath + '?page=1&page_size=20',
+    status: 202,
+    body: runningSearch('large-search'),
+  };
+  const { fetchMock, calls } = logSearchFixtures([
+    first,
+    firstPoll,
+    {
+      method: 'GET',
+      path: searchPath + '?page=2&page_size=20',
+      body: listBody([adminRow(2)], pagination('2', 20, 401, 21)),
+    },
+    {
+      method: 'GET',
+      path: searchPath + '?page=1&page_size=50',
+      body: listBody([adminRow(3)], pagination('1', 50, 401, 9)),
+    },
+    {
+      method: 'GET',
+      path: searchPath + '?page=6&page_size=50',
+      body: listBody([adminRow(4)], pagination('6', 50, 401, 9)),
+    },
+    {
+      method: 'GET',
+      path: '/admin/api/logs?page=6&page_size=50',
+      body: listBody([adminRow(5)], pagination('6', 50, 442, 9)),
+    },
+  ]);
+
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs',
+  });
+  await screen.findByText('Digging through the logs…');
+  await waitFor(() => expect(calls(firstPoll.path)).toHaveLength(1));
+  expect(screen.getByRole('button', { name: 'Cancel search' })).toBeVisible();
+  firstPoll.status = 200;
+  firstPoll.body = listBody([adminRow(1)], pagination('1', 20, 401, 21));
+  expect(await screen.findByText('Search complete', {}, { timeout: 4000 })).toBeVisible();
+  expect(screen.getByText('401 items')).toBeVisible();
+  expect(
+    new Headers(fetchMock.mock.calls.find(([path]) => path === first.path)![1].headers).get(
+      'Prefer',
+    ),
+  ).toBe('respond-async');
+
+  await view.user.click(screen.getByRole('button', { name: 'Next' }));
+  await screen.findByText('#3', { exact: true });
+  await view.user.selectOptions(screen.getByRole('combobox', { name: 'Items per page' }), '50');
+  await screen.findByText('#4', { exact: true });
+  const jump = screen.getByRole('textbox', { name: 'Go to page' });
+  await view.user.clear(jump);
+  await view.user.type(jump, '6{Enter}');
+  await screen.findByText('#5', { exact: true });
+  expect(calls('/admin/api/logs?')).toEqual([first.path]);
+  expect(calls(searchPath)).toEqual([
+    firstPoll.path,
+    firstPoll.path,
+    searchPath + '?page=2&page_size=20',
+    searchPath + '?page=1&page_size=50',
+    searchPath + '?page=6&page_size=50',
+  ]);
+
+  await view.user.click(screen.getByRole('button', { name: 'Refresh' }));
+  await screen.findByText('442 items');
+  expect(calls(searchPath, 'DELETE')).toEqual([searchPath]);
+  expect(calls('/admin/api/logs?')).toEqual([first.path, '/admin/api/logs?page=6&page_size=50']);
+});
+
+it.each([
+  [404, 'not_found'],
+  [409, 'refresh_required'],
+])('restarts a search with the same filters and window after HTTP %i', async (status, code) => {
+  const first: JsonFetchFixture = {
+    method: 'GET',
+    path: '/admin/api/logs?status=500&page=4&page_size=50',
+    status: 202,
+    body: runningSearch('old-search'),
+  };
+  const old = '/admin/api/log-searches/old-search?page=4&page_size=50';
+  const { fetchMock, calls } = logSearchFixtures([
+    first,
+    { method: 'GET', path: old, status, body: { error: { code, message: 'Search changed.' } } },
+  ]);
+  const resolveFixture = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((input, init?: RequestInit) => {
+    if (input === old) {
+      first.status = 200;
+      first.body = listBody([], pagination('1', 50, 0, 1));
+    }
+    return resolveFixture(input, init);
+  });
+  await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs?status=500&page=4&page_size=50',
+  });
+  expect(await screen.findByText('Search complete')).toBeVisible();
+  expect(screen.getByText('No log records', { exact: true })).toBeVisible();
+  expect(calls('/admin/api/logs?')).toEqual([first.path, first.path]);
+  expect(calls(old)).toEqual([old]);
+});
+
+it('stops checking a released search when filters change and discards its late page', async () => {
+  const old = '/admin/api/log-searches/previous';
+  let sendLatePage!: (response: Response) => void;
+  const latePage = new Promise<Response>((resolve) => {
+    sendLatePage = resolve;
+  });
+  const { fetchMock, calls } = logSearchFixtures([
+    {
+      method: 'GET',
+      path: '/admin/api/logs?page=1&page_size=20',
+      status: 202,
+      body: runningSearch('previous'),
+    },
+    {
+      method: 'GET',
+      path: '/admin/api/logs?outcome=failed&page=1&page_size=20',
+      body: listBody([], pagination('1', 20, 0, 1)),
+    },
+  ]);
+  const resolveFixture = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((input, init?: RequestInit) =>
+    String(input).startsWith(old + '?') ? latePage : resolveFixture(input, init),
+  );
+
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs',
+  });
+  expect(await screen.findByText('Digging through the logs…')).toBeVisible();
+  await waitFor(() => expect(calls(old)).toHaveLength(1));
+  await view.user.selectOptions(
+    screen.getByRole('combobox', { name: 'Request outcome' }),
+    'failed',
+  );
+  expect(await screen.findByText('No log records', { exact: true })).toBeVisible();
+  expect(calls(old, 'DELETE')).toEqual([old]);
+  await act(async () => {
+    sendLatePage(
+      new Response(JSON.stringify(listBody([adminRow(9)], pagination())), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+  expect(screen.queryByText('#10', { exact: true })).toBeNull();
+  expect(calls(old)).toHaveLength(1);
+});
+
+it('waits for an explicit retry when the replacement search also disappears', async () => {
+  const path = '/admin/api/logs?page=1&page_size=20';
+  const receipt: JsonFetchFixture = {
+    method: 'GET',
+    path,
+    status: 202,
+    body: runningSearch('evicted-search'),
+  };
+  const { calls } = logSearchFixtures([
+    receipt,
+    {
+      method: 'GET',
+      path: '/admin/api/log-searches/evicted-search?page=1&page_size=20',
+      status: 404,
+      body: { error: { code: 'not_found', message: 'Search missing.' } },
+    },
+  ]);
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs',
+  });
+  const retry = await screen.findByRole('button', { name: 'Retry' });
+  expect(calls(path)).toEqual([path, path]);
+  expect(screen.queryByText('No log records', { exact: true })).toBeNull();
+  receipt.status = 200;
+  receipt.body = listBody([], pagination('1', 20, 0, 1));
+  await view.user.click(retry);
+  expect(await screen.findByText('No log records', { exact: true })).toBeVisible();
+  expect(calls(path)).toEqual([path, path, path]);
+});
+
+it('confirms a known cancellation only after DELETE succeeds and can retry a failed attempt', async () => {
+  const path = '/admin/api/log-searches/pending-cancel';
+  const poll = path + '?page=1&page_size=20';
+  let replyToCancel!: (response: Response) => void;
+  const firstCancel = new Promise<Response>((resolve) => {
+    replyToCancel = resolve;
+  });
+  const { fetchMock, calls } = logSearchFixtures([
+    {
+      method: 'GET',
+      path: '/admin/api/logs?page=1&page_size=20',
+      status: 202,
+      body: runningSearch('pending-cancel'),
+    },
+    { method: 'GET', path: poll, status: 202, body: runningSearch('pending-cancel') },
+  ]);
+  const resolveFixture = fetchMock.getMockImplementation()!;
+  let cancelAttempts = 0;
+  fetchMock.mockImplementation((input, init?: RequestInit) =>
+    init?.method === 'DELETE' && ++cancelAttempts === 1 ? firstCancel : resolveFixture(input, init),
+  );
+  const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+    station: 'admin',
+    role: 'admin',
+    route: '/logs',
+  });
+  await waitFor(() => expect(calls(poll)).toHaveLength(1));
+  await view.user.click(await screen.findByRole('button', { name: 'Cancel search' }));
+  expect(screen.getByText('Canceling search…')).toBeVisible();
+  expect(screen.queryByText('Search canceled')).toBeNull();
+  await act(async () => {
+    replyToCancel(new Response(null, { status: 503 }));
+  });
+  expect(await screen.findByText('Canceling the search failed.')).toBeVisible();
+  expect(screen.queryByText('Search canceled')).toBeNull();
+  await view.user.click(screen.getByRole('button', { name: 'Retry cancel' }));
+  expect(await screen.findByText('Search canceled')).toBeVisible();
+  expect(calls(path, 'DELETE')).toEqual([path, path]);
+  expect(calls(poll)).toHaveLength(1);
 });

@@ -75,14 +75,14 @@ beforeEach(() => {
 });
 
 describe('site settings discovery and saving', () => {
-  it('applies search only on submission and resets it without discarding setting edits', async () => {
+  it('searches immediately and resets without discarding setting edits', async () => {
     const view = await renderWithProviders(<SettingsPage />, { station: 'admin', role: 'admin' });
     const field = await screen.findByLabelText('Response wait');
     await view.user.clear(field);
     await view.user.type(field, '150');
     const search = screen.getByRole('searchbox');
     await view.user.type(search, 'no matching setting');
-    expect(screen.getByLabelText('Response wait')).toHaveValue(150);
+    expect(screen.queryByLabelText('Response wait')).not.toBeInTheDocument();
     await view.user.keyboard('{Enter}');
     expect(screen.queryByLabelText('Response wait')).not.toBeInTheDocument();
     await view.user.click(screen.getByRole('button', { name: 'Reset' }));

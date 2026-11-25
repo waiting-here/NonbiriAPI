@@ -1,17 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ChoiceRow, Field, Fold, Note, Tabs } from '@shared/components/ui';
+import { ChoiceRow, Field, Note, Tabs } from '@shared/components/ui';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { usePagePager } from '@shared/operations/usePagePager';
-import type { CatalogEntry, DiscoveryEvidence, Endpoint, EndpointKey } from '../types';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import type { CatalogEntry, Endpoint, EndpointKey } from '../types';
 import type { DiscoveryModel, DiscoverySource } from './types';
 import { DirectoryBatch } from './DirectoryBatch';
 import { useConnectionOperation } from './useConnectionOperation';
 import { ConnectionOperationNotice } from './OperationNotice';
 import { CoreErrorPanel, CoreLoading, CoreTime, DiscoveryStatus } from '../components';
 import { useNumberedCatalog } from '../numberedQueries';
-import { coreKeys } from '../queries';
 import { getCatalogSelection } from '../pageApi';
 import { PairManualCatalog } from '../EndpointDetail';
 
@@ -20,6 +19,7 @@ export function ServiceModelSetup({
   entry,
   entryKey,
   autoRefresh = false,
+  onAutoRefreshStarted,
   onLockChange,
 }: {
   onLockChange?: (locked: boolean) => void;
@@ -28,9 +28,9 @@ export function ServiceModelSetup({
   entryKey: EndpointKey;
   source?: DiscoverySource;
   autoRefresh?: boolean;
+  onAutoRefreshStarted?: () => void;
 }) {
   const { t } = useTranslation();
-  const client = useQueryClient();
   const [batchLocked, setBatchLocked] = useState(false);
   useEffect(() => {
     onLockChange?.(batchLocked);
@@ -40,55 +40,58 @@ export function ServiceModelSetup({
     autoRefresh && !entryKey.discovery_source_id ? 'manual' : 'automatic',
   );
   const [selected, setSelected] = useState<DiscoveryModel[]>([]);
+  const [manageManual, setManageManual] = useState(true);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [selectionError, setSelectionError] = useState<Error>();
   const [selecting, setSelecting] = useState(false);
   const selectionRequest = useRef<AbortController | null>(null);
   useEffect(() => () => selectionRequest.current?.abort(), []);
-  const pager = usePagePager({
+  const scopeKey = `${accountId}:${entry.id}:${entryKey.id}`;
+  const selectionPager = usePagePager({
     station: 'user',
     listType: 'service-key-models',
-    scopeKey: accountId + ':' + entry.id + ':' + entryKey.id,
+    scopeKey,
     resetKey: JSON.stringify([view, search]),
   });
+  const manualPager = useUrlPagePager({
+    station: 'user',
+    listType: 'manual-catalog',
+    scopeKey,
+    pageParam: `manual_${entryKey.id}_page`,
+    pageSizeParam: `manual_${entryKey.id}_page_size`,
+  });
+  const editingManual = view === 'manual' && manageManual;
+  const pager = editingManual ? manualPager : selectionPager;
   const catalog = useNumberedCatalog(
     accountId,
     entry.id,
     entryKey.id,
     view,
-    {
-      page: pager.page,
-      pageSize: pager.pageSize,
-    },
+    { page: pager.page, pageSize: pager.pageSize },
     true,
-    search,
+    editingManual ? '' : search,
   );
-  const refresh = useConnectionOperation(accountId, () => {
-    void client.invalidateQueries({
-      queryKey: coreKeys.catalogRoot(accountId, entry.id, entryKey.id),
-    });
-  });
+  const refresh = useConnectionOperation(accountId, () => undefined);
+  const available =
+    entry.enabled &&
+    entryKey.enabled &&
+    entryKey.credential_available !== false &&
+    entryKey.suspension_state === 'none';
   const started = useRef(false);
   useEffect(() => {
-    if (
-      !autoRefresh ||
-      !entryKey.discovery_source_id ||
-      !entry.enabled ||
-      !entryKey.enabled ||
-      started.current
-    )
-      return;
+    if (!autoRefresh || !entryKey.discovery_source_id || !available || started.current) return;
     started.current = true;
+    onAutoRefreshStarted?.();
     void refresh
       .run({ kind: 'refresh', endpointId: entry.id, keyId: entryKey.id })
       .catch(() => undefined);
   }, [
     autoRefresh,
+    onAutoRefreshStarted,
     entry.id,
-    entry.enabled,
+    available,
     entryKey.id,
-    entryKey.enabled,
     entryKey.discovery_source_id,
     refresh,
   ]);
@@ -96,13 +99,10 @@ export function ServiceModelSetup({
     view === 'automatic' ? catalog.data?.automatic_entries : catalog.data?.manual_entries;
   const locked =
     refresh.isPending || refresh.outcome === 'unknown' || refresh.outcome === 'refresh-failed';
-  const evidence = catalog.data?.evidence as
-    | (DiscoveryEvidence & {
-        last_success_at?: number | null;
-        added_count?: string | null;
-        removed_count?: string | null;
-      })
-    | undefined;
+  const evidence = catalog.data?.evidence;
+  const showResult =
+    !catalog.error &&
+    ((!refresh.isPending && refresh.outcome !== 'unknown') || evidence?.state === 'checking');
   const keyLabel =
     (entryKey as EndpointKey & { credential_note?: string }).credential_note ||
     entryKey.note ||
@@ -181,7 +181,7 @@ export function ServiceModelSetup({
             <button
               type="button"
               className="nb-btn nb-btn--secondary"
-              disabled={locked || catalog.data?.evidence.state === 'checking' || !entryKey.enabled}
+              disabled={locked || evidence?.state === 'checking' || !available}
               onClick={() =>
                 void refresh
                   .run({ kind: 'refresh', endpointId: entry.id, keyId: entryKey.id })
@@ -192,14 +192,15 @@ export function ServiceModelSetup({
             </button>
           ) : null}
         </div>
-        <ConnectionOperationNotice operation={refresh} />
-        {catalog.data ? <DiscoveryStatus evidence={catalog.data.evidence} /> : null}
+        <ConnectionOperationNotice operation={refresh} showSaved={false} />
+        {showResult && evidence ? <DiscoveryStatus evidence={evidence} /> : null}
         {evidence?.last_success_at ? (
           <p className="nb-small nb-muted">
             {t('user.services.lastSuccessfulFetch')} · <CoreTime value={evidence.last_success_at} />
           </p>
         ) : null}
-        {evidence?.state === 'succeeded' &&
+        {showResult &&
+        evidence?.state === 'succeeded' &&
         evidence.added_count != null &&
         evidence.removed_count != null ? (
           <Note>
@@ -209,7 +210,7 @@ export function ServiceModelSetup({
             })}
           </Note>
         ) : null}
-        {catalog.data?.evidence.state === 'failed' ? (
+        {showResult && evidence?.state === 'failed' ? (
           <Note tone="warn">{t('user.services.retainedCatalog')}</Note>
         ) : null}
       </div>
@@ -223,138 +224,156 @@ export function ServiceModelSetup({
         onChange={(next) => {
           changeScope();
           setView(next);
+          setManageManual(true);
         }}
       >
-        <form
-          className="nb-actions"
-          onSubmit={(event) => {
-            event.preventDefault();
-            changeScope();
-            setSearch(searchDraft.trim());
-          }}
-        >
-          <Field label={t('user.charity.searchModels')}>
-            {(props) => (
-              <input
-                {...props}
-                type="search"
-                maxLength={512}
-                value={searchDraft}
-                onChange={(event) => setSearchDraft(event.target.value)}
-              />
+        {view === 'manual' ? (
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            onClick={() => setManageManual(!manageManual)}
+          >
+            {t(
+              manageManual
+                ? 'user.services.chooseManualModels'
+                : 'user.services.manageManualModels',
             )}
-          </Field>
-          <button type="submit" className="nb-btn nb-btn--secondary">
-            {t('common.search')}
           </button>
-          {search || searchDraft ? (
-            <button
-              type="button"
-              className="nb-btn nb-btn--ghost"
-              onClick={() => {
-                changeScope();
-                setSearch('');
-                setSearchDraft('');
-              }}
-            >
-              {t('common.resetFilter')}
-            </button>
-          ) : null}
-        </form>
-        {selectionError ? (
-          <CoreErrorPanel compact error={selectionError} onRetry={() => void selectMatches()} />
         ) : null}
-        {catalog.isPending ? (
-          <CoreLoading compact />
-        ) : catalog.error ? (
-          <CoreErrorPanel compact error={catalog.error} onRetry={() => void catalog.refetch()} />
-        ) : (
-          <div className="nb-stack">
-            {models?.length ? (
-              <>
-                <div className="nb-actions">
-                  <button
-                    type="button"
-                    className="nb-btn nb-btn--secondary"
-                    disabled={batchLocked || selecting || catalog.isPlaceholderData}
-                    onClick={() => selectRows(models)}
-                  >
-                    {t('user.services.selectPage', { count: models.length })}
-                  </button>
-                  {catalog.data && Number(catalog.data.pagination.total_items) > models.length ? (
-                    catalog.data.selection_revision ? (
-                      <button
-                        type="button"
-                        className="nb-btn nb-btn--secondary"
-                        disabled={batchLocked || selecting || catalog.isPlaceholderData}
-                        onClick={() => void selectMatches()}
-                      >
-                        {t('user.services.selectMatches', {
-                          count: catalog.data.pagination.total_items,
-                        })}
-                      </button>
-                    ) : (
-                      <span className="nb-small">{t('user.services.narrowMatches')}</span>
-                    )
-                  ) : null}
-                </div>
-                <div className="service-model-grid">
-                  {models.map((row) => (
-                    <ChoiceRow
-                      key={row.id}
-                      label={<span className="core-mono">{row.upstream_model_id}</span>}
-                      checked={selected.some(
-                        (item) => item.upstream_model_id === row.upstream_model_id,
-                      )}
-                      disabled={batchLocked || selecting || catalog.isPlaceholderData}
-                      onChange={(checked) =>
-                        checked
-                          ? selectRows([row])
-                          : setSelected((current) =>
-                              current.filter(
-                                (item) => item.upstream_model_id !== row.upstream_model_id,
-                              ),
-                            )
-                      }
-                    />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <Note>
-                {t(
-                  search
-                    ? 'user.services.noMatchingModels'
-                    : view === 'manual'
-                      ? 'user.services.manualListEmpty'
-                      : 'user.services.pulledListEmpty',
-                )}
-              </Note>
-            )}
-            {catalog.data ? (
-              <PagePagination
-                metadata={catalog.data.pagination}
-                requestedPage={pager.page}
-                busy={catalog.isFetching}
-                onPageChange={pager.setPage}
-                onPageSizeChange={pager.setPageSize}
-              />
-            ) : null}
-          </div>
-        )}
-        <Fold
-          lazy
-          plain
-          title={t('user.services.manualModels')}
-          defaultOpen={autoRefresh && !entryKey.discovery_source_id}
-        >
+        {editingManual ? (
           <PairManualCatalog
             accountId={accountId}
             endpointId={entry.id}
             keyId={entryKey.id}
-            visible
+            catalog={catalog}
+            pager={manualPager}
           />
-        </Fold>
+        ) : (
+          <>
+            <form
+              className="nb-actions"
+              onSubmit={(event) => {
+                event.preventDefault();
+                changeScope();
+                setSearch(searchDraft.trim());
+              }}
+            >
+              <Field label={t('user.charity.searchModels')}>
+                {(props) => (
+                  <input
+                    {...props}
+                    type="search"
+                    maxLength={512}
+                    value={searchDraft}
+                    onChange={(event) => setSearchDraft(event.target.value)}
+                  />
+                )}
+              </Field>
+              <button type="submit" className="nb-btn nb-btn--secondary">
+                {t('common.search')}
+              </button>
+              {search || searchDraft ? (
+                <button
+                  type="button"
+                  className="nb-btn nb-btn--ghost"
+                  onClick={() => {
+                    changeScope();
+                    setSearch('');
+                    setSearchDraft('');
+                  }}
+                >
+                  {t('common.resetFilter')}
+                </button>
+              ) : null}
+            </form>
+            {selectionError ? (
+              <CoreErrorPanel compact error={selectionError} onRetry={() => void selectMatches()} />
+            ) : null}
+            {catalog.isPending ? (
+              <CoreLoading compact />
+            ) : catalog.error ? (
+              <CoreErrorPanel
+                compact
+                error={catalog.error}
+                onRetry={() => void catalog.refetch()}
+              />
+            ) : (
+              <div className="nb-stack">
+                {models?.length ? (
+                  <>
+                    <div className="nb-actions">
+                      <button
+                        type="button"
+                        className="nb-btn nb-btn--secondary"
+                        disabled={batchLocked || selecting || catalog.isPlaceholderData}
+                        onClick={() => selectRows(models)}
+                      >
+                        {t('user.services.selectPage', { count: models.length })}
+                      </button>
+                      {catalog.data &&
+                      Number(catalog.data.pagination.total_items) > models.length ? (
+                        catalog.data.selection_revision ? (
+                          <button
+                            type="button"
+                            className="nb-btn nb-btn--secondary"
+                            disabled={batchLocked || selecting || catalog.isPlaceholderData}
+                            onClick={() => void selectMatches()}
+                          >
+                            {t('user.services.selectMatches', {
+                              count: catalog.data.pagination.total_items,
+                            })}
+                          </button>
+                        ) : (
+                          <span className="nb-small">{t('user.services.narrowMatches')}</span>
+                        )
+                      ) : null}
+                    </div>
+                    <div className="service-model-grid">
+                      {models.map((row) => (
+                        <ChoiceRow
+                          key={row.id}
+                          label={<span className="core-mono">{row.upstream_model_id}</span>}
+                          checked={selected.some(
+                            (item) => item.upstream_model_id === row.upstream_model_id,
+                          )}
+                          disabled={batchLocked || selecting || catalog.isPlaceholderData}
+                          onChange={(checked) =>
+                            checked
+                              ? selectRows([row])
+                              : setSelected((current) =>
+                                  current.filter(
+                                    (item) => item.upstream_model_id !== row.upstream_model_id,
+                                  ),
+                                )
+                          }
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <Note>
+                    {t(
+                      search
+                        ? 'user.services.noMatchingModels'
+                        : view === 'manual'
+                          ? 'user.services.manualListEmpty'
+                          : 'user.services.pulledListEmpty',
+                    )}
+                  </Note>
+                )}
+                {catalog.data ? (
+                  <PagePagination
+                    metadata={catalog.data.pagination}
+                    requestedPage={pager.page}
+                    busy={catalog.isFetching}
+                    onPageChange={pager.setPage}
+                    onPageSizeChange={pager.setPageSize}
+                  />
+                ) : null}
+              </div>
+            )}
+          </>
+        )}
         {selected.length ? (
           <div className="nb-stack">
             <Note>{t('user.services.selectedModels', { count: selected.length })}</Note>

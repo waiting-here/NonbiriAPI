@@ -179,6 +179,14 @@ export function DonationKeyUseControls({
       {uses === undefined && query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : null}
+      {!(uses === undefined && (query.isPending || query.error)) &&
+        (rows.length === 0 ? (
+          <p>{t('common.governance.noUses')}</p>
+        ) : !rows.some(
+            (row) => row.capabilities.can_manage || row.capabilities.can_reset_failures,
+          ) ? (
+          <p>{t('common.governance.readOnlyUses')}</p>
+        ) : null)}
       <div className="nb-actions">
         {role === 'owner' ? (
           <>
@@ -189,7 +197,7 @@ export function DonationKeyUseControls({
             {button('withdraw', 'common.connections.withdrawPendingContent')}
           </>
         ) : null}
-        {button('reset', 'common.connections.resetKeyFailures')}
+        {button('reset', 'common.governance.resetUses')}
         {button('release_rate_limit', 'common.connections.releaseKeyRateLimit')}
       </div>
       {operation.isSuccess ? <Note tone="ok">{t('common.outcome.saved')}</Note> : null}

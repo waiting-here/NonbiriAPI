@@ -88,8 +88,13 @@ it.each(scenarios)(
     fireEvent.change(upstream, { target: { value: 'vendor/model' } });
     fireEvent.submit(form);
     await waitFor(() =>
-      expect(screen.getByTestId('query')).toHaveTextContent('upstream_model=vendor%2Fmodel'),
+      expect(
+        fetchMock.mock.calls.some(([path]) =>
+          String(path).includes('upstream_model=vendor%2Fmodel'),
+        ),
+      ).toBe(true),
     );
+    expect(screen.getByTestId('query')).not.toHaveTextContent('upstream_model');
     expect(discord).toHaveValue(discordID);
     await view.user.click(screen.getByRole('button', { name: 'Reset' }));
     await waitFor(() => expect(discord).toHaveValue(''));
@@ -163,7 +168,7 @@ it('keeps a repeated key ID in the URL until it is corrected, including across q
   expect(key).toHaveAccessibleDescription(/key ID filter is invalid/);
   await view.user.click(screen.getByRole('button', { name: 'Last hour' }));
   expect(screen.getByTestId('query')).toHaveTextContent('endpoint_key_id=7&endpoint_key_id=8');
-  expect(screen.getByTestId('query')).toHaveTextContent('from=');
+  expect(screen.getByTestId('query')).toHaveTextContent('range=1h');
   expect(fetchMock.mock.calls.some(([path]) => String(path).includes('/admin/api/logs?'))).toBe(
     false,
   );

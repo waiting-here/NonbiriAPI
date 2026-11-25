@@ -21,9 +21,7 @@ export function AgentState({ state }: { state: string }) {
           ? 'neutral'
           : 'info';
   return (
-    <StatusBadge tone={tone}>
-      {t(stateLabels[state] ?? 'common.agent.states.unknown')}
-    </StatusBadge>
+    <StatusBadge tone={tone}>{t(stateLabels[state] ?? 'common.agent.states.unknown')}</StatusBadge>
   );
 }
 export function AgentError({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
@@ -44,8 +42,11 @@ export function AgentEmpty({ body }: { body: string }) {
 }
 export function AgentTime({ value }: { value?: number | null }) {
   const format = useDateTimeFormatter();
+  const instant = value == null ? null : new Date(value);
   return (
-    <span className="agent-number">{value ? format(new Date(value).toISOString()) : '—'}</span>
+    <span className="agent-number">
+      {instant && Number.isFinite(instant.getTime()) ? format(instant.toISOString()) : '—'}
+    </span>
   );
 }
 export function RawData({ title, value }: { title: ReactNode; value: unknown }) {
@@ -78,13 +79,45 @@ export function AgentMarkdown({ children }: { children: string }) {
 }
 export function MemoryDiff({ before, after }: { before: string; after: string }) {
   const { t } = useTranslation();
+  const diff = textDiff(before, after);
+  type Line = (typeof diff)[number] | { kind: 'omit'; count: number };
+  let rows: Line[] = diff;
+  if (diff.length > 400) {
+    rows = [];
+    for (let start = 0; start < diff.length;) {
+      if (diff[start]!.kind !== 'same') {
+        rows.push(diff[start++]!);
+        continue;
+      }
+      let end = start + 1;
+      while (end < diff.length && diff[end]!.kind === 'same') end++;
+      if (end - start <= 7) rows.push(...diff.slice(start, end));
+      else
+        rows.push(
+          ...diff.slice(start, start + 3),
+          { kind: 'omit', count: end - start - 6 },
+          ...diff.slice(end - 3, end),
+        );
+      start = end;
+    }
+    if (rows.length > 400) {
+      const hidden = rows
+        .slice(200, -200)
+        .reduce((sum, line) => sum + (line.kind === 'omit' ? line.count : 1), 0);
+      rows = [...rows.slice(0, 200), { kind: 'omit', count: hidden }, ...rows.slice(-200)];
+    }
+  }
   return (
     <div className="agent-diff" aria-label={t('common.agent.changes')}>
       <pre>
-        {textDiff(before, after).map((line, index) => (
+        {rows.map((line, index) => (
           <span key={index} className={'agent-diff__' + line.kind}>
             {line.kind === 'add' ? '+ ' : line.kind === 'remove' ? '− ' : '  '}
-            {line.text}
+            {line.kind === 'omit'
+              ? t('common.agent.diffOmitted', { count: line.count })
+              : line.text.length > 1000
+                ? line.text.slice(0, 1000) + '…'
+                : line.text}
             {'\n'}
           </span>
         ))}

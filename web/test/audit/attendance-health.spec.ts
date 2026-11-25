@@ -2,11 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test, expect, type Browser, type Locator, type Page } from '@playwright/test';
-import type {
-  AttendancePage,
-  AttendancePeriod,
-  SignInResult,
-} from '../../src/shared/attendance/api';
+import type { AttendancePeriod, SignInResult } from '../../src/shared/attendance/api';
 
 test.skip(process.env.NONBIRI_V136_BROWSER !== '1', 'Requires the isolated v1.3.6 fixture.');
 
@@ -122,9 +118,7 @@ test('owner, admin and steward release cooldowns and show consistent station tim
         timeZone: role === 'owner' ? 'America/New_York' : 'UTC',
       }).format(new Date((until + (role === 'owner' ? 0 : 480 * 60)) * 1000));
       await expect(health).toContainText('Rate limit wait until ' + expected);
-      await controls
-        .getByRole('button', { name: 'Reset failures and resume services', exact: true })
-        .click();
+      await controls.getByRole('button', { name: 'Reset eligible uses', exact: true }).click();
       await expect(controls).toContainText('Rate-limit wait retained until ' + expected);
       await expect(controls).toContainText('Smart backoff retained until ' + expected);
       await expect(health).not.toContainText('10 consecutive failures');
@@ -307,15 +301,22 @@ test('admin configures sparse periods and the seventh independent sign-in automa
     );
     await dialog.getByRole('button', { name: 'Save activity' }).click();
     expect((await edited).ok()).toBe(true);
-    await user.page.reload();
+    const [listing] = await Promise.all([
+      user.page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          new URL(response.url()).pathname === '/api/attendance',
+      ),
+      user.page.reload(),
+    ]);
+    expect(listing.status()).toBe(200);
     await expect(first.locator('.attendance-milestone--featured.is-awarded')).toHaveCount(2);
     await expect(first.locator('.attendance-cover img')).toHaveAttribute('src', portrait);
-    const listing = await user.page.request.get(
-      user.origin + '/api/attendance?page=1&page_size=20',
-    );
-    const list = (await listing.json()) as AttendancePage;
-    expect(list.items).toHaveLength(2);
-    expect(list.items.every((entry) => entry.status === 'active')).toBe(true);
+    const cards = section.getByRole('region');
+    await expect(cards).toHaveCount(2);
+    await expect(
+      cards.filter({ has: user.page.getByText('In progress', { exact: true }) }),
+    ).toHaveCount(2);
     expect(admin.errors).toEqual([]);
     expect(user.errors).toEqual([]);
   } finally {

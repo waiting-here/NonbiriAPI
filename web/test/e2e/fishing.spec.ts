@@ -719,13 +719,17 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   await page.getByRole('button', { name: /^账号操作/ }).click();
   const account = page.getByRole('dialog', { name: '账号操作' });
   await expect(account.getByRole('link', { name: '账号', exact: true })).toBeVisible();
-  const theme = account.getByRole('combobox', { name: '主题' });
+  await page.keyboard.press('Escape');
+  await expect(account).not.toBeVisible();
+  await page.getByRole('button', { name: '装扮', exact: true }).click();
+  const appearance = page.getByRole('dialog', { name: '装扮', exact: true });
+  const theme = appearance.getByRole('combobox', { name: '主题' });
   await theme.selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await theme.selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.keyboard.press('Escape');
-  await expect(account).not.toBeVisible();
+  await expect(appearance).not.toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '首页', exact: true })).toBeInViewport();
@@ -991,7 +995,8 @@ for (const theme of ['light', 'dark'] as const)
         true,
       );
       await anonymity.locator('xpath=ancestor::label[1]').click();
-      await expect(privacy.getByRole('alert')).toContainText('Synthetic retryable profile save');
+      await expect(privacy.getByRole('alert')).toContainText('请核对请求字段后重试。');
+      await expect(anonymity).toBeChecked();
       await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeDisabled();
       await anonymity.locator('xpath=ancestor::label[1]').click();
       await expect(page.getByRole('button', { name: '投回池塘', exact: true })).toBeEnabled();

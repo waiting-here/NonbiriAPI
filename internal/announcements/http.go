@@ -196,7 +196,7 @@ func (api *httpAPI) listAdmin(writer http.ResponseWriter, request *http.Request,
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "state", "severity", "cursor", "limit", "page", "page_size")
+	values, ok := strictQuery(writer, request, "state", "severity", "title", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -204,7 +204,7 @@ func (api *httpAPI) listAdmin(writer http.ResponseWriter, request *http.Request,
 	if !ok {
 		return
 	}
-	query := AdminListQuery{Cursor: page.Cursor, Limit: page.Limit, Numbered: page.Numbered}
+	query := AdminListQuery{Title: values.Get("title"), Cursor: page.Cursor, Limit: page.Limit, Numbered: page.Numbered}
 	if value, present := values["state"]; present {
 		query.State = value[0]
 		if query.State == "" {

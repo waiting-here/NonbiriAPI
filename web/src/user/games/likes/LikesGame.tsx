@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { GameToolbar } from '../common/GameToolbar';
 import { GameMoney } from '../common/GameMoney';
 import { GameBackLink } from '../common/GameBackLink';
@@ -46,10 +47,7 @@ import { BattleAtmosphere } from './BattleAtmosphere';
 import type { LikesView, Presentation, Selection } from './types';
 import '../games.css';
 import '../common/duel/duel.css';
-import './likes.css';
-import './effects.css';
-import './desktop.css';
-import './guidance.css';
+import './battle.css';
 const Tutorial = lazy(() => import('./tutorial/Tutorial'));
 function Rules({
   catalog,
@@ -408,6 +406,11 @@ export function LikesGame(context: DuelLobbyContext) {
           />
         </div>
       </header>
+      {!current && !queue && !tutorial && (
+        <Link className="nb-btn nb-btn--secondary" to="?opponent=companion">
+          {t('common.companion.entry')}
+        </Link>
+      )}
       {context.onboarding && (
         <OnboardingCard game="likes" progress={context.onboarding} compactNote />
       )}

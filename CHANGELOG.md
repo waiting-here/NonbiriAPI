@@ -4,6 +4,46 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.4.3 — 2026-11-25
+
+- Add free human-versus-companion matches for Bidding Duel, Likes Duel and AI Gwent. Each includes one built-in opponent, seat-based replay and separate choices for personal memory and contributing anonymized official-game history.
+- Cancel unfinished games and clear waiting queues on service restart. Refund charged entries to their original sources or release outstanding holds. Preserve completed results, past first-clear receipts and Whale Haven's continuing activity.
+- Advance storage to schema 59 and account export to format 39. The standalone upgrader accepts exact schemas 54 through 58. Exports include retained companion matches, decisions and player preferences.
+- Native Chat clients receive separate answer and reasoning strings for
+  Mistral-style text and thinking blocks in JSON and streaming responses.
+- Chat also recognizes scalar reasoning aliases, typed reasoning details and
+  thinking blocks on third-party endpoints. JSON/SSE conversion preserves
+  signed and encrypted history. Responses streams deliver answers supplied
+  only in their final snapshot. Repeated empty finish choices on usage frames
+  deliver one terminal result. Gateway v4 accepts heartbeats during generation.
+  Station assistant prefills preserve signed replies for later tool calls.
+- Hungry whales can visit open neighbors for food while both keepers are offline.
+  Manual refills ask for confirmation when food would spill. Whale interactions give
+  immediate feedback, and tailor coupons are consumed only when the price drops.
+- New protocol selections default to OpenAI-compatible. New platform models and
+  OpenAI-compatible bindings initially select Chat Completions. Other supported
+  services can be selected explicitly.
+- Platform inference errors follow the account language. Recognized caller-input
+  errors reported by an upstream retain the donated key's current failure count,
+  including after protocol conversion or request adaptation.
+- Preserve fractions of a percent in charity discount reservations and settlement.
+- Continue long request-log searches in the background. Users, stewards and
+  administrators can cancel a running search and page through its results.
+  An index speeds up searches for caller errors.
+- Improve service setup, donation review, permission and limit editing, operations,
+  request logs and station assistant approvals. Mobile navigation, keyboard focus,
+  draft recovery and on-demand loading cover both stations.
+- A default 28-gram meal now earns an eligible visiting whale one pearl.
+  A full host bank pauses the meal and shows the reason to the visiting keeper.
+  The offline upgrade applies the new rate to the previous default combination.
+- Service key details follow model discovery through completion. Failed refreshes
+  show the latest failure alongside the retained catalog. Model actions fit their
+  labels on desktop and mobile.
+- Reduce SQLite index writes during Lake Notes checkpoints and reuse freshly
+  encoded receipts. Skip unchanged pressure samples and report Whale Haven
+  traffic by route. Committed activity updates can reach subscribers after
+  the initiating client disconnects.
+
 ## 1.4.2 — 2026-11-21
 
 - Feature selected sign-in rewards and choose an activity cover from pool

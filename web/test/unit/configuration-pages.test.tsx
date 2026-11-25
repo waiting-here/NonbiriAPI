@@ -435,7 +435,8 @@ describe('authoritative site-config frontend', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search' }), {
       target: { value: 'Site name' },
     });
-    expect(screen.getByLabelText('Endpoint limit')).toHaveValue(8);
+    expect(screen.queryByLabelText('Endpoint limit')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Site name')).toHaveValue('After');
     await rendered.user.click(screen.getByRole('button', { name: 'Search' }));
     expect(screen.queryByLabelText('Endpoint limit')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Site name')).toHaveValue('After');

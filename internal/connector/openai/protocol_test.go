@@ -24,7 +24,7 @@ const validChunk = `{
 }`
 
 func TestValidateCompletionAndChunkUsage(t *testing.T) {
-	usage, err := validateCompletion([]byte(validCompletion))
+	usage, _, err := validateCompletion([]byte(validCompletion))
 	if err != nil {
 		t.Fatalf("validateCompletion: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestUsageNormalizationMatrix(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			usage, err := validateCompletion(completion(test.usage))
+			usage, _, err := validateCompletion(completion(test.usage))
 			if err != nil {
 				t.Fatalf("validateCompletion rejected response over usage: %v", err)
 			}
@@ -163,7 +163,7 @@ func TestUsageNormalizationMatrix(t *testing.T) {
 	}
 
 	// Max-int64 boundary that stays consistent must parse exactly.
-	usage, err := validateCompletion(completion(`{"prompt_tokens":9223372036854775807,"completion_tokens":0,"total_tokens":9223372036854775807,"prompt_tokens_details":{"cached_tokens":9223372036854775807}}`))
+	usage, _, err := validateCompletion(completion(`{"prompt_tokens":9223372036854775807,"completion_tokens":0,"total_tokens":9223372036854775807,"prompt_tokens_details":{"cached_tokens":9223372036854775807}}`))
 	if err != nil || !usage.Present || usage.CacheReadInputTokens != 1<<63-1 || usage.UncachedInputTokens != 0 {
 		t.Fatalf("max boundary usage=%+v err=%v", usage, err)
 	}
@@ -184,7 +184,7 @@ func TestValidateCompletionRejectsMalformedSuccessShapes(t *testing.T) {
 		`{"id":"x","object":"chat.completion","created":1,"model":"m","choices":[{"index":0,"message":{}}]} trailing`,
 	}
 	for i, body := range tests {
-		if _, err := validateCompletion([]byte(body)); err == nil {
+		if _, _, err := validateCompletion([]byte(body)); err == nil {
 			t.Errorf("case %d accepted malformed response: %s", i, body)
 		}
 	}

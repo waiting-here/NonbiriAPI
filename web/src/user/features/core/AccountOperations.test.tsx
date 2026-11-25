@@ -1,5 +1,6 @@
 import { useLayoutEffect, type ComponentProps } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { ApiError } from '@shared/query/http';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders, assertNoSensitiveQueryCache } from '../../../../test/unit/support';
@@ -119,6 +120,52 @@ describe('account operation consumers', () => {
       expect(downloadAccountExport).not.toHaveBeenCalled();
     },
   );
+
+  it('explains deletion before starting OAuth and protects a pending, then interrupted deletion until authority is checked', async () => {
+    const initial = adapter();
+    const first = await renderWithProviders(<Fixture accountId="1" adapter={initial} />, {
+      station: 'user',
+      locale: 'en',
+    });
+    await first.user.click(screen.getByRole('button', { name: 'Delete account…' }));
+    const before = await screen.findByRole('alertdialog');
+    expect(before).toHaveTextContent(/irreversible/);
+    expect(initial.beginElevation).not.toHaveBeenCalled();
+    await first.user.click(within(before).getByRole('button', { name: /cancel/i }));
+    expect(initial.beginElevation).not.toHaveBeenCalled();
+    first.unmount();
+
+    returned('delete');
+    const actions = adapter();
+    let fail!: (error: Error) => void;
+    actions.deleteAccount = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const view = await renderWithProviders(<Fixture accountId="1" adapter={actions} />, {
+      station: 'user',
+      locale: 'en',
+    });
+    const verified = await screen.findByRole('alertdialog');
+    await view.user.click(
+      within(verified).getByRole('button', { name: 'Permanently delete account' }),
+    );
+    await waitFor(() => expect(actions.deleteAccount).toHaveBeenCalledOnce());
+    expect(verified).toBeVisible();
+    await act(async () => {
+      fail(new ApiError('network_error', 'Connection interrupted', 0));
+    });
+    const check = await screen.findByRole('button', { name: 'Check account status' });
+    expect(screen.getByRole('button', { name: 'Delete account…' })).toBeDisabled();
+    await view.user.click(check);
+    await screen.findByText(/account is still active/i);
+    await view.user.click(screen.getByRole('button', { name: 'Delete account…' }));
+    await screen.findByRole('alertdialog');
+    expect(actions.beginElevation).not.toHaveBeenCalled();
+    expect(actions.deleteAccount).toHaveBeenCalledTimes(1);
+  });
 
   it('cancels the sole deletion confirmation without sending a deletion', async () => {
     returned('delete');

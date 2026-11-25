@@ -44,6 +44,9 @@ function initial(): Profile {
         welfare_cut_bp: 400,
         thursday_cut_bp: 800,
         guest_wage_bp: 2000,
+        guest_full_grams: 28,
+        visit_grams_per_pearl: 28,
+        visit_max_pearls: 2,
         daily_exchange_pearls: 75,
         wallet_cap_milli: 300000000,
         conch_cost_shards: 5,
@@ -52,6 +55,17 @@ function initial(): Profile {
         stove_window_seconds: 172800,
         stove_required_grams: 180,
         feed_silver_fish_price_milli: 19000,
+        feed_silver_fish_grams: 200,
+        coupon_discount_bp: 2000,
+        decor_jelly_lamp_price_pearls: 85,
+        decor_coral_tea_price_pearls: 115,
+        decor_golden_clam_price_pearls: 168,
+        decor_shell_cabinet_price_pearls: 68,
+        decor_pearl_clock_price_pearls: 48,
+        decor_sea_planter_price_pearls: 58,
+        outfit_knit_beret_price_pearls: 150,
+        outfit_winter_snow_price_pearls: 185,
+        outfit_whale_hoodie_price_pearls: 220,
       },
     },
     social: { open: false, door: 'bay-a', accept_work: false, away: null, guests: [] },
@@ -101,6 +115,110 @@ function initial(): Profile {
   };
 }
 
+test('an oversized serving needs confirmation even in an empty custom bowl', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'en'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.settings.values.trough_grams = 100;
+  profile.snapshot.inventory.silver_fish = 1;
+  const sent: Action[] = [];
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
+    if (route.request().method() === 'POST') sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await page.getByRole('button', { name: 'Bag', exact: true }).click();
+  await expect(page.getByText(/Refill tickets only use servings that fit/)).toBeVisible();
+  await page.getByRole('button', { name: 'Fill the bowl', exact: true }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('100 g');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  expect(sent).toEqual([]);
+});
+
+test('tailor coupon savings agree on the shelf, at confirmation and after purchase', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('nb.lang', 'zh'));
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  const profile = initial();
+  const { home, wallet, whale } = profile.snapshot;
+  whale.hasCompletedNaming = true;
+  wallet.pearls = 100;
+  const buffs = {
+    autoRefillEnabled: false,
+    autoRefillTickets: 0,
+    aromaCharges: 0,
+    aromaActiveGrams: 0,
+    wardrobeDiscountCoupons: 1,
+  };
+  home.buffs = buffs;
+  profile.settings.exchange_enabled = false;
+  profile.settings.values.decor_shell_cabinet_price_pearls = 1;
+  profile.settings.values.decor_pearl_clock_price_pearls = 0;
+  const sent: Action[] = [];
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
+    if (route.request().method() === 'POST') {
+      const action = route.request().postDataJSON();
+      expect(action).toMatchObject({
+        type: 'toggle_decor',
+        decorId: 'jelly_lamp',
+        expected_profile_revision: '1',
+      });
+      sent.push(action);
+      home.ownedDecor.push('jelly_lamp');
+      home.equippedDecor.push('jelly_lamp');
+      buffs.wardrobeDiscountCoupons = 0;
+      wallet.pearls = 32;
+      profile.snapshot.revision++;
+    }
+    await route.fulfill({ json: profile });
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  const outfit = page.getByRole('article').filter({ hasText: '鲸鱼贝雷帽针织裙' });
+  const outfitPrice = '原价 150 枚 · 1 张裁缝券抵 30 枚 · 实付 120 枚小鲸币';
+  const dialog = page.getByRole('alertdialog');
+  await expect(outfit).toContainText(outfitPrice);
+  await outfit.getByRole('button', { name: '解锁衣装' }).click();
+  await expect(dialog).toContainText(outfitPrice);
+  await dialog.getByRole('button', { name: '取消' }).click();
+  await page.getByRole('button', { name: '收起菜单面板' }).click();
+  await page.getByRole('button', { name: '鲸币', exact: true }).click();
+  for (const [name, total] of [
+    ['珍珠舷窗挂钟', 0],
+    ['贝壳橡木矮柜', 1],
+  ] as const) {
+    const item = page.getByRole('listitem').filter({ hasText: name });
+    const kept = `实付 ${total} 枚小鲸币 · 裁缝券保留`;
+    await expect(item).toContainText(kept);
+    await item.getByRole('button', { name: '解锁家具' }).click();
+    await expect(dialog).toContainText(kept);
+    await dialog.getByRole('button', { name: '取消' }).click();
+  }
+  expect(sent).toHaveLength(0);
+  const lamp = page.getByRole('listitem').filter({ hasText: '幽蓝数据水母夜灯' });
+  const lampPrice = '原价 85 枚 · 1 张裁缝券抵 17 枚 · 实付 68 枚小鲸币';
+  await expect(lamp).toContainText(lampPrice);
+  await lamp.getByRole('button', { name: '解锁家具' }).click();
+  await expect(dialog).toContainText(lampPrice);
+  await dialog.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(
+    page.getByRole('status').filter({ hasText: '已解锁并布置幽蓝数据水母夜灯' }),
+  ).toContainText(lampPrice);
+  await expect(lamp.getByRole('button', { name: '收起', exact: true })).toBeVisible();
+  expect(sent).toHaveLength(1);
+  await page.getByRole('button', { name: '收起菜单面板' }).click();
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await expect(outfit).toContainText('实付 150 枚小鲸币');
+  await expect(outfit).not.toContainText('裁缝券');
+  await expect(page.getByText('32 小鲸币', { exact: true })).toBeVisible();
+});
+
 test('a visiting keeper sees hiring and meal state consistently in both havens', async ({
   page,
 }) => {
@@ -146,13 +264,18 @@ test('a visiting keeper sees hiring and meal state consistently in both havens',
     });
   });
   await page.goto(USER_ORIGIN + '/games/whale-haven');
-  await expect(page.getByText(/已吃 0 克 · 餐食奖励预计 0 枚/)).toBeVisible();
+  await expect(page.getByText(/已吃 0 \/ 28 克 · 每 28 克可获 1 枚小鲸币/)).toBeVisible();
   await page.getByRole('button', { name: '去邻居家看她' }).click();
   await expect(page.getByText('小鲸鱼 · 串门用餐')).toBeVisible();
   await expect(page.getByText('小满 · 正在帮工')).toBeVisible();
-  profile.social.away.working = true;
-  profile.social.away.work_ends_at_ms = Date.now() + 120000;
+  profile.social.away.meal_paused = true;
   await page.getByRole('button', { name: '串门', exact: true }).click();
+  await page.getByRole('button', { name: '刷新串门状态' }).click();
+  await expect(page.locator('.voyage-card').getByText(/屋主的存钱罐满了/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '召回并结算' })).toBeEnabled();
+  profile.social.away.working = true;
+  delete profile.social.away.meal_paused;
+  profile.social.away.work_ends_at_ms = Date.now() + 120000;
   await page.getByRole('button', { name: '刷新串门状态' }).click();
   await expect(page.getByRole('heading', { name: '在外帮工' })).toBeVisible();
   await expect(page.getByText(/预计收工/)).toBeVisible();
@@ -343,6 +466,13 @@ for (const width of [1440, 390]) {
               Number(profile.snapshot.wallet.gameMilli) - 19000 * body.quantity;
             profile.snapshot.inventory.silver_fish += body.quantity;
           }
+          if (body.type === 'use_feed') {
+            profile.snapshot.inventory.silver_fish--;
+            profile.snapshot.home.troughGrams = Math.min(
+              profile.settings.values.trough_grams,
+              profile.snapshot.home.troughGrams + profile.settings.values.feed_silver_fish_grams,
+            );
+          }
           if (body.type === 'send_visit')
             profile.social.away = {
               target: neighbor.id,
@@ -398,7 +528,26 @@ for (const width of [1440, 390]) {
           .poll(() => commands.filter((c) => c.type === 'buy_feed'))
           .toMatchObject([{ quantity: 3, feedId: 'silver_fish' }]);
         await expect(page.getByRole('status')).toContainText('已购入 热腾腾大碗白米饭 ×3');
+        const fills = () => commands.filter((command) => command.type === 'use_feed');
+        const fill = item.getByRole('button', { name: '盛入饭盆' });
+        await fill.click();
+        await expect(item).toContainText('库存 2 份');
+        expect(fills()).toMatchObject([{ maxSpillGrams: 0 }]);
+        await fill.click();
+        const spill = page.getByRole('alertdialog', { name: '饭碗装不下整份口粮' });
+        await expect(spill).toContainText('预计最多会浪费 40 克');
+        await expect(spill.getByRole('button', { name: '取消' })).toBeFocused();
+        await capture('refill');
+        await spill.getByRole('button', { name: '取消' }).click();
+        await expect(fill).toBeFocused();
+        await expect(item).toContainText('库存 2 份');
+        expect(fills()).toHaveLength(1);
         await page.getByRole('button', { name: '收起菜单面板' }).click();
+        await page.getByTitle(/点击一键添饭/).click();
+        await expect(spill).toContainText('这份口粮有 200 克');
+        await spill.getByRole('button', { name: '仍然添饭' }).click();
+        await expect(page.getByLabel('余粮', { exact: true })).toHaveText('360g');
+        expect(fills()).toMatchObject([{ maxSpillGrams: 0 }, { maxSpillGrams: 40 }]);
         await dock.getByRole('button', { name: '串门' }).click();
         await expect(page.getByText('Hidden identity')).toHaveCount(0);
         await page.getByRole('button', { name: '去串门', exact: true }).click();
@@ -432,6 +581,82 @@ for (const width of [1440, 390]) {
   }
 }
 
+test('a cold headpat keeps idle frames moving and plays the decoded action from frame zero', async ({
+  page,
+}, info) => {
+  await mockRoleSession(page, 'user', 'user');
+  await mockPublicConfig(page, 'user');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.addInitScript(() => {
+    localStorage.setItem('nb.lang', 'zh');
+    const draw = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function (
+      image: CanvasImageSource,
+      ...coords: number[]
+    ) {
+      const [x, y] = coords;
+      if (
+        image instanceof HTMLImageElement &&
+        this.canvas.classList.contains('whale-rig-canvas') &&
+        /\/(idle|waving)\.webp/.test(image.src)
+      ) {
+        const name = image.src.includes('/waving.') ? 'wave' : 'idle';
+        const trace = this.canvas.dataset;
+        const cell = String(x) + ',' + String(y);
+        if (trace[name] !== cell) {
+          trace[name] = cell;
+          trace[name + 'Count'] = String(Number(trace[name + 'Count'] ?? '0') + 1);
+          trace[name + 'First'] ??= cell;
+        }
+      }
+      return Reflect.apply(draw, this, [image, ...coords]);
+    };
+  });
+  const profile = initial();
+  profile.snapshot.whale.hasCompletedNaming = true;
+  profile.snapshot.whale.petLookEnabled = false;
+  profile.snapshot.whale.petRoamEnabled = false;
+  await page.route(USER_ORIGIN + '/api/games/whale-haven/**', (route) =>
+    route.fulfill({ json: profile }),
+  );
+  let release!: () => void;
+  const decoded = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/i2v/waving.webp', async (route) => {
+    await decoded;
+    await route.continue();
+  });
+  await page.goto(USER_ORIGIN + '/games/whale-haven');
+  const canvas = page.locator('canvas.whale-rig-canvas').first();
+  await expect(canvas).toBeVisible();
+  const requested = page.waitForRequest('**/i2v/waving.webp');
+  await page.getByRole('button', { name: /摸摸头（/ }).click();
+  await requested;
+  const before = Number(await canvas.getAttribute('data-idle-count'));
+  // A single loop is 4.45 s. A delayed decode must not consume its lifetime.
+  await expect
+    .poll(async () => Number(await canvas.getAttribute('data-idle-count')), { timeout: 8000 })
+    .toBeGreaterThan(before + 106);
+  release();
+  await expect(canvas).toHaveAttribute('data-wave-first', '0,0');
+  await expect
+    .poll(async () => Number(await canvas.getAttribute('data-wave-count')))
+    .toBeGreaterThan(4);
+  const evidence = process.env.NONBIRI_VISUAL_DIR;
+  if (evidence) {
+    await mkdir(evidence, { recursive: true });
+    await canvas.screenshot({ path: join(evidence, 'headpat-cold-decoded.png') });
+  }
+  await expect
+    .poll(async () => Number(await canvas.getAttribute('data-wave-count')), { timeout: 8000 })
+    .toBeGreaterThan(85);
+  await info.attach('decoded-visual-frames', {
+    body: String(await canvas.getAttribute('data-wave-count')),
+    contentType: 'text/plain',
+  });
+});
+
 test('menu position takes effect in place and routine interactions reply in the cabin', async ({
   page,
 }) => {
@@ -442,11 +667,16 @@ test('menu position takes effect in place and routine interactions reply in the 
   const profile = initial();
   profile.snapshot.whale.hasCompletedNaming = true;
   let failChat = false;
+  let releaseHead: (() => void) | undefined;
+  const heldHead = new Promise<void>((resolve) => {
+    releaseHead = resolve;
+  });
   profile.settings.values.affection_per_level = 250;
   profile.snapshot.whale.affection = 120;
   await page.route(USER_ORIGIN + '/api/games/whale-haven/**', async (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ json: profile });
     const { type } = route.request().postDataJSON();
+    if (type === 'interact') await heldHead;
     if (type === 'buy_feed')
       return route.fulfill({
         status: 409,
@@ -503,7 +733,11 @@ test('menu position takes effect in place and routine interactions reply in the 
   await chat.click();
   await expect(page.getByRole('button', { name: /听我讲个海湾冷笑话/ })).toBeVisible();
   await expect(button('关闭提示')).toHaveCount(0);
+  const waving = page.waitForRequest((request) => /waving.*\.webp/.test(request.url()));
   await page.getByRole('button', { name: /摸摸头（/ }).click();
+  await waving;
+  await expect(page.getByRole('button', { name: /摸摸头，好开心/ })).toHaveCount(0);
+  releaseHead?.();
   await expect(page.getByRole('button', { name: /摸摸头，好开心/ })).toBeVisible();
   await expect(button('关闭提示')).toHaveCount(0);
   failChat = true;

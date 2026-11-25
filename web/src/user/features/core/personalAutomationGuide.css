@@ -13,17 +13,13 @@
 }
 .personal-automation-guide th,
 .personal-automation-guide td {
+  min-width: 0;
   vertical-align: top;
 }
 .personal-automation-guide td:first-child {
   white-space: nowrap;
 }
 .personal-automation-guide td code {
-  white-space: nowrap;
-}
-@media (width < 40rem) {
-  .personal-automation-guide td code {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

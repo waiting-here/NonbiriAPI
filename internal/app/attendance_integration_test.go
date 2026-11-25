@@ -94,7 +94,7 @@ func TestAttendanceRoutesAutomaticAwardsExportAndDeletion(t *testing.T) {
 	}
 	assertUnadoptedWhaleAward(t, document.WhaleHaven, 6, 3, "attendance_tier", p.ID+":1")
 	var exported attendance.UserExport
-	if document.SchemaVersion != 38 || json.Unmarshal(document.Attendance, &exported) != nil || len(exported.SignIns) != 1 || len(exported.Periods) != 1 || !exported.Periods[0].Tiers[0].Awarded {
+	if document.SchemaVersion != 39 || json.Unmarshal(document.Attendance, &exported) != nil || len(exported.SignIns) != 1 || len(exported.Periods) != 1 || !exported.Periods[0].Tiers[0].Awarded {
 		t.Fatal("attendance export missing", string(document.Attendance))
 	}
 	account("/api/account/delete", `{"confirm":"DELETE"}`)

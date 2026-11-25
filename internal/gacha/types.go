@@ -143,6 +143,7 @@ type Configuration struct {
 	TimeZone     string       `json:"time_zone"`
 }
 type AdminInput struct {
+	DeleteID         string        `json:"delete_id,omitempty"`
 	EntryEnabled     *bool         `json:"entry_enabled,omitempty"`
 	Kind             string        `json:"kind"`
 	ExpectedRevision int64         `json:"expected_revision"`

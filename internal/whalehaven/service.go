@@ -45,6 +45,7 @@ func New(store *db.Store, auth resources.FinalTxAuthorizer, pools *activities.Se
 
 type resident struct {
 	id, revision        int64
+	savedTick           int64
 	door                string
 	open, exists, dirty bool
 	state               *rules.State
@@ -81,6 +82,9 @@ type world struct {
 	days           map[dayKey]counters
 	wages          map[int64]float64
 	events         []event
+
+	// Latest end of a disabled interval observed during this settlement.
+	lastPauseEnd int64
 }
 
 func openWorld(ctx context.Context, tx *sql.Tx, ms int64) (*world, error) {
@@ -145,6 +149,7 @@ func (w *world) load(id int64) (*resident, error) {
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	r.savedTick = r.state.LastTickAt
 	r.original, err = assets.Read(w.ctx, w.tx, id)
 	if err != nil {
 		return nil, err

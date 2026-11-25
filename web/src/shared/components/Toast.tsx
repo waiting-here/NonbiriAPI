@@ -29,6 +29,7 @@ interface ToastContextValue {
   clear: () => void;
 }
 
+const ToastActions = createContext<Omit<ToastContextValue, 'toasts'> | null>(null);
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const ICON_BY_TONE: Record<ToastTone, 'info' | 'check' | 'warning' | 'error'> = {
@@ -129,13 +130,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const clear = useCallback(() => setToasts([]), []);
   const push = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setToasts((current) => [...current.slice(-3), { ...toast, id }]);
+    setToasts((current) => {
+      const messages = [...current, { ...toast, id }];
+      if (messages.length <= 4) return messages;
+      const oldestTransient = messages.findIndex((entry) => durationFor(entry) !== null);
+      if (oldestTransient >= 0) messages.splice(oldestTransient, 1);
+      return messages;
+    });
     return id;
   }, []);
+  const actions = useMemo(() => ({ push, dismiss, clear }), [push, dismiss, clear]);
   const value = useMemo(() => ({ toasts, push, dismiss, clear }), [clear, dismiss, push, toasts]);
   return (
     <ToastContext.Provider value={value}>
-      {children}
+      <ToastActions.Provider value={actions}>{children}</ToastActions.Provider>
       <ToastViewport toasts={toasts} onDismiss={dismiss} />
     </ToastContext.Provider>
   );
@@ -148,6 +156,6 @@ export function useToast(): ToastContextValue {
 }
 
 /** Shells may be rendered in isolated tests or public states without a toast provider. */
-export function useOptionalToast(): ToastContextValue | null {
-  return useContext(ToastContext);
+export function useOptionalToast() {
+  return useContext(ToastActions);
 }

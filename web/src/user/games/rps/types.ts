@@ -14,6 +14,7 @@ export type RPSPhase = (typeof RPS_PHASES)[number];
 export const GESTURES = ['rock', 'scissors', 'paper'] as const;
 export type Gesture = (typeof GESTURES)[number];
 export type RPSTerminalReason =
+  | 'server_restart'
   | 'quick_resolved'
   | 'standard_round_limit'
   | 'standard_insufficient_balance'

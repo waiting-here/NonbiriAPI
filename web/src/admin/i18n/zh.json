@@ -1,5 +1,32 @@
 {
   "admin": {
+    "audit": {
+      "cleanupDraft": "请先应用或清空已编辑的筛选，再准备清理。",
+      "alertBatchScope": "将本页选中的 {{count}} 条告警标记为已处理。",
+      "alertRecord": "告警 #{{id}}",
+      "stationMaintenance": "用户站处于维护模式",
+      "settingsSavedSeparately": "此分组单独保存。",
+      "openNext": "下一条记录",
+      "openPrevious": "上一条记录",
+      "resumeReport": "将从上一处断点继续处理举报 {{id}} 的剩余操作。",
+      "pauseGames": "关闭小游戏总开关？",
+      "pauseModules": "同时停用这些模块：{{names}}。本次只保存开关，进行中的对局仍按原规则完成。",
+      "pauseAndSave": "停用并保存",
+      "previousModules": "上次关闭前已启用：{{names}}。重新开启时可按此清单核对模块。",
+      "keepGameDraft": "完成并暂存本项",
+      "unsavedModule": "未保存",
+      "invalidActivityTimes": "请按站点时区填写起止时间，结束时间须晚于开始时间。",
+      "searchReports": "搜索举报编号、连接器或服务地址",
+      "attendancePending": "「{{title}}」的保存结果待确认，请重新打开查看或重试。",
+      "reopenAttendance": "重新打开待确认编辑",
+      "copyAttendance": "复制为草稿",
+      "duplicateDays": "每个签到里程碑须使用不同的天数。",
+      "discardEdits": "放弃本次编辑？",
+      "discardBody": "关闭后会丢弃当前编辑器内未保存的修改。",
+      "gachaStatistics": "卡池统计",
+      "gachaShopStatistics": "商店统计",
+      "gameHistory": "对战历史"
+    },
     "managementHistory": {
       "title": "管理操作记录",
       "description": "查询管理变更、执行方、授权人及实际结果。",
@@ -861,7 +888,7 @@
       "promptTokens": "提示词 token",
       "activityTitle": "产品活动",
       "activityDisabled": "产品活跃统计已关闭，暂不显示每日签到与游戏活跃记录。",
-      "latestDay": "最新日期",
+      "activityDay": "日期",
       "productActive": "产品活跃",
       "gameActive": "游戏活跃",
       "activeValue": "有活动",
@@ -1160,8 +1187,7 @@
         "modeRequiresStake": "启用{{mode}}需要开启三人猜拳，并设置大于 0 的基础投入。",
         "changedElsewhere": "游戏设置已在其他位置修改。你的输入仍保留，请恢复最新设置后重新编辑。",
         "feeRange": "{{field}}须为 0 至 99.99%，最多两位小数。"
-      },
-      "aiPlayersTitle": "AI 玩家与策略"
+      }
     },
     "activities": {
       "nav": "活动",
@@ -1188,7 +1214,6 @@
         "welfareCap": "低保上限（积分）",
         "welfareEnabled": "启用低保活动",
         "welfareThreshold": "低保门槛（积分）",
-        "masterRequired": "请开启活动总开关，或同时关闭低保和疯狂星期四。",
         "periodRequired": "请先在下方填写疯狂星期四的文案和参与规则并保存，再开启活动。",
         "changedElsewhere": "活动设置已更新。请取消当前修改，再基于最新设置编辑。"
       },

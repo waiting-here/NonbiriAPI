@@ -13,7 +13,7 @@ without a match, a draw, or a system cancellation returns each entry to its
 original wallet. On a decided match, the winner receives their original entry
 back plus the loser's entry after fees as general credits. Each platform,
 welfare and Thursday fee is rounded down separately. Surrender is a loss.
-Disconnecting leaves the server timer running. A server restart, account ban or
+Disconnecting from a human match leaves its server timer running. A server restart, account ban or
 account deletion cancels an unfinished match; deleting a user cannot recreate
 that user's wallet. Displayed game points are separate from spendable credits.
 
@@ -42,13 +42,11 @@ Reward draws, both bid reveals and collection of the whole pool play in order.
 The presentation stays in view while scrolling; reduced motion keeps the cards
 and outcome visible without movement. It never exposes unrevealed cards.
 
-## AI challenges
+## Free companion matches
 
-Bidding Duel also supports AI opponents. The administrator can enable the four supplied players—Balanced, Pot-first, Patient and Comeback—or create more players with independently assigned strategies and prices. The strategy editor supports templates, parameters, ordered conditions and situation previews; [AI players](ai-players.md) describes configuration and the API.
+In Bidding and Likes, choose free companion play to challenge the built-in opponent. Bidding uses the 13-round rules. Likes supports quick and standard play, with a separate blind loadout choice. You may require an AI role, harness or particular skills. Both seats lock simultaneous choices privately and reveal them together.
 
-Bidding Duel AI challenges start under the terms shown when you queue. Waiting is unpaid; when the match starts, game credits pay first and general credits cover the remainder. A normally completed win earns the challenge's one-time first-clear reward in game credits. A zero reward still records completion; later reward changes do not grant a supplement. Ordinary matches have no prize and do not count toward PvP rankings or the original newcomer tasks. Normal wins, losses, draws, surrender and AI technical fallback do not refund tickets; fallback does not disqualify an otherwise valid first-clear win. System cancellation refunds the original funding assets. Price, name and strategy changes preserve first-clear status; an explicitly created new challenge has separate eligibility.
-
-Bidding Duel AI players make decisions locally on the Site server; match data is not sent to an external model. The service stores the AI opponent, policy version, action sources, ticket, first-clear record and personalized summary used for decisions. Each AI player defaults to eligible manual bids from at most 30 matches within 30 days; administrators may set 1–30 days and 1–100 matches. Eligible samples continue to be collected and expire within that window regardless of the preference. Turning off match memory excludes cross-match samples from decisions starting with the next match; public information from the current match remains available. Shrinking the window discards samples outside it, and later expansion does not restore them. Your export includes preferences, eligible samples, summaries used in retained matches and first-clear records. Frozen match summaries follow the 30-day match retention. Account deletion removes personal memory and links; long-term anonymous matches contain no personalized summary or account linkage. Minimal first-clear eligibility survives separately so recreating an account with the same Discord identity cannot claim it again.
+Companions use the same hidden-information rules as a human at that seat. You can leave and resume while the service is running. Waiting for a player has no timer. An AI decision has 20 seconds from the start of execution, including setup. A failure, invalid move or timeout ends the match. Open the history to replay from your seat. Companion games have no entry payment, first-clear award or ranking. Retired paid challenges retain their existing receipts and historical results. [Companion setup, memory and replay](ai-players.md)
 
 ## Turn-based Battle Minigame (Test)
 

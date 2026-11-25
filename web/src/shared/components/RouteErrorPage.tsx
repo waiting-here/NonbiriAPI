@@ -103,6 +103,14 @@ export function RouteErrorPage({
           <p>{t(bodyKey)}</p>
           {kind === '403' && station === 'user' && <LoginRestrictions />}
           {recovery}
+          {kind !== '403' && kind !== '404' && (
+            <Link
+              className="nb-btn nb-btn--secondary"
+              to={routePath(station, station === 'admin' ? 'admin-home' : 'home')}
+            >
+              {t('common.backHome')}
+            </Link>
+          )}
         </div>
       </div>
     </section>

@@ -152,7 +152,7 @@ func (a *Adapter) responsesChatStream(ctx context.Context, writer http.ResponseW
 			projected = state.terminalEvents()
 		} else {
 			first := state.id == ""
-			text, refusal := state.text, state.refusal
+			text, refusal, reasoning := state.text, state.refusal, state.reasoning
 			if event.Event != "" && event.Event != "message" {
 				clear(raw)
 				return failure("upstream stream event was invalid")
@@ -165,6 +165,7 @@ func (a *Adapter) responsesChatStream(ctx context.Context, writer http.ResponseW
 			if first {
 				projected = append(projected, state.event("response.created", map[string]any{"response": state.response(false)}), state.event("response.in_progress", map[string]any{"response": state.response(false)}))
 			}
+			projected = append(projected, state.reasoningEvents(reasoning)...)
 			projected = append(projected, state.textEvents(text, refusal)...)
 		}
 		for _, value := range projected {

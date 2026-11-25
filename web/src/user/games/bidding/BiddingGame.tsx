@@ -1,4 +1,5 @@
-import { BiddingLobby, AIMatchInfo, AIActionLog } from './AIPlayers';
+import { AIActionLog } from './AIPlayers';
+import { Link } from 'react-router';
 import { useAIText } from '@shared/aiPlayers';
 import { GameToolbar } from '../common/GameToolbar';
 import { GameMoney } from '../common/GameMoney';
@@ -147,20 +148,6 @@ export function BiddingGame({
         uncertain={duel.uncertain}
         onRetry={duel.uncertain ? duel.retry : duel.refresh}
       />
-      {home?.aiQueueError && (
-        <p role="status" className="duel-feedback">
-          {home.aiQueueError === 'insufficient_credits'
-            ? aiText(
-                '入场时余额不足，排队已结束，未扣除门票。',
-                'Insufficient balance at admission. The queue ended without charging a ticket.',
-              )
-            : aiText(
-                '人机排队已结束，未扣除门票。请重新选择对手。',
-                'The AI queue ended without charging a ticket. Please choose an opponent again.',
-              )}
-        </p>
-      )}
-      {current?.ai && <AIMatchInfo ai={current.ai} sources={current.sources} />}
       <BiddingPresentation home={home} onCue={audio.sound.play} />
       {current ? (
         <div className="bid-play">
@@ -265,25 +252,12 @@ export function BiddingGame({
         </div>
       ) : queue ? (
         <section className="bid-lobby">
-          <span className="bid-eyebrow">
-            {queue.ai
-              ? aiText('等待人机对局', 'WAITING FOR AI MATCH')
-              : text('bidding.fINDINGAMATCH')}
-          </span>
-          <h2>{queue.ai?.bot_name ?? text('bidding.yourSeatIsReady')}</h2>
+          <span className="bid-eyebrow">{text('bidding.fINDINGAMATCH')}</span>
+          <h2>{text('bidding.yourSeatIsReady')}</h2>
           <p>
             {text('bidding.queueTimeLeft')}: <strong>{remaining ?? '—'}s</strong>
           </p>
-          {queue.ai ? (
-            <p>
-              {aiText(
-                `前方包含自己共 ${queue.position ?? 1} 位。入场前不扣门票。`,
-                `Queue position: ${queue.position ?? 1}. No ticket is charged before admission.`,
-              )}
-            </p>
-          ) : (
-            <GamePayment payment={queue.payment} />
-          )}
+          <GamePayment payment={queue.payment} />
           <div className="duel-actions">
             <button
               type="button"
@@ -291,62 +265,59 @@ export function BiddingGame({
               disabled={duel.blocked}
               onClick={() => duel.run({ kind: 'cancel', id: queue.id, revision: queue.revision })}
             >
-              {queue.ai ? aiText('取消排队', 'Leave queue') : text('bidding.cancelQueueAndRefund')}
+              {text('bidding.cancelQueueAndRefund')}
             </button>
           </div>
         </section>
       ) : (
         <>
-          <BiddingLobby
-            blocked={duel.blocked}
-            onStart={duel.run}
-            lastMatch={home?.latestResult?.id}
-          >
-            <section className="bid-lobby">
-              <span className="bid-eyebrow">{text('bidding.cHOOSEYOURTABLE')}</span>
-              <h2>{text('bidding.thirteenCardsOneDuel')}</h2>
-              <div className="bid-modes" role="group" aria-label={text('bidding.entryTier')}>
-                {BIDDING_MODES.map((key, index) => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-pressed={mode === key}
-                    disabled={
-                      duel.pending || duel.uncertain || !!entryProblem({ config, accepting }, key)
-                    }
-                    onClick={() => setMode(key)}
-                  >
-                    <span>
-                      {text('bidding.tier')} {index + 1} {text('bidding.message2')}
-                    </span>
-                    <strong>
-                      <GameMoney value={config.modes[key]?.ticket ?? '0'} />
-                    </strong>
-                    <small>
-                      {!entryProblem({ config, accepting }, key)
-                        ? text('bidding.open')
-                        : text('bidding.unavailable')}
-                    </small>
-                  </button>
-                ))}
-              </div>
-              {selected && <DuelTerms mode={selected} />}
-              <GameActionBar cost={<GameMoney value={selected?.ticket ?? '0'} />}>
+          <Link className="nb-btn nb-btn--secondary" to="?opponent=companion">
+            {aiText('免费 AI 陪玩', 'Free AI companion')}
+          </Link>
+          <section className="bid-lobby">
+            <span className="bid-eyebrow">{text('bidding.cHOOSEYOURTABLE')}</span>
+            <h2>{text('bidding.thirteenCardsOneDuel')}</h2>
+            <div className="bid-modes" role="group" aria-label={text('bidding.entryTier')}>
+              {BIDDING_MODES.map((key, index) => (
                 <button
+                  key={key}
                   type="button"
-                  className="nb-btn nb-btn--primary"
-                  disabled={duel.blocked || !!unavailable || !enough}
-                  onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
+                  aria-pressed={mode === key}
+                  disabled={
+                    duel.pending || duel.uncertain || !!entryProblem({ config, accepting }, key)
+                  }
+                  onClick={() => setMode(key)}
                 >
-                  {unavailable
-                    ? entryMessage(unavailable, text)
-                    : !enough
-                      ? text('bidding.insufficientCredits')
-                      : text('bidding.payEntryAndFindAMatch')}
+                  <span>
+                    {text('bidding.tier')} {index + 1} {text('bidding.message2')}
+                  </span>
+                  <strong>
+                    <GameMoney value={config.modes[key]?.ticket ?? '0'} />
+                  </strong>
+                  <small>
+                    {!entryProblem({ config, accepting }, key)
+                      ? text('bidding.open')
+                      : text('bidding.unavailable')}
+                  </small>
                 </button>
-              </GameActionBar>
-            </section>
-          </BiddingLobby>
+              ))}
+            </div>
+            {selected && <DuelTerms mode={selected} />}
+            <GameActionBar cost={<GameMoney value={selected?.ticket ?? '0'} />}>
+              <button
+                type="button"
+                className="nb-btn nb-btn--primary"
+                disabled={duel.blocked || !!unavailable || !enough}
+                onClick={() => duel.run({ kind: 'queue', mode, termsHash: selected.termsHash })}
+              >
+                {unavailable
+                  ? entryMessage(unavailable, text)
+                  : !enough
+                    ? text('bidding.insufficientCredits')
+                    : text('bidding.payEntryAndFindAMatch')}
+              </button>
+            </GameActionBar>
+          </section>
           {home?.latestResult && (
             <section className="bid-result">
               <DuelFinance result={home.latestResult} />

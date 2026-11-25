@@ -254,11 +254,15 @@ for (const [language, width, theme] of [
         await page.goto(
           origin + healthURL + 'request_id=' + fixture.failure_trace.health_request_id,
         );
-        await page.locator('summary').getByText(labels.attempts, { exact: true }).click();
         const calls = page.locator('.log-attempts > li');
         await expect(calls).toHaveCount(3);
         const impact = labels.healthImpact;
-        const overload = calls.nth(0);
+        const overload = calls.first();
+        const callHeading = overload.getByRole('heading', {
+          name: labels.attemptNumber.replace('{{number}}', '1'),
+          exact: true,
+        });
+        await expect(callHeading).toBeVisible();
         const streakLine = overload.locator('.log-attempt-streak');
         await expect(streakLine).toContainText(impact.streak.unchanged);
         await expect(streakLine).toContainText('5 → 5');
@@ -282,7 +286,6 @@ for (const [language, width, theme] of [
         await expect(calls.nth(2).locator('.log-attempt-streak')).toContainText('4 → 0');
         await expect(calls.nth(2).locator('.log-attempt-backoff')).toHaveCount(0);
         await expect(overload.getByText(common.failure.missing, { exact: true })).toHaveCount(0);
-        const callHeading = overload.getByRole('heading');
         await callHeading.evaluate((element) => element.scrollIntoView({ block: 'center' }));
         await expect(callHeading).toBeInViewport();
         await expect(streakLine).toBeInViewport();

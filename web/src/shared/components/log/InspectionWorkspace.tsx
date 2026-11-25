@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Sheet } from '@shared/components/ui';
 import './inspection.css';
 
@@ -21,26 +22,59 @@ export function InspectionWorkspace({
   children,
 }: Props) {
   const list = useRef<HTMLDivElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
+  // A stable portal target keeps the same editors, open folds and loaded metadata in both layouts.
+  const [detailHost] = useState(() => document.createElement('div'));
+  const [mount, setMount] = useState<HTMLDivElement | null>(null);
+  const layout = useRef<boolean | null>(null);
+  const transfer = useRef<{ selected: string; top: number; focus: HTMLElement | null } | null>(
+    null,
+  );
+  const attachDetail = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node) return;
+      node.appendChild(detailHost);
+      setMount(node);
+      return () => setMount(null);
+    },
+    [detailHost],
+  );
   const origin = useRef<HTMLElement | null>(null);
   const previous = useRef<string | null>(null);
   const [docked, setDocked] = useState<boolean | null>(null);
-  const measureSlot = useCallback((slot: HTMLDivElement | null) => {
-    const listNode = list.current;
-    if (!listNode || !slot) return;
-    // Flex wraps the inspector below the list when their two reading widths no longer fit.
-    const measure = () => {
-      setDocked(Math.abs(slot.offsetLeft - listNode.offsetLeft) > 1);
-    };
-    measure();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    observer?.observe(listNode);
-    observer?.observe(slot);
-    return () => {
-      observer?.disconnect();
-      setDocked(null);
-    };
-  }, []);
+  const measureSlot = useCallback(
+    (slot: HTMLDivElement | null) => {
+      const listNode = list.current;
+      if (!listNode || !slot) return;
+      // Flex wraps the inspector below the list when their two reading widths no longer fit.
+      const measure = () => {
+        const next = Math.abs(slot.offsetLeft - listNode.offsetLeft) > 1;
+        if (next === layout.current) return;
+        const oldMount = detailHost.parentElement;
+        const oldScroll = oldMount?.closest<HTMLElement>('.inspection-dock, .nb-sheet__body');
+        if (layout.current !== null && oldMount?.dataset.record && oldScroll) {
+          const active = document.activeElement;
+          transfer.current = {
+            selected: oldMount.dataset.record,
+            top: oldScroll.scrollTop,
+            focus: active instanceof HTMLElement && detailHost.contains(active) ? active : null,
+          };
+        }
+        layout.current = next;
+        setDocked(next);
+      };
+      measure();
+      const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+      observer?.observe(listNode);
+      observer?.observe(slot);
+      return () => {
+        observer?.disconnect();
+        layout.current = null;
+        transfer.current = null;
+        setDocked(null);
+      };
+    },
+    [detailHost],
+  );
   // The sheet releases inertness in passive cleanup before the list or dock can take focus.
   useEffect(() => {
     const old = previous.current;
@@ -54,13 +88,21 @@ export function InspectionWorkspace({
     }
   }, [selected]);
   useEffect(() => {
-    const target = heading.current;
-    if (selected && docked && target) {
-      if (target?.parentElement?.parentElement) target.parentElement.parentElement.scrollTop = 0;
-      const frame = requestAnimationFrame(() => target.focus({ preventScroll: true }));
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [selected, docked]);
+    if (!selected || !mount?.isConnected || detailHost.parentElement !== mount) return;
+    const prior = transfer.current?.selected === selected ? transfer.current : null;
+    transfer.current = null;
+    const viewport = mount.closest<HTMLElement>('.inspection-dock, .nb-sheet__body');
+    const title = mount
+      .closest('.inspection-dock, [role="dialog"]')
+      ?.querySelector<HTMLElement>('h2');
+    const frame = requestAnimationFrame(() => {
+      // A cached detail can focus its linked attempt before the inspector mounts.
+      if (!prior && detailHost.contains(document.activeElement)) return;
+      if (viewport) viewport.scrollTop = prior?.top ?? 0;
+      (prior?.focus?.isConnected ? prior.focus : title)?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected, mount, detailHost]);
   return (
     <div className="inspection-workspace">
       <div
@@ -75,33 +117,39 @@ export function InspectionWorkspace({
         {children}
       </div>
       {selected && (
-        <div ref={measureSlot} className="inspection-slot">
+        <div
+          ref={measureSlot}
+          className="inspection-slot"
+          onKeyDown={(event) => {
+            const target = event.target;
+            if (
+              event.key === 'Escape' &&
+              !event.defaultPrevented &&
+              target instanceof Node &&
+              (detailHost.contains(target) || event.currentTarget.contains(target))
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              onClose();
+            }
+          }}
+        >
           {docked === null ? null : docked ? (
-            <section
-              className="inspection-dock"
-              aria-label={title}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape' && !event.defaultPrevented) {
-                  event.stopPropagation();
-                  onClose();
-                }
-              }}
-            >
+            <section className="inspection-dock" aria-label={title}>
               <header className="inspection-head">
-                <h2 ref={heading} tabIndex={-1}>
-                  {title}
-                </h2>
+                <h2 tabIndex={-1}>{title}</h2>
                 <Button type="button" onClick={onClose}>
                   {closeLabel}
                 </Button>
               </header>
-              {detail}
+              <div ref={attachDetail} data-record={selected} />
             </section>
           ) : (
             <Sheet open title={title} size="lg" closeLabel={closeLabel} onClose={onClose}>
-              {detail}
+              <div ref={attachDetail} data-record={selected} />
             </Sheet>
           )}
+          {docked !== null && createPortal(detail, detailHost, selected)}
         </div>
       )}
     </div>

@@ -6,7 +6,7 @@ import (
 )
 
 func TestResponseChatBuffersPreserveFragmentsAndCallGrowth(t *testing.T) {
-	state := responseChatState{model: "public", gatewayReasoning: true}
+	state := responseChatState{model: "public", gateway: true}
 	consume := func(delta string) {
 		t.Helper()
 		raw := strings.TrimSuffix(strings.TrimPrefix(chatResponseChunk(delta, "null", "null"), "data: "), "\n\n")

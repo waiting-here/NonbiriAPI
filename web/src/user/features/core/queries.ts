@@ -61,6 +61,8 @@ export const coreKeys = {
     ['user', 'core', 'account', accountId, 'endpoint', endpointId] as const,
   endpointKeysRoot: (accountId: string, endpointId: string) =>
     ['user', 'core', 'account', accountId, 'endpoint-keys', endpointId] as const,
+  focusedEndpointKey: (accountId: string, endpointId: string, keyId: string) =>
+    [...coreKeys.endpointKeysRoot(accountId, endpointId), 'focused', keyId] as const,
   endpointKeys: (accountId: string, endpointId: string, cursor?: string) =>
     ['user', 'core', 'account', accountId, 'endpoint-keys', endpointId, cursor ?? 'first'] as const,
   catalogRoot: (accountId: string, endpointId: string, keyId: string) =>

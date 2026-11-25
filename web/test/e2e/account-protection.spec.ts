@@ -137,6 +137,10 @@ test('deletion alerts can be filtered and resolved in a selected batch', async (
   await layout(page, 'deletion-alert');
   await page.getByRole('checkbox', { name: 'Select alert 7' }).check();
   await page.getByRole('button', { name: 'Resolve selected (1)' }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Resolve selected (1)' })
+    .getByRole('button', { name: 'Resolve', exact: true })
+    .click();
   await expect(page.getByText('123456789012345678')).toHaveCount(0);
   expect(done).toBe(true);
   errors.assertNone();
@@ -369,6 +373,7 @@ test('blacklist add and remove work on desktop and narrow screens', async ({ pag
   await layout(page, 'blacklist', reasonNote);
   await page.getByRole('button', { name: 'Action: 123456789012345678', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Remove from blacklist' }).click();
+  await confirmation.getByRole('button', { name: 'Remove from blacklist', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Account #42', exact: true })).toHaveCount(0);
   expect(listed).toBe(false);
   errors.assertNone();

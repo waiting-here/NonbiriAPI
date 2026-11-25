@@ -31,6 +31,8 @@ func (service *Service) RecoverBeforeListenAt(
 
 	workerCtx, cancel := context.WithDeadline(ctx, budgetDeadline)
 	defer cancel()
+	service.recoveryMu.Lock()
+	defer service.recoveryMu.Unlock()
 	startup := !service.recovered.Load()
 	processed := 0
 	if startup && !service.recoveryValidated.Load() {
@@ -45,6 +47,18 @@ func (service *Service) RecoverBeforeListenAt(
 			return RecoveryResult{}, err
 		}
 		processed += count
+		if processed < limit {
+			count, err := service.cancelStartupBatch(workerCtx, decisionNow, limit-processed)
+			if err != nil {
+				return RecoveryResult{}, err
+			}
+			processed += count
+		}
+		more := processed == limit
+		if !more {
+			service.recovered.Store(true)
+		}
+		return RecoveryResult{Processed: processed, More: more}, nil
 	}
 	if processed < limit {
 		count, err := service.recoverHealthEpochBatch(workerCtx, decisionNow, limit-processed)
@@ -75,12 +89,9 @@ func (service *Service) RecoverBeforeListenAt(
 		processed += count
 	}
 
-	more, err := service.recoveryWorkPending(workerCtx, decisionNow, startup)
+	more, err := service.recoveryWorkPending(workerCtx, decisionNow)
 	if err != nil {
 		return RecoveryResult{}, err
-	}
-	if startup && !more {
-		service.recovered.Store(true)
 	}
 	return RecoveryResult{Processed: processed, More: more}, nil
 }
@@ -130,14 +141,7 @@ ORDER BY session_id,user_id LIMIT ?)`, limit)
 	return int(changed), nil
 }
 
-func (service *Service) recoveryWorkPending(ctx context.Context, decisionNow int64, startup bool) (bool, error) {
-	if startup {
-		pending, err := service.recoveryExists(ctx, `SELECT EXISTS(
-SELECT 1 FROM game_online_leases WHERE substr(session_id,1,4)='rps_')`)
-		if err != nil || pending {
-			return pending, err
-		}
-	}
+func (service *Service) recoveryWorkPending(ctx context.Context, decisionNow int64) (bool, error) {
 	pending, err := service.recoveryExists(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_rps_sessions WHERE health_epoch<>?)`, service.healthEpoch)
 	if err != nil || pending {

@@ -1,3 +1,4 @@
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
@@ -416,6 +417,7 @@ function ModelLimitEditor({
 
   return (
     <section ref={panel} className="nb-stack model-limits__editor" aria-label={model}>
+      <DraftLeaveGuard dirty={!!draft && Object.keys(draft.changes).length > 0} />
       <Button variant="ghost" type="button" onClick={onBack}>
         {t('common.modelLimits.back')}
       </Button>

@@ -175,6 +175,9 @@ async function deleteRule(page: Page, actor: Session, panel: Locator, pattern: s
       new URL(value.url()).pathname === actor.prefix + rulesPath,
   );
   await ruleRow(panel, pattern).getByRole('button', { name: labels.remove, exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: labels.remove });
+  await expect(confirmation).toContainText(pattern);
+  await confirmation.getByRole('button', { name: labels.remove, exact: true }).click();
   expect((await response).status()).toBe(204);
   await expect(ruleRow(panel, pattern)).toHaveCount(0);
 }
@@ -355,7 +358,7 @@ test('level five without tag permission reads rule sources but cannot bypass the
   }
 });
 
-test('a separate pending donation needs manual approval and keeps its receipt outside both panes', async ({
+test('a separate pending donation needs manual approval and keeps its receipt with the active view', async ({
   browser,
 }) => {
   const actor = await session(browser, 'admin');
@@ -407,6 +410,10 @@ test('a separate pending donation needs manual approval and keeps its receipt ou
         new URL(response.url()).pathname === actor.prefix + donationPath + '/pending-review',
     );
     await page.getByRole('button', { name: connectionCopy.approveAllUses, exact: true }).click();
+    await page
+      .getByRole('alertdialog', { name: connectionCopy.approveAllUses })
+      .getByRole('button', { name: connectionCopy.approveAllUses, exact: true })
+      .click();
     const response = await reviewed;
     expect(response.status()).toBe(200);
     expect(response.request().postDataJSON().uses).toEqual(
@@ -422,7 +429,12 @@ test('a separate pending donation needs manual approval and keeps its receipt ou
     });
     const container = page.locator('.charity-donations');
     const panes = container.locator(':scope > .charity-donations__panes');
-    const receipt = container.locator(':scope > .donation-review-results');
+    const receipt = panes.locator(':scope > .ops-detail-target > .donation-review-results');
+    const listReceipt = container.locator(':scope > .donation-review-results');
+    const back = panes.getByRole('button', {
+      name: common.common.operations.charity.returnToList,
+      exact: true,
+    });
     await expect(receipt).toBeVisible();
     await expect(receipt.locator(':scope > li')).toHaveCount(data.pending_key_ids.length);
     for (const theme of ['light', 'dark']) {
@@ -433,20 +445,16 @@ test('a separate pending donation needs manual approval and keeps its receipt ou
         await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
         await receipt.scrollIntoViewIfNeeded();
         await expect(panes.locator(':scope > *')).toHaveCount(2);
-        expect(
-          await receipt.evaluate((node) => node.closest('.charity-donations__panes') === null),
-        ).toBe(true);
         const receiptBox = await receipt.boundingBox();
-        const panesBox = await panes.boundingBox();
+        const backBox = await back.boundingBox();
         expect(Math.round(receiptBox!.y + receiptBox!.height)).toBeLessThanOrEqual(
-          Math.round(panesBox!.y),
+          Math.round(backBox!.y),
         );
         await noOverflow(page);
-        await panes
-          .getByRole('button', { name: common.common.operations.charity.returnToList, exact: true })
-          .click();
+        await back.click();
         await expect(panes.locator(':scope > *')).toHaveCount(1);
-        await expect(receipt).toBeVisible();
+        await expect(listReceipt).toBeVisible();
+        await expect(listReceipt.locator(':scope > li')).toHaveCount(data.pending_key_ids.length);
         await panes
           .getByRole('button', { name: common.common.operations.charity.openReview, exact: true })
           .click();

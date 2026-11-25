@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
@@ -181,8 +182,46 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 			return err
 		}
 	}
-	if err := offlineStep(ctx, "migration", 56, "attendance_periods", "attendance presentation", func() error {
-		_, err := tx.ExecContext(ctx, db.AttendancePresentationSQL)
+	if source < 56 {
+		if err := offlineStep(ctx, "migration", 56, "attendance_periods", "attendance presentation", func() error {
+			_, err := tx.ExecContext(ctx, db.AttendancePresentationSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+	if source < 57 {
+		if err := offlineStep(ctx, "migration", 57, "dispatch_caller_parameter_errors", "Google caller error receipts", func() error {
+			_, err := tx.ExecContext(ctx, db.GoogleCallerParameterSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+		if err := offlineStep(ctx, "migration", 57, "charity_reservations", "fractional discount snapshots", func() error {
+			_, err := tx.ExecContext(ctx, db.CharityDiscountPrecisionSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+		if err := offlineStep(ctx, "migration", 57, "whale_haven_settings", "Whale Haven visit reward rate", func() error {
+			return updateVisitRewardRate(ctx, tx, time.Now().UnixMilli())
+		}); err != nil {
+			return err
+		}
+	}
+	if source < 58 {
+		if err := offlineStep(ctx, "migration", 58, "request_logs", "caller error log index", func() error {
+			_, err := tx.ExecContext(ctx, db.RequestLogCallerErrorIndexSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+	if err := offlineStep(ctx, "migration", 59, "companion_matches", "companion games and restart settlement", func() error {
+		if err := UpgradeGameCancellation(ctx, tx); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, db.CompanionProgramsSQL+"\n"+db.CompanionMatchesSQL)
 		return err
 	}); err != nil {
 		return err
@@ -207,6 +246,17 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 		committed = err == nil
 		return err
 	})
+}
+
+// Append a prospective correction to the old defaults without rewriting
+// historical meals or changing a site's customized reward or meal size.
+func updateVisitRewardRate(ctx context.Context, tx *sql.Tx, at int64) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO whale_haven_settings(revision,effective_at,document)
+		SELECT revision+1,MAX(effective_at,?),json_set(document,'$.values.visit_grams_per_pearl',28)
+		FROM (SELECT revision,effective_at,document FROM whale_haven_settings ORDER BY revision DESC LIMIT 1)
+		WHERE json_extract(document,'$.values.guest_full_grams')=28
+		AND json_extract(document,'$.values.visit_grams_per_pearl')=35`, at)
+	return err
 }
 
 func migrateSchema54(ctx context.Context, tx *sql.Tx) error {

@@ -327,11 +327,10 @@ export const DECOR_CATALOG: Record<
 
 export interface ConchGachaRewardItem {
   readonly id: 'auto_refill' | 'aroma_boost' | 'wardrobe_coupon' | 'affection_candy';
-  readonly name: string;
+  readonly name: readonly [string, string];
   readonly emoji: string;
   readonly artwork?: string;
-
-  readonly description: string;
+  readonly description: readonly [string, string];
 }
 
 export const CONCH_SHARD_ART = 'props/conch-shard.webp';
@@ -340,35 +339,42 @@ export const CONCH_GACHA_ART = 'props/conch-gacha.webp';
 export const CONCH_GACHA_POOL: readonly ConchGachaRewardItem[] = [
   {
     id: 'auto_refill',
-    name: '定时续碗保温券 ×1',
+    name: ['定时续碗保温券', 'Auto-refill ticket'],
     emoji: '🍲',
     artwork: 'props/buff-auto-refill.webp',
 
-    description: '开启后当青花饭碗吃空时，自动从背包续入 1 碗口粮，夜间长挂不断粮！',
+    description: [
+      '开启自动续饭后，饭碗吃空时会使用一张券补一份主粮。',
+      'With auto-refill on, an empty bowl uses one ticket to add a serving of rice.',
+    ],
   },
   {
     id: 'aroma_boost',
-    name: '五常新米增香包 ×1',
+    name: ['五常新米增香包', 'Rice seasoning'],
     emoji: '✨',
     artwork: 'props/buff-aroma-spice.webp',
 
-    description: '撒入饭碗后，接下来一部分米饭的消化速度提升（更快拿满产出）！',
+    description: [
+      '撒入饭碗后，小鲸会更快消化一部分米饭。',
+      'Add it to the bowl to help your whale digest some of the rice faster.',
+    ],
   },
   {
     id: 'wardrobe_coupon',
-    name: '深海裁缝海螺券 ×1',
+    name: ['深海裁缝海螺券', 'Tailor coupon'],
     emoji: '🎀',
     artwork: 'props/buff-tailor-coupon.webp',
 
-    description: '下次用小鲸币解锁任意衣橱新装或小屋家具时自动抵扣一部分小鲸币！',
+    description: [
+      '解锁新衣装或家具时，能省小鲸币才会用券。',
+      'Used automatically when it saves coins on an outfit or furnishing.',
+    ],
   },
   {
     id: 'affection_candy',
-    name: '海盐牛奶糖（羁绊 +18）',
+    name: ['海盐牛奶糖', 'Sea salt milk candy'],
     emoji: '🍬',
-    artwork: 'props/rice-onigiri-snack.webp',
-
-    description: '当场喂给小鲸鱼，心情回满并直接增加 +18 点羁绊经验，加速解锁高阶转化率！',
+    description: ['抽中后小鲸会当场吃掉。', 'Your whale eats it as soon as you draw it.'],
   },
 ];
 

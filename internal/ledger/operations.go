@@ -36,6 +36,8 @@ var operationRules = map[Kind]operationRule{
 	KindFishingSettle:        {source: sourceFishingBatch, channel: "fishing", behavior: "settlement"},
 	KindFishingRelease:       {source: sourceFishingBatch, channel: "fishing", behavior: "refund"},
 	KindLinkLinkEntry:        {source: sourceLinkLinkSession, channel: "linklink", behavior: "fee"},
+	KindLinkLinkRefund:       {source: sourceLinkLinkSession, channel: "linklink", behavior: "refund"},
+	KindRPSRefund:            {source: sourceRPSSession, channel: "rps", behavior: "refund"},
 	KindRPSQueueReserve:      {source: sourceRPSQueue, channel: "rps", behavior: "reserve"},
 	KindRPSQueueRelease:      {source: sourceRPSQueue, channel: "rps", behavior: "refund"},
 	KindRPSSessionStart:      {source: sourceRPSSession, channel: "rps", behavior: "transfer"},

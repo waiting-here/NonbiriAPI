@@ -19,6 +19,7 @@ import {
   PanelBody,
   PanelHead,
   Toggle,
+  Tabs,
 } from '@shared/components/ui';
 import {
   AGENT_TOOLS,
@@ -33,6 +34,8 @@ import {
   type TemplateMessage,
 } from './api';
 import { AgentError } from './AgentParts';
+import { ChatGPTConnection } from './ChatGPTConnection';
+import { CodexConnection } from './CodexConnection';
 import { DriverPanel } from './DriverPanel';
 import { ReasoningEffortField } from './ReasoningEffortField';
 
@@ -552,7 +555,28 @@ function DriverForm({ initial, account }: { initial: DriverSettings; account: st
     </Panel>
   );
 }
-function AgentConfigForm({ initial, account }: { initial: AgentSettings; account: string }) {
+function configurationFields(conversation: AgentSettings, tools: AgentSettings) {
+  return {
+    chat_enabled: conversation.chat_enabled,
+    mode: conversation.mode,
+    auto_template: conversation.auto_template,
+    chat_template: conversation.chat_template,
+    auto_prefill: conversation.auto_prefill,
+    chat_prefill: conversation.chat_prefill,
+    tools: tools.tools,
+    tool_descriptions: tools.tool_descriptions,
+    search_url: tools.search_url,
+  };
+}
+function AgentConfigForm({
+  initial,
+  account,
+  toolsView,
+}: {
+  initial: AgentSettings;
+  account: string;
+  toolsView: boolean;
+}) {
   const { t } = useTranslation();
   const client = useQueryClient();
   const guard = useAdminRequestGuard();
@@ -560,30 +584,34 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
   const [draft, setDraft] = useState(initial);
   const [key, setKey] = useState<string>();
   const [error, setError] = useState<unknown>(null);
+  const [lastToolsView, setLastToolsView] = useState(toolsView);
+  if (lastToolsView !== toolsView) {
+    setLastToolsView(toolsView);
+    setKey(undefined);
+  }
   const patch = (change: Partial<AgentSettings>) => setDraft((old) => ({ ...old, ...change }));
+  const visible = toolsView ? configurationFields(base, draft) : configurationFields(draft, base);
+  const dirty =
+    JSON.stringify(visible) !== JSON.stringify(configurationFields(base, base)) ||
+    key !== undefined;
+  const restoreSection = (saved: AgentSettings) => {
+    setDraft((old) => ({
+      ...saved,
+      ...(toolsView ? configurationFields(old, saved) : configurationFields(saved, old)),
+    }));
+    setKey(undefined);
+  };
   const save = useMutation({
     mutationFn: async () => {
       const request = guard();
-      const body: Omit<AgentSettings, 'revision' | 'search_has_key'> = {
-        chat_enabled: draft.chat_enabled,
-        mode: draft.mode,
-        auto_template: draft.auto_template,
-        chat_template: draft.chat_template,
-        auto_prefill: draft.auto_prefill,
-        chat_prefill: draft.chat_prefill,
-        tools: draft.tools,
-        tool_descriptions: draft.tool_descriptions,
-        search_url: draft.search_url,
-      };
       const value = await putSettings({
-        ...body,
+        ...visible,
         expected_revision: base.revision,
-        ...(key !== undefined ? { search_api_key: key } : {}),
+        ...(toolsView && key !== undefined ? { search_api_key: key } : {}),
       });
       request.assertCurrent();
       setBase(value);
-      setDraft(value);
-      setKey(undefined);
+      restoreSection(value);
       client.setQueryData([...agentRoot('admin', account), 'settings'], value);
       return value;
     },
@@ -610,144 +638,145 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
           className="nb-form"
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate();
+            if (dirty && !busy) save.mutate();
           }}
         >
           <fieldset className="nb-stack" disabled={busy}>
-            <Fields>
-              <Toggle
-                disabled={busy}
-                label={t('common.agent.chatEnabled')}
-                description={t('common.agent.chatEnabledHelp')}
-                checked={draft.chat_enabled}
-                onChange={(chat_enabled) => patch({ chat_enabled })}
-              />
-              <Field label={t('common.agent.autoMode')} help={t('common.agent.modeHelp')}>
-                {(props) => (
-                  <select
-                    {...props}
-                    value={draft.mode}
-                    onChange={(event) =>
-                      patch({ mode: event.target.value as AgentSettings['mode'] })
-                    }
-                  >
-                    <option value="off">{t('common.agent.modes.off')}</option>
-                    <option value="preview">{t('common.agent.modes.preview')}</option>
-                    <option value="auto">{t('common.agent.modes.auto')}</option>
-                  </select>
-                )}
-              </Field>
-            </Fields>
-            <Fold title={t('common.agent.templates')}>
-              <h3>{t('common.agent.reviewTemplate')}</h3>
-              <TemplateEditor
-                value={draft.auto_template}
-                onChange={(auto_template) => patch({ auto_template })}
-                chat={false}
-              />
-              <h3>{t('common.agent.chatTemplate')}</h3>
-              <TemplateEditor
-                value={draft.chat_template}
-                onChange={(chat_template) => patch({ chat_template })}
-                chat
-              />
-              <Field
-                label={t('common.agent.reviewPrefill')}
-                size="long"
-                help={t('common.agent.prefillHelp')}
-                optional
-              >
-                {(props) => (
-                  <textarea
-                    {...props}
-                    value={draft.auto_prefill}
-                    onChange={(event) => patch({ auto_prefill: event.target.value })}
+            {!toolsView && (
+              <>
+                <Fields>
+                  <Toggle
+                    disabled={busy}
+                    label={t('common.agent.chatEnabled')}
+                    description={t('common.agent.chatEnabledHelp')}
+                    checked={draft.chat_enabled}
+                    onChange={(chat_enabled) => patch({ chat_enabled })}
                   />
-                )}
-              </Field>
-              <Field size="long" label={t('common.agent.chatPrefill')} optional>
-                {(props) => (
-                  <textarea
-                    {...props}
-                    value={draft.chat_prefill}
-                    onChange={(event) => patch({ chat_prefill: event.target.value })}
-                  />
-                )}
-              </Field>
-            </Fold>
-            <Fold title={t('common.agent.toolsTitle')}>
-              <p className="nb-small nb-muted">{t('common.agent.toolDescriptionHelp')}</p>
-              <Fields>
-                {AGENT_TOOLS.map((name) => (
-                  <div key={name} className="nb-stack nb-stack--sm">
-                    <Toggle
-                      disabled={busy}
-                      label={t(toolLabels[name]!)}
-                      checked={draft.tools[name] ?? true}
-                      onChange={(checked) =>
-                        patch({ tools: { ...draft.tools, [name]: checked } })
-                      }
-                    />
-                    <Fold plain title={t('common.agent.toolDescription')}>
-                      <Field
-                        label={t('common.agent.toolDescriptionFor', {
-                          tool: t(toolLabels[name]!),
-                        })}
+                  <Field label={t('common.agent.autoMode')} help={t('common.agent.modeHelp')}>
+                    {(props) => (
+                      <select
+                        {...props}
+                        value={draft.mode}
+                        onChange={(event) =>
+                          patch({ mode: event.target.value as AgentSettings['mode'] })
+                        }
                       >
-                        {(props) => (
-                          <textarea
-                            {...props}
-                            rows={6}
-                            value={draft.tool_descriptions?.[name] ?? ''}
-                            onChange={(event) =>
-                              patch({
-                                tool_descriptions: {
-                                  ...draft.tool_descriptions,
-                                  [name]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                        )}
-                      </Field>
-                    </Fold>
-                  </div>
-                ))}
-              </Fields>
-            </Fold>
-            <Fold title={t('common.agent.webSearch')}>
-              <Fields>
-                <Field
-                  size="long"
-                  label={t('common.agent.searchURL')}
-                  help={t('common.agent.searchHelp')}
-                >
-                  {(props) => (
-                    <input
-                      {...props}
-                      type="url"
-                      value={draft.search_url}
-                      onChange={(event) => patch({ search_url: event.target.value })}
+                        <option value="off">{t('common.agent.modes.off')}</option>
+                        <option value="preview">{t('common.agent.modes.preview')}</option>
+                        <option value="auto">{t('common.agent.modes.auto')}</option>
+                      </select>
+                    )}
+                  </Field>
+                </Fields>
+                <Fold title={t('common.agent.templates')}>
+                  <h3>{t('common.agent.reviewTemplate')}</h3>
+                  <TemplateEditor
+                    value={draft.auto_template}
+                    onChange={(auto_template) => patch({ auto_template })}
+                    chat={false}
+                  />
+                  <h3>{t('common.agent.chatTemplate')}</h3>
+                  <TemplateEditor
+                    value={draft.chat_template}
+                    onChange={(chat_template) => patch({ chat_template })}
+                    chat
+                  />
+                  <Field
+                    label={t('common.agent.reviewPrefill')}
+                    size="long"
+                    help={t('common.agent.prefillHelp')}
+                    optional
+                  >
+                    {(props) => (
+                      <textarea
+                        {...props}
+                        value={draft.auto_prefill}
+                        onChange={(event) => patch({ auto_prefill: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                  <Field size="long" label={t('common.agent.chatPrefill')} optional>
+                    {(props) => (
+                      <textarea
+                        {...props}
+                        value={draft.chat_prefill}
+                        onChange={(event) => patch({ chat_prefill: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                </Fold>
+              </>
+            )}
+            {toolsView && (
+              <>
+                <Fold title={t('common.agent.toolsTitle')} defaultOpen>
+                  <p className="nb-small nb-muted">{t('common.agent.toolDescriptionHelp')}</p>
+                  <Fields>
+                    {AGENT_TOOLS.map((name) => (
+                      <div key={name} className="nb-stack nb-stack--sm">
+                        <Toggle
+                          disabled={busy}
+                          label={t(toolLabels[name]!)}
+                          checked={draft.tools[name] ?? true}
+                          onChange={(checked) =>
+                            patch({ tools: { ...draft.tools, [name]: checked } })
+                          }
+                        />
+                        <Fold plain title={t('common.agent.toolDescription')}>
+                          <Field
+                            label={t('common.agent.toolDescriptionFor', {
+                              tool: t(toolLabels[name]!),
+                            })}
+                          >
+                            {(props) => (
+                              <textarea
+                                {...props}
+                                rows={6}
+                                value={draft.tool_descriptions?.[name] ?? ''}
+                                onChange={(event) =>
+                                  patch({
+                                    tool_descriptions: {
+                                      ...draft.tool_descriptions,
+                                      [name]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            )}
+                          </Field>
+                        </Fold>
+                      </div>
+                    ))}
+                  </Fields>
+                </Fold>
+                <Fold title={t('common.agent.webSearch')}>
+                  <Fields>
+                    <Field
+                      size="long"
+                      label={t('common.agent.searchURL')}
+                      help={t('common.agent.searchHelp')}
+                    >
+                      {(props) => (
+                        <input
+                          {...props}
+                          type="url"
+                          value={draft.search_url}
+                          onChange={(event) => patch({ search_url: event.target.value })}
+                        />
+                      )}
+                    </Field>
+                    <SecretField
+                      hasKey={base.search_has_key}
+                      value={key}
+                      onChange={setKey}
+                      label={t('common.agent.searchKey')}
                     />
-                  )}
-                </Field>
-                <SecretField
-                  hasKey={base.search_has_key}
-                  value={key}
-                  onChange={setKey}
-                  label={t('common.agent.searchKey')}
-                />
-              </Fields>
-            </Fold>
+                  </Fields>
+                </Fold>
+              </>
+            )}
             <FormActions>
-              <Button
-                variant="primary"
-                type="submit"
-                disabled={
-                  save.isPending ||
-                  (JSON.stringify(base) === JSON.stringify(draft) && key === undefined)
-                }
-              >
+              <Button variant="primary" type="submit" disabled={busy || !dirty}>
                 {t('common.save')}
               </Button>
               <Button
@@ -763,8 +792,7 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
                 variant="secondary"
                 disabled={busy}
                 onClick={() => {
-                  setDraft(base);
-                  setKey(undefined);
+                  restoreSection(base);
                   save.reset();
                 }}
               >
@@ -782,35 +810,76 @@ function AgentConfigForm({ initial, account }: { initial: AgentSettings; account
   );
 }
 export function AdminSettings({ account, active }: { account: string; active: boolean }) {
+  const { t } = useTranslation();
+  const [section, setSection] = useState<'drivers' | 'accounts' | 'conversation' | 'tools'>(
+    'drivers',
+  );
+  const [legacyOpen, setLegacyOpen] = useState(false);
   const driver = useQuery({
     queryKey: [...agentRoot('admin', account), 'driver'],
     queryFn: ({ signal }) => getDriver(signal),
-    enabled: active,
+    enabled: active && section === 'drivers' && legacyOpen,
     retry: false,
   });
   const settings = useQuery({
     queryKey: [...agentRoot('admin', account), 'settings'],
     queryFn: ({ signal }) => getSettings(signal),
-    enabled: active,
+    enabled: active && (section === 'conversation' || section === 'tools'),
     retry: false,
   });
+  if (!active) return null;
   return (
     <div className="nb-stack">
-      <DriverPanel key={account} account={account} active={active} />
-      {driver.isPending ? (
-        <LoadingState />
-      ) : driver.error ? (
-        <AgentError error={driver.error} onRetry={() => void driver.refetch()} />
-      ) : (
-        <DriverForm initial={driver.data} account={account} />
-      )}
-      {settings.isPending ? (
-        <LoadingState />
-      ) : settings.error ? (
-        <AgentError error={settings.error} onRetry={() => void settings.refetch()} />
-      ) : (
-        <AgentConfigForm initial={settings.data} account={account} />
-      )}
+      <Tabs
+        label={t('common.agent.configuration')}
+        value={section}
+        onChange={setSection}
+        tabs={[
+          { value: 'drivers', label: t('common.agent.driverSourcesAndBindings') },
+          { value: 'accounts', label: t('common.agent.connectedAccounts') },
+          { value: 'conversation', label: t('common.agent.chatAndReview') },
+          { value: 'tools', label: t('common.agent.toolsTitle') },
+        ]}
+      >
+        {section === 'accounts' && (
+          <>
+            <ChatGPTConnection key={account + ':chatgpt'} account={account} active={active} />
+            <CodexConnection key={account + ':codex'} account={account} active={active} />
+          </>
+        )}
+        {section === 'drivers' && (
+          <>
+            <DriverPanel key={account} account={account} active={active} />
+            <Fold
+              lazy
+              open={legacyOpen}
+              onOpenChange={setLegacyOpen}
+              title={t('common.agent.drivers.legacy')}
+            >
+              {driver.isPending ? (
+                <LoadingState />
+              ) : driver.error ? (
+                <AgentError error={driver.error} onRetry={() => void driver.refetch()} />
+              ) : (
+                <DriverForm key={account} initial={driver.data} account={account} />
+              )}
+            </Fold>
+          </>
+        )}
+        {(section === 'conversation' || section === 'tools') &&
+          (settings.isPending ? (
+            <LoadingState />
+          ) : settings.error ? (
+            <AgentError error={settings.error} onRetry={() => void settings.refetch()} />
+          ) : (
+            <AgentConfigForm
+              key={account}
+              initial={settings.data}
+              account={account}
+              toolsView={section === 'tools'}
+            />
+          ))}
+      </Tabs>
     </div>
   );
 }

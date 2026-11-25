@@ -348,12 +348,15 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 	}
 	pending := map[string]bool{}
 	seen := map[string]bool{}
+	var itemID string
 	for _, raw := range items {
 		item, ok := systemOneMap(raw)
 		if !ok {
 			return bad()
 		}
 		kind, _ := decisionString(item["type"], 0, 64)
+		previousID := itemID
+		itemID, _ = decisionString(item["id"], 1, 1024)
 		var extra json.RawMessage
 		if value, present := item["extra_content"]; present {
 			outer, ok := systemOneMap(value)
@@ -364,7 +367,7 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 		}
 		switch kind {
 		case "reasoning":
-			if !gateway || len(pending) > 0 {
+			if len(pending) > 0 || !gateway && item["id"] != nil && !validOpaqueText(itemID, 1024, true) {
 				return bad()
 			}
 			for name := range item {
@@ -372,10 +375,10 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 					return bad()
 				}
 			}
-			if item["status"] != nil && !bytes.Equal(item["status"], []byte(`"completed"`)) {
+			if !replayableChatTextStatus(item["status"], !gateway) {
 				return bad()
 			}
-			if item["summary"] != nil && !bytes.Equal(bytes.TrimSpace(item["summary"]), []byte(`[]`)) {
+			if raw := item["summary"]; raw != nil && !visitJSONArray(raw, func([]byte) bool { return false }) {
 				return bad()
 			}
 			var parts []map[string]json.RawMessage
@@ -393,15 +396,30 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 				}
 				reasoning.WriteString(value)
 			}
-			message := map[string]any{"role": "assistant", "content": nil, "reasoning_content": reasoning.String()}
+			field := "reasoning_content"
+			turnID, generated := strings.CutPrefix(itemID, "rs_")
+			if !gateway && strings.HasPrefix(itemID, chatReasoningAliasIDPrefix) {
+				turnID = strings.TrimPrefix(itemID, chatReasoningAliasIDPrefix)
+				if !validOpaqueText(turnID, 512, true) {
+					return bad()
+				}
+				field, generated = "reasoning", true
+			}
+			message := map[string]any{"role": "assistant", "content": nil, field: reasoning.String()}
 			if extra != nil {
 				message["extra_content"] = extra
 			}
 			if len(messages) > 0 {
 				last := messages[len(messages)-1].(map[string]any)
-				if last["role"] == "assistant" && (extra == nil || last["extra_content"] == nil) {
-					previous, _ := last["reasoning_content"].(string)
-					last["reasoning_content"] = previous + reasoning.String()
+				// An SSE answer can be published before its reasoning. Match the
+				// IDs generated for that turn to avoid changing an earlier reply.
+				sameTurn := generated && previousID == "msg_"+turnID
+				if last["role"] == "assistant" && (gateway || sameTurn && !hasChatReasoning(last)) && (extra == nil || last["extra_content"] == nil) {
+					previous, _ := last[field].(string)
+					last[field] = previous + reasoning.String()
+					if !gateway {
+						restoreChatReasoningAnswer(last)
+					}
 					if extra != nil {
 						last["extra_content"] = extra
 					}
@@ -418,11 +436,11 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 					return bad()
 				}
 			}
-			if raw := item["status"]; raw != nil && !bytes.Equal(raw, []byte(`"completed"`)) {
-				return bad()
-			}
 			role, _ := decisionString(item["role"], 1, 32)
 			if role != "user" && role != "assistant" && role != "system" && role != "developer" {
+				return bad()
+			}
+			if !replayableChatTextStatus(item["status"], !gateway && role == "assistant") {
 				return bad()
 			}
 			content, err := responseChatContent(item["content"], role)
@@ -436,10 +454,15 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 				}
 				message["extra_content"] = extra
 			}
-			if gateway && role == "assistant" && len(messages) > 0 {
+			if role == "assistant" && len(messages) > 0 {
 				last := messages[len(messages)-1].(map[string]any)
-				if last["role"] == "assistant" && last["reasoning_content"] != nil && last["content"] == nil && (extra == nil || last["extra_content"] == nil) {
+				reasoningOnly := hasChatReasoning(last) && last["content"] == nil && last["refusal"] == nil
+				sameTurn := gateway || followsChatReasoningTurn(previousID, itemID, "msg_")
+				if last["role"] == "assistant" && reasoningOnly && sameTurn && (extra == nil || last["extra_content"] == nil) {
 					last["content"] = content
+					if !gateway {
+						restoreChatReasoningAnswer(last)
+					}
 					if extra != nil {
 						last["extra_content"] = extra
 					}
@@ -476,7 +499,8 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 			tool := map[string]any{"id": id, "type": "function", "function": map[string]string{"name": name, "arguments": arguments}}
 			if len(messages) > 0 {
 				last, _ := messages[len(messages)-1].(map[string]any)
-				if last["role"] == "assistant" && (last["tool_calls"] != nil || gateway) && (extra == nil || last["extra_content"] == nil) {
+				joinTurn := last["tool_calls"] != nil || gateway || hasChatReasoning(last) && followsChatReasoningTurn(previousID, itemID, "fc_")
+				if last["role"] == "assistant" && joinTurn && (extra == nil || last["extra_content"] == nil) {
 					calls, _ := last["tool_calls"].([]any)
 					last["tool_calls"] = append(calls, tool)
 					if extra != nil {
@@ -513,6 +537,58 @@ func responseChatMessagesMode(input, instructions []byte, gateway bool) ([]any, 
 		return bad()
 	}
 	return messages, nil
+}
+
+func hasChatReasoning(message map[string]any) bool {
+	return message["reasoning_content"] != nil || message["reasoning"] != nil
+}
+
+// A terminal length or content filter stop still supplies usable assistant
+// text for the next Chat turn. Tool history requires completed calls and results.
+func replayableChatTextStatus(status json.RawMessage, allowIncomplete bool) bool {
+	return status == nil || bytes.Equal(status, []byte(`"completed"`)) || allowIncomplete && bytes.Equal(status, []byte(`"incomplete"`))
+}
+
+// When adjacent items have the IDs produced by the bridge, use the shared
+// completion ID to keep separate assistant turns from being joined on replay.
+func followsChatReasoningTurn(previousID, currentID, prefix string) bool {
+	if !strings.HasPrefix(currentID, prefix) {
+		return true
+	}
+	for _, previousPrefix := range []string{"rs_", chatReasoningAliasIDPrefix, "msg_"} {
+		if turn, ok := strings.CutPrefix(previousID, previousPrefix); ok {
+			if prefix == "fc_" {
+				return currentID == prefix+turn+"_0"
+			}
+			return currentID == prefix+turn
+		}
+	}
+	return true
+}
+
+// A projected reasoning turn carries scalar Chat channels. Restore them when
+// its answer contains at most one output text and one refusal.
+func restoreChatReasoningAnswer(message map[string]any) {
+	parts, ok := message["content"].([]any)
+	if !ok || len(parts) == 0 || len(parts) > 2 {
+		return
+	}
+	var answer, refusal any
+	for _, raw := range parts {
+		part := raw.(map[string]any)
+		switch {
+		case part["type"] == "text" && answer == nil:
+			answer = part["text"]
+		case part["type"] == "refusal" && refusal == nil:
+			refusal = part["refusal"]
+		default:
+			return
+		}
+	}
+	message["content"] = answer
+	if refusal != nil {
+		message["refusal"] = refusal
+	}
 }
 
 func responseChatContent(raw []byte, role string) (any, error) {

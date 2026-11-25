@@ -11,34 +11,30 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if service == nil || service.closed.Load() {
 		return ErrClosed
 	}
-	service.recovered.Store(false)
 	now, err := service.decisionNow()
 	if err != nil {
 		return err
 	}
-	if err := service.ValidatePersistedState(ctx); err != nil {
-		return err
+	// Full-state validation uses the caller's startup budget. The two-second
+	// deadline below bounds a single mutation batch.
+	service.recoveryMu.Lock()
+	var validationErr error
+	if !service.recoveryValidated.Load() {
+		validationErr = service.ValidatePersistedState(ctx)
+	}
+	service.recoveryMu.Unlock()
+	if validationErr != nil {
+		return validationErr
 	}
 	for {
-		removed, err := service.pruneLeases(ctx, now)
+		result, err := service.RecoverBeforeListenAt(ctx, now, workerBatchSize, time.Now().Add(2*time.Second))
 		if err != nil {
 			return err
 		}
-		if removed < workerBatchSize {
-			break
+		if !result.More {
+			return nil
 		}
 	}
-	for {
-		processed, err := service.runDue(ctx, now)
-		if err != nil {
-			return err
-		}
-		if processed < workerBatchSize {
-			break
-		}
-	}
-	service.recovered.Store(true)
-	return nil
 }
 
 func (service *Service) validatePersistedSessions(ctx context.Context) error {
@@ -142,6 +138,10 @@ SELECT id FROM game_linklink_sessions WHERE deadline<=? ORDER BY deadline,id LIM
 }
 
 func (service *Service) timeoutOne(ctx context.Context, sessionID string, now int64) (bool, error) {
+	return service.endSession(ctx, sessionID, now, false)
+}
+
+func (service *Service) endSession(ctx context.Context, sessionID string, now int64, restart bool) (bool, error) {
 	tx, err := service.database.BeginTx(ctx, nil)
 	if err != nil {
 		return false, classifyDB(err)
@@ -151,19 +151,23 @@ func (service *Service) timeoutOne(ctx context.Context, sessionID string, now in
 	if err != nil || !found {
 		return false, err
 	}
-	if now < record.Deadline {
+	if !restart && now < record.Deadline {
 		return false, nil
 	}
 	maintenance, err := maintenanceEnabled(ctx, tx)
 	if err != nil {
 		return false, err
 	}
-	if maintenance {
+	if maintenance && !restart {
 		if err := service.authorizeSystemTimeout(ctx, tx, record); err != nil {
 			return false, err
 		}
 	}
-	if _, err := service.terminalize(ctx, tx, record, TerminalTimedOut, now); err != nil {
+	reason := TerminalTimedOut
+	if restart {
+		reason = TerminalCancelled
+	}
+	if _, err := service.terminalize(ctx, tx, record, reason, max(now, record.CreatedAt)); err != nil {
 		if errors.Is(err, ErrConflict) {
 			return false, nil
 		}

@@ -46,7 +46,7 @@ func TestModalityPricingWireAndSafeProjections(t *testing.T) {
 		t.Fatal(steward)
 	}
 	public := CapabilityPricing{Mode: "per_token"}
-	if err := capabilityContextPricing(&public, prices.contextPricing, 50, 80); err != nil {
+	if err := capabilityContextPricing(&public, prices.contextPricing, 50, 8000); err != nil {
 		t.Fatal(err)
 	}
 	if public.UserModalitiesMilli.Audio.UncachedInput != "9001" || public.DiscountedUserModalitiesMilli.Audio.UncachedInput != "4501" || public.CurrentUserModalitiesMilli.Audio.UncachedInput != "7201" {

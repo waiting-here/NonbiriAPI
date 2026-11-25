@@ -244,3 +244,11 @@
 .charity-model-editor > .model-types-field {
   margin-block: var(--nb-space-4);
 }
+
+@media (prefers-reduced-transparency: reduce) {
+  /* The review decision stays reachable at the bottom of the screen inside its card. */
+.charity-review-actions {
+    backdrop-filter: none;
+    background: var(--nb-color-surface-raised);
+  }
+}

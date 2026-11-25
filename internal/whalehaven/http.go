@@ -2,6 +2,7 @@ package whalehaven
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -43,6 +45,8 @@ type actionRequest struct {
 	PresetID         string `json:"presetId,omitempty"`
 	ExpectedProfile  string `json:"expected_profile_revision"`
 	ExpectedSettings string `json:"expected_settings_revision"`
+
+	MaxSpillGrams *uint64 `json:"maxSpillGrams,omitempty"`
 }
 type exchangeRequest struct {
 	Quantity         string `json:"quantity"`
@@ -52,6 +56,9 @@ type exchangeRequest struct {
 
 func decodeBody(r *http.Request, dest any) error {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 8193))
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if err != nil || len(raw) > 8192 || strictjson.ValidateObject(raw) != nil {
 		return invalid("请求内容无效。")
 	}
@@ -115,6 +122,9 @@ func (s *Service) Register(reg resources.UserRouteRegistrar) error {
 		if err := reg.RegisterUserRoute(route.method, prefix+route.path, func(out http.ResponseWriter, req *http.Request, user resources.UserPrincipal) {
 			value, err := s.handle(req, user.UserID, route.path)
 			if err != nil {
+				if httperr.IsClientCancellation(req.Context(), err) {
+					return
+				}
 				writeFailure(out, err)
 				return
 			}
@@ -206,7 +216,7 @@ func (s *Service) handle(req *http.Request, id int64, route string) (any, error)
 			if e = w.settle(r); e != nil {
 				return nil, e
 			}
-			return w.profile(r, operation)
+			return w.actionProfile(r, operation, action.Type)
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -301,7 +311,7 @@ func (s *Service) handle(req *http.Request, id int64, route string) (any, error)
 	}
 	// Projection reads the just-written event rows. Drop the in-memory copies to avoid duplicate timeline entries.
 	w.events = nil
-	value, err := w.profile(r, operation)
+	value, err := w.actionProfile(r, operation, action.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +358,10 @@ func (s *Service) apply(w *world, r *resident, a actionRequest, op string) error
 		}
 		quantity = *a.Quantity
 	}
-	result, err := r.state.Apply(rules.Action{Type: a.Type, FeedID: a.FeedID, Quantity: quantity, DecorID: a.DecorID, OutfitID: a.OutfitID, Name: a.Name, Zone: a.Zone, Streak: a.Streak, Key: a.Key, Enabled: a.Enabled, ForceSleep: a.ForceSleep}, w.now, w.config)
+	result, err := r.state.Apply(rules.Action{Type: a.Type, FeedID: a.FeedID, MaxSpillGrams: a.MaxSpillGrams, Quantity: quantity, DecorID: a.DecorID, OutfitID: a.OutfitID, Name: a.Name, Zone: a.Zone, Streak: a.Streak, Key: a.Key, Enabled: a.Enabled, ForceSleep: a.ForceSleep}, w.now, w.config)
+	if errors.Is(err, rules.ErrFeedSpill) {
+		return conflict(err.Error())
+	}
 	if err != nil {
 		return invalid(err.Error())
 	}
@@ -375,7 +388,7 @@ func (s *Service) apply(w *world, r *resident, a actionRequest, op string) error
 		category = "harvest"
 	case "spin_conch_gacha":
 		category = "gacha"
-		note = "海螺扭蛋 · " + result.Reward
+		note = conchEventPrefix + result.Reward
 	case "select_outfit":
 		note = "更换衣装"
 	case "toggle_decor":

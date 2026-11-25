@@ -58,7 +58,7 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	errorGuard := newSensitiveGuard(append([][]byte{target.credential.bearer, target.credential.ciphertext, identifier}, sentSecrets...)...)
 	clear(identifier)
 	defer errorGuard.Clear()
-	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), InputLengthErrors: true, Rules: smartbackoff.RulesFromContext(ctx),
+	errorContext := upstreamerror.Context{CharityCall: smartbackoff.IsCharityCall(ctx), Rules: smartbackoff.RulesFromContext(ctx),
 		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
 		ContainsSecret: func(value []byte) bool {
 			scanner := errorGuard.clone()
@@ -74,9 +74,6 @@ func (a *Adapter) AttemptImage(ctx context.Context, writer http.ResponseWriter, 
 	httpRequest = egress.WithResponseLimits(httpRequest, egress.ResponseLimits{JSONBytes: a.maxImageResponseBytes, StreamBytes: a.maxImageResponseBytes, LineBytes: int(a.maxImageResponseBytes), EventBytes: int(a.maxImageResponseBytes)})
 	upload.Attach(httpRequest)
 	response, err := client.Do(httpRequest)
-	if err == nil {
-		errorContext.UnchangedCallerParameter = unchangedCallerParameters(ctx, response, request.fields, body, policy)
-	}
 	if response != nil {
 		defer func() { result.UpstreamStatus = response.StatusCode }()
 	}

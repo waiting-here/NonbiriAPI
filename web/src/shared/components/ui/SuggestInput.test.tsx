@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Field } from './Field';
@@ -75,6 +75,23 @@ describe('freeform suggestions', () => {
       expect(input).toHaveValue('beta');
     },
   );
+
+  it('keeps keyboard suggestions and the draft through focus-induced scrolling', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const input = screen.getByRole('combobox', { name: 'Model' });
+    await user.click(input);
+    await user.keyboard('{ArrowDown}{Enter}');
+    await user.clear(input);
+    await user.keyboard('{ArrowDown}');
+    fireEvent.scroll(document);
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('');
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+    await user.keyboard('{Enter}');
+    expect(input).toHaveValue('alpha');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
 
   it('closes an already open list and preserves the draft when its form becomes busy', async () => {
     const user = userEvent.setup();

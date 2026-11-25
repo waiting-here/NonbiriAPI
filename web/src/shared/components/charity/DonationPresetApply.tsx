@@ -3,7 +3,6 @@ import {
   hasStewardPermission,
   type StewardPermissions,
 } from '@shared/operations/stewardPermissions';
-import { StewardPermissionNotice } from '../StewardPermissionNotice';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -25,7 +24,7 @@ import { useRetainedOperation } from '@shared/operations/useRetainedOperation';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { formatCount } from '@shared/utils/formatNumber';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from '../States';
 import { Button, DataTable, Field, FilterBar, Fold, Note, OutcomeNote, StatusBadge } from '../ui';
 import { BindingBatchResults, type BindingResultLabel } from './BindingBatchResults';
@@ -64,7 +63,7 @@ export function DonationPresetApply({
     (!hasStewardPermission(session.data?.user, 'charity.presets') ||
       !hasStewardPermission(session.data?.user, 'charity.manage'))
   )
-    return <StewardPermissionNotice />;
+    return null;
   if (custom)
     return (
       <Fold key={`${accountId}:${item.id}`} title={t('common.bindingPresets.applyTitle')} lazy>
@@ -125,7 +124,7 @@ function CustomPresetApply(props: {
     enabled: !selected,
     retry: false,
   });
-  const lost = isForbidden(list.error) || isUnauthorized(list.error);
+  const lost = isManagementForbidden(list.error) || isUnauthorized(list.error);
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
@@ -278,7 +277,7 @@ function ApplyBody({
     charityKeys.root(role),
   );
   const lost = [preset.error, apply.error, readError].some(
-    (error) => isForbidden(error) || isUnauthorized(error),
+    (error) => isManagementForbidden(error) || isUnauthorized(error),
   );
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
@@ -354,6 +353,14 @@ function ApplyBody({
           <p>
             {t('common.bindingPresets.applyHelp', { name, count: preset.data.mappings.length })}
           </p>
+          <ul>
+            {preset.data.mappings.map((mapping) => (
+              <li key={JSON.stringify([mapping.charity_model_id, mapping.upstream_model_id])}>
+                {mapping.full_name ?? t('common.bindingPresets.deletedTarget')} ←{' '}
+                {mapping.upstream_model_id}
+              </li>
+            ))}
+          </ul>
           <Button
             type="button"
             variant="primary"

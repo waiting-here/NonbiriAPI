@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"math/big"
 	"net/netip"
 	"strconv"
+	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -254,6 +256,14 @@ func (repository *Repository) listCases(
 	limit int,
 	requested *pagination.Request,
 ) (Page[CaseSummary], error) {
+	return repository.searchCases(ctx, actor, status, cursor, limit, requested, "", false)
+}
+
+func (repository *Repository) searchCases(ctx context.Context, actor authz.Actor, status, cursor string, limit int, requested *pagination.Request, search string, pending bool) (Page[CaseSummary], error) {
+	search = strings.TrimSpace(search)
+	if len([]rune(search)) > 160 || pending && status != "" {
+		return Page[CaseSummary]{}, ErrInvalidRequest
+	}
 	if err := repository.admit(); err != nil {
 		return Page[CaseSummary]{}, err
 	}
@@ -274,6 +284,9 @@ func (repository *Repository) listCases(
 	if owner == "" {
 		owner = "all"
 	}
+	if search != "" || pending {
+		owner += fmt.Sprintf(":%t:%x", pending, sha256.Sum256([]byte(search)))
+	}
 	var cursorTime int64
 	cursorID := ""
 	if cursor != "" {
@@ -291,6 +304,13 @@ func (repository *Repository) listCases(
 WHERE (?='' OR status=?)
  AND (status IN ('pending_indexing','pending_review','approved_processing') OR created_at+?>?)`
 	args := []any{status, status, caseRetentionSeconds, now}
+	if pending {
+		query += " AND status IN ('pending_indexing','pending_review','approved_processing')"
+	}
+	if search != "" {
+		query += " AND (instr(lower(id),lower(?))>0 OR instr(lower(connector_type),lower(?))>0 OR instr(lower(canonical_base_url),lower(?))>0)"
+		args = append(args, search, search, search)
+	}
 	if cursor != "" {
 		query += ` AND (created_at<? OR (created_at=? AND id<?))`
 		args = append(args, cursorTime, cursorTime, cursorID)

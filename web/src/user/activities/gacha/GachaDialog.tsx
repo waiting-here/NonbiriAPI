@@ -24,6 +24,7 @@ export function GachaDialog({
     <NativeDialog
       onDismiss={onClose}
       busy={closeDisabled}
+      dismissOnBackdrop={!onSurfaceClick}
       className={'gacha-dialog ' + className}
       aria-label={title}
       onClick={(event) => {
@@ -33,16 +34,6 @@ export function GachaDialog({
             !event.target.closest('button, a, input, select, textarea, [role="button"]')
           ) {
             onSurfaceClick();
-          }
-        } else if (event.target === event.currentTarget) {
-          const rect = event.currentTarget.getBoundingClientRect();
-          if (
-            event.clientX < rect.left ||
-            event.clientX > rect.right ||
-            event.clientY < rect.top ||
-            event.clientY > rect.bottom
-          ) {
-            onClose();
           }
         }
       }}

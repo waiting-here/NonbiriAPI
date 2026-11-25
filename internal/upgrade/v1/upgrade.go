@@ -14,6 +14,9 @@ import (
 const SourceCommit = "03456c51d7537e806fc1b4576fc7e9660dc3f696"
 const SourceSchemaVersion = 54
 const schema55Commit = "b1700f25d7a73535af76cdd15c356d92eff0d8fd"
+const schema56Commit = "1bb01bdb833396fdd25dc2229f3be6265c34bae5"
+const schema57Commit = "5a50687973b51f0709103a907836e96041ae89f6"
+const schema58Commit = "b1472fa832167ff045a71ea3ee2878541757af10"
 const toolName = "nonbiri-upgrade-v1"
 
 type Options struct {
@@ -33,6 +36,9 @@ type Result struct {
 var supportedSources = []db.OfflineConversionDescriptor{
 	{Tool: toolName, SourceCommit: SourceCommit, SourceSchemaVersion: SourceSchemaVersion, SourceManifestHash: db.Schema54ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
 	{Tool: toolName, SourceCommit: schema55Commit, SourceSchemaVersion: 55, SourceManifestHash: db.Schema55ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
+	{Tool: toolName, SourceCommit: schema56Commit, SourceSchemaVersion: 56, SourceManifestHash: db.Schema56ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
+	{Tool: toolName, SourceCommit: schema57Commit, SourceSchemaVersion: 57, SourceManifestHash: db.Schema57ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
+	{Tool: toolName, SourceCommit: schema58Commit, SourceSchemaVersion: 58, SourceManifestHash: db.Schema58ManifestHash, TargetSchemaVersion: db.CurrentSchemaVersion},
 }
 
 func SchemaDescriptor() db.StorageSchemaDescriptor {

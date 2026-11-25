@@ -14,6 +14,7 @@ export const base = '/api/games/whale-haven';
 type Settings = { enabled: boolean; exchange_enabled: boolean; values: Record<string, number> };
 export interface Profile {
   snapshot: GameSnapshot;
+  conch_reward?: string;
   settings: Settings;
   settings_revision: string;
   timezone_offset_minutes: number;
@@ -26,6 +27,7 @@ export interface Profile {
       label: string;
       allow_hire: boolean;
       working: boolean;
+      meal_paused?: boolean;
       started_at_ms: number;
       work_ends_at_ms?: number;
     };
@@ -46,7 +48,7 @@ export type Action =
   | { type: 'adopt'; name: string; open: boolean }
   | { type: 'rename'; name: string }
   | { type: 'buy_feed'; feedId: FeedItemId; quantity?: number }
-  | { type: 'use_feed'; feedId: FeedItemId }
+  | { type: 'use_feed'; feedId: FeedItemId; maxSpillGrams?: number }
   | { type: 'toggle_decor'; decorId: DecorItemId }
   | { type: 'select_outfit'; outfitId: WhaleOutfitId }
   | { type: 'toggle_sleep'; forceSleep?: boolean }
@@ -139,9 +141,8 @@ export function formatMilliCredits(value: string | number) {
   return formatAmount(String(value));
 }
 export function costWithCoupon(profile: Profile, basePrice: number) {
-  if (!profile.snapshot.home.buffs?.wardrobeDiscountCoupons) return basePrice;
-  return Math.max(
-    1,
-    Math.floor((basePrice * (10000 - profile.settings.values.coupon_discount_bp)) / 10000),
-  );
+  const discountBP = profile.settings.values.coupon_discount_bp ?? 0;
+  if (!profile.snapshot.home.buffs?.wardrobeDiscountCoupons || basePrice <= 0 || discountBP <= 0)
+    return basePrice;
+  return Math.max(1, Math.floor((basePrice * (10_000 - discountBP)) / 10_000));
 }

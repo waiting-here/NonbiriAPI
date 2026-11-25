@@ -5,6 +5,7 @@ import { Field, Fold, Note, Toggle } from '@shared/components/ui';
 import { NativeServicesField } from '@shared/components/NativeServicesField';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import {
+  configurationOptions,
   DISCOVERY_FORMATS,
   type DiscoveryPreset,
   type MainstreamEntry,
@@ -45,10 +46,7 @@ export function MainstreamEntries({
         ...Object.fromEntries(changedEntries.map((key) => [key, true])),
       }));
   }
-  const protocols = options.filter(
-    (row, index, rows) =>
-      rows.findIndex((other) => other.configuration_type === row.configuration_type) === index,
-  );
+  const protocols = configurationOptions(options);
   const patch = (index: number, change: Partial<MainstreamEntry>) => {
     const entry = value.entries[index]!;
     const key = entryKey(entry, index);
@@ -134,10 +132,10 @@ export function MainstreamEntries({
                     {(props) => (
                       <select
                         {...props}
-                        value={entry.connector_type}
+                        value={metadata?.configuration_type ?? entry.connector_type}
                         onChange={(event) => {
-                          const choice = options.find(
-                            (row) => row.connector_type === event.target.value,
+                          const choice = protocols.find(
+                            (row) => row.configuration_type === event.target.value,
                           );
                           if (choice)
                             patch(index, {
@@ -149,13 +147,13 @@ export function MainstreamEntries({
                             });
                         }}
                       >
-                        {!protocols.some((row) => row.connector_type === entry.connector_type) ? (
+                        {!metadata ? (
                           <option value={entry.connector_type}>
                             {t(connectorLabels[entry.connector_type])}
                           </option>
                         ) : null}
                         {protocols.map((row) => (
-                          <option key={row.connector_type} value={row.connector_type}>
+                          <option key={row.configuration_type} value={row.configuration_type}>
                             {t(connectorLabels[row.configuration_type])}
                           </option>
                         ))}
@@ -206,7 +204,9 @@ export function MainstreamEntries({
         className="nb-btn nb-btn--secondary"
         disabled={disabled || !protocols.length}
         onClick={() => {
-          const first = protocols[0]!;
+          const first =
+            protocols.find((row) => row.configuration_type === 'openai-compatible') ??
+            protocols[0]!;
           onChange({
             ...value,
             entries: [

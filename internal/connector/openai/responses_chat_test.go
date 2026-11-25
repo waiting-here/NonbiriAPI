@@ -15,6 +15,255 @@ import (
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
+func TestResponsesChatTypedTextWithinConversionSubset(t *testing.T) {
+	const content = `[{"type":"text","text":"two "},{"type":"text","text":"parts"}]`
+	const thought = `[{"type":"thinking","thinking":[{"type":"text","text":"thought"}]}]`
+	for _, stream := range []bool{false, true} {
+		for _, tc := range []struct {
+			name, content string
+			accepted      bool
+		}{
+			{"text", content, true},
+			{"thinking", thought, false},
+			{"reference", `[{"type":"text","text":"see note","citations":[12]}]`, false},
+		} {
+			t.Run(fmt.Sprintf("%s/stream=%t", tc.name, stream), func(t *testing.T) {
+				message := `{"role":"assistant","content":` + tc.content + `}`
+				data := `{"id":"c","object":"chat.completion","created":1,"choices":[{"index":0,"message":` + message + `,"finish_reason":"stop"}]}`
+				if stream {
+					data = strings.TrimSpace(strings.TrimPrefix(chatResponseChunk(message, `"stop"`, `null`), "data: "))
+				}
+				state := responseChatState{model: "public"}
+				defer state.clear()
+				err := state.consume([]byte(data), stream)
+				if (err == nil) != tc.accepted || tc.accepted && (state.text != "two parts" || state.reasoning != "") {
+					t.Fatalf("text=%q reasoning=%q error=%v", state.text, state.reasoning, err)
+				}
+			})
+		}
+	}
+}
+
+func TestResponsesChatRejectsUnreplayableReasoning(t *testing.T) {
+	for _, fields := range []string{
+		`"content":"answer","reasoning_content":{"text":"thought"}`,
+		`"content":"answer","reasoning_content":"thought","reasoning_details":[{"type":"reasoning.text","text":"thought","signature":"signed"}]`,
+		`"content":"answer","thinking_blocks":[{"type":"redacted_thinking","data":"opaque"}]`,
+		`"content":"answer","reasoning":"thought","reasoning_content":"thought"`,
+		`"content":"answer","reasoning":"first","reasoning_content":"second"`,
+		`"content":"answer","reasoning":["thought"]`,
+		`"content":[{"type":"thinking","thinking":"","signature":"signed"}]`,
+		`"content":[{"type":"thinking","thinking":[]}],"reasoning_content":"thought"`,
+	} {
+		message := `{"role":"assistant",` + fields + `}`
+		for _, stream := range []bool{false, true} {
+			data := `{"id":"c","object":"chat.completion","created":1,"choices":[{"index":0,"message":` + message + `,"finish_reason":"stop"}]}`
+			if stream {
+				data = strings.TrimSpace(strings.TrimPrefix(chatResponseChunk(message, `"stop"`, `null`), "data: "))
+			}
+			var state responseChatState
+			err := state.consume([]byte(data), stream)
+			state.clear()
+			if err == nil {
+				t.Fatalf("stream=%t accepted %s", stream, fields)
+			}
+		}
+	}
+}
+
+func TestResponsesChatScalarReasoningRoundTrip(t *testing.T) {
+	for _, field := range []string{"reasoning_content", "reasoning"} {
+		t.Run(field, func(t *testing.T) { testResponsesChatScalarRoundTrip(t, field) })
+	}
+}
+
+func TestResponsesChatKeepsSeparateReasoningTurns(t *testing.T) {
+	history := `[{"type":"reasoning","id":"rsalias_first","summary":[],"content":[{"type":"reasoning_text","text":"first"}]},
+		{"type":"message","id":"msg_second","role":"assistant","content":[{"type":"output_text","text":"second"}]},
+		{"type":"reasoning","id":"rs_third","summary":[],"content":[{"type":"reasoning_text","text":"third"}]},
+		{"type":"function_call","id":"fc_fourth_0","call_id":"c","name":"f","arguments":"{}"},
+		{"type":"function_call_output","call_id":"c","output":"done"}]`
+	messages, err := responseChatMessages([]byte(history), nil)
+	if err != nil || len(messages) != 5 {
+		t.Fatalf("merged independent assistant turns: %v, %v", messages, err)
+	}
+	if messages[0].(map[string]any)["reasoning"] != "first" || messages[2].(map[string]any)["reasoning_content"] != "third" {
+		t.Fatal(messages)
+	}
+}
+
+func TestResponsesChatIncompleteTextReplay(t *testing.T) {
+	for _, tc := range []struct{ finish, detail, field string }{
+		{"length", "max_output_tokens", "reasoning_content"},
+		{"content_filter", "content_filter", "reasoning"},
+	} {
+		for _, stream := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/stream=%t", tc.finish, stream), func(t *testing.T) {
+				message := `{"role":"assistant","content":"partial answer","` + tc.field + `":"thought"}`
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if stream {
+						w.Header().Set("Content-Type", "text/event-stream")
+						fmt.Fprint(w, chatResponseChunk(message, fmt.Sprintf("%q", tc.finish), "null")+"data: [DONE]\n\n")
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprintf(w, `{"id":"c1","object":"chat.completion","created":1,"choices":[{"index":0,"message":%s,"finish_reason":%q}]}`, message, tc.finish)
+				}))
+				defer server.Close()
+				request := inferenceRequestForTest(t, contract.OperationResponses, fmt.Sprintf(`{"model":"public","input":"hi","stream":%t}`, stream))
+				defer request.Clear()
+				writer := httptest.NewRecorder()
+				result := adapterForServer(t, server.URL, nil, nil).AttemptInference(context.Background(), writer, NewTarget(server.URL+"/v1", "upstream", NewCredential([]byte("fixture-key"), nil)), request, contract.TypeOpenAIChatCompletions, contract.AttemptPolicy{})
+				if !result.Success {
+					t.Fatal(result)
+				}
+				response := writer.Body.Bytes()
+				if stream {
+					events := projectionEvents(t, writer.Body.String())
+					if len(events) == 0 || string(events[len(events)-1]["type"]) != `"response.incomplete"` {
+						t.Fatal(writer.Body)
+					}
+					response = events[len(events)-1]["response"]
+				}
+				var terminal struct {
+					Status string
+					Output []json.RawMessage
+					Detail struct{ Reason string } `json:"incomplete_details"`
+				}
+				if json.Unmarshal(response, &terminal) != nil || terminal.Status != "incomplete" || terminal.Detail.Reason != tc.detail || len(terminal.Output) != 2 {
+					t.Fatal(string(response))
+				}
+				for _, item := range terminal.Output {
+					if !bytes.Contains(item, []byte(`"status":"incomplete"`)) {
+						t.Fatal(string(item))
+					}
+				}
+				input := append(terminal.Output, json.RawMessage(`{"role":"user","content":"continue"}`))
+				history, _ := json.Marshal(input)
+				replay := inferenceRequestForTest(t, contract.OperationResponses, `{"model":"public","input":`+string(history)+`}`)
+				defer replay.Clear()
+				body, err := replay.compileChatResponse("upstream", contract.AttemptPolicy{})
+				var chat struct{ Messages []map[string]json.RawMessage }
+				if err != nil || json.Unmarshal(body, &chat) != nil || len(chat.Messages) != 2 {
+					t.Fatalf("replay failed: %s, %v", body, err)
+				}
+				if string(chat.Messages[0][tc.field]) != `"thought"` || string(chat.Messages[0]["content"]) != `"partial answer"` || string(chat.Messages[1]["content"]) != `"continue"` {
+					t.Fatal(string(body))
+				}
+			})
+		}
+	}
+}
+
+func testResponsesChatScalarRoundTrip(t *testing.T, field string) {
+	t.Helper()
+	const answer = `"content":"answer","refusal":"declined"`
+	const call = `"id":"call","type":"function","function":{"name":"lookup","arguments":"{}"}`
+	const usage = `{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5,"completion_tokens_details":{"reasoning_tokens":1}}`
+	other, expectedID := "reasoning", `"rs_c1"`
+	if field == "reasoning" {
+		other, expectedID = "reasoning_content", `"rsalias_c1"`
+	}
+	jsonWire := `{"id":"c1","object":"chat.completion","created":1,"choices":[{"index":0,"message":{"role":"assistant",` + answer + `,"` + field + `":"one two","` + other + `":"","tool_calls":[{` + call + `}]},"finish_reason":"tool_calls"}],"usage":` + usage + `}`
+	for _, mode := range []string{"json", "reasoning first", "answer first"} {
+		t.Run(mode, func(t *testing.T) {
+			stream := mode != "json"
+			wire := jsonWire
+			if stream {
+				reasoning := chatResponseChunk(`{"`+field+`":"one "}`, "null", "null")
+				message := chatResponseChunk(`{`+answer+`,"`+other+`":null}`, "null", "null")
+				wire = reasoning + message
+				if mode == "answer first" {
+					wire = message + reasoning
+				}
+				wire += chatResponseChunk(`{"`+field+`":"two","tool_calls":[{"index":0,`+call+`}]}`, `"tool_calls"`, usage) + "data: [DONE]\n\n"
+			}
+			replayed := make(chan []map[string]json.RawMessage, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body struct{ Messages []map[string]json.RawMessage }
+				if json.NewDecoder(r.Body).Decode(&body) != nil || r.URL.Path != "/v1/chat/completions" {
+					t.Error("invalid upstream Chat request")
+				}
+				if len(body.Messages) > 1 {
+					replayed <- body.Messages
+					w.Header().Set("Content-Type", "application/json")
+					io.WriteString(w, jsonWire)
+					return
+				}
+				if stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+				} else {
+					w.Header().Set("Content-Type", "application/json")
+				}
+				io.WriteString(w, wire)
+			}))
+			defer server.Close()
+			adapter := adapterForServer(t, server.URL, nil, nil)
+			run := func(input string, stream bool) *httptest.ResponseRecorder {
+				t.Helper()
+				request := inferenceRequestForTest(t, contract.OperationResponses, fmt.Sprintf(`{"model":"public","input":%s,"stream":%t}`, input, stream))
+				defer request.Clear()
+				writer := httptest.NewRecorder()
+				result := adapter.AttemptInference(context.Background(), writer, NewTarget(server.URL+"/v1", "upstream", NewCredential([]byte("fixture-key"), nil)), request, contract.TypeOpenAIChatCompletions, contract.AttemptPolicy{})
+				if !result.Success || !result.Usage.Present || result.Usage.OutputTokens != 3 {
+					t.Fatalf("result=%+v body=%s", result, writer.Body)
+				}
+				return writer
+			}
+			public := run(`"hi"`, stream).Body
+			response := json.RawMessage(public.Bytes())
+			if stream {
+				var deltas strings.Builder
+				var done string
+				for _, event := range projectionEvents(t, public.String()) {
+					switch string(event["type"]) {
+					case `"response.reasoning_text.delta"`:
+						var delta string
+						if json.Unmarshal(event["delta"], &delta) != nil || string(event["item_id"]) != expectedID {
+							t.Fatal("invalid reasoning delta", event)
+						}
+						deltas.WriteString(delta)
+					case `"response.reasoning_text.done"`:
+						_ = json.Unmarshal(event["text"], &done)
+					case `"response.completed"`:
+						response = event["response"]
+					}
+				}
+				if deltas.String() != "one two" || done != "one two" {
+					t.Fatal(public.String())
+				}
+			}
+			var terminal struct {
+				Output []json.RawMessage
+				Usage  json.RawMessage
+			}
+			if json.Unmarshal(response, &terminal) != nil || len(terminal.Output) != 3 || !bytes.Contains(terminal.Usage, []byte(`"reasoning_tokens":1`)) {
+				t.Fatal(string(response))
+			}
+			reasonIndex := 0
+			if mode == "answer first" {
+				reasonIndex = 1
+			}
+			if !bytes.Contains(terminal.Output[reasonIndex], []byte(`"text":"one two","type":"reasoning_text"`)) || !bytes.Contains(terminal.Output[reasonIndex], []byte(`"id":`+expectedID)) || !bytes.Contains(terminal.Output[reasonIndex], []byte(`"summary":[]`)) {
+				t.Fatal(string(response))
+			}
+			input := []json.RawMessage{json.RawMessage(`{"role":"assistant","content":"older turn"}`)}
+			input = append(input, terminal.Output...)
+			input = append(input, json.RawMessage(`{"type":"function_call_output","call_id":"call","output":"done"}`))
+			replay, _ := json.Marshal(input)
+			run(string(replay), false)
+			select {
+			case messages := <-replayed:
+				if len(messages) != 3 || messages[0][field] != nil || string(messages[1][field]) != `"one two"` || messages[1][other] != nil || string(messages[1]["content"]) != `"answer"` || string(messages[1]["refusal"]) != `"declined"` || !bytes.Contains(messages[1]["tool_calls"], []byte(`"id":"call"`)) || string(messages[2]["tool_call_id"]) != `"call"` {
+					t.Fatalf("upstream history: %s", messages)
+				}
+			default:
+				t.Fatal("replayed history did not reach the upstream")
+			}
+		})
+	}
+}
+
 func TestResponsesChatFiniteCompilation(t *testing.T) {
 	body := `{"model":"public/m","instructions":"system rules","input":[{"role":"user","content":[{"type":"input_text","text":"look"},{"type":"input_image","image_url":"data:image/png;base64,YQ==","detail":"low"}]},{"type":"function_call","call_id":"call1","name":"lookup","arguments":"{}"},{"type":"function_call_output","call_id":"call1","output":"result"}],"tools":[{"type":"function","name":"lookup","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}],"tool_choice":{"type":"function","name":"lookup"},"parallel_tool_calls":false,"max_output_tokens":13,"temperature":0.4,"top_p":0.9,"text":{"format":{"type":"json_schema","name":"result","schema":{"type":"object","properties":{"answer":{"type":"string"}}}}},"stream":true}`
 	request := inferenceRequestForTest(t, contract.OperationResponses, body)
@@ -73,6 +322,14 @@ func TestResponsesChatRejectsUnrepresentableRequests(t *testing.T) {
 	}
 	for _, input := range []string{
 		`[{"type":"reasoning","encrypted_content":"opaque"}]`,
+		`[{"type":"reasoning","summary":[{"type":"summary_text","text":"summary"}],"content":[{"type":"reasoning_text","text":"thought"}]}]`,
+		`[{"type":"reasoning","summary":[],"encrypted_content":"opaque","content":[{"type":"reasoning_text","text":"thought"}]}]`,
+		`[{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"thought","signature":"signed"}]}]`,
+		`[{"type":"reasoning","status":"in_progress","content":[{"type":"reasoning_text","text":"thought"}]}]`,
+		`[{"type":"message","role":"assistant","status":"in_progress","content":"partial"}]`,
+		`[{"type":"message","role":"user","status":"incomplete","content":"partial"}]`,
+		`[{"type":"function_call","status":"incomplete","call_id":"c","name":"f","arguments":"{"},{"type":"function_call_output","call_id":"c","output":"done"}]`,
+		`[{"type":"function_call","call_id":"c","name":"f","arguments":"{}"},{"type":"function_call_output","call_id":"c","status":"incomplete","output":"partial"}]`,
 		`[{"role":"user","content":[{"type":"input_file","file_data":"inline","filename":"a.pdf"}]}]`,
 		`[{"type":"function_call_output","call_id":"missing","output":"x"}]`,
 		`[{"type":"function_call","call_id":"c","name":"f","arguments":"{}"}]`,
@@ -157,6 +414,8 @@ func TestResponsesChatSSETerminationToolsAndUsage(t *testing.T) {
 		{"extra_after_finish", text + chatResponseChunk(`{}`, `"stop"`, `null`) + chatResponseChunk(`{"content":"extra"}`, `null`, `null`) + "data: [DONE]\n\n", false, false},
 		{"reported_error", text + `data: {"error":{"message":"failed"},"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}` + "\n\n", false, true},
 		{"secret_split", chatResponseChunk(`{"content":"secret-"}`, `null`, `null`) + chatResponseChunk(`{"content":"material"}`, `"stop"`, `null`) + usage + "data: [DONE]\n\n", false, false},
+		{"reasoning_secret_split", chatResponseChunk(`{"reasoning_content":"secret-"}`, `null`, `null`) + chatResponseChunk(`{"reasoning_content":"material"}`, `"stop"`, `null`) + usage + "data: [DONE]\n\n", false, false},
+		{"reasoning_changes_source", chatResponseChunk(`{"reasoning":"first"}`, `null`, `null`) + chatResponseChunk(`{"reasoning_content":"second"}`, `"stop"`, `null`) + usage + "data: [DONE]\n\n", false, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

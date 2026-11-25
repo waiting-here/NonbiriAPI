@@ -11,6 +11,7 @@ import { dirname, resolve } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
 
 import en from '../../src/user/i18n/en.json' with { type: 'json' };
+import zh from '../../src/user/i18n/zh.json' with { type: 'json' };
 import commonEn from '../../src/shared/i18n/common/en.json' with { type: 'json' };
 import commonZh from '../../src/shared/i18n/common/zh.json' with { type: 'json' };
 import adminZh from '../../src/admin/i18n/zh.json' with { type: 'json' };
@@ -312,7 +313,7 @@ test('level 5 reads accounts and retains the lower-user ban boundary', async ({ 
     await expect(page.getByLabel(copy.lightRPMLimit, { exact: true })).toBeEnabled();
     await expect(page.getByLabel(copy.endpointLimit, { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: copy.tabPenalties, exact: true }).click();
-    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: copy.unban, exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: copy.ban, exact: true })).toHaveCount(0);
     const unban = await context.request.post(state.user_url + root + '/unban', {
       headers: { Origin: state.user_url, 'Idempotency-Key': randomUUID() },
@@ -389,7 +390,11 @@ test('administrator follows retained request identity through deletion history a
     const history = dialog.getByRole('link', { name: 'View deletion history' });
     await expect(history).toHaveAttribute(
       'href',
-      '/users?deleted=' + state.management.history_record_id,
+      '/users?' +
+        new URLSearchParams({
+          deleted: state.management.history_record_id,
+          log_context: 'request_id=' + state.management.request_ids[0],
+        }),
     );
     await history.click();
     await expect(page.getByRole('heading', { name: 'Deleted account', exact: true })).toBeVisible();
@@ -663,6 +668,94 @@ test('level 6 forcibly rejects an automatic donation through one consequence con
     expect(completed.request().postDataJSON().decision).toBe('force_reject');
     expect(completed.request().postDataJSON()).not.toHaveProperty('key_settings');
     await expect(dialog).toHaveCount(0);
+
+    for (const role of ['admin', 6] as const) {
+      for (const language of ['en', 'zh'] as const) {
+        const management = await session(browser, role, false, language);
+        try {
+          const origin = role === 'admin' ? state.admin_url : state.user_url;
+          const prefix = role === 'admin' ? '/admin/api' : '/api/steward';
+          const result = await read(
+            management,
+            origin,
+            prefix + '/donations/' + state.management.automatic_donation_id,
+          );
+          expect(result.review_result).toMatchObject({
+            decision: 'force_reject',
+            reason: 'Synthetic review finding',
+          });
+          expect(result.reviewer).toMatchObject({ role: 'steward' });
+          const managementPage = await management.newPage();
+          const route = role === 'admin' ? '/charity?' : '/steward?tab=charity&';
+          await managementPage.goto(
+            origin + route + 'charity_section=donations&donation_id=' + result.id,
+          );
+          const copy = (language === 'zh' ? commonZh : commonEn).common.operations.charity;
+          const resultValue = managementPage
+            .locator('dt')
+            .filter({ hasText: new RegExp(`^${copy.review}$`) })
+            .locator('xpath=following-sibling::dd[1]');
+          await expect(resultValue).toContainText(
+            `${copy.decision.force_reject} · Synthetic review finding ·`,
+          );
+
+          if (
+            process.env.NONBIRI_VISUAL_DIR &&
+            ((role === 'admin' && language === 'en') || (role === 6 && language === 'zh'))
+          ) {
+            for (const theme of ['light', 'dark']) {
+              await managementPage.evaluate((mode) => {
+                document.documentElement.dataset.theme = mode;
+              }, theme);
+              for (const width of [1440, 390]) {
+                await managementPage.setViewportSize({ width, height: 900 });
+                await resultValue.scrollIntoViewIfNeeded();
+                expect(
+                  await managementPage.evaluate(
+                    () => document.documentElement.scrollWidth - innerWidth,
+                  ),
+                ).toBeLessThanOrEqual(1);
+                await managementPage.screenshot({
+                  path: resolve(
+                    process.env.NONBIRI_VISUAL_DIR,
+                    `donation-result-${role}-${language}-${theme}-${width}.png`,
+                  ),
+                });
+              }
+            }
+          }
+        } finally {
+          await management.close();
+        }
+      }
+    }
+    for (const language of ['en', 'zh'] as const) {
+      const owner = await session(browser, 1, false, language);
+      try {
+        const result = await read(
+          owner,
+          state.user_url,
+          '/api/donations/' + state.management.automatic_donation_id,
+        );
+        expect(result.review_result).toMatchObject({
+          decision: 'force_reject',
+          reason: 'Synthetic review finding',
+        });
+        expect(result).not.toHaveProperty('reviewer');
+        const ownerPage = await owner.newPage();
+        await ownerPage.goto(state.user_url + '/charity/donations/' + result.id);
+        const copy = (language === 'zh' ? zh : en).user.charity;
+        const ownerReview = ownerPage.locator('.economy-review-result');
+        await expect(ownerReview).toContainText(copy.reviewResult);
+        await expect(ownerReview).toContainText(copy.status.rejected);
+        await expect(ownerReview).toContainText('Synthetic review finding');
+        await expect(ownerReview).not.toContainText(
+          (language === 'zh' ? commonZh : commonEn).common.operations.charity.decision.force_reject,
+        );
+      } finally {
+        await owner.close();
+      }
+    }
   } finally {
     await context.close();
   }
@@ -937,6 +1030,7 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     steward = await session(browser, 6, true),
     admin = await session(browser, 'admin');
   const copy = commonEn.common.operations.maintenance;
+  let restoreMaintenance = false;
   try {
     const page = await steward.newPage();
     await page.goto(state.user_url + '/steward?tab=maintenance');
@@ -949,10 +1043,13 @@ test('level 6 can enable maintenance but only the administrator can restore serv
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname === '/api/steward/maintenance/enable',
     );
+    restoreMaintenance = true;
     await dialog.getByRole('button', { name: copy.enableAction, exact: true }).click();
     expect((await enabling).ok()).toBe(true);
-    await expect(dialog).toHaveCount(0);
-    await expect(page.getByText(copy.stewardCannotDisable, { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { name: commonEn.common.maintenanceTitle, exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: copy.disableAction, exact: true })).toHaveCount(
       0,
     );
@@ -986,11 +1083,22 @@ test('level 6 can enable maintenance but only the administrator can restore serv
     expect((await restoring).ok()).toBe(true);
     await expect(adminPage.getByRole('alertdialog')).toHaveCount(0);
     expect((await read(admin, state.admin_url, '/admin/api/maintenance')).enabled).toBe(false);
+    restoreMaintenance = false;
     await page.reload();
     await expect(page.getByRole('button', { name: copy.enableAction, exact: true })).toBeVisible();
   } finally {
-    await steward.close();
-    await admin.close();
+    try {
+      if (restoreMaintenance) {
+        const current = await read(admin, state.admin_url, '/admin/api/maintenance');
+        if (current.enabled)
+          await write(admin, state.admin_url, '/admin/api/maintenance/disable', {
+            expected_revision: current.revision,
+            reason: 'Restore isolated service after the maintenance test',
+          });
+      }
+    } finally {
+      await Promise.all([steward.close(), admin.close()]);
+    }
   }
 });
 

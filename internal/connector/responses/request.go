@@ -2,7 +2,6 @@
 package responses
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/url"
 	"regexp"
@@ -406,8 +405,11 @@ func content(raw []byte, role string) ([]any, error) {
 	}
 	return out, nil
 }
+
+const maxReasoningBytes = 1 << 20
+
 func reasoningExtension(raw []byte) ([]any, string, error) {
-	if len(raw) > 1<<20 {
+	if len(raw) > maxReasoningBytes {
 		return nil, "", chatwire.ErrProtocol
 	}
 	outer, err := chatwire.Object(raw)
@@ -442,34 +444,51 @@ func reasoningExtension(raw []byte) ([]any, string, error) {
 }
 func reasoningItem(raw []byte) (map[string]json.RawMessage, string, error) {
 	item, err := chatwire.Object(raw)
-	if err != nil || !chatwire.Keys(item, "type", "id", "summary", "encrypted_content", "status") || string(item["type"]) != `"reasoning"` {
+	if err != nil || !chatwire.Keys(item, "type", "id", "summary", "content", "encrypted_content", "signature", "status") || string(item["type"]) != `"reasoning"` {
 		return nil, "", chatwire.ErrProtocol
 	}
 	id, ok := chatwire.String(item["id"])
 	if !ok || id == "" || len(id) > 512 {
 		return nil, "", chatwire.ErrProtocol
 	}
-	if status, ok := item["status"]; ok && string(status) != `"completed"` && string(status) != `"incomplete"` {
+	if !chatwire.Null(item["status"]) && !validItemStatus(item) {
 		return nil, "", chatwire.ErrProtocol
 	}
-	if raw, ok := item["encrypted_content"]; ok && !chatwire.Null(raw) {
-		text, ok := chatwire.String(raw)
-		if !ok || len(text) > 64<<10 {
-			return nil, "", chatwire.ErrProtocol
+	for _, field := range []string{"encrypted_content", "signature"} {
+		if raw := item[field]; !chatwire.Null(raw) {
+			if text, ok := chatwire.String(raw); !ok || len(text) > 64<<10 {
+				return nil, "", chatwire.ErrProtocol
+			}
 		}
 	}
-	var summary []json.RawMessage
-	if json.Unmarshal(item["summary"], &summary) != nil || chatwire.Null(item["summary"]) {
-		return nil, "", chatwire.ErrProtocol
+	summary, err := reasoningText(item["summary"], "summary_text")
+	if err != nil {
+		return nil, "", err
 	}
-	var text bytes.Buffer
-	for _, raw := range summary {
-		part, err := chatwire.Object(raw)
-		value, ok := chatwire.String(part["text"])
-		if err != nil || !chatwire.Keys(part, "type", "text") || string(part["type"]) != `"summary_text"` || !ok {
+	if !chatwire.Null(item["content"]) {
+		content, err := reasoningText(item["content"], "reasoning_text")
+		if err != nil {
 			return nil, "", chatwire.ErrProtocol
+		}
+		if summary == "" {
+			summary = content
+		}
+	}
+	return item, summary, nil
+}
+
+func reasoningText(raw json.RawMessage, kind string) (string, error) {
+	var parts []json.RawMessage
+	if json.Unmarshal(raw, &parts) != nil || parts == nil {
+		return "", chatwire.ErrProtocol
+	}
+	var text strings.Builder
+	for _, part := range parts {
+		_, value, err := parsePart(part, kind)
+		if err != nil {
+			return "", err
 		}
 		text.WriteString(value)
 	}
-	return item, text.String(), nil
+	return text.String(), nil
 }

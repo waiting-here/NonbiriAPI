@@ -138,6 +138,9 @@ func (w *world) settle(r *resident) error {
 		if i+1 < len(epochs) {
 			until = epochs[i+1].AtMS
 		}
+		if !e.Master || !e.Settings.Enabled {
+			w.lastPauseEnd = max(w.lastPauseEnd, until)
+		}
 		for t := e.AtMS; t < until; {
 			next, err := w.settleInterval(people, incoming, t, until, e)
 			if err != nil {
@@ -219,7 +222,7 @@ func (w *world) settleInterval(people []*resident, incoming map[int64][]*visit, 
 						end = min(end, w.midnight(at))
 					}
 					end = min(end, at+v.workLeft)
-				} else if p.state.Home.TroughGrams == 0 && !p.state.CanRefill() {
+				} else if p.state.Home.TroughGrams == 0 && !p.state.CanRefill(cfg) {
 					if err := w.farewell(v, at, cfg, "empty"); err != nil {
 						return 0, err
 					}
@@ -372,6 +375,16 @@ func (w *world) reward(r *resident, peer, at, coins, shards int64, cfg config.Se
 		wallet.ConchShards -= overflow
 		wallet.DailyConchShardsGained -= overflow
 	}
+	if kind == "settlement" && p < coins {
+		switch {
+		case !r.state.StoveReady(at, cfg):
+			text += "（自家近期开火用粮不足，未获鲸币）"
+		case wallet.Pearls == assets.MaxBalance:
+			text += "（小鲸币钱包已满）"
+		default:
+			text += "（今日社交鲸币已达上限）"
+		}
+	}
 	w.keepDay(r)
 	r.dirty = true
 	w.remember(event{user: r.id, peer: peer, at: at, kind: kind, text: text, movementReason: "social_reward", pearls: p, shards: s})
@@ -514,25 +527,36 @@ func (w *world) sendVisit(g *resident, a actionRequest) error {
 	if h.state.Home.TroughGrams <= 0 {
 		return conflict("这户饭碗里已经没有余粮了。")
 	}
+	if h.state.BankFull(w.config) {
+		return conflict("这户存钱罐已满，暂时不能开饭。可以换一家串门。")
+	}
+	if w.guestCount(h.id) >= 2 {
+		return conflict("这户的两个客位已经坐满了。")
+	}
+	w.startVisit(g, h, a.AllowHire != nil && *a.AllowHire, "小鲸出发串门"+preset, "客鲸来小屋串门"+preset)
+	return nil
+}
+
+func (w *world) guestCount(host int64) int {
 	count := 0
 	for _, v := range w.visits {
-		if !v.ended && v.host == h.id {
+		if !v.ended && v.host == host {
 			count++
 		}
 	}
-	if count >= 2 {
-		return conflict("这户的两个客位已经坐满了。")
-	}
-	w.visits[g.id] = &visit{guest: g.id, host: h.id, started: w.now, allowHire: a.AllowHire != nil && *a.AllowHire}
+	return count
+}
+
+func (w *world) startVisit(g, h *resident, allowHire bool, guestNote, hostNote string) {
+	w.visits[g.id] = &visit{guest: g.id, host: h.id, started: w.now, allowHire: allowHire}
 	g.state.Whale.Location = rules.Location{Kind: "visiting", NeighborID: h.door, StartedAt: w.now}
 	g.state.Whale.IsSleeping = false
 	g.state.Whale.SleepingSince = 0
 	g.state.Whale.TempEmotion = nil
 	g.dirty = true
 	h.dirty = true
-	w.remember(event{user: g.id, peer: h.id, at: w.now, kind: "visit_out", text: "小鲸出发串门" + preset})
-	w.remember(event{user: h.id, peer: g.id, at: w.now, kind: "guest_in", text: "客鲸来小屋串门" + preset})
-	return nil
+	w.remember(event{user: g.id, peer: h.id, at: w.now, kind: "visit_out", text: guestNote})
+	w.remember(event{user: h.id, peer: g.id, at: w.now, kind: "guest_in", text: hostNote})
 }
 
 func (w *world) catchGuest(h *resident, a actionRequest) error {

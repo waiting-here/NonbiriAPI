@@ -3,7 +3,7 @@ import { MAX_HEROES } from '../game/rules.js';
 import { factionRules } from '../game/factions.js';
 import { leaderDefinitions } from '../cards/leaders.js';
 import { models } from '../ai/models.js';
-import { cardDescription, abilityNames } from './card.js';
+import { cardDescription, abilityNames, abilityText } from './card.js';
 
 export function showRulesGuide(arena) {
   arena.view.showDialog(
@@ -63,7 +63,7 @@ export function showRulesGuide(arena) {
         'safety_layer',
         'berserker',
         'avenger',
-      ].map((id) => `${abilityNames[id]}：${ability_dict[id]?.description || '请查看卡牌说明。'}`),
+      ].map((id) => `${abilityNames[id]}：${abilityText[id]?.description || '请查看卡牌说明。'}`),
     ],
     true,
   );
@@ -84,7 +84,7 @@ export function showRulesGuide(arena) {
     [
       `卡组至少22张单位（英雄也算单位），最多${MAX_HEROES}张英雄，最多10张特殊牌；每张卡还须遵守副本上限及阵营限制，中立牌可加入任意阵营。当前四套标准预设各26张，初学者可直接使用。`,
       '随机预设从本阵营四套标准配置中抽一套；随机组牌保留主题核心后替换部分单位。开战前可查看结果或重新随机，整场不会再随机换卡组。',
-      '人机挑战与玩家对战由平台保存对局。普通行动30秒、开局换牌20秒、技能选目标15秒；按平台规则处理超时，连续三个普通回合超时判负。刷新或重连会恢复当前对局。AI观战仅在本机演示，不计账号成绩或奖励。',
+      '玩家对战的普通行动、开局换牌、技能选目标分别限时30、20、15秒，连续三个普通回合超时判负。免费 AI 陪玩中，你可以慢慢考虑，关页后可返回仍在进行的局。AI 的单次决策限时20秒，排队单独计算。',
     ],
     true,
   );

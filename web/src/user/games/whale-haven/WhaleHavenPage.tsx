@@ -1,21 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useWhaleText } from './copy';
+import { conchRewardCopy, unlockPriceText, useWhaleText } from './copy';
 import { Link } from 'react-router';
 import { Amount } from '@shared/components/Amount';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { GameBackLink } from '../common/GameBackLink';
 import { UserPageGate } from '../../components/UserPageGate';
-import {
-  act,
-  exchange,
-  fetchProfile,
-  fetchNeighborHouse,
-  costWithCoupon,
-  type Action,
-  type Profile,
-} from './api';
+import { act, exchange, fetchProfile, fetchNeighborHouse, type Action, type Profile } from './api';
 import { soundEngine } from './audio/soundEngine';
 import { WhaleNamingModal } from './components/WhaleNamingModal';
 import {
@@ -40,6 +32,25 @@ import './styles/host.css';
 
 const profileKey = ['user', 'games', 'whale-haven', 'profile'] as const;
 const menuPreference = 'nonbiri:user:whale-haven:menu-position';
+
+function itemToUnlock(profile: Profile, command: Action) {
+  const { home } = profile.snapshot;
+  const { values } = profile.settings;
+  if (command.type === 'toggle_decor' && !home.ownedDecor.includes(command.decorId))
+    return {
+      name: DECOR_CATALOG[command.decorId].name,
+      basePrice: values['decor_' + command.decorId + '_price_pearls'],
+    };
+  if (
+    command.type === 'select_outfit' &&
+    command.outfitId !== 'maid_classic' &&
+    !home.ownedOutfits?.includes(command.outfitId)
+  )
+    return {
+      name: OUTFIT_CATALOG[command.outfitId].name,
+      basePrice: values['outfit_' + command.outfitId + '_price_pearls'],
+    };
+}
 
 function useSmallViewport() {
   const [small, setSmall] = useState(() => window.matchMedia('(max-width:860px)').matches);
@@ -76,11 +87,11 @@ function WhaleGame() {
   const [departure, setDeparture] = useState<{ peer: NeighborStation; preset?: string } | null>(
     null,
   );
-  const [purchase, setPurchase] = useState<{
+  const [confirmation, setConfirmation] = useState<{
     command: Action;
     title: string;
-    price: string;
-    unit: string;
+    description: ReactNode;
+    confirmLabel: string;
     revision: string;
     profileRevision: number;
     error?: string;
@@ -168,7 +179,15 @@ function WhaleGame() {
       setBusy(false);
     }
   }
-  function receipt(command: Action, previous: Profile) {
+  function receipt(command: Action, previous: Profile, updated: Profile) {
+    const item = itemToUnlock(previous, command);
+    if (item) {
+      const unlocked =
+        command.type === 'toggle_decor'
+          ? t(`已解锁并布置${item.name}。`, `Unlocked and placed ${item.name}.`)
+          : t(`已解锁并换上${item.name}。`, `Unlocked and equipped ${item.name}.`);
+      return `${unlocked} ${unlockPriceText(previous, item.basePrice, t)}`;
+    }
     switch (command.type) {
       case 'buy_feed': {
         const count = command.quantity ?? 1;
@@ -177,21 +196,6 @@ function WhaleGame() {
       }
       case 'harvest_pearls':
         return t('本次收益已入账。', 'Earnings collected.');
-      case 'select_outfit':
-        if (
-          command.outfitId !== 'maid_classic' &&
-          !previous.snapshot.home.ownedOutfits?.includes(command.outfitId)
-        ) {
-          const name = OUTFIT_CATALOG[command.outfitId].name;
-          return t(`已解锁并换上${name}。`, `Unlocked and equipped ${name}.`);
-        }
-        break;
-      case 'toggle_decor':
-        if (!previous.snapshot.home.ownedDecor.includes(command.decorId)) {
-          const name = DECOR_CATALOG[command.decorId].name;
-          return t(`已解锁并布置${name}。`, `Unlocked and placed ${name}.`);
-        }
-        break;
       case 'set_open':
         if (!command.open)
           return t('小筑已关闭，本次来往已结算。', 'Haven closed and visits settled.');
@@ -211,19 +215,31 @@ function WhaleGame() {
           '客鲸已回家，本次来往已结算。',
           'Your guest is home and the visit has been settled.',
         );
-      case 'spin_conch_gacha':
+      case 'spin_conch_gacha': {
+        const prize = conchRewardCopy(updated.conch_reward, t);
+        if (prize)
+          return t(
+            `抽到${prize.name}。${prize.destination}`,
+            `You drew ${prize.name}. ${prize.destination}`,
+          );
         return t(
           '海螺扭蛋已开启，本次奖励已领取。',
           'Conch draw complete. Your reward has been granted.',
         );
+      }
     }
   }
   async function dispatch(command: Action, onError?: (reason: string) => void) {
-    if (!profile) return false;
+    if (!profile || lock.current) return false;
+    if (command.type === 'interact') {
+      const kind = command.zone === 'head' ? 'headpat' : 'poke';
+      setImpulse({ seq: ++nextImpulse.current, kind });
+      soundEngine.play(kind);
+    }
     const prev = profile;
-    const message = receipt(command, prev);
-    const updated = await commit(() => act(prev, command), message, onError);
+    const updated = await commit(() => act(prev, command), undefined, onError);
     if (updated) {
+      let message = receipt(command, prev, updated);
       if (
         prev.snapshot.interactionAffectionRemaining > 0 &&
         updated.snapshot.interactionAffectionRemaining === 0
@@ -232,36 +248,30 @@ function WhaleGame() {
           '今天的三次互动羁绊奖励已领完，仍可继续互动。',
           'You earned all three interaction Bond XP awards today. You can keep playing.',
         );
-        setFeedback({ message: message ? `${message} ${limit}` : limit, error: false });
+        message = message ? `${message} ${limit}` : limit;
       }
+      if (message) setFeedback({ message, error: false });
       if (command.type === 'chat' || command.type === 'interact')
         setSpokenReply(updated.snapshot.whale.tempEmotion?.line ?? '');
       const anim =
-        command.type === 'interact'
-          ? command.zone === 'head'
-            ? 'headpat'
-            : 'poke'
-          : command.type === 'use_feed'
-            ? command.feedId === 'berry_teacake'
-              ? 'teacake'
-              : 'feed'
-            : command.type === 'harvest_pearls'
-              ? 'celebrate'
-              : null;
-      if (anim) setImpulse({ seq: ++nextImpulse.current, kind: anim });
-      soundEngine.play(
         command.type === 'use_feed'
-          ? 'feed_rice'
+          ? command.feedId === 'berry_teacake'
+            ? 'teacake'
+            : 'feed'
           : command.type === 'harvest_pearls'
-            ? 'coin_harvest'
-            : command.type === 'catch_guest'
-              ? (('catch_' + command.action) as 'catch_gentle')
-              : command.type === 'interact'
-                ? command.zone === 'head'
-                  ? 'headpat'
-                  : 'poke'
+            ? 'celebrate'
+            : null;
+      if (anim) setImpulse({ seq: ++nextImpulse.current, kind: anim });
+      if (command.type !== 'interact')
+        soundEngine.play(
+          command.type === 'use_feed'
+            ? 'feed_rice'
+            : command.type === 'harvest_pearls'
+              ? 'coin_harvest'
+              : command.type === 'catch_guest'
+                ? (('catch_' + command.action) as 'catch_gentle')
                 : 'ui_click',
-      );
+        );
       if (command.type === 'set_open' && !command.open) setView(null);
     }
     return !!updated;
@@ -272,27 +282,53 @@ function WhaleGame() {
       settings: { values },
       snapshot,
     } = profile;
-    let title: string,
-      price: number,
-      unit = t('小鲸币', 'whale coins');
+    const ask = (action: Action, title: string, description: ReactNode, confirmLabel: string) =>
+      setConfirmation({
+        command: action,
+        title,
+        description,
+        confirmLabel,
+        revision: profile.settings_revision,
+        profileRevision: snapshot.revision,
+      });
+    if (command.type === 'use_feed' && command.feedId !== 'berry_teacake') {
+      const { troughGrams, troughFeedType } = snapshot.home;
+      const room = values.trough_grams - troughGrams;
+      const serving = values['feed_' + command.feedId + '_grams'];
+      const spill = Math.ceil(serving - room);
+      // An occupied bowl rejects mixed staples and leaves its last 10 g of space alone.
+      const canFill = troughGrams === 0 || (troughFeedType === command.feedId && room > 10);
+      if (canFill && spill > 0 && snapshot.inventory[command.feedId] > 0) {
+        ask(
+          { ...command, maxSpillGrams: spill },
+          t('饭碗装不下整份口粮', 'The whole serving won’t fit'),
+          t(
+            `这份口粮有 ${serving} 克，预计最多会浪费 ${spill} 克。继续添饭会用掉整份。`,
+            `This serving weighs ${serving} g. Up to ${spill} g may spill, and the whole serving will be used.`,
+          ),
+          t('仍然添饭', 'Fill anyway'),
+        );
+      } else {
+        void dispatch({ ...command, maxSpillGrams: 0 });
+      }
+      return;
+    }
+    const item = itemToUnlock(profile, command);
+    if (item) {
+      ask(
+        command,
+        t('解锁', 'Unlock ') + item.name,
+        unlockPriceText(profile, item.basePrice, t),
+        t('确认', 'Confirm'),
+      );
+      return;
+    }
+    let title: string, price: number, unit: string;
     if (command.type === 'buy_feed') {
       title =
         t('购入', 'Buy ') + FEED_CATALOG[command.feedId].name + ' ×' + (command.quantity ?? 1);
       price = values['feed_' + command.feedId + '_price_milli'];
       unit = t('游戏积分', 'game credits');
-    } else if (
-      command.type === 'select_outfit' &&
-      command.outfitId !== 'maid_classic' &&
-      !snapshot.home.ownedOutfits?.includes(command.outfitId)
-    ) {
-      title = t('解锁', 'Unlock ') + OUTFIT_CATALOG[command.outfitId].name;
-      price = costWithCoupon(profile, values['outfit_' + command.outfitId + '_price_pearls']);
-    } else if (
-      command.type === 'toggle_decor' &&
-      !snapshot.home.ownedDecor.includes(command.decorId)
-    ) {
-      title = t('解锁', 'Unlock ') + DECOR_CATALOG[command.decorId].name;
-      price = costWithCoupon(profile, values['decor_' + command.decorId + '_price_pearls']);
     } else if (command.type === 'spin_conch_gacha') {
       title = t('转动海螺扭蛋', 'Draw a conch reward');
       price = values.conch_cost_shards;
@@ -301,16 +337,19 @@ function WhaleGame() {
       void dispatch(command);
       return;
     }
-    setPurchase({
+    ask(
       command,
       title,
-      price: String(
-        BigInt(price) * BigInt(command.type === 'buy_feed' ? (command.quantity ?? 1) : 1),
-      ),
-      unit,
-      revision: profile.settings_revision,
-      profileRevision: snapshot.revision,
-    });
+      <>
+        {t('本次花费', 'Cost')}{' '}
+        {command.type === 'buy_feed' ? (
+          <Amount value={String(BigInt(price) * BigInt(command.quantity ?? 1))} unit={unit} />
+        ) : (
+          price + ' ' + unit
+        )}
+      </>,
+      t('确认', 'Confirm'),
+    );
   }
   const stageHost = useRef<HTMLDivElement>(null);
   const adopted = profile?.snapshot.whale.hasCompletedNaming;
@@ -475,7 +514,7 @@ function WhaleGame() {
                   : snap.inventory.silver_fish > 0
                     ? 'silver_fish'
                     : 'sweet_shrimp';
-              if (snap.inventory[id] > 0) void dispatch({ type: 'use_feed', feedId: id });
+              if (snap.inventory[id] > 0) choose({ type: 'use_feed', feedId: id });
               else deck('feed');
             }}
             onToggleSleep={(forceSleep) => void dispatch({ type: 'toggle_sleep', forceSleep })}
@@ -611,39 +650,34 @@ function WhaleGame() {
           onClose={() => setDeparture(null)}
         />
       )}
-      {purchase && (
+      {confirmation && (
         <ConfirmDialog
           open
-          title={purchase.title}
-          description={
-            <>
-              {t('本次花费', 'Cost')}{' '}
-              {purchase.command.type === 'buy_feed' ? (
-                <Amount value={purchase.price} unit={purchase.unit} />
-              ) : (
-                purchase.price + ' ' + purchase.unit
-              )}
-            </>
-          }
-          confirmLabel={t('确认', 'Confirm')}
+          title={confirmation.title}
+          description={confirmation.description}
+          confirmLabel={confirmation.confirmLabel}
           busy={busy}
           confirmDisabled={
-            purchase.revision !== profile.settings_revision ||
-            purchase.profileRevision !== snap.revision
+            confirmation.revision !== profile.settings_revision ||
+            confirmation.profileRevision !== snap.revision
           }
-          onCancel={() => setPurchase(null)}
+          onCancel={() => setConfirmation(null)}
           onConfirm={async () => {
-            if (await dispatch(purchase.command, (error) => setPurchase({ ...purchase, error })))
-              setPurchase(null);
+            if (
+              await dispatch(confirmation.command, (error) =>
+                setConfirmation({ ...confirmation, error }),
+              )
+            )
+              setConfirmation(null);
           }}
         >
-          {purchase.error && !busy && <p role="alert">{purchase.error}</p>}
-          {(purchase.revision !== profile.settings_revision ||
-            purchase.profileRevision !== snap.revision) && (
+          {confirmation.error && !busy && <p role="alert">{confirmation.error}</p>}
+          {(confirmation.revision !== profile.settings_revision ||
+            confirmation.profileRevision !== snap.revision) && (
             <p>
               {t(
-                '价格或存档已变动，请取消后重新选择。',
-                'The price or your saved game changed. Cancel and choose again.',
+                '小筑规则或存档已变动，请取消后重新选择。',
+                'The haven rules or your saved game changed. Cancel and choose again.',
               )}
             </p>
           )}

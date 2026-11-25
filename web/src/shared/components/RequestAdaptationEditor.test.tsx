@@ -395,6 +395,11 @@ describe('RequestAdaptationEditor', () => {
     await rendered.user.clear(headers);
     await rendered.user.type(headers, 'X-Dirty');
     await rendered.user.click(screen.getByRole('button', { name: 'Refresh configuration' }));
+    await rendered.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Refresh configuration',
+      }),
+    );
 
     expect(
       await screen.findByText(

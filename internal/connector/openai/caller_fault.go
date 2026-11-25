@@ -1,59 +1,6 @@
 package openai
 
-import (
-	"bytes"
-	"context"
-	"net/http"
-
-	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
-	"github.com/waiting-here/NonbiriAPI/internal/smartbackoff"
-)
-
-// unchangedCallerParameters is called before releasing the wire body, only for
-// native codecs whose fields retain the decoder's original JSON values.
-// Configured adaptations and protocol conversions cannot supply this proof.
-// Comparing raw values also refuses otherwise equivalent codec normalization.
-func unchangedCallerParameters(ctx context.Context, response *http.Response, fields []jsonField, body []byte, policy contract.AttemptPolicy) func(string) bool {
-	if !smartbackoff.IsCharityCall(ctx) || response == nil || response.StatusCode != 400 && response.StatusCode != 422 ||
-		policy.HasAdaptation || len(policy.AdditionalHeaders) != 0 || len(policy.ManagedHeaders) != 0 || len(policy.NativeExtensions) != 0 {
-		return nil
-	}
-	// body is the native serializer's validated JSON. Borrowing its values
-	// avoids copying large inputs again just to inspect a rejected request.
-	wire, ok := borrowedObjectFields(body)
-	if !ok {
-		return nil
-	}
-	original := fieldsByName(fields)
-	matched := make(map[string]bool)
-	for _, field := range wire {
-		if value, ok := original[field.name]; ok && bytes.Equal(value, field.value) {
-			matched[field.name] = true
-		}
-	}
-	// A dotted error parameter names a member, not a literal top-level key.
-	// Prove the whole parent unchanged and the member present exactly once.
-	// Keep only booleans: the callback outlives our ownership of the wire body.
-	for _, path := range [][2]string{{"thinking", "type"}, {"thinking", "budget_tokens"}, {"reasoning", "effort"}} {
-		name := path[0] + "." + path[1]
-		matched[name] = false
-		if !matched[path[0]] {
-			continue
-		}
-		children, ok := borrowedObjectFields(original[path[0]])
-		if !ok {
-			continue
-		}
-		count := 0
-		for _, child := range children {
-			if child.name == path[1] {
-				count++
-			}
-		}
-		matched[name] = count == 1
-	}
-	return func(name string) bool { return matched[name] }
-}
+import contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 
 func callerParameterFailure(result AttemptResult) AttemptResult {
 	if result.Failure == FailureUpstream && result.FailureOrigin == contract.OriginUpstreamResponse &&

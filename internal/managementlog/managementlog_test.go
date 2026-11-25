@@ -456,6 +456,14 @@ func TestOperationTotalsUseSameFilteredSnapshot(t *testing.T) {
 	}
 }
 
+func TestDiscardingSearchResultsDoesNotRecordAManagementOperation(t *testing.T) {
+	for _, prefix := range []string{"/admin/api/", "/api/steward/"} {
+		if _, record := DescribeRoute(http.MethodDelete, prefix+"log-searches/{search_id}"); record {
+			t.Fatalf("recorded ephemeral log search cancellation on %s", prefix)
+		}
+	}
+}
+
 func TestAIRouteClassificationKeepsConversationHistorySeparate(t *testing.T) {
 	cases := []struct {
 		method, path string

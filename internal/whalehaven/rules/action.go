@@ -23,6 +23,9 @@ type Action struct {
 	Key        string `json:"key,omitempty"`
 	ForceSleep *bool  `json:"force_sleep,omitempty"`
 	Enabled    *bool  `json:"enabled,omitempty"`
+
+	// A nil limit allows the usual partial serving.
+	MaxSpillGrams *uint64 `json:"max_spill_grams,omitempty"`
 }
 
 type Result struct {
@@ -42,6 +45,9 @@ var (
 	errAway   = errors.New("小鲸正在串门，先召回她吧。")
 )
 
+// ErrFeedSpill leaves the serving in inventory when the confirmed limit is exceeded.
+var ErrFeedSpill = errors.New("饭碗余量已变，口粮会溢出更多。请重新添饭以查看当前用量。")
+
 // Apply runs on a state loaded inside the host's write transaction. The host
 // checks GameCostMilli against its ledger and commits both the purchase and
 // debit together. It supplies the time and advances the state before dispatch.
@@ -58,7 +64,7 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 		s.Inventory[a.FeedID] += a.Quantity
 		return Result{GameCostMilli: price * a.Quantity}, nil
 	case "use_feed":
-		return s.feed(a.FeedID, now, p)
+		return s.feed(a, now, p)
 	case "harvest_pearls":
 		earned := s.Home.UnclaimedPearls
 		if earned > math.MaxInt64-s.Wallet.Pearls {
@@ -169,7 +175,8 @@ func (s *State) Apply(a Action, now int64, p Parameters) (Result, error) {
 	return Result{}, nil
 }
 
-func (s *State) feed(id string, now int64, p Parameters) (Result, error) {
+func (s *State) feed(a Action, now int64, p Parameters) (Result, error) {
+	id := a.FeedID
 	if !slices.Contains(foodIDs, id) {
 		return Result{}, errAction
 	}
@@ -192,11 +199,15 @@ func (s *State) feed(id string, now int64, p Parameters) (Result, error) {
 			return Result{}, errors.New("等饭碗吃空，再换另一种主粮。")
 		}
 		capacity := float64(p.Value("trough_grams"))
-		grams = min(float64(p.Value(key+"grams")), capacity-s.Home.TroughGrams)
+		serving := float64(p.Value(key + "grams"))
+		grams = min(serving, capacity-s.Home.TroughGrams)
 		// As in the original bowl, leave the last ten grams of headroom
 		// alone instead of spending an entire serving to fill a tiny gap.
 		if grams <= 0 || (s.Home.TroughGrams > 0 && s.Home.TroughGrams >= capacity-10) {
 			return Result{}, errors.New("青花鲸鱼饭碗已经盛满啦。")
+		}
+		if a.MaxSpillGrams != nil && serving-grams > float64(*a.MaxSpillGrams) {
+			return Result{}, ErrFeedSpill
 		}
 		s.Home.TroughGrams += grams
 		s.Home.TroughFeedType = id
@@ -239,16 +250,18 @@ func (s *State) dress(a Action, now int64, p Parameters) (Result, error) {
 			return Result{}, nil
 		}
 	}
-	price := p.Value(priceKey)
-	withCoupon := s.Home.Buffs.WardrobeDiscountCoupons > 0 && price > 0 && p.Value("coupon_discount_bp") > 0
-	if withCoupon {
-		price = max(1, fraction(price, 10_000-p.Value("coupon_discount_bp")))
+	basePrice := p.Value(priceKey)
+	price := basePrice
+	discountBP := p.Value("coupon_discount_bp")
+	if s.Home.Buffs.WardrobeDiscountCoupons > 0 && basePrice > 0 && discountBP > 0 {
+		price = max(1, fraction(basePrice, 10_000-discountBP))
 	}
 	if s.Wallet.Pearls < price {
 		return Result{}, errors.New("小鲸币不足，先去存钱罐收币吧。")
 	}
 	s.Wallet.Pearls -= price
-	if withCoupon {
+	usedCoupon := price < basePrice
+	if usedCoupon {
 		s.Home.Buffs.WardrobeDiscountCoupons--
 	}
 	if isDecor {
@@ -261,7 +274,24 @@ func (s *State) dress(a Action, now int64, p Parameters) (Result, error) {
 		s.Whale.Outfit = id
 		s.say("cheerful", "新衣服暖乎乎的，谢谢饲养员～", now+9000)
 	}
-	return Result{CostPearls: price, UsedCoupon: withCoupon}, nil
+	return Result{CostPearls: price, UsedCoupon: usedCoupon}, nil
+}
+
+var conchPrizes = [...]struct{ id, name string }{
+	{"auto_refill", "定时续碗保温券"},
+	{"aroma_boost", "五常新米增香包"},
+	{"wardrobe_coupon", "深海裁缝海螺券"},
+	{"affection_candy", "海盐牛奶糖"},
+}
+
+// ConchPrizeName resolves the prize ID recorded in a haven's activity history.
+func ConchPrizeName(id string) string {
+	for _, prize := range conchPrizes {
+		if prize.id == id {
+			return prize.name
+		}
+	}
+	return ""
 }
 
 func (s *State) spin(now int64, p Parameters) (Result, error) {
@@ -269,11 +299,10 @@ func (s *State) spin(now int64, p Parameters) (Result, error) {
 	if cost <= 0 || s.Wallet.ConchShards < cost {
 		return Result{}, errors.New("虹彩海螺碎片不足。")
 	}
-	ids := [...]string{"auto_refill", "aroma_boost", "wardrobe_coupon", "affection_candy"}
-	var weights [len(ids)]int64
+	var weights [len(conchPrizes)]int64
 	var total int64
-	for i, id := range ids {
-		weights[i] = p.Value("conch_" + id + "_weight")
+	for i, prize := range conchPrizes {
+		weights[i] = p.Value("conch_" + prize.id + "_weight")
 		total += weights[i]
 	}
 	if total <= 0 {
@@ -284,14 +313,14 @@ func (s *State) spin(now int64, p Parameters) (Result, error) {
 		return Result{}, err
 	}
 	n := roll.Int64()
-	for i, id := range ids {
+	for i, prize := range conchPrizes {
 		if n >= weights[i] {
 			n -= weights[i]
 			continue
 		}
 		s.Wallet.ConchShards -= cost
 		b := &s.Home.Buffs
-		switch id {
+		switch prize.id {
 		case "auto_refill":
 			b.AutoRefillTickets++
 		case "aroma_boost":
@@ -302,8 +331,8 @@ func (s *State) spin(now int64, p Parameters) (Result, error) {
 			s.Whale.Mood = float64(p.Value("candy_mood"))
 			s.Feel(0, p.Value("candy_affection"))
 		}
-		s.say("cheerful", "叮铃铃～虹彩海螺转出奖品啦！", now+9000)
-		return Result{Reward: id}, nil
+		s.say("cheerful", "叮铃铃～虹彩海螺转出「"+prize.name+"」啦！", now+9000)
+		return Result{Reward: prize.id}, nil
 	}
 	return Result{}, errAction
 }

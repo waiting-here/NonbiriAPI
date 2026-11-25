@@ -1,4 +1,6 @@
 /* eslint-disable */
+import abilityText from '../cards/ability-text.json' with { type: 'json' };
+export { abilityText };
 import { models } from '../ai/models.js';
 import { setTooltip } from './tooltip.js';
 import { rowNames } from '../game/rules.js';
@@ -46,7 +48,7 @@ export const abilityNames = {
 export function definition(card) {
   return card.arenaData || card;
 }
-export function cardDescription(card, registry = ability_dict) {
+export function cardDescription(card, registry = abilityText) {
   const data = definition(card),
     ids = card.abilities || data.abilities;
   const types = {
@@ -85,18 +87,6 @@ export function cardDescription(card, registry = ability_dict) {
     );
   if (card.arenaGrowth) lines.push(`自身成长 +${card.arenaGrowth}（离场后清除）`);
   if (card.arenaBonus) lines.push(`基础强化 +${card.arenaBonus}（离场后清除，仍受天气影响）`);
-  if (data.type === 'unit' && typeof board !== 'undefined') {
-    const row = board.row.find((row) => row.cards.includes(card));
-    if (row) {
-      const effects = [];
-      if (row.effects.weather) effects.push('天气：基础战力 ≤1');
-      if (row.effects.bond[data.id] > 1) effects.push(`集群 ×${row.effects.bond[data.id]}`);
-      const morale = row.effects.morale - (ids.includes('morale') ? 1 : 0);
-      if (morale > 0) effects.push(`对齐 +${morale}`);
-      if (row.effects.horn - (ids.includes('horn') ? 1 : 0) > 0) effects.push('算力 ×2');
-      if (effects.length) lines.push(`当前影响：${effects.join(' · ')}`);
-    }
-  }
   const passive = new Set(['bond', 'morale', 'horn', 'deep_think', 'mardroeme', 'berserker']);
   for (const id of ids) {
     if (ids.includes('storm') && ['fog', 'rain'].includes(id)) continue;

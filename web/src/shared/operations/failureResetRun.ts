@@ -24,7 +24,7 @@ interface Transport {
   yield: () => Promise<void>;
 }
 export class FailureResetRun {
-  phase: 'selecting' | 'resetting' | 'paused' | 'done' = 'selecting';
+  phase: 'selecting' | 'confirming' | 'resetting' | 'paused' | 'done' = 'selecting';
   error: unknown = null;
   readonly entries = new Map<string, Entry>();
   private readonly donations = new Map<string, { revision: string; conflict: boolean }>();
@@ -44,6 +44,7 @@ export class FailureResetRun {
   constructor(
     private readonly targets: FailureResetTarget[],
     private readonly io: Transport,
+    private confirmationRequired = false,
   ) {}
   stop() {
     this.stopped = true;
@@ -71,6 +72,11 @@ export class FailureResetRun {
     else if (!donation)
       this.donations.set(item.donation_id, { revision: item.expected_revision, conflict: false });
     if (!this.entries.has(item.key_id)) this.entries.set(item.key_id, { ...item });
+  }
+  confirm() {
+    if (this.phase !== 'confirming') return;
+    this.confirmationRequired = false;
+    return this.resume();
   }
   async resume() {
     if (this.running || this.phase === 'done') return;
@@ -110,6 +116,15 @@ export class FailureResetRun {
         }
         this.io.progress();
         await this.io.yield();
+      }
+      if (
+        this.selectionDone &&
+        this.confirmationRequired &&
+        !this.stopped &&
+        this.entries.size > 0
+      ) {
+        this.phase = 'confirming';
+        return;
       }
       while (this.selectionDone && !this.stopped) {
         this.io.guard();

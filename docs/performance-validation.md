@@ -4,6 +4,41 @@ Run synthetic experiments against temporary databases and a local mock upstream.
 Never point these tests at a deployed instance. Default admission limits remain
 enabled; a rejected request is not counted as accepted throughput.
 
+## Request log searches
+
+With Go 1.26.11, run the search experiment on a local temporary database.
+
+```sh
+NONBIRI_LOG_SEARCH_SCALE=1 GOTOOLCHAIN=local CGO_ENABLED=0 GOMAXPROCS=3 \
+  go test -p 1 ./internal/logapi -run '^TestLogSearchAccessScale$' -count=1 -v -timeout=20m
+```
+
+The test uses the full SQLite schema at 10,000 and 100,000 logs, with tied
+start times, expired and unfinished requests, and skewed error and model
+distributions. It compares exact counts, ordered first and last pages, and all
+collected IDs plus completion times. It loads each result, verifies agreement
+across layouts and records plans before and after `ANALYZE request_logs`.
+
+At 100,000 rows, without planner statistics, 90 retained logs matched the
+rare error. Exact count P99 fell from 94.24 ms to 0.55 ms with the schema 58
+partial index. The first ID page fell from 16.86 ms to 0.53 ms. With a cold
+charity model, a frequent error and a time range, adding the model and route
+to the retention-covering index reduced the median count from 12.51 ms to
+0.52 ms. The original model-first plan was still below the timer resolution
+for that combination. The selected index occupied 389,120 bytes with the
+fixture's short model names. Index size depends on error frequency and name
+length.
+
+A fixed concurrent run issued 100 synchronous administrator repository pages
+and 100 writer transactions, each finishing up to 20 requests. Page P95/P99
+went from 94.61/102.36 ms to 1.50/2.03 ms. Isolated batches of 200 requests
+had median insert and finish times of 11.15/8.51 ms at baseline and
+16.89/9.82 ms with the new index across five batches. Model-only filters kept
+their existing index. The broad ordered collection still consumed about
+114 ms for 90,015 rows. Full table statistics helped the heavy-owner rare-error
+query, while changing some choices for selective model and date combinations.
+Service startup and log reads perform no planner-statistics maintenance.
+
 ## Diagnostic history and idle image tasks
 
 Diagnostic deduplication selects the existing partial unique index for the

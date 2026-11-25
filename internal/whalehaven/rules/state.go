@@ -146,6 +146,19 @@ func (s *State) BankCapacity(p Parameters) int64 {
 	return p.Value("bank_base_pearls")
 }
 
+// BankRoom includes fractional production and wages already held for a worker.
+func (h *Home) BankRoom(capacity int64) float64 {
+	room := float64(capacity-h.UnclaimedPearls-h.PaidWorkerWages) - (h.PearlProgress+h.WageProgress)/100
+	if room < 1e-10 {
+		return 0
+	}
+	return room
+}
+
+func (s *State) BankFull(p Parameters) bool {
+	return s.Home.BankRoom(s.BankCapacity(p)) == 0
+}
+
 func (s *State) ConversionBP(now int64, p Parameters) int64 {
 	level := 1 + min(9, s.Whale.Affection/max(1, p.Value("affection_per_level")))
 	rate := p.Value("conversion_base_bp") + p.Value("affection_level_"+strconv.FormatInt(level, 10)+"_bp")

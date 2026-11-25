@@ -209,12 +209,16 @@ func TestCharityManagementPerformanceUsesBoundedRouteTemplates(t *testing.T) {
 
 func TestPerformanceSeparatesEventStreamsAndLeaderboards(t *testing.T) {
 	for path, want := range map[string]string{
-		"/api/events":                     "/api/events",
-		"/api/games/fishing/leaderboard":  "game.fishing.leaderboard",
-		"/api/games/fishing/state":        "game.fishing.state",
-		"/api/games/fishing/private-name": "game.fishing",
-		"/api/games/private/leaderboard":  "game.other",
-		"/api/events/private":             "/api/other",
+		"/api/events":                         "/api/events",
+		"/api/games/fishing/leaderboard":      "game.fishing.leaderboard",
+		"/api/games/fishing/state":            "game.fishing.state",
+		"/api/games/fishing/private-name":     "game.fishing",
+		"/api/games/whale-haven/availability": "game.whale-haven.availability",
+		"/api/games/whale-haven/profile":      "game.whale-haven.profile",
+		"/api/games/whale-haven/actions":      "game.whale-haven.actions",
+		"/api/games/whale-haven/private-name": "game.whale-haven",
+		"/api/games/private/leaderboard":      "game.other",
+		"/api/events/private":                 "/api/other",
 	} {
 		if got := performanceRoute(path); got != want {
 			t.Fatalf("%s: got %s want %s", path, got, want)

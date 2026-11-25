@@ -397,6 +397,21 @@ export async function mockRoleSession(
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
+      path: '/admin/api/reports/badge',
+      body: {
+        total: '0',
+        by_status: { pending_indexing: '0', pending_review: '0', approved_processing: '0' },
+      },
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+      body: numberedResponse([], '1', 20),
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
       path: '/admin/api/donations/badge',
       body: { pending_count: '0', server_now: 1_800_000_000 },
     });

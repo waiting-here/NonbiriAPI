@@ -211,7 +211,7 @@ These routes use station sessions and existing same-origin checks; they are not 
 | GET | `/admin/api/gacha/statistics/pools/{id}/export?format=json\|csv` | Complete selected-pool aggregate download |
 | GET | `/admin/api/gacha/statistics/shop/cards` | Shop card quantities, distinct participants and chart summaries |
 | GET | `/admin/api/gacha/statistics/shop/export?format=json\|csv` | Complete shop-card aggregate download |
-| POST | `/admin/api/gacha` | Save settings, a pool or a template |
+| POST | `/admin/api/gacha` | Save settings, a pool or a template, or remove an eligible draft or custom template |
 
 Themes consisting entirely of limited cards stay hidden until a pool containing their cards has opened. Past openings continue to count after a pool ends or is paused; already owned cards remain visible. Scheduled pools paused before opening do not reveal their themes.
 
@@ -223,6 +223,10 @@ that these cards are excluded from progress. Content-setting changes do not
 delete ownership or alter completion rewards.
 
 Administrator settings accept an optional `entry_enabled` boolean, alongside rules, shop and the expected revision. Omitting it preserves the current switch; new installations default to false.
+
+To remove a draft pool or a custom template, submit `kind` (`delete_pool` or `delete_preset`), `delete_id` (the saved `gp_` or `gt_` identifier) and the object's current positive `expected_revision`. Use the same `Idempotency-Key` and body to retry after a lost response. A confirmed retry returns the current administrator configuration. Concurrent changes require fetching the latest revision.
+
+Draft removal requires a complete configuration history showing that the pool was never published, with zero draws and participants and no card statistics, participant records or draw receipts. A stale revision or an ineligible pool returns a conflict. Only custom templates can be removed. Existing pools retain their copied configuration. The recorded deletion preserves the configuration history and reserves the deleted identifier.
 
 Gacha POST routes require `Idempotency-Key`. Retry uncertain operations with the same key and identical body. Confirmed retries never repeat charges or rewards. Expired draw receipts report completion without a new draw. Price-dependent actions include the displayed `revision`; administrator edits include `expected_revision`. Unknown fields and oversized bodies are rejected.
 

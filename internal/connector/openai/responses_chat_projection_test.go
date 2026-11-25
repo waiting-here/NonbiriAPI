@@ -43,11 +43,12 @@ func projectionEvents(t *testing.T, wire string) []map[string]json.RawMessage {
 	return out
 }
 
-func TestGatewayResponsesProjectionReasoningIsExplicit(t *testing.T) {
+func TestResponsesChatAndGatewayProjectCanonicalReasoning(t *testing.T) {
 	request := gatewayProjectionRequest(t, false)
 	raw := []byte(`{"id":"c","created":1,"object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"answer","reasoning_content":"actual reasoning","tool_calls":[{"id":"call","type":"function","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`)
-	if _, _, err := projectChatAsResponse(raw, request); err == nil {
-		t.Fatal("ordinary Chat bridge accepted reasoning extension")
+	ordinary, _, err := projectChatAsResponse(raw, request)
+	if err != nil {
+		t.Fatal(err)
 	}
 	writer := httptest.NewRecorder()
 	projection, err := NewGatewayResponsesChatProjection(context.Background(), writer, request, 1<<20)
@@ -58,8 +59,8 @@ func TestGatewayResponsesProjectionReasoningIsExplicit(t *testing.T) {
 	if _, err = projection.Write(raw); err != nil {
 		t.Fatal(err)
 	}
-	if !projection.Complete() || !projection.Committed() {
-		t.Fatal("JSON projection did not complete")
+	if !projection.Complete() || !projection.Committed() || string(ordinary) != writer.Body.String() {
+		t.Fatal("ordinary and Gateway JSON projections differed")
 	}
 	var root struct {
 		Output []map[string]json.RawMessage
@@ -73,12 +74,6 @@ func TestGatewayResponsesProjectionReasoningIsExplicit(t *testing.T) {
 	}
 	if string(root.Output[0]["type"]) != `"reasoning"` || string(root.Output[0]["summary"]) != "[]" || string(root.Output[0]["content"]) != `[{"text":"actual reasoning","type":"reasoning_text"}]` || string(root.Output[1]["type"]) != `"message"` || string(root.Output[2]["type"]) != `"function_call"` {
 		t.Fatal(writer.Body.String())
-	}
-	ordinary := responseChatState{model: "public"}
-	defer ordinary.clear()
-	delta := strings.TrimSuffix(strings.TrimPrefix(chatResponseChunk(`{"reasoning_content":"thought"}`, "null", "null"), "data: "), "\n\n")
-	if ordinary.consume([]byte(delta), true) == nil {
-		t.Fatal("ordinary streaming bridge accepted reasoning extension")
 	}
 }
 
@@ -231,13 +226,13 @@ func TestGatewayResponsesProjectionBoundaries(t *testing.T) {
 	t.Run("limit", func(t *testing.T) {
 		limit := int64(httperr.MaxSSEErrorFrameBytes + 8192)
 		writer := &projectionCheckpoint{ResponseRecorder: httptest.NewRecorder()}
-		p, _ := NewGatewayResponsesChatProjection(context.Background(), writer, request, limit)
+		p, _ := NewGatewayResponsesChatProjection(context.Background(), httperr.WithLanguage(writer, "zh"), request, limit)
 		defer p.Clear()
 		if _, err := p.Write([]byte(chatResponseChunk(`{"content":"a"}`, "null", "null"))); err != nil {
 			t.Fatal(err)
 		}
 		_, err := p.Write([]byte(chatResponseChunk(`{"content":"`+strings.Repeat("x", 9000)+`"}`, "null", "null")))
-		if err == nil || !p.Rejected() || p.Complete() || int64(writer.Body.Len()) > limit || !strings.Contains(writer.Body.String(), `"error"`) {
+		if err == nil || !p.Rejected() || p.Complete() || int64(writer.Body.Len()) > limit || !strings.Contains(writer.Body.String(), "[NonbiriAPI] 响应格式转换失败") {
 			t.Fatal("bounded failure was lost")
 		}
 	})

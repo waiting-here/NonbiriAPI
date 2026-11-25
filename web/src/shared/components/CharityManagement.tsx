@@ -62,7 +62,7 @@ import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import '@shared/styles/charity-management.css';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
@@ -110,11 +110,17 @@ import { KeyLimitSummary } from './KeyRoutingLimits';
 import { ManagedKeyLimitsControl, type ManagedKeyLimitsAuthority } from './ManagedKeyLimitsControl';
 import { KeyRateLimitTime } from './KeyRateLimitTime';
 import { useRateLimitRefresh } from '@shared/operations/useRateLimitRefresh';
+import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 import { MarkdownText } from './MarkdownText';
 import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { TimeInput } from './TimeInput';
 
 type ManagedDonation = AdminDonation | StewardDonation;
+const reviewDecisionCopy = {
+  approve: 'common.operations.charity.decision.approve',
+  reject: 'common.operations.charity.decision.reject',
+  force_reject: 'common.operations.charity.decision.force_reject',
+} as const satisfies Record<NonNullable<ManagedDonation['review_result']>['decision'], string>;
 const approvalOriginCopy = {
   none: 'common.donationReview.origin.none',
   auto: 'common.donationReview.origin.auto',
@@ -474,7 +480,7 @@ function DonationKeyEditor(
           </Fold>
         </>
       ) : null}
-      <DonationKeySettings key={props.donation.revision} {...props} />
+      <DonationKeySettings key={props.item.id} {...props} />
     </section>
   );
 }
@@ -511,6 +517,26 @@ function DonationKeySettings({
   const client = useQueryClient();
   const copy = charityControlCopy(useTranslation().i18n.language);
   const [draft, setDraft] = useState(() => keyManagementDraft(item));
+  const [prior, setPrior] = useState({
+    revision: donation.revision,
+    draft: keyManagementDraft(item),
+  });
+  const [conflict, setConflict] = useState(false);
+  if (prior.revision !== donation.revision) {
+    const next = keyManagementDraft(item);
+    const merged = { ...draft };
+    let changedBoth = false;
+    for (const field of Object.keys(next) as (keyof KeyManagementDraft)[]) {
+      const before = JSON.stringify(prior.draft[field]),
+        latest = JSON.stringify(next[field]),
+        local = JSON.stringify(draft[field]);
+      if (local === before) Object.assign(merged, { [field]: next[field] });
+      else if (latest !== before && latest !== local) changedBoth = true;
+    }
+    setDraft(merged);
+    setPrior({ revision: donation.revision, draft: next });
+    if (changedBoth) setConflict(true);
+  }
   const [reset, setReset] = useState(false);
   const save = useRetainedOperation<
     ReturnType<typeof keySettingsBody> & { reset_failure_streak: boolean },
@@ -553,7 +579,7 @@ function DonationKeySettings({
   );
   const validationError = keySettingsError(draft, item.authorized_expires_at);
   const terminal = item.charity_state === 'ended' || item.charity_state === 'expired';
-  const capabilityLost = isUnauthorized(save.error) || isForbidden(save.error);
+  const capabilityLost = isUnauthorized(save.error) || isManagementForbidden(save.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -749,17 +775,37 @@ function DonationKeySettings({
               {t(`common.operations.charity.validation.${validationError}`)}
             </p>
           ) : null}
+          {conflict && (
+            <Note
+              tone="warn"
+              action={
+                <Button
+                  onClick={() => {
+                    setDraft(prior.draft);
+                    setConflict(false);
+                  }}
+                >
+                  {t('common.outcome.reload')}
+                </Button>
+              }
+            >
+              {t('common.governance.conflict')}
+            </Note>
+          )}
           {save.error ? <ErrorState error={save.error} /> : null}
           <FormActions>
             <button
               className="nb-btn nb-btn--primary"
               type="button"
-              disabled={save.isPending || Boolean(validationError)}
+              disabled={save.isPending || conflict || Boolean(validationError)}
               onClick={() => {
                 const expiresAt = effectiveExpiry(draft);
                 if (expiresAt === undefined || keySettingsError(draft, item.authorized_expires_at))
                   return;
-                save.mutate({ ...keySettingsBody(draft), reset_failure_streak: reset });
+                save.mutate(
+                  { ...keySettingsBody(draft), reset_failure_streak: reset },
+                  { onSuccess: () => setReset(false) },
+                );
               }}
             >
               {t(charityCopyKey(role, 'saveKeyLimits'))}
@@ -803,7 +849,7 @@ function DonationDetail(props: DonationDetailProps) {
   return (
     <fieldset className="ops-stack ops-unframed" disabled={props.busy || reviewPending}>
       {!selectedID(params, 'binding_key') ? (
-        <DonationReview key={props.item.revision} {...props} onPendingChange={setReviewPending} />
+        <DonationReview key={props.item.id} {...props} onPendingChange={setReviewPending} />
       ) : null}
       <DonationKeyPages
         disabled={props.busy || reviewPending}
@@ -833,6 +879,7 @@ function DonationReview({
 }) {
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
+  const { t: reviewDecision } = useRegisteredCopy(reviewDecisionCopy);
   const reviewPager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'donation-review-keys',
@@ -906,7 +953,7 @@ function DonationReview({
           .find((error): error is KeySettingsValidation => error !== null) ?? null;
     }
   }
-  const capabilityLost = isUnauthorized(review.error) || isForbidden(review.error);
+  const capabilityLost = isUnauthorized(review.error) || isManagementForbidden(review.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -922,11 +969,13 @@ function DonationReview({
   if (onReviewed && review.isSuccess)
     return (
       <Card>
-        <Note tone="ok">
-          {t('common.pendingReviews.saved', {
-            status: t(charityStatusKey(role, review.data?.status ?? 'pending')),
-          })}
-        </Note>
+        {review.outcome !== 'confirmed' && (
+          <Note tone="ok">
+            {t('common.pendingReviews.saved', {
+              status: t(charityStatusKey(role, review.data?.status ?? 'pending')),
+            })}
+          </Note>
+        )}
         {review.refreshError ? (
           <OutcomeNote
             outcome={{ kind: 'savedRefreshFailed', recheck: () => void review.refresh() }}
@@ -988,7 +1037,7 @@ function DonationReview({
             <>
               <dt>{t('common.operations.charity.review')}</dt>
               <dd>
-                {t(`common.operations.charity.decision.${item.review_result.decision}`)} ·{' '}
+                {reviewDecision(item.review_result.decision)} ·{' '}
                 {item.review_result.reason} · {formatDateTime(item.review_result.reviewed_at)}
               </dd>
             </>
@@ -1334,7 +1383,7 @@ function DonationKeyPages({
     placeholderData: (previous, query) =>
       samePageFamily(query?.queryKey, queryKey) ? previous : undefined,
   });
-  const capabilityLost = isForbidden(keys.error) || isUnauthorized(keys.error);
+  const capabilityLost = isManagementForbidden(keys.error) || isUnauthorized(keys.error);
   useRateLimitRefresh(
     keys.data?.data.flatMap((key) => [
       key.rate_limited_until,
@@ -1418,7 +1467,13 @@ function DonationKeyPages({
           onCapabilityLoss={onCapabilityLoss}
           choices={keys.data.data.map((key) => ({
             id: key.id,
-            label: `${key.display_head}…${key.display_tail}`,
+            failed:
+              key.streak.failure_disabled ||
+              Number(key.streak.count) > 0 ||
+              key.service_statuses?.some(
+                (row) => row.failure_disabled || Number(row.failure_streak) > 0,
+              ),
+            label: `${key.display_head}…${key.display_tail} · ${key.streak.count}`,
             target: {
               donation_id: item.id,
               key_id: key.id,
@@ -1578,10 +1633,14 @@ function DonationsPanel({
     : '';
   const rawQuery = oneParam(searchParams, 'q');
   const query = validManagementSearch(rawQuery) ? rawQuery : '';
+  const sort = oneParam(searchParams, 'donation_sort') === 'newest' ? 'newest' : 'oldest';
+  const formatDateTime = useDateTimeFormatter();
   const rawStatus = oneParam(searchParams, 'donation_status');
-  const status = (DONATION_DISPLAY_STATUSES as readonly string[]).includes(rawStatus)
-    ? rawStatus
-    : '';
+  const status =
+    rawStatus === 'any_pending' ||
+    (DONATION_DISPLAY_STATUSES as readonly string[]).includes(rawStatus)
+      ? rawStatus
+      : '';
   const userID = selectedID(searchParams, 'donor_user_id');
   const rawDiscordID = oneParam(searchParams, 'donor_discord_id');
   const discordID = /^[1-9][0-9]{0,19}$/.test(rawDiscordID) ? rawDiscordID : '';
@@ -1688,6 +1747,7 @@ function DonationsPanel({
     query,
     userID,
     discordID,
+    sort,
     pager.page,
     pager.pageSize,
   ] as const;
@@ -1698,6 +1758,7 @@ function DonationsPanel({
         role,
         {
           review_status: status,
+          sort: sort === 'newest' ? sort : undefined,
           handling,
           q: query,
           user_id: userID,
@@ -1722,10 +1783,61 @@ function DonationsPanel({
     : !list.isPending && !list.isFetching;
   const { listRef, detailRef, remember } = useDetailNavigation(selected, navigationReady);
   const capabilityLost =
-    isForbidden(list.error) || isUnauthorized(list.error) || isUnauthorized(detail.error);
+    isManagementForbidden(list.error) || isUnauthorized(list.error) || isUnauthorized(detail.error);
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  const hasWaitingRows =
+    !selected &&
+    list.data?.data.some(
+      (row) => row.review_submitted_at !== undefined || row.status === 'pending',
+    );
+  useEffect(() => {
+    if (!hasWaitingRows) return;
+    const timer = window.setInterval(() => setNow(Date.now() / 1000), 60_000);
+    return () => window.clearInterval(timer);
+  }, [hasWaitingRows]);
+  const [nextReviewError, setNextReviewError] = useState<unknown>(null);
+  const [findingNext, setFindingNext] = useState(false);
+  const nextRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => nextRequest.current?.abort(), []);
+  const [noNext, setNoNext] = useState(false);
+  const nextReview = async () => {
+    nextRequest.current?.abort();
+    const request = new AbortController();
+    nextRequest.current = request;
+    setFindingNext(true);
+    setNextReviewError(null);
+    try {
+      const page = await getManagedDonationsPage(
+        role,
+        {
+          review_status: 'any_pending',
+          handling: handling as ManagedDonationPageFilters['handling'],
+          sort,
+          q: query,
+          user_id: userID,
+          discord_id: discordID,
+        },
+        '1',
+        10,
+        request.signal,
+      );
+      if (request.signal.aborted) return;
+      const next = page.data.find((row) => row.id !== selected);
+      if (next) {
+        setSelected(next.id);
+        setReceipt(null);
+        setUseReceipt(null);
+        setNoNext(false);
+      } else setNoNext(true);
+    } catch (error) {
+      if (!request.signal.aborted) setNextReviewError(error);
+    } finally {
+      if (!request.signal.aborted) setFindingNext(false);
+    }
+  };
   const reviewedTargetUnavailable =
     useReceipt?.donationId === selected &&
-    (isForbidden(detail.error) ||
+    (isManagementForbidden(detail.error) ||
       (detail.error instanceof ApiError && detail.error.status === 404));
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
@@ -1746,8 +1858,8 @@ function DonationsPanel({
       </Card>
     );
   }
-  return (
-    <div className="charity-donations" ref={listRef} tabIndex={-1}>
+  const reviewReceipt = (
+    <>
       {receipt ? (
         <Note tone="ok">
           {t('common.pendingReviews.saved', { status: t(charityStatusKey(role, receipt.status)) })}
@@ -1779,6 +1891,22 @@ function DonationsPanel({
           }
         />
       ) : null}
+      {(receipt || useReceipt) && (
+        <>
+          <Button disabled={findingNext} onClick={() => void nextReview()}>
+            {t('common.governance.nextPending')}
+          </Button>
+          {nextReviewError ? (
+            <ErrorState error={nextReviewError} onRetry={() => void nextReview()} />
+          ) : null}
+          {noNext && <Note>{t('common.noResultsBody')}</Note>}
+        </>
+      )}
+    </>
+  );
+  return (
+    <div className="charity-donations" ref={listRef} tabIndex={-1}>
+      {!selected && reviewReceipt}
       <div className={`charity-donations__panes${selected && !binding ? ' nb-md' : ''}`}>
         <div className="charity-donations__list" hidden={binding}>
           <Card>
@@ -1809,6 +1937,26 @@ function DonationsPanel({
                           value={queryDraft}
                           onChange={(event) => setQueryDraft(event.target.value)}
                         />
+                      )}
+                    </Field>
+                    <Field label={t('common.governance.queueOrder')} size="short">
+                      {(props) => (
+                        <select
+                          {...props}
+                          value={sort}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setSearchParams((current) => {
+                              const next = new URLSearchParams(current);
+                              next.set('donation_sort', value);
+                              next.set('donations_page', '1');
+                              return next;
+                            });
+                          }}
+                        >
+                          <option value="oldest">{t('common.governance.oldest')}</option>
+                          <option value="newest">{t('common.governance.newest')}</option>
+                        </select>
                       )}
                     </Field>
                   </>
@@ -1891,6 +2039,7 @@ function DonationsPanel({
                           }}
                         >
                           <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
+                          <option value="any_pending">{t('common.governance.reviewOnly')}</option>
                           {DONATION_DISPLAY_STATUSES.map((value) => (
                             <option key={value} value={value}>
                               {t(`common.connections.donationStates.${value}`)}
@@ -1938,7 +2087,10 @@ function DonationsPanel({
                     ? [
                         {
                           key: 'status',
-                          label: t(`common.connections.donationStates.${status}`),
+                          label:
+                            status === 'any_pending'
+                              ? t('common.governance.reviewOnly')
+                              : t(`common.connections.donationStates.${status}`),
                           onRemove: () => updateFilters(handling, query, ''),
                           removeLabel: t('common.resetFilter'),
                         },
@@ -2071,7 +2223,18 @@ function DonationsPanel({
                               ),
                             ].join(' · ')}
                           >
-                            {t('common.itemId', { id: item.id })}
+                            {t('common.itemId', { id: item.id })} ·{' '}
+                            {formatDateTime(item.review_submitted_at ?? item.created_at)}{' '}
+                            {(item.review_submitted_at !== undefined ||
+                              item.status === 'pending') &&
+                              t('common.governance.waitMinutes', {
+                                count: Math.max(
+                                  0,
+                                  Math.floor(
+                                    (now - (item.review_submitted_at ?? item.created_at)) / 60,
+                                  ),
+                                ),
+                              })}
                             {BigInt(item.source_count) > BigInt(item.sources.length)
                               ? ' · ' +
                                 t('common.operations.charity.sourcePreview', {
@@ -2136,6 +2299,7 @@ function DonationsPanel({
                           type="button"
                           className="nb-btn nb-btn--secondary ops-row-action"
                           disabled={list.isFetching}
+                          title={t('common.workflow.openDonationHandling')}
                           onClick={() => setSelected(item.id)}
                         >
                           {t('common.operations.charity.openReview')}
@@ -2159,6 +2323,7 @@ function DonationsPanel({
         </div>
         {selected ? (
           <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
+            {reviewReceipt}
             <button
               className="nb-btn nb-btn--ghost"
               type="button"
@@ -2199,7 +2364,7 @@ function DonationsPanel({
                   onReviewed={(value) => {
                     setReceipt(value);
                     setUseReceipt(null);
-                    setSelected('');
+                    setNoNext(false);
                   }}
                   onUsesReviewed={(results, labels) => {
                     setReceipt(null);
@@ -2232,6 +2397,7 @@ const workflowSearchParameters = [
   'donation_key',
   'donation_from',
   'donation_status',
+  'donation_sort',
   'donor_user_id',
   'donor_discord_id',
   'donations_page',
@@ -2405,13 +2571,15 @@ function CharityManagementAccount({
           <SectionHead
             title={t('user.steward.charityTab')}
             actions={
-              <Link
-                className="nb-btn nb-btn--secondary"
-                to="/charity/channel-presets"
-                state={{ returnTo: location.pathname + location.search }}
-              >
-                {t('common.bindingPresets.title')}
-              </Link>
+              has('charity.presets') && (
+                <Link
+                  className="nb-btn nb-btn--secondary"
+                  to="/charity/channel-presets"
+                  state={{ returnTo: location.pathname + location.search }}
+                >
+                  {t('common.bindingPresets.title')}
+                </Link>
+              )
             }
           />
         ) : null}
@@ -2456,9 +2624,19 @@ function CharityManagementAccount({
         />
         <div id="charity-panel" role="tabpanel" aria-labelledby={`charity-tab-${section}`}>
           {!sectionAllowed ? <StewardPermissionNotice /> : null}
-          {sectionAllowed && section === 'donations' ? (
-            <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
-          ) : null}
+          <div hidden={section !== 'donations'}>
+            {canOpenDonation &&
+            (section === 'donations' ||
+              (section === 'models' &&
+                !!selectedID(params, 'binding_donation') &&
+                !!selectedID(params, 'binding_key'))) ? (
+              <DonationsPanel
+                role={frame}
+                accountId={accountId}
+                onCapabilityLoss={clearCapability}
+              />
+            ) : null}
+          </div>
           <div hidden={section !== 'models'}>
             {(sectionAllowed && section === 'models') || keepModelDraft ? (
               <ModelsPanel
@@ -2481,6 +2659,12 @@ function CharityManagementAccount({
                   has('charity.request_adaptation') ||
                   has('charity.affinity')
                 }
+                canCreate={has('charity.create')}
+                canDelete={has('charity.delete')}
+                canEditSettings={has('charity.model_settings')}
+                canEditPricing={has('charity.pricing')}
+                canManageBindings={has('charity.manage')}
+                canSetNonMainstream={has('charity.non_mainstream')}
                 canEditAffinity={has('charity.affinity')}
                 canEditAdaptation={has('charity.request_adaptation')}
                 canReadAdaptation={
@@ -2556,7 +2740,14 @@ function ScopedKeyBrowser({
 }) {
   const [selected, setSelected] = useState<{ donationID: string; keyID: string } | null>(null);
   const { t } = useTranslation();
-  const [, setParams] = useSearchState();
+  const selectedArea = useRef<HTMLDivElement>(null);
+  const keyTrigger = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (selected) {
+      selectedArea.current?.focus();
+      selectedArea.current?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [selected]);
   const copy = charityControlCopy(useTranslation().i18n.language);
   const client = useQueryClient();
   const detailKey = [
@@ -2586,7 +2777,7 @@ function ScopedKeyBrowser({
       : [],
     () => detail.refetch({ throwOnError: true }),
   );
-  const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
+  const lost = isUnauthorized(detail.error) || isManagementForbidden(detail.error);
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
@@ -2599,91 +2790,99 @@ function ScopedKeyBrowser({
         charityModelID={modelID}
         onCapabilityLoss={onCapabilityLoss}
         onOpenDonation={(donationID, keyID) => {
-          if (keyID) setSelected({ donationID, keyID });
+          if (keyID) {
+            keyTrigger.current = document.activeElement as HTMLElement;
+            setSelected({ donationID, keyID });
+          }
         }}
+        renderKeyDetail={(row) =>
+          selected?.donationID === row.donation_id && selected.keyID === row.key_id ? (
+            <div tabIndex={-1} ref={selectedArea}>
+              <Button
+                onClick={() => {
+                  setSelected(null);
+                  keyTrigger.current?.focus();
+                }}
+              >
+                {t('common.close')}
+              </Button>
+              {detail.isPending ? (
+                <LoadingState />
+              ) : detail.error ? (
+                <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+              ) : detail.data ? (
+                <Card key={`${modelID}:${detail.data.key_id}`}>
+                  <p>{copy.shared}</p>
+                  <p>
+                    {copy.totalBindings}: {detail.data.binding_count}
+                  </p>
+                  <p>
+                    {copy.visibleModels}:{' '}
+                    {(detail.data.visible_models ?? [])
+                      .map((model) => model.full_name)
+                      .join(', ') || '—'}{' '}
+                    {detail.data.visible_models_truncated ? copy.truncated : ''}
+                  </p>
+                  <dl className="ops-kv">
+                    <dt>{copy.donorNote}</dt>
+                    <dd>{detail.data.donation_note || '—'}</dd>
+                    <dt>{copy.approvalNote}</dt>
+                    <dd>{detail.data.approval_note ?? '—'}</dd>
+                  </dl>
+                  <DonationKeyEditor
+                    accountId={accountId}
+                    item={detail.data}
+                    donation={{
+                      id: detail.data.donation_id,
+                      revision: detail.data.donation_revision,
+                      status: detail.data.charity_state === 'pending' ? 'pending' : 'approved',
+                    }}
+                    role="steward"
+                    refresh={refresh}
+                    refreshLimits={async () => {
+                      await refresh();
+                      const current =
+                        client.getQueryData<NonNullable<typeof detail.data>>(detailKey);
+                      if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
+                      return { item: current, donationRevision: current.donation_revision };
+                    }}
+                    onCapabilityLoss={onCapabilityLoss}
+                  />
+                  <DonationDiscoveryControl
+                    role="steward"
+                    target={{ donation_id: detail.data.donation_id, key_id: detail.data.key_id }}
+                    onCapabilityLoss={onCapabilityLoss}
+                  />
+                  <DonationKeyModels
+                    role="steward"
+                    accountId={accountId}
+                    donationId={detail.data.donation_id}
+                    keyId={detail.data.key_id}
+                    editable={
+                      detail.data.charity_state !== 'ended' &&
+                      detail.data.charity_state !== 'expired'
+                    }
+                    onCapabilityLoss={onCapabilityLoss}
+                  />
+                  <RecurringLimitsDisclosure
+                    disabled={disabled}
+                    role="steward"
+                    accountId={accountId}
+                    donationId={detail.data.donation_id}
+                    keyId={detail.data.key_id}
+                    readOnly={
+                      detail.data.charity_state === 'ended' ||
+                      detail.data.charity_state === 'expired'
+                    }
+                    onSaved={() => void refresh()}
+                    onCapabilityLoss={onCapabilityLoss}
+                  />
+                </Card>
+              ) : null}
+            </div>
+          ) : null
+        }
       />
-      {selected ? (
-        detail.isPending ? (
-          <LoadingState />
-        ) : detail.error ? (
-          <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-        ) : detail.data ? (
-          <Card key={`${modelID}:${detail.data.key_id}`}>
-            <Button
-              type="button"
-              onClick={() =>
-                setParams((next) => {
-                  next.set('charity_section', 'donations');
-                  next.set('donation_id', detail.data.donation_id);
-                  return next;
-                })
-              }
-            >
-              {t('common.workflow.openDonationHandling')}
-            </Button>
-            <p>{copy.shared}</p>
-            <p>
-              {copy.totalBindings}: {detail.data.binding_count}
-            </p>
-            <p>
-              {copy.visibleModels}:{' '}
-              {(detail.data.visible_models ?? []).map((model) => model.full_name).join(', ') || '—'}{' '}
-              {detail.data.visible_models_truncated ? copy.truncated : ''}
-            </p>
-            <dl className="ops-kv">
-              <dt>{copy.donorNote}</dt>
-              <dd>{detail.data.donation_note || '—'}</dd>
-              <dt>{copy.approvalNote}</dt>
-              <dd>{detail.data.approval_note ?? '—'}</dd>
-            </dl>
-            <DonationKeyEditor
-              accountId={accountId}
-              item={detail.data}
-              donation={{
-                id: detail.data.donation_id,
-                revision: detail.data.donation_revision,
-                status: detail.data.charity_state === 'pending' ? 'pending' : 'approved',
-              }}
-              role="steward"
-              refresh={refresh}
-              refreshLimits={async () => {
-                await refresh();
-                const current = client.getQueryData<NonNullable<typeof detail.data>>(detailKey);
-                if (!current) throw new ApiError('not_found', 'Donation key not found.', 404);
-                return { item: current, donationRevision: current.donation_revision };
-              }}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-            <DonationDiscoveryControl
-              role="steward"
-              target={{ donation_id: detail.data.donation_id, key_id: detail.data.key_id }}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-            <DonationKeyModels
-              role="steward"
-              accountId={accountId}
-              donationId={detail.data.donation_id}
-              keyId={detail.data.key_id}
-              editable={
-                detail.data.charity_state !== 'ended' && detail.data.charity_state !== 'expired'
-              }
-              onCapabilityLoss={onCapabilityLoss}
-            />
-            <RecurringLimitsDisclosure
-              disabled={disabled}
-              role="steward"
-              accountId={accountId}
-              donationId={detail.data.donation_id}
-              keyId={detail.data.key_id}
-              readOnly={
-                detail.data.charity_state === 'ended' || detail.data.charity_state === 'expired'
-              }
-              onSaved={() => void refresh()}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-          </Card>
-        ) : null
-      ) : null}
     </div>
   );
 }
@@ -2705,7 +2904,7 @@ function PickerKeyManager({
 }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const logReturnTo = logManagementReturnPath(location.state, role);
+  const logReturnTo = logManagementReturnPath(location.state, role, location.search);
   const client = useQueryClient();
   const detailKey = [
     ...charityKeys.root(role),
@@ -2738,9 +2937,9 @@ function PickerKeyManager({
       }),
     retry: false,
   });
-  const lost = isUnauthorized(detail.error) || isForbidden(detail.error);
+  const lost = isUnauthorized(detail.error) || isManagementForbidden(detail.error);
   useEffect(() => {
-    if (lost && !(logReturnTo && isForbidden(detail.error))) onCapabilityLoss?.();
+    if (lost && !(logReturnTo && isManagementForbidden(detail.error))) onCapabilityLoss?.();
   }, [lost, logReturnTo, detail.error, onCapabilityLoss]);
   const refresh = () =>
     client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true });

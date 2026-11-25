@@ -134,6 +134,9 @@ for (const scenario of [
     const control = page.locator('.failure-reset-control').first();
     await expect(control).toHaveAttribute('open', '');
     await control.getByRole('button', { name: copy.all, exact: true }).click();
+    const confirmation = page.getByRole('alertdialog', { name: copy.title });
+    await expect(confirmation).toContainText('101');
+    await confirmation.getByRole('button', { name: copy.title, exact: true }).click();
     await expect(control.getByRole('button', { name: copy.resume, exact: true })).toBeVisible();
     expect(requests.map((r) => r.path.endsWith('/selection'))).toEqual([true, true, false]);
     await control.getByRole('button', { name: copy.resume, exact: true }).click();

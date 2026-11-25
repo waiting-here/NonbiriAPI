@@ -9,15 +9,11 @@ The original interface includes 16 standard presets, random decks, the card
 catalog and up to eight custom decks per faction. Custom decks stay in this
 browser under the signed-in account and can be imported or exported in the deck
 editor. They are not part of the server's account export; deleting the account
-clears its local decks in the browser performing the deletion. A free local
-AI-vs-AI demonstration does not charge tickets or write account results.
+clears its local decks in the browser performing the deletion.
 
-Rules, shuffled decks, hidden hands and choices are authoritative on the Go
-server. The browser handles input and presentation. Players can face human
-opponents or one of four faction AI challenges. The original local scorer handles
-AI decisions and automatic choices. Three consecutive normal human turn timeouts
-lose the match; AI source failures use legal fallbacks. Opening exchanges allow
-20 seconds, normal turns 30 seconds, and intermediate choices 15 seconds.
+The Go server owns the rules, shuffled decks, hidden hands and decisions. Human games give 20 seconds for opening exchanges, 30 for normal turns and 15 for intermediate choices. Three consecutive normal-turn timeouts lose a human match.
+
+In companion play you face the built-in opponent. You can require an AI faction or leave it open. Each side builds its deck independently before playing. The game enforces the same seat visibility at every decision and replay step. Players can close the page and return while the service is running. A program failure, illegal move or 20-second execution timeout ends the match.
 
 ## Administration and settlement
 
@@ -31,12 +27,7 @@ as general credits. A draw or system cancellation refunds original payment sourc
 without deductions. Terms freeze on admission; later settings do
 not reprice a match. PvP has no separate fixed win reward or newcomer task.
 
-AI entry starts disabled, with an independent zero ticket and first-clear reward.
-AI challenges charge one ticket on admission and can grant a one-time game-credit
-reward for a normal win; they do not use the PvP prize pool or affect rankings/Elo.
-The four opponents use administrator-selected original deck presets and no personal
-memory. See [AI players](ai-players.md#gwent-challenges) for their routes, frozen
-decks, refunds and export behavior.
+Companion matches are free and do not change Elo or leaderboard totals. First-clear receipts and settled rewards from retired paid challenges keep their historical meaning. [Companion play, memory and consent](ai-players.md)
 
 The 7-day and 30-day boards rank wins, then win rate, then earlier achievement.
 An independent Elo record starts at 1,500 and uses K=32 with the standard 400-point
@@ -49,18 +40,16 @@ from user pages and public boards, but are included in the owner's account expor
 The shared duel service supplies queues, payments, history and deletion. Gwent
 adds sequential decision windows and resumable effect choices. Actions must match
 the current seat, revision and decision window; the server never sends an opponent's
-hidden hand or deck order. A server restart resumes active matches with their saved
-cards and a new decision window, without charging another ticket. Pending queues
-are cancelled; system cancellations refund the original payment sources.
+hidden hand or deck order. Startup cancels unfinished matches and waiting entries, including those from the earlier challenges. System cancellation refunds original payment sources or releases outstanding holds. Previously committed results remain available.
 
 Routes use `/api/games/gwent` for catalog, state, queue, actions, surrender,
-history, randomness proofs and `leaderboard?window=7d|30d`. Administrator history
+history, randomness proofs and `leaderboard?window=7d|30d`. Companion games and owner-only replays use `/api/games/gwent/companion`. Administrator history
 and ZIP export use `/admin/api/games/gwent/history`. They retain the shared
 [duel authorization and history rules](duel-games.md).
 
 Account export adds `gwent`, including owner-safe match records and competitive
-results. Recent histories and competitive results last 30 days; anonymous game
-traces omit identity, dates, payment sources and ratings. The current Elo aggregate
+results. Recent histories and competitive results last 30 days. Anonymous competitive
+game traces omit identity, dates, payment sources and ratings. The current Elo aggregate
 lasts with the account. Account deletion removes its rating and result links
 without altering the other participant's financial result.
 

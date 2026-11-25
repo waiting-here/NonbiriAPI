@@ -1,5 +1,4 @@
-import zh from '../../i18n/zh.json';
-import en from '../../i18n/en.json';
+declare const __LAKE_NOTES_NATIVE_COPY__: [unknown, unknown];
 import original from './native.en.json';
 
 const words = new Map<string, string>();
@@ -11,7 +10,7 @@ function collect(source: unknown, target: unknown) {
       collect(value, (target as Record<string, unknown>)[key]);
   }
 }
-collect(zh.user.lakeNotes, en.user.lakeNotes);
+collect(...__LAKE_NOTES_NATIVE_COPY__);
 for (const [source, target] of Object.entries(original)) words.set(source, target);
 const replacements = [...words]
   .filter(([source]) => /[\u4e00-\u9fff]/.test(source))

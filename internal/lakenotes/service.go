@@ -37,6 +37,8 @@ type Service struct {
 	now          func() time.Time
 	random       rules.Random53
 	seed         func() (uint32, error)
+	recoveryMu   sync.Mutex
+	recovered    bool
 	budgetMu     sync.Mutex
 	budgetSecond int64
 	budgetTotal  int
@@ -88,20 +90,21 @@ func (s *Service) authorize(ctx context.Context, tx *sql.Tx, user int64, admin b
 func settingsTx(ctx context.Context, tx *sql.Tx) (_ Settings, resultErr error) {
 	finish := lakePhase(ctx, "config")
 	defer func() { finish(resultErr) }()
-	raw := map[string]string{}
-	for _, key := range []string{game.GamesEnabledKey, lakeconfig.EnabledKey, lakeconfig.ExchangesKey} {
-		var value string
-		if err := tx.QueryRowContext(ctx, "SELECT value FROM site_config WHERE key=?", key).Scan(&value); err != nil {
-			return Settings{}, err
-		}
-		raw[key] = value
-	}
-	wire, err := lakeconfig.Compile(raw)
+	var master, enabled, exchanges string
+	var version int64
+	err := tx.QueryRowContext(ctx, `SELECT master.value, lake.value, exchanges.value, games.revision
+FROM config_revisions AS games
+JOIN site_config AS master ON master.key=?
+JOIN site_config AS lake ON lake.key=?
+JOIN site_config AS exchanges ON exchanges.key=?
+WHERE games.domain='games'`, game.GamesEnabledKey, lakeconfig.EnabledKey, lakeconfig.ExchangesKey).Scan(&master, &enabled, &exchanges, &version)
 	if err != nil {
 		return Settings{}, err
 	}
-	var version int64
-	if err = tx.QueryRowContext(ctx, "SELECT revision FROM config_revisions WHERE domain='games'").Scan(&version); err != nil {
+	wire, err := lakeconfig.Compile(map[string]string{
+		game.GamesEnabledKey: master, lakeconfig.EnabledKey: enabled, lakeconfig.ExchangesKey: exchanges,
+	})
+	if err != nil {
 		return Settings{}, err
 	}
 	return Settings{Revision: rev(version), Wire: wire}, nil
@@ -204,6 +207,7 @@ func mutate[T any](ctx context.Context, s *Service, user int64, admin bool, key,
 		if e != nil {
 			return out, e
 		}
+		out.freshJSON = raw
 		if !admin && s.activity != nil {
 			activity := lakePhase(ctx, "activity")
 			e = s.activity(ctx, tx, user, now.Unix())
@@ -370,7 +374,7 @@ func (s *Service) profileViewFromTx(ctx context.Context, tx *sql.Tx, user int64,
 	}
 	if c != nil {
 		v := c.view(row.revision)
-		if out.Readonly && !c.state.Terminal() {
+		if out.Readonly && !castEnded(c.state) {
 			v.Readonly = true
 			v.RecoveryAction = "closed"
 		}

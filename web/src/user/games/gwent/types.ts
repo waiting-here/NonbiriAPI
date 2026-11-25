@@ -78,7 +78,6 @@ export interface Catalog {
   content_hash: string;
   modes: {
     standard: { rules_version: number; cards: CardDefinition[] };
-    ai?: { rules_version: number; cards: CardDefinition[] };
   };
 }
 

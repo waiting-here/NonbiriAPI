@@ -78,6 +78,18 @@ func TestQuickMatchRevealTerminalAndACK(t *testing.T) {
 			t.Fatalf("user %d balance=%s want=%d", userID, got, want)
 		}
 	}
+	for range 2 {
+		if err := fixture.service.Close(); err != nil {
+			t.Fatal(err)
+		}
+		fixture.service = fixture.newService(8)
+		if err := fixture.service.RecoverBeforeListen(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fixture.scalar("SELECT count(*) FROM credit_operations WHERE kind='rps_refund'") != 0 || fixture.scalar("SELECT count(*) FROM game_rps_pending_results") != 3 {
+		t.Fatal("committed results changed at restart")
+	}
 	tx := fixture.mustReadTx()
 	pending, _, err := loadPending(context.Background(), tx, users[0])
 	_ = tx.Rollback()
@@ -181,13 +193,8 @@ func TestRecoveryRestoresFullPhaseWithoutDefaults(t *testing.T) {
 	if err := restarted.RecoverBeforeListen(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	after := fixture.sessionForUser(users[0])
-	if after.Phase != before.Phase || after.PhaseSeq != before.PhaseSeq || after.Seats[0].TimeoutCount.Big().Sign() != 0 {
-		t.Fatalf("recovery mutated gameplay state")
-	}
-	want := fixture.clock.Load() + int64(after.GestureSeconds)
-	if after.PhaseDeadline == nil || *after.PhaseDeadline != want || after.HealthEpoch != 8 {
-		t.Fatalf("deadline=%v health=%d want deadline=%d", after.PhaseDeadline, after.HealthEpoch, want)
+	if fixture.scalar("SELECT count(*) FROM game_rps_pending_results WHERE session_id_text=? AND terminal_reason='server_restart'", before.ID) != 3 {
+		t.Fatal("missing cancellation receipts")
 	}
 }
 

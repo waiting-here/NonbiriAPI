@@ -313,18 +313,19 @@ func TestRejectFastForwardOwnershipAndStaleControls(t *testing.T) {
 		t.Fatal("disabled start", err)
 	}
 }
-func TestRestartPauseDeleteRefundAndRollback(t *testing.T) {
+func TestRestartCancelsPausedGameAndRefundsOnce(t *testing.T) {
 	f := newFixture(t)
 	v := f.start("recover-game")
 	v = f.control(v, "resume", 0, nil)
 	f.now.Add(5000)
 	v = f.control(v, "advance", 300, nil)
+	v = f.control(v, "pause", 300, nil)
 	r, err := f.s.Module().RecoverBeforeListen(f.ctx, f.now.Load()/1000, 10, time.Now().Add(time.Second))
 	if err != nil || r.Processed != 1 {
 		t.Fatal(r, err)
 	}
 	current, err := f.s.Read(f.ctx, Identity{UserID: f.user})
-	if err != nil || current.Status != "paused" || current.State.Tick != 300 {
+	if err != nil || current.Status != "cancelled" || current.State.Tick != 300 {
 		t.Fatal(current, err)
 	}
 	for _, commit := range []bool{false, true} {
@@ -349,7 +350,7 @@ func TestRestartPauseDeleteRefundAndRollback(t *testing.T) {
 			if a != 100000 || b != 3000 {
 				t.Fatalf("refund %d %d", a, b)
 			}
-		} else if a != 98000 || b != 0 {
+		} else if a != 100000 || b != 3000 {
 			t.Fatal("rollback changed wallets")
 		}
 	}

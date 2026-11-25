@@ -122,7 +122,23 @@ func (s *Service) RecoverBeforeListen(ctx context.Context, now int64, limit int,
 	if err != nil {
 		return host.WorkResult{}, err
 	}
-	processed, more, err := s.finance.RestoreOnboarding(ctx, tx, limit, max(now, sampled))
+	waiting, err := entries(ctx, tx, `state='waiting' ORDER BY ordinal LIMIT ?`, limit)
+	if err != nil {
+		return host.WorkResult{}, err
+	}
+	for _, entry := range waiting {
+		if err := s.releaseEntry(ctx, tx, entry, max(now, sampled)); err != nil {
+			return host.WorkResult{}, err
+		}
+		facts.AccountIDs = append(facts.AccountIDs, entry.User.Int64)
+	}
+	processed := len(waiting)
+	more := processed == limit
+	if !more {
+		var restored int
+		restored, more, err = s.finance.RestoreOnboarding(ctx, tx, limit-processed, max(now, sampled))
+		processed += restored
+	}
 	if err != nil {
 		return host.WorkResult{}, err
 	}

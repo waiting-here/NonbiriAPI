@@ -23,7 +23,7 @@ import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { listReturnPath } from '@shared/operations/listReturn';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../States';
 import {
   Button,
@@ -60,7 +60,14 @@ export function ChannelBindingPresets({
         ? 'all'
         : 'active';
   const [search, setSearch] = useState(q);
-  const [channel, setChannel] = useState<PresetChannel | null>(null);
+  const selected = params.get('preset_channel') ?? '';
+  const setChannel = (value: PresetChannel | null) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set('preset_channel', value.channel_id);
+      else next.delete('preset_channel');
+      return next;
+    });
   const [visited, setVisited] = useState<PresetChannel[]>([]);
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
@@ -82,7 +89,15 @@ export function ChannelBindingPresets({
     queryFn: ({ signal }) => getPresetChannels(role, q, state, pager.page, pager.pageSize, signal),
     retry: false,
   });
-  const lost = isForbidden(list.error) || isUnauthorized(list.error);
+  const channel =
+    visited.find((row) => row.channel_id === selected) ??
+    list.data?.data.find((row) => row.channel_id === selected) ??
+    null;
+  const mounted =
+    channel && !visited.some((row) => row.channel_id === channel.channel_id)
+      ? [...visited, channel]
+      : visited;
+  const lost = isManagementForbidden(list.error) || isUnauthorized(list.error);
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);
@@ -104,7 +119,7 @@ export function ChannelBindingPresets({
             )
           }
         />
-        {visited.map((entry) => (
+        {mounted.map((entry) => (
           <div key={entry.channel_id} hidden={channel?.channel_id !== entry.channel_id}>
             <PresetWorkspace
               role={role}
@@ -206,7 +221,9 @@ export function ChannelBindingPresets({
                           cell: 'status',
                           render: (row) => (
                             <StatusBadge
-                              tone={row.state === 'retired' ? 'neutral' : row.enabled ? 'ok' : 'neutral'}
+                              tone={
+                                row.state === 'retired' ? 'neutral' : row.enabled ? 'ok' : 'neutral'
+                              }
                             >
                               {t(
                                 row.state === 'retired'
@@ -297,7 +314,7 @@ function PresetWorkspace({
     retry: false,
   });
   useEffect(() => {
-    if (isForbidden(detail.error) || isUnauthorized(detail.error)) onCapabilityLoss?.();
+    if (isManagementForbidden(detail.error) || isUnauthorized(detail.error)) onCapabilityLoss?.();
   }, [detail.error, onCapabilityLoss]);
   if (!detail.data)
     return detail.error ? (
@@ -356,7 +373,9 @@ function PresetEditor({
     () => client.invalidateQueries({ queryKey: charityKeys.root(role) }, { throwOnError: true }),
     charityKeys.root(role),
   );
-  const lost = [save.error, readError].some((error) => isForbidden(error) || isUnauthorized(error));
+  const lost = [save.error, readError].some(
+    (error) => isManagementForbidden(error) || isUnauthorized(error),
+  );
   useEffect(() => {
     if (lost) onCapabilityLoss?.();
   }, [lost, onCapabilityLoss]);

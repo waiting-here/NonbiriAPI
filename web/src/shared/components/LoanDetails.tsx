@@ -77,7 +77,12 @@ export function HistoryDialog({
   const id = useId();
   const text = useLoanText();
   return (
-    <NativeDialog onDismiss={onClose} className="loan-dialog" aria-labelledby={id}>
+    <NativeDialog
+      dismissOnBackdrop
+      onDismiss={onClose}
+      className="loan-dialog"
+      aria-labelledby={id}
+    >
       <header>
         <h2 id={id}>{title}</h2>
         <Button onClick={onClose} autoFocus>

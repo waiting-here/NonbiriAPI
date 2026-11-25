@@ -57,6 +57,7 @@ type Service struct {
 	report       func(error)
 	closed       atomic.Bool
 	recovered    atomic.Bool
+	recoveryMu   sync.Mutex
 	mu           sync.Mutex
 	cancel       context.CancelFunc
 	done         chan struct{}

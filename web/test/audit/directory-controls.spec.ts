@@ -582,6 +582,12 @@ test('administrator saves changed binding order, removes a connection and delete
       .first()
       .getByRole('button', { name: copy.operations.charity.remove, exact: true })
       .click();
+    const removeBinding = page.getByRole('alertdialog');
+    await expect(removeBinding).toBeVisible();
+    expect((await read(admin, state.admin_url, bindingsPath)).bindings).toHaveLength(2);
+    await removeBinding
+      .getByRole('button', { name: copy.operations.charity.remove, exact: true })
+      .click();
     await expect(ordered.locator('tbody tr')).toHaveCount(1);
     expect(
       (await read(admin, state.admin_url, bindingsPath)).bindings.map(
@@ -754,13 +760,17 @@ test('administrator applies log filters, exports them and downloads retained dia
     await expect(filters.getByLabel(commonEn.logs.httpStatus, { exact: true })).toHaveValue('');
     await page.goto(state.admin_url + '/logs?request_id=' + state.request_ids[0]);
     const detail = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
-    await detail.locator('summary').filter({ hasText: 'Service call attempts' }).click();
-    await detail.getByRole('button', { name: 'Upstream error details', exact: true }).click();
+    const failure = detail
+      .getByRole('list', { name: commonEn.logs.attemptSummary })
+      .getByRole('button')
+      .first();
+    await failure.click();
     const event = detail
       .locator('details')
       .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
       .first();
-    await event.locator('summary').first().click();
+    await expect(event).toHaveAttribute('open', '');
+    await expect(event.locator('pre')).toHaveCount(0);
     await event.getByRole('button', { name: 'Load error body', exact: true }).click();
     await expect(event.locator('pre')).toHaveText(state.json_body);
     const rawDownload = page.waitForEvent('download');

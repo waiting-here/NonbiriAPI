@@ -161,6 +161,7 @@ WHERE user_id=? AND generation=?`, now, userID, expectedGeneration)
 type CallerIdentity struct {
 	UserID     int64
 	Generation int64
+	Language   string
 }
 
 func (r *Repository) ResolveCallerKey(ctx context.Context, presented string) (CallerIdentity, error) {
@@ -174,10 +175,10 @@ func (r *Repository) ResolveCallerKey(ctx context.Context, presented string) (Ca
 	digest := sha256.Sum256([]byte(presented))
 	var identity CallerIdentity
 	err = r.readDB.QueryRowContext(ctx, `
-SELECT c.user_id,c.generation
+SELECT c.user_id,c.generation,u.lang
 FROM caller_keys c JOIN users u ON u.id=c.user_id
 WHERE c.key_hash=? AND u.is_admin=0
-  AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?))`, digest[:], now).Scan(&identity.UserID, &identity.Generation)
+  AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?))`, digest[:], now).Scan(&identity.UserID, &identity.Generation, &identity.Language)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CallerIdentity{}, ErrNotFound
 	}

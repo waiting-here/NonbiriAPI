@@ -424,6 +424,10 @@ test('keeps the one-time value visible when the post-generation metadata refresh
   expect(server.posts).toHaveLength(1);
   await assertNoSensitiveBrowserPersistence(page, [secret]);
   await page.getByRole('button', { name: 'I have saved it', exact: true }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'I have saved it', exact: true })
+    .click();
   await expect(page.getByText(secret, { exact: true })).toHaveCount(0);
   guard.assertNone();
 });

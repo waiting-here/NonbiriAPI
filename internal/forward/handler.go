@@ -109,7 +109,7 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 
 	if err != nil {
 		if request.Context().Err() == nil {
-			handler.service.writePreAcceptanceFailure(request.Context(), writer, nil, nil, err, charity, request.Header.Get("Accept-Language"))
+			handler.service.writePreAcceptanceFailure(request.Context(), writer, nil, nil, err, charity, httperr.Language(writer))
 		}
 		return
 	}
@@ -119,7 +119,7 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 	if decoded.inference != nil {
 		decoded.inference.SetOptionHeaders(request.Header)
 	}
-	handler.service.execute(request.Context(), writer, userID, decoded, filtered, p.mediaType, request.Header.Get("Accept-Language"), request.Header)
+	handler.service.execute(request.Context(), writer, userID, decoded, filtered, p.mediaType, httperr.Language(writer), request.Header)
 }
 
 func validateChatMedia(request *http.Request) (string, bool) {

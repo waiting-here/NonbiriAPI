@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 )
@@ -51,7 +52,7 @@ type PressureMonitor struct {
 	value  PressureSnapshot
 	points []pressureSample
 	// Only Run writes samples and flushes. Readers never access the database.
-	flushedAt int64
+	lastFlushed pressureSample
 }
 
 func NewPressureMonitor(ctx context.Context, database *sql.DB, source func() PressureReading) (*PressureMonitor, error) {
@@ -86,7 +87,7 @@ func NewPressureMonitor(ctx context.Context, database *sql.DB, source func() Pre
 		p.points[left], p.points[right] = p.points[right], p.points[left]
 	}
 	if len(p.points) > 0 {
-		p.flushedAt = p.points[len(p.points)-1].at
+		p.lastFlushed = p.points[len(p.points)-1]
 	}
 	p.value.SampleSeconds = int(pressureSampleInterval / time.Second)
 	return p, nil
@@ -141,17 +142,13 @@ func (p *PressureMonitor) sample(now time.Time) {
 func (p *PressureMonitor) flush(ctx context.Context) error {
 	p.mu.RLock()
 	value := p.value
-	points := make([]pressureSample, 0, pressureFlushBatch)
-	for _, point := range p.points {
-		if point.at >= p.flushedAt {
-			points = append(points, point)
-			if len(points) == pressureFlushBatch {
-				break
-			}
-		}
+	first := sort.Search(len(p.points), func(i int) bool { return p.points[i].at >= p.lastFlushed.at })
+	if first < len(p.points) && p.points[first] == p.lastFlushed {
+		first++
 	}
+	points := append([]pressureSample(nil), p.points[first:min(first+pressureFlushBatch, len(p.points))]...)
 	p.mu.RUnlock()
-	if value.ObservedAt == 0 {
+	if value.ObservedAt == 0 || len(points) == 0 {
 		return nil
 	}
 	tx, err := p.db.BeginTx(ctx, nil)
@@ -159,7 +156,8 @@ func (p *PressureMonitor) flush(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `UPDATE global_pressure_state SET rpm_peak=max(rpm_peak,?),concurrency_peak=max(concurrency_peak,?) WHERE id=1`, value.RPM.PeakAll, value.Concurrency.PeakAll); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE global_pressure_state SET rpm_peak=max(rpm_peak,?1),concurrency_peak=max(concurrency_peak,?2)
+WHERE id=1 AND (rpm_peak<?1 OR concurrency_peak<?2)`, value.RPM.PeakAll, value.Concurrency.PeakAll); err != nil {
 		return err
 	}
 	for _, point := range points {
@@ -174,10 +172,7 @@ func (p *PressureMonitor) flush(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	if len(points) > 0 {
-		// Repeat the last minute because new samples may raise its peak.
-		p.flushedAt = points[len(points)-1].at
-	}
+	p.lastFlushed = points[len(points)-1]
 	return nil
 }
 
@@ -195,7 +190,11 @@ func (p *PressureMonitor) Run(ctx context.Context) {
 		defer cancel()
 		if err := p.flush(flushContext); err != nil {
 			if !failed {
-				slog.Warn("global pressure samples could not be saved")
+				reason := "storage"
+				if errors.Is(err, context.DeadlineExceeded) {
+					reason = "flush_deadline"
+				}
+				slog.Warn("global pressure samples could not be saved", "reason", reason)
 			}
 			failed = true
 		} else {

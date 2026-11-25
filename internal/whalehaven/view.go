@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/whalehaven/rules"
 )
 
 const peerFrom = ` FROM whale_haven_profiles h JOIN users u ON u.id=h.user_id LEFT JOIN game_user_preferences pref ON pref.user_id=u.id `
@@ -153,7 +154,7 @@ func (w *world) neighbors(r *resident, q, filter string) ([]neighbor, error) {
 				return nil, e
 			}
 			n.project(p)
-			if n.Grams > 0 {
+			if n.Grams > 0 && !p.state.BankFull(w.config) {
 				available = append(available, n)
 			}
 		}
@@ -228,6 +229,12 @@ func (w *world) profile(r *resident, operation string) (map[string]any, error) {
 				out := map[string]any{"target": n.ID, "label": n.label(), "allow_hire": v.allowHire, "working": v.working, "started_at_ms": v.started}
 				if v.working {
 					out["work_ends_at_ms"] = w.now + v.workLeft
+				} else {
+					host, err := w.load(id)
+					if err != nil {
+						return nil, err
+					}
+					out["meal_paused"] = host.state.BankFull(w.config)
 				}
 				away = out
 			}
@@ -300,6 +307,26 @@ func (w *world) profile(r *resident, operation string) (map[string]any, error) {
 	return value, nil
 }
 
+// The timeline is capped at 40 entries. A retried draw must still identify its own prize.
+func (w *world) actionProfile(r *resident, operation, action string) (map[string]any, error) {
+	value, err := w.profile(r, operation)
+	if err != nil || action != "spin_conch_gacha" {
+		return value, err
+	}
+	var note string
+	err = w.tx.QueryRowContext(w.ctx, "SELECT text FROM whale_haven_events WHERE user_id=? AND operation_id=? AND kind='gacha' ORDER BY id DESC LIMIT 1", r.id, operation).Scan(&note)
+	if errors.Is(err, sql.ErrNoRows) {
+		return value, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if id, ok := strings.CutPrefix(note, conchEventPrefix); ok {
+		value["conch_reward"] = id
+	}
+	return value, nil
+}
+
 func (w *world) timeline(r *resident) ([]map[string]any, map[string]any, error) {
 	logs := []map[string]any{}
 	prints := map[string]any{}
@@ -356,9 +383,19 @@ func (w *world) timeline(r *resident) ([]map[string]any, map[string]any, error) 
 	return logs, prints, rows.Err()
 }
 
+const conchEventPrefix = "海螺扭蛋 · "
+
 func eventView(id string, at int64, kind, note string, pearls, shards int64, pending bool) map[string]any {
 	entry := map[string]any{"id": id, "timestamp": at, "kind": kind, "detail": movementDetail(pearls, shards)}
 	switch kind {
+	case "gacha":
+		if reward, ok := strings.CutPrefix(note, conchEventPrefix); ok {
+			entry["conchReward"] = reward
+			note = "海螺扭蛋"
+			if name := rules.ConchPrizeName(reward); name != "" {
+				note = conchEventPrefix + name
+			}
+		}
 	case "visit_out", "guest_in", "catch":
 		if title, message, ok := strings.Cut(note, " · "); ok {
 			note, entry["presetMessage"] = title, message

@@ -35,6 +35,8 @@ func (service *Service) RecoverBeforeListenAt(
 		return RecoveryResult{}, err
 	}
 
+	service.recoveryMu.Lock()
+	defer service.recoveryMu.Unlock()
 	startup := !service.recovered.Load()
 	if startup && !service.recoveryValidated.Load() {
 		if err := service.ValidatePersistedState(workerCtx); err != nil {
@@ -47,14 +49,14 @@ func (service *Service) RecoverBeforeListenAt(
 		return RecoveryResult{}, err
 	}
 	if processed < limit {
-		count, runErr := service.runLifecycleDueBatch(workerCtx, decisionNow, limit-processed)
+		count, runErr := service.runLifecycleBatch(workerCtx, decisionNow, limit-processed, startup)
 		if runErr != nil {
 			return RecoveryResult{}, runErr
 		}
 		processed += count
 	}
 
-	more, err := service.lifecycleRecoveryPending(workerCtx, decisionNow)
+	more, err := service.lifecycleRecoveryPending(workerCtx, decisionNow, startup)
 	if err != nil {
 		return RecoveryResult{}, err
 	}
@@ -110,10 +112,14 @@ DELETE FROM game_online_leases WHERE rowid IN (
 	return int(changed), nil
 }
 
-func (service *Service) runLifecycleDueBatch(ctx context.Context, decisionNow int64, limit int) (int, error) {
+func (service *Service) runLifecycleBatch(ctx context.Context, decisionNow int64, limit int, startup bool) (int, error) {
+	upper := decisionNow
+	if startup {
+		upper = 253402300799
+	}
 	rows, err := service.readDatabase.QueryContext(ctx, `
 SELECT id FROM game_linklink_sessions
-WHERE deadline<=? ORDER BY deadline,id LIMIT ?`, decisionNow, limit)
+WHERE deadline<=? ORDER BY deadline,id LIMIT ?`, upper, limit)
 	if err != nil {
 		return 0, classifyDB(err)
 	}
@@ -134,14 +140,14 @@ WHERE deadline<=? ORDER BY deadline,id LIMIT ?`, decisionNow, limit)
 		return 0, classifyDB(err)
 	}
 	for _, sessionID := range ids {
-		if _, err := service.timeoutOne(ctx, sessionID, decisionNow); err != nil {
+		if _, err := service.endSession(ctx, sessionID, decisionNow, startup); err != nil {
 			return 0, err
 		}
 	}
 	return len(ids), nil
 }
 
-func (service *Service) lifecycleRecoveryPending(ctx context.Context, decisionNow int64) (bool, error) {
+func (service *Service) lifecycleRecoveryPending(ctx context.Context, decisionNow int64, startup bool) (bool, error) {
 	var pending int
 	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_online_leases
@@ -154,6 +160,9 @@ WHERE substr(session_id,1,3)='ll_' AND (expires_at<=? OR health_epoch<>?)
 	}
 	if pending == 1 {
 		return true, nil
+	}
+	if startup {
+		decisionNow = 253402300799
 	}
 	if err := service.readDatabase.QueryRowContext(ctx, `SELECT EXISTS(
 SELECT 1 FROM game_linklink_sessions WHERE deadline<=?

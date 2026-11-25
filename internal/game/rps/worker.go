@@ -14,46 +14,30 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if service == nil || service.closed.Load() {
 		return ErrClosed
 	}
-	service.recovered.Store(false)
 	now, err := service.decisionNow()
 	if err != nil {
 		return err
 	}
-	if err := service.ValidatePersistedState(ctx); err != nil {
-		return err
+	// Full-state validation uses the caller's startup budget. The two-second
+	// deadline below bounds a single mutation batch.
+	service.recoveryMu.Lock()
+	var validationErr error
+	if !service.recoveryValidated.Load() {
+		validationErr = service.ValidatePersistedState(ctx)
 	}
-	if _, err := service.database.ExecContext(ctx, `DELETE FROM game_online_leases WHERE substr(session_id,1,4)='rps_'`); err != nil {
-		return classifyDB(err)
-	}
-	service.leaseMu.Lock()
-	clear(service.leaseBindings)
-	service.leaseMu.Unlock()
-	if err := service.recoverHealthEpoch(ctx, now); err != nil {
-		return err
+	service.recoveryMu.Unlock()
+	if validationErr != nil {
+		return validationErr
 	}
 	for {
-		count, err := service.sweepQueues(ctx, now)
+		result, err := service.RecoverBeforeListenAt(ctx, now, workerBatchSize, time.Now().Add(2*time.Second))
 		if err != nil {
 			return err
 		}
-		if count < workerBatchSize {
-			break
+		if !result.More {
+			return nil
 		}
 	}
-	for {
-		count, err := service.runTerminalRetries(ctx, now)
-		if err != nil {
-			return err
-		}
-		if count < workerBatchSize {
-			break
-		}
-	}
-	if _, err := service.expireRankFacts(ctx, now); err != nil {
-		return err
-	}
-	service.recovered.Store(true)
-	return nil
 }
 
 func (service *Service) validatePersistedState(ctx context.Context) error {

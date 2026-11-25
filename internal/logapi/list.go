@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"strconv"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const commonListColumns = `l.id,l.logical_request_id,l.route_kind,l.caller_result_class,
@@ -27,457 +29,227 @@ const (
 	upstreamModelPredicate = ` AND l.id IN (SELECT request_log_id FROM request_attempts WHERE upstream_model_id=?)`
 )
 
-func (repository *Repository) ListUser(ctx context.Context, userID int64, filter ListFilter) (result Page[UserLogRow], resultErr error) {
-	if repository == nil || ctx == nil || userID <= 0 {
-		return Page[UserLogRow]{}, ErrInvalid
-	}
-	ctx = logReadContext(ctx, "user")
-	filter, err := normalizeListFilter(filter, "user")
-	if err != nil {
-		return Page[UserLogRow]{}, err
-	}
-	now, err := repository.decisionNow()
-	if err != nil {
-		return Page[UserLogRow]{}, err
-	}
-	owner := filterOwner("user", userID, filter)
-	var tx *sql.Tx
-	var reader logReadQueryer = repository.readDB
-	if filter.Page != nil || repository.readAuth != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
-		defer cancel()
-		tx, err = repository.beginPageRead(ctx, "user", userID, now)
-		if err != nil {
-			return Page[UserLogRow]{}, err
-		}
-		defer tx.Rollback()
-		reader = tx
-	}
-	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-user-list-v1", owner)
-	if err != nil {
-		return Page[UserLogRow]{}, err
-	}
-	query := `WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
-	args := []any{userID, now - requestLogRetentionSeconds}
-	if useOperationRange(filter) {
-		query += " AND " + logOperationSQL + "=?"
-		args = append(args, filter.Operation)
-	}
-	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
-	query, args = diagnosisFilter(query, args, filter)
-	if filter.Model != nil {
-		query += ` AND l.model=?`
-		args = append(args, *filter.Model)
-	}
-	if filter.ErrorCode != nil {
-		query += ` AND l.caller_error_code=?`
-		args = append(args, *filter.ErrorCode)
-	}
-	if filter.Status != nil {
-		// Logical caller status only; attempt status never participates.
-		query += ` AND l.caller_status=?`
-		args = append(args, *filter.Status)
-	}
-	if filter.From != nil {
-		query += ` AND l.started_at>=?`
-		args = append(args, *filter.From)
-	}
-	if filter.To != nil {
-		query += ` AND l.started_at<?`
-		args = append(args, *filter.To)
-	}
-	if cursor.rowID != 0 {
-		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
-		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
-	}
-	query, args, metadata, err := logListPageQuery(ctx, reader, commonListColumns+`,l.model`, "", query, args, filter.Page, filter.Limit)
-	if err != nil {
-		return Page[UserLogRow]{}, err
-	}
-	finishRows := observeLogRead(ctx, "rows")
-	defer func() { finishRows(resultErr) }()
-	rows, err := reader.QueryContext(ctx, query, args...)
-	if err != nil {
-		return Page[UserLogRow]{}, translateReadError(ctx, err)
-	}
-	defer rows.Close()
-	capacity := filter.Limit
-	if capacity < 1 || capacity > maximumLimit {
-		return Page[UserLogRow]{}, ErrInvalid
-	}
-	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, capacity), Pagination: metadata}
-	privacyIDs := make([]int64, 0, capacity)
-	positions := make([]listCursor, 0, capacity+1)
-	for rows.Next() {
-		var model string
-		record, scanErr := scanCommon(rows, &model)
-		if scanErr != nil {
-			return Page[UserLogRow]{}, translateReadError(ctx, scanErr)
-		}
-		usage, usageErr := usageFromRecord(record)
-		if usageErr != nil || !utf8Bound(model, 512) {
-			return Page[UserLogRow]{}, ErrInvariant
-		}
-		if len(page.Data) < filter.Limit {
-			privacyIDs = append(privacyIDs, record.rowID)
-			switch kind := RouteKind(record.routeKind); {
-			case kind.IsSelf() || kind == RouteDiscovery:
-				page.Data = append(page.Data, UserSelfLogRow{
-					RejectionFields: rejectionFields(record),
-					ID:              record.id, RouteKind: RouteKind(record.routeKind),
-					CallerResultClass: resultClassPointer(record.callerResultClass),
-					CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
-					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-					Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10),
-				})
-			case kind.IsCharity():
-				page.Data = append(page.Data, UserCharityLogRow{
-					RejectionFields: rejectionFields(record),
-					ID:              record.id, RouteKind: RouteKind(record.routeKind),
-					CallerResultClass: resultClassPointer(record.callerResultClass),
-					CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
-					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,
-				})
-			default:
-				return Page[UserLogRow]{}, ErrInvariant
-			}
-		}
-		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
-	}
-	if err := rows.Err(); err != nil {
-		return Page[UserLogRow]{}, translateReadError(ctx, err)
-	}
-	if err := rows.Close(); err != nil {
-		return Page[UserLogRow]{}, translateReadError(ctx, err)
-	}
-	if err := redactUserLogRows(ctx, reader, privacyIDs, page.Data); err != nil {
-		return Page[UserLogRow]{}, err
-	}
-	if len(positions) > filter.Limit {
-		next, err := repository.encodeListCursor("logapi-user-list-v1", owner, positions[filter.Limit-1])
-		if err != nil {
-			return Page[UserLogRow]{}, err
-		}
-		page.NextCursor = &next
-	}
-	if tx != nil {
-		finishRows(nil)
-		if err := tx.Commit(); err != nil {
-			return Page[UserLogRow]{}, translateReadError(ctx, err)
-		}
-	}
-	return page, nil
+type logProjection[T any] struct {
+	columns string
+	join    string
+	scan    func(rowScanner) (int64, T, error)
+	redact  func(context.Context, logReadQueryer, []int64, []T) error
 }
 
-func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) (result Page[AdminLogRow], resultErr error) {
-	if repository == nil || ctx == nil {
-		return Page[AdminLogRow]{}, ErrInvalid
-	}
-	ctx = logReadContext(ctx, "admin")
-	filter, err := normalizeListFilter(filter, "admin")
-	if err != nil {
-		return Page[AdminLogRow]{}, err
-	}
-	now, err := repository.decisionNow()
-	if err != nil {
-		return Page[AdminLogRow]{}, err
-	}
-	owner := filterOwner("admin", 0, filter)
-	var tx *sql.Tx
-	var reader logReadQueryer = repository.readDB
-	if filter.Page != nil || repository.readAuth != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
-		defer cancel()
-		tx, err = repository.beginPageRead(ctx, "admin", 0, now)
-		if err != nil {
-			return Page[AdminLogRow]{}, err
-		}
-		defer tx.Rollback()
-		reader = tx
-	}
-	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-admin-list-v1", owner)
-	if err != nil {
-		return Page[AdminLogRow]{}, err
-	}
-	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
-	args := make([]any, 0, 16)
-	args = append(args, now-requestLogRetentionSeconds)
-	if useOperationRange(filter) {
-		query += " AND " + logOperationSQL + "=?"
-		args = append(args, filter.Operation)
-	}
-	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
-	query, args = diagnosisFilter(query, args, filter)
-	if filter.UserID != nil {
-		query += ` AND l.origin_user_id=?`
-		args = append(args, *filter.UserID)
-	}
-	if filter.DiscordID != nil {
-		query += ` AND l.origin_discord_id=?`
-		args = append(args, *filter.DiscordID)
-	}
-	if filter.EndpointKeyID != nil {
-		query += endpointKeyPredicate
-		args = append(args, *filter.EndpointKeyID)
-	}
-	if filter.EndpointBaseURL != nil {
-		query += endpointURLPredicate
-		args = append(args, *filter.EndpointBaseURL)
-	}
-	if filter.UpstreamModel != nil {
-		query += upstreamModelPredicate
-		args = append(args, *filter.UpstreamModel)
-	}
-	if filter.ErrorCode != nil {
-		query += ` AND l.caller_error_code=?`
-		args = append(args, *filter.ErrorCode)
-	}
-	if filter.Status != nil {
-		query += ` AND l.caller_status=?`
-		args = append(args, *filter.Status)
-	}
-	if filter.UsageTotalMismatch != nil {
-		query += ` AND l.usage_total_mismatch=?`
-		args = append(args, *filter.UsageTotalMismatch)
-	}
-	if filter.From != nil {
-		query += ` AND l.started_at>=?`
-		args = append(args, *filter.From)
-	}
-	if filter.To != nil {
-		query += ` AND l.started_at<?`
-		args = append(args, *filter.To)
-	}
-	modelPredicate, modelArgs, err := charityModelFilter(ctx, reader, filter)
-	if err != nil {
-		return Page[AdminLogRow]{}, err
-	}
-	query += modelPredicate
-	args = append(args, modelArgs...)
-	if cursor.rowID != 0 {
-		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
-		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
-	}
-	query, args, metadata, err := logListPageQuery(ctx, reader, commonListColumns+`,`+callerIdentityColumns+`,l.user_id`, callerIdentityJoin, query, args, filter.Page, filter.Limit)
-	if err != nil {
-		return Page[AdminLogRow]{}, err
-	}
-	finishRows := observeLogRead(ctx, "rows")
-	defer func() { finishRows(resultErr) }()
-	rows, err := reader.QueryContext(ctx, query, args...)
-	if err != nil {
-		return Page[AdminLogRow]{}, translateReadError(ctx, err)
-	}
-	defer rows.Close()
-	capacity := filter.Limit
-	if capacity < 1 || capacity > maximumLimit {
-		return Page[AdminLogRow]{}, ErrInvalid
-	}
-	page := Page[AdminLogRow]{Data: make([]AdminLogRow, 0, capacity), Pagination: metadata}
-	positions := make([]listCursor, 0, capacity+1)
-	for rows.Next() {
-		var userID sql.NullInt64
-		record, identity, scanErr := scanManagementCommon(rows, &userID)
-		if scanErr != nil {
-			return Page[AdminLogRow]{}, translateReadError(ctx, scanErr)
-		}
-		usage, usageErr := usageFromRecord(record)
-		if usageErr != nil {
-			return Page[AdminLogRow]{}, usageErr
-		}
-		if len(page.Data) < filter.Limit {
-			page.Data = append(page.Data, AdminLogRow{
-				OriginIdentity:  record.origin,
-				RejectionFields: rejectionFields(record),
-				ID:              record.id, RouteKind: RouteKind(record.routeKind),
-				CallerResultClass: resultClassPointer(record.callerResultClass),
-				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
-				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UsageTotalMismatch: record.usageTotalMismatch == 1,
-				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
-			})
-		}
-		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
-	}
-	if err := rows.Err(); err != nil {
-		return Page[AdminLogRow]{}, translateReadError(ctx, err)
-	}
-	if len(positions) > filter.Limit {
-		next, err := repository.encodeListCursor("logapi-admin-list-v1", owner, positions[filter.Limit-1])
-		if err != nil {
-			return Page[AdminLogRow]{}, err
-		}
-		page.NextCursor = &next
-	}
-	if tx != nil {
-		if err := rows.Close(); err != nil {
-			return Page[AdminLogRow]{}, translateReadError(ctx, err)
-		}
-		finishRows(nil)
-		if err := tx.Commit(); err != nil {
-			return Page[AdminLogRow]{}, translateReadError(ctx, err)
-		}
-	}
-	return page, nil
+var userProjection = logProjection[UserLogRow]{columns: commonListColumns + ",l.model", scan: scanUserLogRow, redact: redactUserLogRows}
+
+func managementProjection[T AdminLogRow | StewardLogRow]() logProjection[T] {
+	return logProjection[T]{columns: commonListColumns + "," + callerIdentityColumns + ",l.user_id", join: callerIdentityJoin, scan: scanManagementLogRow[T]}
 }
 
-func (repository *Repository) ListSteward(
-	ctx context.Context,
-	stewardUserID int64,
-	filter ListFilter,
-	authorizer StewardAuthorizer,
-) (result Page[StewardLogRow], resultErr error) {
-	if repository == nil || ctx == nil || stewardUserID <= 0 || authorizer == nil {
-		return Page[StewardLogRow]{}, ErrInvalid
+func (r *Repository) ListUser(ctx context.Context, userID int64, filter ListFilter) (Page[UserLogRow], error) {
+	return listLogs(ctx, r, logSearchScope{role: "user", actorID: userID}, filter, userProjection)
+}
+
+func (r *Repository) ListAdmin(ctx context.Context, filter ListFilter) (Page[AdminLogRow], error) {
+	return listLogs(ctx, r, logSearchScope{role: "admin"}, filter, managementProjection[AdminLogRow]())
+}
+
+func (r *Repository) ListSteward(ctx context.Context, userID int64, filter ListFilter, authorizer StewardAuthorizer) (Page[StewardLogRow], error) {
+	return listLogs(ctx, r, logSearchScope{role: "steward", actorID: userID, steward: authorizer}, filter, managementProjection[StewardLogRow]())
+}
+
+func listLogs[T any](ctx context.Context, r *Repository, scope logSearchScope, filter ListFilter, projection logProjection[T]) (Page[T], error) {
+	if ctx == nil || r == nil || !scope.valid() {
+		return Page[T]{}, ErrInvalid
 	}
-	ctx = logReadContext(ctx, "steward")
-	filter, err := normalizeListFilter(filter, "steward")
+	filter, err := normalizeListFilter(filter, scope.role)
 	if err != nil {
-		return Page[StewardLogRow]{}, err
+		return Page[T]{}, err
 	}
-	now, err := repository.decisionNow()
-	if err != nil {
-		return Page[StewardLogRow]{}, err
-	}
-	owner := filterOwner("steward", stewardUserID, filter)
-	if filter.Page != nil || repository.readAuth != nil {
+	ctx = logListContext(ctx, scope.role, filter)
+	if filter.Page != nil || r.readAuth != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
 		defer cancel()
 	}
-	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-steward-list-v1", owner)
+	owner := filterOwner(scope.role, scope.actorID, filter)
+	tokenScope := "logapi-" + scope.role + "-list-v1"
+	now, err := r.decisionNow()
 	if err != nil {
-		return Page[StewardLogRow]{}, err
+		return Page[T]{}, err
 	}
-	tx, _, err := repository.beginStewardReadOn(ctx, repository.readDB, stewardUserID, authorizer)
+	var tx *sql.Tx
+	if filter.Page == nil && r.readAuth == nil && scope.role != "steward" {
+		// Legacy embedded repositories rely on the caller for cursor authorization.
+		tx, err = r.readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		err = translateReadError(ctx, err)
+	} else {
+		tx, err = r.beginSearchRead(ctx, scope, now)
+	}
 	if err != nil {
-		return Page[StewardLogRow]{}, err
+		return Page[T]{}, err
 	}
 	defer tx.Rollback()
-	// Keep the steward projection independent from the administrator DTO.
-	query := `WHERE (l.completed_at IS NULL OR l.completed_at>?)`
-	args := make([]any, 0, 16)
-	args = append(args, now-requestLogRetentionSeconds)
-	if useOperationRange(filter) {
-		query += " AND " + logOperationSQL + "=?"
-		args = append(args, filter.Operation)
-	}
-	query += phaseFilter(filter.Phase) + outcomeFilter(filter.Outcome)
-	query, args = diagnosisFilter(query, args, filter)
-	if filter.UserID != nil {
-		query += ` AND l.origin_user_id=?`
-		args = append(args, *filter.UserID)
-	}
-	if filter.DiscordID != nil {
-		query += ` AND l.origin_discord_id=?`
-		args = append(args, *filter.DiscordID)
-	}
-	if filter.EndpointKeyID != nil {
-		query += endpointKeyPredicate
-		args = append(args, *filter.EndpointKeyID)
-	}
-	if filter.EndpointBaseURL != nil {
-		query += endpointURLPredicate
-		args = append(args, *filter.EndpointBaseURL)
-	}
-	if filter.UpstreamModel != nil {
-		query += upstreamModelPredicate
-		args = append(args, *filter.UpstreamModel)
-	}
-	if filter.ErrorCode != nil {
-		query += ` AND l.caller_error_code=?`
-		args = append(args, *filter.ErrorCode)
-	}
-	if filter.Status != nil {
-		query += ` AND l.caller_status=?`
-		args = append(args, *filter.Status)
-	}
-	if filter.UsageTotalMismatch != nil {
-		query += ` AND l.usage_total_mismatch=?`
-		args = append(args, *filter.UsageTotalMismatch)
-	}
-	if filter.From != nil {
-		query += ` AND l.started_at>=?`
-		args = append(args, *filter.From)
-	}
-	if filter.To != nil {
-		query += ` AND l.started_at<?`
-		args = append(args, *filter.To)
-	}
-	modelPredicate, modelArgs, err := charityModelFilter(ctx, tx, filter)
+	cursor, err := r.decodeListCursor(filter.Cursor, tokenScope, owner)
 	if err != nil {
-		return Page[StewardLogRow]{}, err
+		return Page[T]{}, err
 	}
-	query += modelPredicate
-	args = append(args, modelArgs...)
-	if cursor.rowID != 0 {
-		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
-		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
-	}
-	query, args, metadata, err := logListPageQuery(ctx, tx, commonListColumns+`,`+callerIdentityColumns+`,l.user_id`, callerIdentityJoin, query, args, filter.Page, filter.Limit)
+	where, args, err := listPredicates(ctx, tx, scope, now, filter, cursor)
 	if err != nil {
-		return Page[StewardLogRow]{}, err
+		return Page[T]{}, err
 	}
-
+	query, args, metadata, err := logIDPageQuery(ctx, tx, where, args, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[T]{}, err
+	}
 	finishRows := observeLogRead(ctx, "rows")
-	defer func() { finishRows(resultErr) }()
-	rows, err := tx.QueryContext(ctx, query, args...)
+	ids, last, more, err := listPageIDs(ctx, tx, query, args, filter.Limit)
 	if err != nil {
-		return Page[StewardLogRow]{}, translateReadError(ctx, err)
+		finishRows(err)
+		return Page[T]{}, err
 	}
-	defer rows.Close()
-	capacity := filter.Limit
-	if capacity < 1 || capacity > maximumLimit {
-		return Page[StewardLogRow]{}, ErrInvalid
+	page, err := projectLogPage(ctx, tx, scope, ids, metadata, now, projection)
+	finishRows(err)
+	if err != nil {
+		return Page[T]{}, err
 	}
-	page := Page[StewardLogRow]{Data: make([]StewardLogRow, 0, capacity), Pagination: metadata}
-	positions := make([]listCursor, 0, capacity+1)
-	for rows.Next() {
-		var userID sql.NullInt64
-		record, identity, scanErr := scanManagementCommon(rows, &userID)
-		if scanErr != nil {
-			return Page[StewardLogRow]{}, translateReadError(ctx, scanErr)
-		}
-		usage, usageErr := usageFromRecord(record)
-		if usageErr != nil {
-			return Page[StewardLogRow]{}, usageErr
-		}
-		if len(page.Data) < filter.Limit {
-			// Construct directly into the independent Steward type. No Admin DTO
-			// exists on this path, including transiently.
-			page.Data = append(page.Data, StewardLogRow{
-				OriginIdentity:  record.origin,
-				RejectionFields: rejectionFields(record),
-				ID:              record.id, RouteKind: RouteKind(record.routeKind),
-				CallerResultClass: resultClassPointer(record.callerResultClass),
-				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
-				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UsageTotalMismatch: record.usageTotalMismatch == 1,
-				UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
-			})
-		}
-		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
-	}
-	if err := rows.Err(); err != nil {
-		return Page[StewardLogRow]{}, translateReadError(ctx, err)
-	}
-	if err := rows.Close(); err != nil {
-		return Page[StewardLogRow]{}, translateReadError(ctx, err)
-	}
-	if len(positions) > filter.Limit {
-		next, err := repository.encodeListCursor("logapi-steward-list-v1", owner, positions[filter.Limit-1])
+	if more {
+		next, err := r.encodeListCursor(tokenScope, owner, last)
 		if err != nil {
-			return Page[StewardLogRow]{}, err
+			return Page[T]{}, err
 		}
 		page.NextCursor = &next
 	}
-	finishRows(nil)
 	if err := tx.Commit(); err != nil {
-		return Page[StewardLogRow]{}, translateReadError(ctx, err)
+		return Page[T]{}, translateReadError(ctx, err)
 	}
 	return page, nil
+}
+
+func listPageIDs(ctx context.Context, tx *sql.Tx, query string, args []any, limit int) (ids []int64, last listCursor, more bool, err error) {
+	finish := observeLogRead(ctx, "ids")
+	defer func() { finish(err) }()
+	if limit < 1 || limit > maximumLimit {
+		return nil, last, false, ErrInvalid
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, last, false, translateReadError(ctx, err)
+	}
+	defer rows.Close()
+	ids = make([]int64, 0, limit)
+	for rows.Next() {
+		var pos listCursor
+		if err := rows.Scan(&pos.rowID, &pos.startedAt); err != nil {
+			return nil, last, false, translateReadError(ctx, err)
+		}
+		if len(ids) == limit {
+			more = true
+		} else {
+			ids = append(ids, pos.rowID)
+			last = pos
+		}
+	}
+	return ids, last, more, translateReadError(ctx, rows.Err())
+}
+
+// The supplied IDs carry the snapshot order. Project only this window, in that
+// order, rechecking visibility before reading the caller and settlement facts.
+func projectLogPage[T any](ctx context.Context, tx *sql.Tx, scope logSearchScope, ids []int64, metadata *pagination.Metadata, now int64, projection logProjection[T]) (page Page[T], err error) {
+	finish := observeLogRead(ctx, "projection")
+	defer func() { finish(err) }()
+	page = Page[T]{Data: make([]T, 0, len(ids)), Pagination: metadata}
+	if len(ids) == 0 {
+		return page, nil
+	}
+	args := make([]any, 0, 2*len(ids)+2)
+	for index, id := range ids {
+		args = append(args, index, id)
+	}
+	where, scopeArgs := scope.visibleLogs(now)
+	query := "WITH wanted(pos,id) AS (VALUES " + strings.TrimSuffix(strings.Repeat("(?,?),", len(ids)), ",") + ") SELECT " + projection.columns +
+		" FROM wanted CROSS JOIN request_logs l ON l.id=wanted.id" + projection.join + " " + where + " ORDER BY wanted.pos"
+	rows, err := tx.QueryContext(ctx, query, append(args, scopeArgs...)...)
+	if err != nil {
+		return Page[T]{}, translateReadError(ctx, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		id, data, err := projection.scan(rows)
+		if err != nil {
+			return Page[T]{}, translateReadError(ctx, err)
+		}
+		if len(page.Data) >= len(ids) || ids[len(page.Data)] != id {
+			return Page[T]{}, ErrSearchExpired
+		}
+		page.Data = append(page.Data, data)
+	}
+	if err := rows.Err(); err != nil {
+		return Page[T]{}, translateReadError(ctx, err)
+	}
+	if err := rows.Close(); err != nil {
+		return Page[T]{}, translateReadError(ctx, err)
+	}
+	if len(page.Data) != len(ids) {
+		return Page[T]{}, ErrSearchExpired
+	}
+	if projection.redact != nil {
+		if err := projection.redact(ctx, tx, ids, page.Data); err != nil {
+			return Page[T]{}, err
+		}
+	}
+	return page, nil
+}
+
+func scanUserLogRow(scanner rowScanner) (int64, UserLogRow, error) {
+	var model string
+	record, err := scanCommon(scanner, &model)
+	if err != nil {
+		return 0, nil, err
+	}
+	usage, err := usageFromRecord(record)
+	if err != nil || !utf8Bound(model, 512) {
+		return 0, nil, ErrInvariant
+	}
+	switch kind := RouteKind(record.routeKind); {
+	case kind.IsSelf() || kind == RouteDiscovery:
+		return record.rowID, UserSelfLogRow{
+			RejectionFields: rejectionFields(record),
+			ID:              record.id, RouteKind: kind,
+			CallerResultClass: resultClassPointer(record.callerResultClass),
+			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
+			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
+			Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+		}, nil
+	case kind.IsCharity():
+		return record.rowID, UserCharityLogRow{
+			RejectionFields: rejectionFields(record),
+			ID:              record.id, RouteKind: kind,
+			CallerResultClass: resultClassPointer(record.callerResultClass),
+			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
+			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,
+		}, nil
+	default:
+		return 0, nil, ErrInvariant
+	}
+}
+
+func scanManagementLogRow[T AdminLogRow | StewardLogRow](scanner rowScanner) (int64, T, error) {
+	var userID sql.NullInt64
+	record, identity, err := scanManagementCommon(scanner, &userID)
+	if err != nil {
+		return 0, T{}, err
+	}
+	usage, err := usageFromRecord(record)
+	if err != nil {
+		return 0, T{}, err
+	}
+	return record.rowID, T{
+		OriginIdentity:  record.origin,
+		RejectionFields: rejectionFields(record),
+		ID:              record.id, RouteKind: RouteKind(record.routeKind),
+		CallerResultClass: resultClassPointer(record.callerResultClass),
+		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
+		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
+		UsageTotalMismatch: record.usageTotalMismatch == 1,
+		UserID:             nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity, CharityModel: record.charityModel, CharityModelID: record.charityModelID,
+	}, nil
 }
 
 func utf8Bound(value string, max int) bool {

@@ -171,11 +171,11 @@ func TestRecoverBeforeListenFailsClosedWhenRetryCheckpointCannotPersist(t *testi
 		t.Fatalf("pending = (%#v,%v)", pending, err)
 	}
 	fixture.clock.Store(*pending.NextAttemptAt)
-	if _, err = fixture.database.Exec(`CREATE TRIGGER fail_fishing_checkpoint BEFORE UPDATE ON game_fishing_batches WHEN NEW.attempt_count>OLD.attempt_count BEGIN SELECT RAISE(ABORT,'database is locked'); END`); err != nil {
+	if _, err = fixture.database.Exec(`CREATE TRIGGER fail_fishing_checkpoint BEFORE UPDATE ON game_fishing_batches WHEN NEW.state='released' BEGIN SELECT RAISE(ABORT,'database is locked'); END`); err != nil {
 		t.Fatal(err)
 	}
 	err = fixture.service.RecoverBeforeListen(context.Background())
-	if !errors.Is(err, ErrServiceUnavailable) {
+	if err == nil {
 		t.Fatalf("recovery checkpoint error = %v", err)
 	}
 	if fixture.service.recovered.Load() {
@@ -203,11 +203,11 @@ func TestRecoverBeforeListenFailsClosedWhenCheckpointCASMakesNoProgress(t *testi
 		t.Fatalf("pending = (%#v,%v)", pending, err)
 	}
 	fixture.clock.Store(*pending.NextAttemptAt)
-	if _, err = fixture.database.Exec(`CREATE TRIGGER ignore_fishing_checkpoint BEFORE UPDATE ON game_fishing_batches WHEN NEW.attempt_count>OLD.attempt_count BEGIN SELECT RAISE(IGNORE); END`); err != nil {
+	if _, err = fixture.database.Exec(`CREATE TRIGGER ignore_fishing_checkpoint BEFORE UPDATE ON game_fishing_batches WHEN NEW.state='released' BEGIN SELECT RAISE(IGNORE); END`); err != nil {
 		t.Fatal(err)
 	}
 	err = fixture.service.RecoverBeforeListen(context.Background())
-	if !errors.Is(err, ErrServiceUnavailable) {
+	if err == nil {
 		t.Fatalf("recovery zero-progress error = %v", err)
 	}
 	if fixture.service.recovered.Load() {

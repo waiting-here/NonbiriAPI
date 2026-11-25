@@ -41,7 +41,7 @@ WHERE c.logical_request_id=? AND u.state='committed' AND u.calls_actual=1)`, req
 	var prices credits.TokenPrices
 	var usage contract.Usage
 	var unknown int
-	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,discount_percent,request_user_price_milli,user_reserved_milli,
+	err := tx.QueryRowContext(ctx, `SELECT pricing_mode,COALESCE(discount_basis_points,discount_percent*100),request_user_price_milli,user_reserved_milli,
 uncached_user_price_milli,cache_write_user_price_milli,cache_read_user_price_milli,output_user_price_milli,
 usage_uncached_input_tokens,cache_write_input_tokens,cache_read_input_tokens,usage_output_tokens,usage_unknown,context_pricing,usage_details
 FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
@@ -77,7 +77,7 @@ FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
 	if mode != "per_request" && missing && original < reserved {
 		original = reserved
 	}
-	charge, err := credits.ApplyDiscountPercent(original, discount)
+	charge, err := credits.ApplyDiscountBasisPoints(original, discount)
 	if err != nil {
 		return requestCharge{}, claim.ErrInvariant
 	}

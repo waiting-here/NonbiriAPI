@@ -308,7 +308,10 @@
 .nb-toast-viewport {
   position: fixed;
   right: var(--nb-space-4);
-  bottom: var(--nb-space-4);
+  top: calc(var(--nb-topbar-height, 4rem) + var(--nb-space-2));
+  max-height: 45dvh;
+  overflow-y: auto;
+  pointer-events: none;
   z-index: var(--nb-z-toast);
   display: grid;
   gap: var(--nb-space-2);
@@ -316,6 +319,7 @@
 }
 
 .nb-toast {
+  pointer-events: auto;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--nb-space-3);

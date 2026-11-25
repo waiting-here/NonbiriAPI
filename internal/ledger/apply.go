@@ -235,7 +235,7 @@ func validatePlan(plan Plan) error {
 	if spec.capacity.consume != nil && !validReservation(*spec.capacity.consume) {
 		return ErrInvalidPlan
 	}
-	if spec.capacity.consumeAll && (spec.capacity.consume == nil || spec.kind != KindRPSTerminal || len(spec.capacity.releaseAll) != 0 || spec.capacity.reserve != nil) {
+	if spec.capacity.consumeAll && (spec.capacity.consume == nil || (spec.kind != KindRPSTerminal && spec.kind != KindRPSRefund) || len(spec.capacity.releaseAll) != 0 || spec.capacity.reserve != nil) {
 		return ErrInvalidPlan
 	}
 	for _, ref := range spec.capacity.releaseAll {

@@ -2026,7 +2026,7 @@ export function mountLake(root, bridge) {
             this.resume();
           } else if (intent === 'skip' || (this.feedback && !this.feedback.completed))
             this.finishCatchFeedback();
-          else if (['success', 'failed'].includes(this.state)) {
+          else if (['success', 'failed', 'cancelled'].includes(this.state)) {
             this.catchSound.unlock();
             this.start();
           }
@@ -3561,6 +3561,20 @@ export function mountLake(root, bridge) {
       lastPhase = '';
       terminalShown = '';
       game.clearCatchFeedback();
+    }
+    if (result.cast.phase === 'cancelled') {
+      game.input.clear();
+      game.state = 'cancelled';
+      game.paused = false;
+      terminalShown = result.cast.id;
+      ui.overlay.hidden = false;
+      ui.catchArt.hidden = ui.overlayBasket.hidden = ui.overlaySecondary.hidden = true;
+      ui.overlayIcon.textContent = '';
+      ui.overlayTitle.textContent = bridge.text('cancelled');
+      ui.overlayText.textContent = '';
+      ui.overlayButton.textContent = bridge.text('again');
+      ui.overlayButton.disabled = bridge.busy() || bridge.readonly();
+      return;
     }
     if (phase === 'waiting' || phase === 'playing') {
       game.state = phase;

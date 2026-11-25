@@ -122,7 +122,11 @@ export function EmptyState({ title, body, action, illustration = 'empty' }: Empt
   );
 }
 
-function errorMessage(error: unknown, translate: (key: string) => string): string {
+function errorMessage(
+  error: unknown,
+  translate: (key: string) => string,
+  language: string,
+): string {
   if (isUnauthorized(error)) return translate('common.authRequired');
   if (isStewardPermissionDenied(error)) return translate('management.permissions.denied');
   if (isApiError(error) && error.code === 'elevated_required')
@@ -149,6 +153,29 @@ function errorMessage(error: unknown, translate: (key: string) => string): strin
         return translate('common.invalidResponse');
       case 'not_found':
         return translate('common.resourceNotFound');
+      case 'invalid_request':
+      case 'payload_too_large':
+      case 'upstream':
+      case 'service_unavailable':
+      case 'internal':
+      case 'result_unknown':
+      case 'resource_locked':
+      case 'resource_limit_exceeded': {
+        const codes = {
+          invalid_request: 'common.responseErrors.invalid',
+          payload_too_large: 'common.responseErrors.large',
+          upstream: 'common.responseErrors.provider',
+          service_unavailable: 'common.responseErrors.unavailable',
+          internal: 'common.errorBody',
+          result_unknown: 'common.operation.unknown',
+          resource_locked: 'common.responseErrors.locked',
+          resource_limit_exceeded: 'common.responseErrors.limit',
+        };
+        // Preserve localized field-specific recovery details when the server supplies them.
+        if (error.message && (!language.startsWith('zh') || /[\u3400-\u9fff]/.test(error.message)))
+          return error.message;
+        return translate(codes[error.code]);
+      }
       default:
         // The server message is already bounded and control-character cleaned
         // by the HTTP boundary. It remains useful for a stable, human-safe API
@@ -174,7 +201,7 @@ export function ErrorState({
   /** Explicitly supplied, already-cleaned detail for an authorized surface. */
   detail?: ErrorDetail;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const unauthorized = isUnauthorized(error);
   return (
     <div className="state-panel error-state nb-state nb-state--error" role="alert">
@@ -183,14 +210,22 @@ export function ErrorState({
       </span>
       <div>
         <h2>{unauthorized ? t('common.authRequiredTitle') : t('common.error')}</h2>
-        <p>{errorMessage(error, t)}</p>
+        <p>{errorMessage(error, t, i18n?.resolvedLanguage ?? i18n?.language ?? 'en')}</p>
+        {unauthorized && (
+          <a
+            className="nb-btn nb-btn--secondary"
+            href={import.meta.env.MODE === 'admin' ? '/' : '/api/auth/discord/start'}
+          >
+            {t('common.signIn')}
+          </a>
+        )}
         {detail ? (
           <details className="diagnostic">
             <summary>{detail.label}</summary>
             <p>{detail.text}</p>
           </details>
         ) : null}
-        {onRetry ? (
+        {onRetry && !unauthorized ? (
           <Button type="button" onClick={onRetry}>
             {t('common.retry')}
           </Button>

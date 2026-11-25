@@ -290,8 +290,8 @@
   --nb-density-factor: 0.875;
 }
 
-[data-font-size='large'] {
-  --nb-font-scale: 1.125;
+:root[data-font-size='large'] {
+  font-size: 112.5%;
 }
 
 @media (prefers-color-scheme: dark) {

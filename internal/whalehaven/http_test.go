@@ -5,12 +5,18 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
@@ -145,6 +151,187 @@ func (f *stationFixture) call(t *testing.T, id int64, route string, input map[st
 func (f *stationFixture) adopt(t *testing.T, id int64, name string) map[string]any {
 	return f.call(t, id, "actions", map[string]any{"type": "adopt", "name": name, "open": true, "expected_profile_revision": "1", "expected_settings_revision": "2"}, "adopt-whale-fresh-player-house", 200)
 }
+
+type whaleMutationCheck func() error
+
+func (check whaleMutationCheck) AuthorizeUserMutation(context.Context, *sql.Tx, int64) error {
+	return check()
+}
+
+func TestWhaleHTTPCanceledRequests(t *testing.T) {
+	f := newStationFixture(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	serverFailure := errors.New("server stopped the operation")
+	for _, tc := range []struct {
+		name                                           string
+		cancelRequest, expired, duringBody, noResponse bool
+		cause, failure                                 error
+	}{
+		{name: "client left during request", cancelRequest: true, failure: fmt.Errorf("read: %w", context.Canceled), noResponse: true},
+		{name: "client canceled all operations", cancelRequest: true, failure: errors.Join(context.Canceled, fmt.Errorf("close: %w", context.Canceled)), noResponse: true},
+		{name: "rollback failed after client canceled", cancelRequest: true, failure: errors.Join(context.Canceled, serverFailure)},
+		{name: "client left while sending body", duringBody: true, cancelRequest: true, failure: context.Canceled, noResponse: true},
+		{name: "body read deadline expired", duringBody: true, failure: context.DeadlineExceeded},
+		{name: "dependency canceled a live request", failure: context.Canceled},
+		{name: "service failed as client left", cancelRequest: true, failure: serverFailure},
+		{name: "server canceled with a cause", cancelRequest: true, cause: serverFailure, failure: context.Canceled},
+		{name: "request deadline expired", expired: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancelCause(t.Context())
+			defer cancel(nil)
+			reqCtx := ctx
+			if tc.expired {
+				deadline, stop := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+				defer stop()
+				reqCtx = deadline
+			}
+			f.service.auth = whaleMutationCheck(func() error {
+				if tc.cancelRequest {
+					cancel(tc.cause)
+				}
+				return tc.failure
+			})
+			const path = "/api/games/whale-haven/actions"
+			var body io.Reader = strings.NewReader(`{"type":"recall_home"}`)
+			if tc.duringBody {
+				if tc.cancelRequest {
+					cancel(tc.cause)
+				}
+				body = iotest.ErrReader(tc.failure)
+			}
+			req := httptest.NewRequestWithContext(reqCtx, "POST", path, body)
+			rec := httptest.NewRecorder()
+			rec.Code = 0 // Distinguish returning without writing from sending a header.
+			logs.Reset()
+			f.routes["POST "+path](rec, req, resources.UserPrincipal{UserID: 1})
+			logged := strings.Contains(logs.String(), "Whale Haven request failed")
+			if tc.noResponse {
+				if rec.Code != 0 || rec.Body.Len() != 0 || logged {
+					t.Fatal(rec.Code, rec.Body.String(), logs.String())
+				}
+			} else if rec.Code != 500 || !strings.Contains(rec.Body.String(), "internal_error") || !logged {
+				t.Fatal(rec.Code, rec.Body.String(), logs.String())
+			}
+		})
+	}
+}
+
+func TestBowlRefillHonorsConfirmedSpillAfterAutomaticRefill(t *testing.T) {
+	f := newStationFixture(t)
+	f.enable(t)
+	user := f.user(t, "keeper")
+	profile := f.adopt(t, user, "Fin")
+	if _, err := f.store.DB().Exec(`UPDATE whale_haven_settings SET document=json_set(document,'$.values.trough_grams',250) WHERE revision=2`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`UPDATE whale_haven_profiles SET snapshot=json_set(snapshot,
+		'$.inventory.silver_fish',3,'$.home.buffs.autoRefillEnabled',json('true')) WHERE user_id=?`, user); err != nil {
+		t.Fatal(err)
+	}
+	action := map[string]any{"type": "use_feed", "feedId": "silver_fish", "maxSpillGrams": 0,
+		"expected_profile_revision":  strconv.FormatInt(int64(profile["snapshot"].(map[string]any)["revision"].(float64)), 10),
+		"expected_settings_revision": profile["settings_revision"]}
+	// A refill ticket adds a 180 g serving between the last snapshot and the click.
+	f.at = f.at.Add(time.Second)
+	f.call(t, user, "actions", action, "fill-bowl-without-any-spill", http.StatusConflict)
+	afterRefusal := f.call(t, user, "profile", nil, "", http.StatusOK)["snapshot"].(map[string]any)
+	if afterRefusal["inventory"].(map[string]any)["silver_fish"] != 2.0 {
+		t.Fatal("an unconfirmed manual refill spent a serving")
+	}
+	action["maxSpillGrams"] = 110
+	for range 2 {
+		result := f.call(t, user, "actions", action, "fill-bowl-with-confirmed-spill", http.StatusOK)["snapshot"].(map[string]any)
+		if result["inventory"].(map[string]any)["silver_fish"] != 1.0 || result["home"].(map[string]any)["troughGrams"] != 250.0 {
+			t.Fatalf("unexpected confirmed refill: %v", result)
+		}
+	}
+}
+
+func TestConchActivityFromStoredV142Notes(t *testing.T) {
+	for id, name := range map[string]string{
+		"auto_refill": "定时续碗保温券", "aroma_boost": "五常新米增香包",
+		"wardrobe_coupon": "深海裁缝海螺券", "affection_candy": "海盐牛奶糖",
+	} {
+		entry := eventView("1", 1000, "gacha", "海螺扭蛋 · "+id, 0, 0, false)
+		if entry["conchReward"] != id || entry["title"] != "海螺扭蛋 · "+name {
+			t.Errorf("old %s record: %v", id, entry)
+		}
+	}
+}
+
+func TestConchDrawAppliesCandyAndReplaysItsOwnPrize(t *testing.T) {
+	f := newStationFixture(t)
+	f.enable(t)
+	user := f.user(t, "keeper")
+	before := f.adopt(t, user, "Fin")["snapshot"].(map[string]any)
+	tx, err := f.store.DB().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := assets.MoveTx(t.Context(), tx, user, f.at.UnixMilli(), assets.Balance{Shards: 10}, "site_reward", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`UPDATE whale_haven_settings SET document=json_set(document,
+		'$.values.conch_auto_refill_weight',0,'$.values.conch_aroma_boost_weight',0,'$.values.conch_wardrobe_coupon_weight',0,
+		'$.values.candy_mood',92,'$.values.candy_affection',7) WHERE revision=2`); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	spin := func(snapshot map[string]any, settings string) map[string]any {
+		return map[string]any{"type": "spin_conch_gacha", "expected_profile_revision": key(int64(snapshot["revision"].(float64))), "expected_settings_revision": settings}
+	}
+	first := spin(before, "2")
+	const firstKey = "conch-candy-draw-and-replay"
+	draw := f.call(t, user, "actions", first, firstKey, 200)
+	after := draw["snapshot"].(map[string]any)
+	whale := after["whale"].(map[string]any)
+	if draw["conch_reward"] != "affection_candy" || whale["mood"] != 92.0 || whale["affection"] != before["whale"].(map[string]any)["affection"].(float64)+7 {
+		t.Fatalf("candy draw %v, whale %v", draw["conch_reward"], whale)
+	}
+	if !reflect.DeepEqual(before["inventory"], after["inventory"]) || !reflect.DeepEqual(before["home"].(map[string]any)["buffs"], after["home"].(map[string]any)["buffs"]) ||
+		after["wallet"].(map[string]any)["conchShards"] != 5.0 {
+		t.Fatal("candy should consume five shards and leave stored items alone")
+	}
+	fresh := f.call(t, user, "profile", nil, "", 200)
+	event := fresh["snapshot"].(map[string]any)["logs"].([]any)[0].(map[string]any)
+	if fresh["conch_reward"] != nil || event["title"] != "海螺扭蛋 · 海盐牛奶糖" || event["conchReward"] != draw["conch_reward"] {
+		t.Fatalf("reloaded candy event %v", event)
+	}
+	// Replay after a different prize and after the first draw has left the 40-entry timeline.
+	if _, err := f.store.DB().Exec(`INSERT INTO whale_haven_settings(revision,effective_at,document)
+		SELECT 3,effective_at,json_set(document,'$.values.conch_affection_candy_weight',0,'$.values.conch_wardrobe_coupon_weight',1)
+		FROM whale_haven_settings WHERE revision=2`); err != nil {
+		t.Fatal(err)
+	}
+	second := f.call(t, user, "actions", spin(after, "3"), "conch-coupon-next-draw", 200)
+	if second["conch_reward"] != "wardrobe_coupon" {
+		t.Fatal(second["conch_reward"])
+	}
+	if _, err := f.store.DB().Exec(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<39)
+		INSERT INTO whale_haven_events(user_id,created_at,kind,text) SELECT ?,?,'interact','摸头' FROM n`, user, f.at.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	retry := f.call(t, user, "actions", first, firstKey, 200)
+	snap := retry["snapshot"].(map[string]any)
+	buffs := snap["home"].(map[string]any)["buffs"].(map[string]any)
+	if retry["operation_id"] != draw["operation_id"] || retry["conch_reward"] != draw["conch_reward"] ||
+		snap["wallet"].(map[string]any)["conchShards"] != 0.0 || buffs["wardrobeDiscountCoupons"] != 1.0 ||
+		snap["whale"].(map[string]any)["affection"] != whale["affection"] {
+		t.Fatal("replay changed the original prize or awarded it twice")
+	}
+	logs := snap["logs"].([]any)
+	if len(logs) != 40 || logs[39].(map[string]any)["conchReward"] != "wardrobe_coupon" {
+		t.Fatal("expected the later coupon as the only draw on the current timeline")
+	}
+}
+
 func TestStationExchangeSharedWalletAndReplay(t *testing.T) {
 	f := newStationFixture(t)
 	user := f.user(t, "player")

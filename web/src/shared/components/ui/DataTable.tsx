@@ -63,14 +63,17 @@ export function DataTable<Row>({
               <Fragment key={key}>
                 <tr
                   onClick={onRowClick ? (event) => onRowClick(row, event) : undefined}
-                  aria-selected={selectedKey === key ? true : undefined}
+                  aria-current={selectedKey === key ? 'true' : undefined}
                 >
                   {columns.map((column) => (
                     <td
                       key={column.key}
                       data-column={column.key}
                       data-cell={column.cell}
-                      data-label={column.mobileLabel}
+                      data-label={
+                        column.mobileLabel ??
+                        (typeof column.header === 'string' ? column.header : undefined)
+                      }
                       className={columnClassName(column)}
                     >
                       {column.render(row)}

@@ -169,7 +169,7 @@ func catalog() []Field {
 	pearls("treat_pearls", "招待奖励", "Treat reward", 2)
 	add("treat_shards", "招待海螺碎片", "Treat shards", "shards", 1, 0, 10000)
 	add("tea_bonus_shards", "珊瑚茶几招待额外碎片", "Extra treat shards with tea table", "shards", 1, 0, 10000)
-	add("visit_grams_per_pearl", "串门每币所需口粮", "Feed per visit pearl", "grams", 35, 1, 10000)
+	add("visit_grams_per_pearl", "串门每币所需口粮", "Feed per visit pearl", "grams", 28, 1, 10000)
 	add("visit_grams_per_shard", "串门每片所需口粮", "Feed per visit shard", "grams", 25, 1, 10000)
 	pearls("visit_max_pearls", "单次串门小鲸币上限", "Pearls per visit limit", 2)
 	add("visit_max_shards", "单次串门碎片上限", "Shards per visit limit", "shards", 3, 0, 10000)

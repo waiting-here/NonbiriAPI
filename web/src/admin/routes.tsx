@@ -116,8 +116,8 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/WhaleHavenPage')).WhaleHavenPage }),
       },
       {
-        path: pathFor('admin-game-ai'),
-        lazy: async () => ({ Component: (await import('./pages/AIPlayersPage')).AIPlayersPage }),
+        path: pathFor('admin-game-companions'),
+        lazy: async () => ({ Component: (await import('./pages/CompanionsPage')).CompanionsPage }),
       },
       {
         path: pathFor('admin-game-history'),

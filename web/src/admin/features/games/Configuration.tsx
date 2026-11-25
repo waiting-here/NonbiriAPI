@@ -1,6 +1,7 @@
+import { PercentInput } from './PercentInput';
 import { Affix, Field, Fields, Note, Toggle } from '@shared/components/ui';
 import { modeLabel, modesFor, useGameAdminText, type GameID } from './copy';
-import { percentBP, type DuelGameConfig } from './config';
+import { type DuelGameConfig } from './config';
 
 export function DuelConfiguration({
   game,
@@ -67,19 +68,14 @@ export function DuelConfiguration({
                     }
                   >
                     {(props) => (
-                      <Affix
+                      <PercentInput
                         {...props}
                         unit="%"
-                        type="number"
-                        min="0"
                         max="99.99"
-                        step="0.01"
-                        value={
-                          Number.isNaN(current.rake_bp[field]) ? '' : current.rake_bp[field] / 100
-                        }
-                        onChange={(event) =>
+                        basisPoints={current.rake_bp[field]}
+                        onBasisChange={(points) =>
                           update({
-                            rake_bp: { ...current.rake_bp, [field]: percentBP(event.target.value) },
+                            rake_bp: { ...current.rake_bp, [field]: points },
                           })
                         }
                       />

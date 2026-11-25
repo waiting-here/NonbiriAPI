@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
-import type { Period, Pool } from '../features/operations/economy';
+import { adminPageKeys } from '../features/operations/adminPages';
+import type { ActivitiesConfig, Period, Pool } from '../features/operations/economy';
 import { ActivitiesPage } from './ActivitiesPage';
 
 vi.mock('../features/attendance/AttendanceManagement', () => ({
@@ -40,6 +41,16 @@ const welfarePool: Pool = {
 
 function installActivities(initialPeriod: Period | null, rejectWrite = false, pool?: Pool) {
   let period = initialPeriod;
+  let config: ActivitiesConfig = {
+    revision: '4',
+    master_enabled: false,
+    loan_enabled: false,
+    loan_tiers: ['10000', '100000', '1000000'],
+    loan_a: '0.9',
+    loan_b: '1.3',
+    welfare: { enabled: false, threshold: '1', cap: '2' },
+    thursday: { enabled: false },
+  };
   const writes: Record<string, unknown>[] = [];
   const reply = (body: unknown) =>
     new Response(JSON.stringify(body), {
@@ -55,17 +66,15 @@ function installActivities(initialPeriod: Period | null, rejectWrite = false, po
       const method = init?.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/admin/api/session')
         return reply({ admin: { username: 'fixture-admin' } });
-      if (method === 'GET' && url.pathname === '/admin/api/activities/config')
-        return reply({
-          revision: '4',
-          master_enabled: false,
-          loan_enabled: false,
-          loan_tiers: ['10000', '100000', '1000000'],
-          loan_a: '0.9',
-          loan_b: '1.3',
-          welfare: { enabled: false, threshold: '1', cap: '2' },
-          thursday: { enabled: false },
-        });
+      if (method === 'GET' && url.pathname === '/admin/api/activities/config') return reply(config);
+      if (method === 'PATCH' && url.pathname === '/admin/api/activities/config') {
+        const body = JSON.parse(String(init?.body));
+        writes.push(body);
+        const { expected_revision, ...fields } = body;
+        if (expected_revision !== config.revision) return new Response(null, { status: 409 });
+        config = { ...fields, revision: String(Number(config.revision) + 1) };
+        return reply(config);
+      }
       if (method === 'GET' && url.pathname === '/admin/api/activities/thursday')
         return reply({ period });
       if (method === 'GET' && url.pathname === '/admin/api/pools')
@@ -98,6 +107,7 @@ function installActivities(initialPeriod: Period | null, rejectWrite = false, po
             }),
             { status: 409, headers: { 'content-type': 'application/json' } },
           );
+        config = { ...config, revision: String(Number(config.revision) + 1) };
         period = {
           ...previousPeriod,
           period_key: body.period_key,
@@ -183,6 +193,74 @@ describe('automatic activity schedules', () => {
     },
   );
 
+  it('saves the Thursday schedule separately and keeps the pending welfare amount for the next configuration write', async () => {
+    const writes = installActivities(null);
+    const view = await renderActivities();
+    const threshold = await screen.findByLabelText('Welfare threshold (credits)');
+    fireEvent.change(threshold, { target: { value: '7.25' } });
+    fireEvent.change(view.entry, { target: { value: '3' } });
+    await view.user.click(screen.getByRole('button', { name: 'Save and schedule' }));
+    await screen.findByRole('heading', { name: 'Update configured next period' });
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toHaveProperty('welfare');
+    expect(threshold).toHaveValue('7.25');
+    const save = screen.getByRole('button', { name: 'Save activity settings' });
+    await waitFor(() => expect(save).toBeEnabled());
+    await view.user.click(save);
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]).toMatchObject({
+      expected_revision: '5',
+      welfare: { threshold: '7.25', cap: '2' },
+    });
+    expect(writes[1]).not.toHaveProperty('period_key');
+  });
+
+  it('keeps a period edit until the operator reviews a newer version and preserves untouched server fields', async () => {
+    const period = { ...previousPeriod, state: 'configured' } as const;
+    const writes = installActivities(period);
+    const view = await renderActivities();
+    await waitFor(() => expect(view.entry).toBeEnabled());
+    fireEvent.change(view.entry, { target: { value: '4' } });
+    Object.assign(period, { revision: '10', literature: 'Server edit' });
+    await act(async () => {
+      await view.queryClient.invalidateQueries({
+        queryKey: adminPageKeys.thursday('fixture-admin'),
+      });
+    });
+    const save = screen.getByRole('button', { name: 'Save and schedule' });
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(view.entry).toHaveValue('4');
+    expect(writes).toHaveLength(0);
+    await view.user.click(screen.getByRole('button', { name: 'Review latest period' }));
+    expect(screen.getByLabelText('Literature')).toHaveValue('Server edit');
+    expect(view.entry).toHaveValue('4');
+    await view.user.click(save);
+    await waitFor(() =>
+      expect(writes[0]).toMatchObject({
+        expected_revision: '10',
+        literature: 'Server edit',
+        entry: '4',
+      }),
+    );
+  });
+
+  it('keeps an empty or out-of-range per-user limit out of a schedule write', async () => {
+    const writes = installActivities(null);
+    const view = await renderActivities();
+    await waitFor(() => expect(view.entry).toBeEnabled());
+    fireEvent.change(view.entry, { target: { value: '2' } });
+    const limit = screen.getByLabelText('Per-user limit');
+    const save = screen.getByRole('button', { name: 'Save and schedule' });
+    for (const value of ['', '0', '1001', '1.5']) {
+      fireEvent.change(limit, { target: { value } });
+      expect(save).toBeDisabled();
+    }
+    expect(writes).toHaveLength(0);
+    fireEvent.change(limit, { target: { value: '1000' } });
+    await view.user.click(save);
+    await waitFor(() => expect(writes[0]).toMatchObject({ per_user_limit: 1000 }));
+  });
+
   it('validates multiline text by field and retains it after a rejected save', async () => {
     const writes = installActivities(null, true);
     const view = await renderActivities();
@@ -212,11 +290,11 @@ describe('automatic activity schedules', () => {
     await view.user.type(screen.getByLabelText('Literature'), 'Next announcement');
     const fee = screen.getByLabelText('Platform fee (%)');
     await view.user.clear(fee);
-    await view.user.type(fee, '1.25');
-    expect(fee).toHaveValue(1.25);
+    await view.user.type(fee, '0.05');
+    expect(fee).toHaveValue('0.05');
     await view.user.click(screen.getByRole('button', { name: 'Save and schedule' }));
     await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0].pumps_bp).toEqual({ platform: 125, welfare: 0, next_pool: 0 });
+    expect(writes[0].pumps_bp).toEqual({ platform: 5, welfare: 0, next_pool: 0 });
   });
 
   it('refreshes a new schedule across the Thursday boundary without losing edits, and allows cancel', async () => {

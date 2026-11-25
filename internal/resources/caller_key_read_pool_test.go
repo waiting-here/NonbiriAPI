@@ -14,6 +14,9 @@ func TestCallerKeyReadPoolAndFreshAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = e.store.DB().Exec("UPDATE users SET lang='zh' WHERE id=?", owner); err != nil {
+		t.Fatal(err)
+	}
 	held, err := e.store.DB().Conn(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -23,8 +26,14 @@ func TestCallerKeyReadPoolAndFreshAuthorization(t *testing.T) {
 	identity, err := e.repository.ResolveCallerKey(ctx, key.Secret)
 	cancel()
 	held.Close()
-	if err != nil || identity.UserID != owner || identity.Generation != 1 {
+	if err != nil || identity.UserID != owner || identity.Generation != 1 || identity.Language != "zh" {
 		t.Fatalf("read was blocked by the writer: %+v %v", identity, err)
+	}
+	if _, err = e.store.DB().Exec("UPDATE users SET lang='en' WHERE id=?", owner); err != nil {
+		t.Fatal(err)
+	}
+	if updated, err := e.repository.ResolveCallerKey(t.Context(), key.Secret); err != nil || updated.Language != "en" {
+		t.Fatal("the same caller key must observe the updated account language", err)
 	}
 	next, err := e.repository.RegenerateCallerKey(t.Context(), owner, 1)
 	if err != nil {

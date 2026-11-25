@@ -20,7 +20,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/timeapi"
-	"github.com/waiting-here/NonbiriAPI/internal/whalehaven"
 	whaleconfig "github.com/waiting-here/NonbiriAPI/internal/whalehaven/config"
 )
 
@@ -111,7 +110,7 @@ func (a *application) registerRoutes(store *db.Store, roleAuthorizer *roleFinalT
 	if err := a.audits.registerRoutes(a.authRuntime, a.logs, roleAuthorizer); err != nil {
 		return fmt.Errorf("register audit routes: %w", err)
 	}
-	if err := whalehaven.New(store, a.authRuntime, a.activities, a.activityRuntime.now).Register(a.authRuntime); err != nil {
+	if err := a.activityRuntime.whale.Register(a.authRuntime); err != nil {
 		return fmt.Errorf("register Whale Haven user routes: %w", err)
 	}
 	if err := whaleconfig.RegisterAdmin(a.authRuntime, store.ReadDB(), store.DB(), gameAdminAuthorization(roleAuthorizer), a.activityRuntime.now); err != nil {

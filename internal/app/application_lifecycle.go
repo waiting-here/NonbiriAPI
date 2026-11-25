@@ -182,6 +182,9 @@ func (a *application) CloseContext(ctx context.Context) error {
 				<-a.managementDone
 			}
 			a.setClosePhase("domains")
+			if a.logs != nil {
+				a.logs.CloseSearches()
+			}
 			var failures []error
 			closeResource := func(close func() error) {
 				if err := close(); err != nil {

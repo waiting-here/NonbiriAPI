@@ -4,6 +4,8 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import * as charity from '@shared/operations/charity';
 import * as modelPages from '@shared/operations/charityModelPages';
+import * as bindingOptions from '@shared/operations/charityBindingBatch';
+import * as candidatePages from '@shared/operations/charityPages';
 import { ApiError } from '@shared/query/http';
 import type { CharityBindingPicker, CharitySelection } from '../CharityBindingPicker';
 import type { ManagedDonationKeySummary } from '@shared/operations/donationPages';
@@ -124,6 +126,57 @@ async function choose(view: Awaited<ReturnType<typeof setup>>, name: string, id:
   await view.user.click(screen.getByRole('button', { name: 'Choose another charity model' }));
 }
 describe('multi-target donation binding recovery', () => {
+  it('finds exact matches across target pages, bulk checks only unambiguous routes, and leaves writes for confirmation', async () => {
+    const targets = ['provider/uni', 'provider-a/dup', 'provider-b/dup'].map((name, index) => ({
+      ...options.data[0]!,
+      charity_model_id: String(31 + index),
+      full_name: '[公益]' + name,
+    }));
+    const reads = vi
+      .spyOn(bindingOptions, 'getBindingOptions')
+      .mockImplementation(async (_role, _donation, _key, _q, page, size) => ({
+        data: page === '2' ? targets.slice(2) : targets.slice(0, 2),
+        next_cursor: null,
+        pagination: { page, page_size: size, total_items: '3', total_pages: '2' },
+      }));
+    vi.spyOn(candidatePages, 'getManagedBindingCandidatesPage').mockImplementation(
+      async (_role, id, _filter, page, size) => ({
+        data: [
+          {
+            ...chatProjection,
+            ...unboundCandidate,
+            donation_id: '7',
+            donation_key_id: '21',
+            upstream_model_id: id === '31' ? 'uni' : 'dup',
+            source_types: ['automatic'],
+            source: {
+              connector_type: 'openai-compatible',
+              canonical_base_url: 'https://example.test',
+              display_head: 'head',
+              display_tail: 'tail',
+            },
+          },
+        ],
+        next_cursor: null,
+        pagination: { page, page_size: size, total_items: '1', total_pages: '1' },
+      }),
+    );
+    const write = vi.fn(async () => json({}));
+    const view = await setup(write);
+    await screen.findByRole('row', { name: /provider\/uni/ });
+    await view.user.click(screen.getByRole('button', { name: /Find same-name candidates/ }));
+    await view.user.click(
+      await screen.findByRole('button', { name: 'Select unambiguous matches' }),
+    );
+    expect(screen.getByRole('checkbox', { name: /provider\/uni/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /provider-a\/dup/ })).not.toBeChecked();
+    await view.user.click(screen.getByRole('checkbox', { name: /provider-b\/dup/ }));
+    expect(reads.mock.calls.some((call) => call[4] === '2')).toBe(true);
+    await view.user.click(screen.getByRole('button', { name: 'Add selected candidates to draft' }));
+    await view.user.click(screen.getByRole('button', { name: 'Add 2 connections' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('[公益]provider-b/dup');
+    expect(write).not.toHaveBeenCalled();
+  });
   it('rereads at most four targets together and keeps deleted targets removable in order', async () => {
     const rows = Array.from({ length: 8 }, (_, index) => ({
       charity_model_id: String(31 + index),
@@ -159,6 +212,11 @@ describe('multi-target donation binding recovery', () => {
     for (const row of rows) await choose(view, row.full_name, row.charity_model_id);
     await view.user.click(screen.getByRole('button', { name: 'Add 8 connections' }));
     await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Add 8 connections',
+      }),
+    );
+    await view.user.click(
       await screen.findByRole('button', { name: 'Refresh and keep selections' }),
     );
     for (let completed = 0; completed < rows.length; completed += 4) {
@@ -184,7 +242,7 @@ describe('multi-target donation binding recovery', () => {
       selected.getByRole('button', { name: 'Remove selected Target 1: up-31' }),
     );
     expect(screen.getByRole('button', { name: 'Add 7 connections' })).toBeEnabled();
-  });
+  }, 20_000);
   it('keeps the complete draft when a target reread fails', async () => {
     vi.spyOn(charity, 'getManagedDonation').mockResolvedValue({
       revision: '5',
@@ -200,6 +258,11 @@ describe('multi-target donation binding recovery', () => {
     await choose(view, 'Target A', '31');
     await choose(view, 'Target B', '32');
     await view.user.click(screen.getByRole('button', { name: 'Add 2 connections' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Add 2 connections',
+      }),
+    );
     await view.user.click(
       await screen.findByRole('button', { name: 'Refresh and keep selections' }),
     );
@@ -274,7 +337,17 @@ describe('multi-target donation binding recovery', () => {
     await view.user.click(screen.getByRole('button', { name: 'Select another upstream' }));
     await view.user.click(screen.getByRole('button', { name: 'Choose another charity model' }));
     await view.user.click(screen.getByRole('button', { name: 'Add 2 connections' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Add 2 connections',
+      }),
+    );
     await view.user.click(await screen.findByRole('button', { name: 'Add 1 connections' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Add 1 connections',
+      }),
+    );
     await screen.findByText('Upstream model not found');
     expect(writes.map((write) => write.targets[0]?.expected_binding_revision)).toEqual(['1', '2']);
   });
@@ -296,6 +369,11 @@ describe('multi-target donation binding recovery', () => {
     await choose(view, 'Target A', '31');
     await choose(view, 'Target B', '32');
     await view.user.click(screen.getByRole('button', { name: 'Add 2 connections' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Add 2 connections',
+      }),
+    );
     await view.user.click(await screen.findByRole('button', { name: 'Retry the original action' }));
     await screen.findByText('Upstream model not found');
     expect(writes).toHaveLength(2);
@@ -340,6 +418,11 @@ describe('multi-target donation binding recovery', () => {
     });
     await choose(view, 'Target A', '31');
     await view.user.click(screen.getByRole('button', { name: 'Add 1 connections' }));
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Add 1 connections',
+      }),
+    );
     const refresh = await screen.findByRole('button', { name: 'Check again' });
     expect(
       screen.queryByRole('button', { name: 'Retry the original action' }),

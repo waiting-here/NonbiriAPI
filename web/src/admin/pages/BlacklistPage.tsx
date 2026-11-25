@@ -22,7 +22,7 @@ import { DataTable, MoreMenu } from '@shared/components/ui';
 import { ExpandablePanel } from '@shared/components/ui/ExpandablePanel';
 import './blacklist.css';
 import { ReasonText } from '@shared/components/ReasonText';
-import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { clearStationSession } from '@shared/charityManagement';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { useAdminSession } from '../data';
@@ -195,16 +195,16 @@ export function BlacklistManagement({
     listKeys,
   );
   useEffect(() => {
-    if (isUnauthorized(mutation.error) || isForbidden(mutation.error)) {
+    if (isUnauthorized(mutation.error) || isManagementForbidden(mutation.error)) {
       onAuthorityLoss?.();
     }
   }, [mutation.error, onAuthorityLoss]);
   useEffect(() => {
     if (
       isUnauthorized(result.error) ||
-      isForbidden(result.error) ||
+      isManagementForbidden(result.error) ||
       isUnauthorized(events.error) ||
-      isForbidden(events.error)
+      isManagementForbidden(events.error)
     ) {
       if (onAuthorityLoss) onAuthorityLoss();
       else if ([result.error, events.error].some(isUnauthorized)) clearStationSession(client, role);
@@ -275,7 +275,7 @@ export function BlacklistManagement({
     </>
   );
   const authorityError = [result.error, events.error, mutation.error].find(
-    (error) => isUnauthorized(error) || isForbidden(error),
+    (error) => isUnauthorized(error) || isManagementForbidden(error),
   );
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
@@ -348,35 +348,35 @@ export function BlacklistManagement({
           </FormActions>
         </form>
         {panelOpen ? feedback : null}
-        <ConfirmDialog
-          open={
-            confirmation !== null &&
-            Boolean(accountID) &&
-            !isForbidden(mutation.error) &&
-            !isUnauthorized(mutation.error)
-          }
-          title={label.addTitle}
-          description={
-            <>
-              <p>Discord ID: {confirmation?.id}</p>
-              <p>{label.description}</p>
-              <p>
-                {label.reason}: {confirmation?.reason}
-              </p>
-            </>
-          }
-          confirmLabel={label.add}
-          danger
-          busy={mutation.isPending}
-          onCancel={() => setConfirmation(null)}
-          onConfirm={() => {
-            if (confirmation) {
-              mutation.mutate(confirmation);
-              setConfirmation(null);
-            }
-          }}
-        />
       </ExpandablePanel>
+      <ConfirmDialog
+        open={
+          confirmation !== null &&
+          Boolean(accountID) &&
+          !isManagementForbidden(mutation.error) &&
+          !isUnauthorized(mutation.error)
+        }
+        title={confirmation?.add ? label.addTitle : label.remove}
+        description={
+          <>
+            <p>Discord ID: {confirmation?.id}</p>
+            <p>{confirmation?.add ? label.description : t('common.governance.removeBlacklist')}</p>
+            <p>
+              {label.reason}: {confirmation?.reason}
+            </p>
+          </>
+        }
+        confirmLabel={confirmation?.add ? label.add : label.remove}
+        danger
+        busy={mutation.isPending}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          if (confirmation) {
+            mutation.mutate(confirmation);
+            setConfirmation(null);
+          }
+        }}
+      />
       {!panelOpen ? feedback : null}
       <Card>
         <FilterBar
@@ -573,9 +573,9 @@ export function BlacklistManagement({
                                   disabled: busy,
                                   onSelect: () => {
                                     setNotice('');
-                                    mutation.mutate({
+                                    setConfirmation({
                                       id: item.discord_id,
-                                      reason: '',
+                                      reason: item.reason,
                                       add: false,
                                     });
                                   },

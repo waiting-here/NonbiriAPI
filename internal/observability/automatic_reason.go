@@ -65,15 +65,19 @@ func PutAutomaticReasonTx(ctx context.Context, tx *sql.Tx, ownerKind, ownerID st
 	if _, err = tx.ExecContext(ctx, `DELETE FROM automatic_reason_rule_labels WHERE owner_kind=? AND owner_id=?`, ownerKind, ownerID); err != nil {
 		return err
 	}
+	if len(reason.Rules) == 0 {
+		return nil
+	}
+	args := make([]any, 0, 6*len(reason.Rules))
 	for i, label := range reason.Rules {
 		if label.Revision < 1 || label.Name == "" || !utf8.ValidString(label.Name) || utf8.RuneCountInString(label.Name) > 120 {
 			return ErrInvalid
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO automatic_reason_rule_labels(owner_kind,owner_id,ordinal,rule_id,rule_revision,name_snapshot) VALUES(?,?,?,?,?,?)`, ownerKind, ownerID, i, label.RuleID, label.Revision, label.Name); err != nil {
-			return err
-		}
+		args = append(args, ownerKind, ownerID, i, label.RuleID, label.Revision, label.Name)
 	}
-	return nil
+	values := strings.TrimSuffix(strings.Repeat("(?,?,?,?,?,?),", len(reason.Rules)), ",")
+	_, err = tx.ExecContext(ctx, `INSERT INTO automatic_reason_rule_labels(owner_kind,owner_id,ordinal,rule_id,rule_revision,name_snapshot) VALUES `+values, args...)
+	return err
 }
 
 func (reason AutomaticReason) Text(lang string) string {

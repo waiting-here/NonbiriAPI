@@ -1,6 +1,15 @@
 import { ApiError, apiFetch } from '@shared/query/http';
 import { queryPath } from '@shared/operations/api';
-import { array, decimal, integer, record, string } from '@shared/operations/wire';
+import {
+  array,
+  boolean,
+  decimal,
+  exactRecord,
+  integer,
+  invalidResponse,
+  record,
+  string,
+} from '@shared/operations/wire';
 import type { PageSize } from '@shared/operations/pageNumbers';
 
 export interface Subject {
@@ -375,6 +384,35 @@ function snapshotDetails(value: unknown): SnapshotDetails | undefined {
       : {}),
   };
 }
+const textFilterKeys = [
+  'source',
+  'actor_id',
+  'authorizer_id',
+  'domain',
+  'action',
+  'outcome',
+  'event_id',
+  'target_kind',
+  'target_id',
+  'group_key',
+  'search',
+] as const;
+
+export const historyFilterFields = ['time_from', 'time_to', ...textFilterKeys] as const;
+
+function cleanupFilter(value: unknown): Filter {
+  // Dropping a new condition would widen the cleanup when the prepared filter is submitted.
+  const row = exactRecord(value, historyFilterFields, 'cleanup filter', []);
+  const filter: Filter = {};
+  for (const key of textFilterKeys) {
+    if (row[key] !== undefined) filter[key] = string(row[key], 'cleanup filter');
+  }
+  for (const key of ['time_from', 'time_to'] as const) {
+    if (row[key] !== undefined) filter[key] = integer(row[key], 'cleanup time filter');
+  }
+  return filter;
+}
+
 function cleanupJob(value: unknown): CleanupJob {
   const row = record(
     value,
@@ -399,7 +437,7 @@ function cleanupJob(value: unknown): CleanupJob {
     created_at: integer(row.created_at, 'cleanup time'),
     updated_at: integer(row.updated_at, 'cleanup update'),
     actor: subject(row.actor),
-    filter: row.filter as Filter,
+    filter: cleanupFilter(row.filter),
     cutoff_max_id: decimal(row.cutoff_max_id, 'cleanup cutoff'),
     deleted_operations: decimal(row.deleted_operations, 'deleted operations'),
     deleted_items: decimal(row.deleted_items, 'deleted targets'),
@@ -454,9 +492,12 @@ export async function prepareCleanup(
     signal,
   });
   const row = record(value, ['filter', 'all', 'cutoff_max_id'], 'cleanup scope');
+  const preparedFilter = cleanupFilter(row.filter);
+  const all = boolean(row.all, 'cleanup scope');
+  if (all !== (Object.keys(preparedFilter).length === 0)) invalidResponse('cleanup scope');
   return {
-    filter,
-    all: Object.keys(filter).length === 0,
+    filter: preparedFilter,
+    all,
     cutoff_max_id: decimal(row.cutoff_max_id, 'cleanup cutoff'),
   };
 }

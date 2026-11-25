@@ -35,6 +35,7 @@ const (
 type DeepLink struct {
 	RouteID    string  `json:"route_id"`
 	ResourceID *string `json:"resource_id,omitempty"`
+	KeyID      string  `json:"key_id,omitempty"`
 }
 
 type Issue struct {

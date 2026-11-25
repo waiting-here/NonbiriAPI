@@ -387,6 +387,47 @@ function installDonationFetch(initial: AdminDonation) {
 
 const operationKeyPattern = /^[A-Za-z0-9_-]{22,128}$/;
 
+describe('donation review result copy', () => {
+  it.each([
+    ['admin', 'en', 'approve', 'Approve'],
+    ['admin', 'en', 'reject', 'Reject'],
+    ['admin', 'en', 'force_reject', 'Forcibly rejected'],
+    ['admin', 'zh', 'approve', '批准'],
+    ['admin', 'zh', 'reject', '驳回'],
+    ['admin', 'zh', 'force_reject', '强制驳回'],
+    ['steward', 'en', 'approve', 'Approve'],
+    ['steward', 'en', 'reject', 'Reject'],
+    ['steward', 'en', 'force_reject', 'Forcibly rejected'],
+    ['steward', 'zh', 'approve', '批准'],
+    ['steward', 'zh', 'reject', '驳回'],
+    ['steward', 'zh', 'force_reject', '强制驳回'],
+  ] as const)(
+    'shows %s %s %s with the reason',
+    async (frame, locale, decision, expected) => {
+      installDonationFetch({
+        ...approvedDonation(
+          managedKey({
+            charity_state: decision === 'approve' ? 'available' : 'ended',
+            ended_reason: decision === 'approve' ? null : 'terminated',
+          }),
+        ),
+        status: decision === 'approve' ? 'approved' : 'rejected',
+        review_result: { decision, reason: 'Review finding', reviewed_at: 10 },
+      });
+      await renderWithProviders(<SessionBackedManagement frame={frame} />, {
+        station: frame === 'admin' ? 'admin' : 'user',
+        role: frame === 'admin' ? 'admin' : 'level6',
+        locale,
+        route: '/?charity_section=donations&donation_id=1',
+      });
+      const label = await screen.findByText(locale === 'zh' ? '审核结果' : 'Review', {
+        selector: 'dt',
+      });
+      expect(label.nextElementSibling).toHaveTextContent(`${expected} · Review finding ·`);
+    },
+  );
+});
+
 describe('donation review source context', () => {
   it.each(['admin', 'level5', 'level6'] as const)(
     'shows classifications and current labels for %s',
@@ -1240,7 +1281,7 @@ describe('CharityManagement corrective controls', () => {
   });
 
   it.each(['admin', 'steward'] as const)(
-    'keeps the %s review receipt above the list and reopened detail',
+    'keeps the %s review receipt adjacent to the reviewed detail',
     async (frame) => {
       installDonationFetch(pendingDonation());
       const view = await renderWithProviders(<SessionBackedManagement frame={frame} />, {
@@ -1251,11 +1292,7 @@ describe('CharityManagement corrective controls', () => {
       await view.user.type(await screen.findByLabelText('Reason'), 'Reviewed source');
       await view.user.click(await screen.findByRole('button', { name: 'Approve donation' }));
       const receipt = await screen.findByText(/Review saved:/);
-      expect(receipt.closest('.nb-md')).toBeNull();
-
-      await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-      await screen.findByRole('heading', { name: 'Donation review' });
-      expect(receipt.closest('.nb-md')).toBeNull();
+      expect(receipt.closest('.ops-detail-target')).not.toBeNull();
       const panes = view.container.querySelector('.charity-donations__panes.nb-md');
       expect(panes?.children).toHaveLength(2);
       expect(panes?.children[0]).toHaveClass('charity-donations__list');
@@ -1645,7 +1682,8 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(screen.getByRole('button', { name: 'Create charity model' }));
     expect(screen.getByRole('checkbox', { name: 'Chat completions' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Responses' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Responses' })).not.toBeChecked();
+    await view.user.click(screen.getByRole('checkbox', { name: 'Responses' }));
     expect(screen.getByRole('checkbox', { name: 'Embeddings' })).not.toBeChecked();
     await view.user.click(screen.getByRole('checkbox', { name: 'Image generation' }));
     expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
@@ -2316,11 +2354,17 @@ it.each(['approve', 'reject'] as const)(
         name: decision === 'approve' ? 'Approve pending content' : 'Return pending content',
       }),
     );
+    expect(writes).toBe(0);
+    await view.user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: decision === 'approve' ? 'Approve pending content' : 'Return pending content',
+      }),
+    );
     await waitFor(() => expect(writes).toBe(1));
     expect(screen.getByRole('button', { name: 'Return to list' })).toBeDisabled();
     finishWrite();
     await screen.findByText('Review saved.');
-    expect(screen.getByText('Review saved.').closest('.nb-md')).toBeNull();
+    expect(screen.getByText('Review saved.').closest('.ops-detail-target')).not.toBeNull();
     expect(view.container.querySelector('.charity-donations__panes.nb-md')?.children).toHaveLength(
       2,
     );

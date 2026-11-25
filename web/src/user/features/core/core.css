@@ -860,8 +860,21 @@
     margin-inline-start: var(--nb-space-2);
   }
 }
-.services-key-table .nb-inline {
+.services-key-table .services-key-actions {
   justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.services-key-actions > * {
+  flex: none;
+}
+@media (width <= 48rem) {
+  .services-key-table .services-key-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .services-key-actions > .nb-more > .nb-btn {
+    min-inline-size: 2.5rem;
+  }
 }
 .services-key-table .core-key-panels[hidden] {
   display: none;
@@ -873,9 +886,6 @@
 }
 .services-key-table .core-key-panels > td::before {
   display: none;
-}
-.services-key-table .core-key-panels .nb-inline {
-  justify-content: flex-start;
 }
 .services-key-table .core-key-feedback > td {
   grid-column: 1 / -1;
@@ -1038,13 +1048,6 @@
   }
   .services-key-table td[data-cell='meta'] .nb-key-limits__summary {
     gap: var(--nb-space-1);
-  }
-  .services-key-table td[data-cell='action'] .nb-inline {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .services-key-table td[data-cell='action'] .nb-more__summary {
-    min-width: 40px;
   }
   .services-key-table td:nth-child(4) {
     grid-column: 1;
@@ -1253,6 +1256,12 @@
   grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--nb-space-3);
+}
+.models-workspace .core-binding-row > .nb-actions {
+  grid-column: 4;
+}
+.models-workspace .core-binding-row > .nb-more {
+  grid-column: 5;
 }
 .models-workspace .model-source-main {
   display: grid;

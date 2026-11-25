@@ -190,7 +190,7 @@ export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
   );
   const terminalReason = enumValue(
     record.terminal_reason,
-    ['completed', 'timed_out', 'abandoned'] as const,
+    ['completed', 'timed_out', 'abandoned', 'cancelled'] as const,
     'LinkLink terminal reason',
   );
   const startedAt = unixTime(record.started_at, 'LinkLink summary start');

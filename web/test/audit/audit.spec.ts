@@ -223,13 +223,17 @@ async function requestDiagnostics(page: Page, admin: boolean, keyboard = false, 
   await expect(dialog.getByRole('region', { name: 'Request source' })).not.toContainText(
     'discard=this',
   );
-  await dialog.locator('summary').filter({ hasText: 'Service call attempts' }).click();
-  await dialog.getByRole('button', { name: 'Upstream error details' }).click();
+  const failure = dialog
+    .getByRole('list', { name: common.logs.attemptSummary })
+    .getByRole('button')
+    .first();
+  await failure.click();
   const event = dialog
     .locator('details')
     .filter({ has: page.locator(':scope > summary', { hasText: 'Error event 1' }) })
     .first();
-  await event.locator('summary').first().click();
+  await expect(event).toHaveAttribute('open', '');
+  await expect(event.locator('pre')).toHaveCount(0);
   const load = event.getByRole('button', { name: 'Load error body' });
   if (keyboard) {
     await load.focus();
@@ -455,7 +459,9 @@ test('an alert opens the exact retained issue context across refresh and mobile 
     await page.reload();
     await expect(page.getByText(f.issue_id, { exact: true })).toBeVisible();
     expect(page.url()).toBe(saved);
-    await expect(page.locator('a[href="/users?user=' + f.users[0].id + '"]')).toBeVisible();
+    const relatedUser = page.getByRole('link', { name: 'Open related page', exact: true });
+    await expect(relatedUser).toBeVisible();
+    await expect(relatedUser).toHaveAttribute('href', '/users?user=' + f.users[0].id);
     const response = await api(
       context,
       '/admin/api/alerts/targets/issue_user/' + f.users[0].id,

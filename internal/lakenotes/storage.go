@@ -69,3 +69,35 @@ func decodeStoredCast(version int, identity string, raw []byte) (rules.Cast, err
 	}
 	return rules.DecodeCast(raw)
 }
+
+func castEnded(c rules.Cast) bool {
+	return c.Phase == "cancelled" || c.Terminal()
+}
+
+// Cancellation archives a paused, unfinished rules checkpoint without replaying it.
+func decodeCancelledCast(version int, identity string, raw []byte, tick uint64) (rules.Cast, error) {
+	c, err := decodeStoredCast(version, identity, raw)
+	if err != nil {
+		// Earlier cancellation records carried the lifecycle phase inside the snapshot.
+		var fields map[string]json.RawMessage
+		var plan struct {
+			BiteTick uint64 `json:"biteTick"`
+		}
+		if len(raw) > 65536 || json.Unmarshal(raw, &fields) != nil || string(fields["phase"]) != `"cancelled"` || json.Unmarshal(fields["plan"], &plan) != nil {
+			return rules.Cast{}, ErrInvariant
+		}
+		fields["phase"] = json.RawMessage(`"playing"`)
+		if tick < plan.BiteTick {
+			fields["phase"] = json.RawMessage(`"waiting"`)
+		}
+		raw, err = json.Marshal(fields)
+		if err != nil {
+			return rules.Cast{}, err
+		}
+		c, err = decodeStoredCast(version, identity, raw)
+	}
+	if err != nil || (c.Phase != "waiting" && c.Phase != "playing") || !c.Paused || c.Held || c.Reward != nil || c.Result != nil {
+		return rules.Cast{}, ErrInvariant
+	}
+	return c, nil
+}

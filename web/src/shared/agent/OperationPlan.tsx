@@ -208,6 +208,12 @@ export function OperationPlan({
         }}
         onConfirm={() => void submit(true)}
       >
+        {plan.operations.map((op, index) => {
+          const preview = plan.preview[index];
+          return preview?.dangerous || preview?.requires_elevation ? (
+            <OperationSummary key={index} operation={op} preview={preview} />
+          ) : null;
+        })}
         {elevatedRequired ? (
           <Field
             label={t('management.users.elevatedPassword')}

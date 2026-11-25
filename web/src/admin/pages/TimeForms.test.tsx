@@ -152,6 +152,13 @@ describe('administrator time forms', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create draft' })).toBeEnabled());
     await view.user.click(screen.getByRole('button', { name: 'Create draft' }));
+    const create = screen.getByRole('button', { name: 'Create private draft' });
+    expect(create).toBeDisabled();
+    await view.user.type(screen.getByRole('textbox', { name: 'English title' }), 'Maintenance');
+    await view.user.type(
+      screen.getByRole('textbox', { name: 'English body' }),
+      'Service resumes at midnight.',
+    );
     fireEvent.change(dateTimeInput(), { target: { value: '2030-01-01T00:00' } });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Create private draft' })).toBeEnabled(),

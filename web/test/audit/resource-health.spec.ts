@@ -61,7 +61,7 @@ test('current service failures are visible to owner and managers and recover thr
       await expect(health.getByText('10 consecutive failures', { exact: true })).toBeVisible();
       await expect(health).toContainText('reset failures to resume');
       await expect(
-        page.getByRole('button', { name: 'Reset failures and resume services', exact: true }),
+        page.getByRole('button', { name: 'Reset eligible uses', exact: true }),
       ).toBeVisible();
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 1000 });
@@ -148,12 +148,17 @@ test('current service failures are visible to owner and managers and recover thr
     await page.goto(`${fixture.admin_url}/charity?donation_id=${ids.donation_id}`);
     const reset = page.locator('.failure-reset-control:visible').first();
     await reset.getByText('Reset failure count', { exact: true }).click();
+    await reset.getByRole('button', { name: 'Reset all matching keys', exact: true }).click();
+    const confirmation = page.getByRole('alertdialog', { name: 'Reset failure count' });
+    await expect(
+      confirmation.getByText(`#${ids.donation_id} / #${ids.key_id}`, { exact: true }),
+    ).toBeVisible();
     const completed = page.waitForResponse(
       (response) =>
         response.url().endsWith('/admin/api/donation-keys/failure-streak-reset') &&
         response.request().method() === 'POST',
     );
-    await reset.getByRole('button', { name: 'Reset all matching keys' }).click();
+    await confirmation.getByRole('button', { name: 'Reset failure count', exact: true }).click();
     const response = await completed;
     expect(response.ok()).toBe(true);
     const receipt = await response.json();

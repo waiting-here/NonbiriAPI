@@ -115,7 +115,8 @@ func TestLogRouteRegistrationClosedSetsAndFailures(t *testing.T) {
 	if err := RegisterUserRoutes(user, fixture.repo); err != nil {
 		t.Fatalf("RegisterUserRoutes: %v", err)
 	}
-	wantUser := []string{"GET /api/logs", "GET /api/logs/export.csv", "GET /api/logs/export.json", "GET /api/logs/{id}"}
+	wantUser := []string{"GET /api/logs", "GET /api/logs/export.csv", "GET /api/logs/export.json", "GET /api/logs/{id}",
+		"GET /api/log-searches/{search_id}", "DELETE /api/log-searches/{search_id}"}
 	if len(user.handlers) != len(wantUser) {
 		t.Fatalf("user route count = %d", len(user.handlers))
 	}
@@ -129,7 +130,8 @@ func TestLogRouteRegistrationClosedSetsAndFailures(t *testing.T) {
 	if err := RegisterStewardRoutes(steward, fixture.repo, authorizer); err != nil {
 		t.Fatalf("RegisterStewardRoutes: %v", err)
 	}
-	wantSteward := []string{"GET /api/steward/logs", "GET /api/steward/logs/{id}", "GET /api/steward/logs/export.csv", "GET /api/steward/logs/export.json"}
+	wantSteward := []string{"GET /api/steward/logs", "GET /api/steward/logs/{id}", "GET /api/steward/logs/export.csv", "GET /api/steward/logs/export.json",
+		"GET /api/steward/log-searches/{search_id}", "DELETE /api/steward/log-searches/{search_id}"}
 	if len(steward.handlers) != len(wantSteward) {
 		t.Fatalf("steward route count = %d", len(steward.handlers))
 	}
@@ -146,6 +148,7 @@ func TestLogRouteRegistrationClosedSetsAndFailures(t *testing.T) {
 	wantAdmin := []string{
 		"GET /admin/api/logs", "GET /admin/api/logs/{id}",
 		"GET /admin/api/logs/export.csv", "GET /admin/api/logs/export.json",
+		"GET /admin/api/log-searches/{search_id}", "DELETE /admin/api/log-searches/{search_id}",
 	}
 	if len(admin.handlers) != len(wantAdmin) {
 		t.Fatalf("admin route count = %d", len(admin.handlers))

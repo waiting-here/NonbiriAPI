@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChoiceRow, Field, FilterBar, Fold, Note, Segmented } from '@shared/components/ui';
 import { ConnectionUnavailable } from '@shared/components/ConnectionUnavailable';
@@ -19,7 +19,18 @@ import { useBindingCopy } from './bindingCopy';
 import { isAccessLoss } from './feedback';
 import { ManualSource } from './ManualSource';
 import { useModelText } from './copy';
+import type { SourcePickerView } from './modelSourceVisit';
 import './binding-picker.css';
+
+function useSearchTerm(initial = '') {
+  const [draft, setDraft] = useState(initial);
+  const [term, setTerm] = useState(initial.trim());
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTerm(draft.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [draft]);
+  return [draft, setDraft, draft.trim() ? term : ''] as const;
+}
 
 export function PersonalBindingPicker({
   accountId,
@@ -31,6 +42,9 @@ export function PersonalBindingPicker({
   focusSearch = false,
   onSearchFocused,
   onAccessLoss,
+  restoredView,
+  onManage,
+  endpointState,
 }: {
   accountId: string;
   modelId: string;
@@ -41,44 +55,56 @@ export function PersonalBindingPicker({
   focusSearch?: boolean;
   onSearchFocused?: () => void;
   onAccessLoss?: (error: Error) => void;
+  restoredView?: SourcePickerView;
+  onManage?: (view: SourcePickerView) => void;
+  endpointState?: { returnTo: string; modelSourceEntry: string; modelSourceParent: string };
 }) {
   const copy = useBindingCopy();
+  const location = useLocation();
   const text = useModelText();
   const [manualLocked, setManualLocked] = useState(false);
   const [manualSaved, setManualSaved] = useState(false);
   const locked = externalLocked || manualLocked;
-  const [service, setService] = useState<Connection | null>(null);
-  const [serviceQuery, setServiceQuery] = useState('');
-  const [endpoint, setEndpoint] = useState<Endpoint | null>(null);
-  const [endpointQuery, setEndpointQuery] = useState('');
-  const [entryKey, setEntryKey] = useState<EndpointKey | null>(null);
-  const [keyQuery, setKeyQuery] = useState('');
-  const [queryDraft, setQueryDraft] = useState('');
-  const [query, setQuery] = useState('');
-  const [source, setSource] = useState<CatalogSourceType | ''>('');
-  const [step, setStep] = useState<'endpoints' | 'keys' | 'models'>('endpoints');
+  const [service, setService] = useState<Connection | null>(restoredView?.service ?? null);
+  const [serviceDraft, setServiceQuery, serviceQuery] = useSearchTerm(restoredView?.serviceSearch);
+  const [endpoint, setEndpoint] = useState<Endpoint | null>(restoredView?.endpoint ?? null);
+  const [endpointDraft, setEndpointQuery, endpointQuery] = useSearchTerm(
+    restoredView?.endpointSearch,
+  );
+  const [entryKey, setEntryKey] = useState<EndpointKey | null>(restoredView?.entryKey ?? null);
+  const [keyDraft, setKeyQuery, keyQuery] = useSearchTerm(restoredView?.keySearch);
+  const [queryDraft, setQueryDraft] = useState(restoredView?.modelSearch ?? '');
+  const [query, setQuery] = useState(restoredView?.modelSearch.trim() ?? '');
+  const [source, setSource] = useState<CatalogSourceType | ''>(restoredView?.source ?? '');
+  const [step, setStep] = useState<SourcePickerView['step']>(restoredView?.step ?? 'endpoints');
   const searchInput = useRef<HTMLInputElement>(null);
+  const modelSearch = useRef<HTMLInputElement>(null);
+  const pendingManual = useRef<{ keyId: string; upstream: string } | null>(null);
   const servicePager = usePagePager({
     station: 'user',
     listType: 'binding-services',
+    initialPage: restoredView?.pages.service,
     scopeKey: accountId,
     resetKey: serviceQuery,
   });
   const endpointPager = usePagePager({
     station: 'user',
     listType: 'models-binding-endpoints',
+    initialPage: restoredView?.pages.endpoint,
     scopeKey: accountId,
     resetKey: `${service?.id ?? ''}:${endpointQuery}`,
   });
   const keyPager = usePagePager({
     station: 'user',
     listType: 'models-binding-keys',
+    initialPage: restoredView?.pages.key,
     scopeKey: accountId,
     resetKey: `${endpoint?.id ?? ''}:${keyQuery}`,
   });
   const modelPager = usePagePager({
     station: 'user',
     listType: 'models-binding-candidates',
+    initialPage: restoredView?.pages.model,
     scopeKey: `${accountId}:${modelId}`,
     resetKey: `${entryKey?.id ?? ''}:${query}:${source}`,
   });
@@ -138,11 +164,61 @@ export function PersonalBindingPicker({
   }, [queryDraft]);
   useEffect(() => {
     if (!focusSearch || locked) return;
-    searchInput.current?.focus();
+    if (entryKey && modelSearch.current) modelSearch.current.focus();
+    else if (
+      endpoints.isPending ||
+      (endpoints.data?.pagination.total_items === '1' &&
+        endpoints.data.data[0]?.enabled &&
+        (!endpoint ||
+          keys.isPending ||
+          (keys.data?.pagination.total_items === '1' &&
+            !entryKey &&
+            keys.data.data[0]?.enabled &&
+            keys.data.data[0].credential_available !== false &&
+            keys.data.data[0].suspension_state === 'none')))
+    )
+      return;
+    else searchInput.current?.focus();
     onSearchFocused?.();
-  }, [focusSearch, locked, onSearchFocused]);
+  }, [
+    focusSearch,
+    locked,
+    onSearchFocused,
+    endpoint,
+    entryKey,
+    endpoints.data,
+    endpoints.isPending,
+    keys.data,
+    keys.isPending,
+  ]);
+  useEffect(() => {
+    const pending = pendingManual.current;
+    if (
+      !pending ||
+      entryKey?.id !== pending.keyId ||
+      query !== pending.upstream ||
+      candidates.isFetching ||
+      candidates.isPlaceholderData
+    )
+      return;
+    const row = candidates.data?.data.find((item) => item.upstream_model_id === pending.upstream);
+    if (!row) return;
+    pendingManual.current = null;
+    const id = candidateIdentity(row);
+    if (row.capabilities.can_bind && !bound.has(id) && !selected.has(id)) onToggle(row);
+  }, [
+    entryKey,
+    query,
+    candidates.data,
+    candidates.isFetching,
+    candidates.isPlaceholderData,
+    onToggle,
+    bound,
+    selected,
+  ]);
   const chooseService = (next: Connection | null) => {
     setService(next);
+    pendingManual.current = null;
     setManualSaved(false);
     setEndpoint(null);
     setEntryKey(null);
@@ -153,16 +229,21 @@ export function PersonalBindingPicker({
     setStep('endpoints');
     setSource('');
   };
-  const chooseEndpoint = (next: Endpoint) => {
-    setManualSaved(false);
-    setEndpoint(next);
-    setEntryKey(null);
-    setKeyQuery('');
-    setQueryDraft('');
-    setQuery('');
-    setStep('keys');
-  };
+  const chooseEndpoint = useCallback(
+    (next: Endpoint) => {
+      pendingManual.current = null;
+      setManualSaved(false);
+      setEndpoint(next);
+      setEntryKey(null);
+      setKeyQuery('');
+      setQueryDraft('');
+      setQuery('');
+      setStep('keys');
+    },
+    [setKeyQuery],
+  );
   const chooseKey = (next: EndpointKey) => {
+    pendingManual.current = null;
     setManualSaved(false);
     setEntryKey(next);
     setQueryDraft('');
@@ -186,7 +267,7 @@ export function PersonalBindingPicker({
     return () => {
       active = false;
     };
-  }, [endpoint, endpointQuery, endpoints.data]);
+  }, [endpoint, endpointQuery, endpoints.data, chooseEndpoint]);
   useEffect(() => {
     const rows = keys.data?.data;
     if (
@@ -221,7 +302,6 @@ export function PersonalBindingPicker({
         ariaLabel={copy.filterService}
         activeCount={service ? 1 : 0}
         secondaryAlwaysVisible
-        onSubmit={() => undefined}
         onReset={
           locked
             ? undefined
@@ -239,7 +319,7 @@ export function PersonalBindingPicker({
                 ref={searchInput}
                 type="search"
                 placeholder={copy.searchServices}
-                value={serviceQuery}
+                value={serviceDraft}
                 maxLength={128}
                 disabled={locked}
                 onChange={(event) => setServiceQuery(event.target.value)}
@@ -329,7 +409,7 @@ export function PersonalBindingPicker({
                     {...props}
                     type="search"
                     placeholder={copy.searchEndpoints}
-                    value={endpointQuery}
+                    value={endpointDraft}
                     maxLength={128}
                     disabled={locked}
                     onChange={(event) => setEndpointQuery(event.target.value)}
@@ -396,7 +476,7 @@ export function PersonalBindingPicker({
                     {...props}
                     type="search"
                     placeholder={copy.searchKeys}
-                    value={keyQuery}
+                    value={keyDraft}
                     maxLength={128}
                     disabled={locked}
                     onChange={(event) => setKeyQuery(event.target.value)}
@@ -485,6 +565,7 @@ export function PersonalBindingPicker({
                       <input
                         {...props}
                         type="search"
+                        ref={modelSearch}
                         data-testid="model-source-search"
                         placeholder={copy.searchModels}
                         maxLength={256}
@@ -575,7 +656,11 @@ export function PersonalBindingPicker({
                   onLock={setManualLocked}
                   onEdit={() => setManualSaved(false)}
                   onCreated={(upstream) => {
+                    pendingManual.current = { keyId: entryKey.id, upstream };
+                    setSource('manual');
                     setQueryDraft(upstream);
+                    setQuery(upstream);
+                    modelPager.reset();
                     setManualSaved(true);
                   }}
                 />
@@ -585,9 +670,42 @@ export function PersonalBindingPicker({
                 className="nb-btn nb-btn--ghost"
                 aria-disabled={locked || undefined}
                 onClick={(event) => {
-                  if (locked) event.preventDefault();
+                  if (locked) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (
+                    event.button !== 0 ||
+                    event.ctrlKey ||
+                    event.metaKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  onManage?.({
+                    service,
+                    endpoint,
+                    entryKey,
+                    step,
+                    source,
+                    serviceSearch: serviceDraft,
+                    endpointSearch: endpointDraft,
+                    keySearch: keyDraft,
+                    modelSearch: queryDraft,
+                    pages: {
+                      service: servicePager.page,
+                      endpoint: endpointPager.page,
+                      key: keyPager.page,
+                      model: modelPager.page,
+                    },
+                  });
                 }}
-                to={`/endpoints?${new URLSearchParams({ ...(endpoint.connection_id ? { connection_id: endpoint.connection_id } : {}), endpoint_id: endpoint.id, key_id: entryKey.id })}`}
+                state={endpointState ?? { returnTo: location.pathname + location.search }}
+                to={
+                  endpoint.connection_id
+                    ? `/endpoints?${new URLSearchParams({ connection_id: endpoint.connection_id, endpoint_id: endpoint.id, focus_key_id: entryKey.id })}`
+                    : `/endpoints/${encodeURIComponent(endpoint.id)}?${new URLSearchParams({ focus_key_id: entryKey.id })}`
+                }
               >
                 {copy.managePair}
               </Link>

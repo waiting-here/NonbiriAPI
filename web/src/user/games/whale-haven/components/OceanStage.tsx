@@ -48,7 +48,7 @@ import { formatMilliCredits, type NeighborHouse, type Profile } from '../api';
 import { UiSwitch } from './UiMotifs';
 import { MenuPositionButton, type MenuPresentationMode } from './ControlDeck';
 
-import { guestVisitLabel, useWhaleText } from '../copy';
+import { guestVisitLabel, useWhaleText, visitMealDetail } from '../copy';
 
 const CABIN_FURNITURE = ['shell_cabinet', 'pearl_clock', 'sea_planter'] as const;
 
@@ -400,10 +400,7 @@ export function OceanStage({
           `工资按帮工产出的 ${values.guest_wage_bp / 100}% 结算`,
           `Wages are ${values.guest_wage_bp / 100}% of your whale’s production`,
         )
-      : t(
-          `已吃 ${Math.floor(whale.location.eatenGrams ?? 0)} 克 · 餐食奖励预计 ${whale.location.pendingPearls ?? 0} 枚小鲸币`,
-          `${Math.floor(whale.location.eatenGrams ?? 0)} g eaten · Estimated meal reward: ${whale.location.pendingPearls ?? 0} whale coins`,
-        ));
+      : visitMealDetail(whale.location.eatenGrams ?? 0, values, social.away?.meal_paused, t));
 
   const satietyColor =
     whale.satiety >= 60 ? '#44d492' : whale.satiety >= 30 ? '#f6b84c' : '#ff6b7a';

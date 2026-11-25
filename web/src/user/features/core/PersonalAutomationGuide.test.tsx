@@ -39,7 +39,8 @@ describe('optional personal automation guide', () => {
   );
 
   it('provides bodyless Bearer reads and explicit JSON writes with distinct retained operation keys', () => {
-    expect(examples.read).toContain('Authorization: Bearer $CALLER_KEY');
+    expect(examples.read).toContain('Authorization: Bearer $NONBIRI_KEY');
+    expect(examples.read).toContain(window.location.origin);
     expect(examples.read).not.toContain('Idempotency-Key');
     expect(examples.read).not.toContain('--data');
     expect(examples.importRequest).toContain('Content-Type: application/json');

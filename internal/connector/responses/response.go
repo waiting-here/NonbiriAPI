@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/chatwire"
-	"github.com/waiting-here/NonbiriAPI/internal/connector/continuation"
 	contract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
@@ -17,22 +17,27 @@ type partState struct {
 	kind           string
 	text           strings.Builder
 	textDone, done bool
+	wrapped        bool
 }
 type itemState struct {
-	id, kind, callID, name string
-	args                   strings.Builder
-	toolIndex              int
-	argsDone, done         bool
-	parts                  []*partState
-	final                  json.RawMessage
+	id, kind, callID, name       string
+	args                         strings.Builder
+	toolIndex                    int
+	argsObserved, argsDone, done bool
+	parts                        []*partState
+	reasoningParts               []*partState
+	final                        json.RawMessage
 }
 type decoder struct {
 	includeUsage                                                  bool
 	id, model, responseID, finish                                 string
 	created, sequence                                             int64
 	started, terminal, finished, roleSent, nonReasoning, toolSeen bool
+	sentinelSeen                                                  bool
 	items                                                         []*itemState
 	toolCount                                                     int
+	reasoningBytes                                                int
+	replaySize, replayEnvelope                                    int
 	usage                                                         contract.Usage
 	continuationID                                                string
 }
@@ -68,8 +73,8 @@ func (d *decoder) JSON(raw []byte) ([]byte, contract.Usage, error) {
 	if err != nil {
 		return nil, usage, err
 	}
-	if extra, ok := message["extra_content"].(map[string]any); ok {
-		message["extra_content"] = continuation.Bind(extra, d.continuationID)
+	if _, err := bindReasoning(message, d.continuationID); err != nil {
+		return nil, usage, err
 	}
 	out, err := chatwire.Completion(d.id, d.model, d.created, message, finish, usage)
 	d.usage = usage
@@ -142,7 +147,7 @@ func projectItems(items []json.RawMessage) (map[string]any, error) {
 		kind, _ := chatwire.String(item["type"])
 		switch kind {
 		case "reasoning":
-			if nonReasoning {
+			if nonReasoning || len(reasoning) >= 128 {
 				return nil, chatwire.ErrProtocol
 			}
 			value, body, err := reasoningItem(raw)
@@ -164,7 +169,7 @@ func projectItems(items []json.RawMessage) (map[string]any, error) {
 				return nil, chatwire.ErrProtocol
 			}
 			for _, raw := range parts {
-				kind, value, err := parsePart(raw, false)
+				kind, value, err := parsePart(raw, "")
 				if err != nil {
 					return nil, err
 				}
@@ -209,12 +214,7 @@ func projectItems(items []json.RawMessage) (map[string]any, error) {
 		message["reasoning_content"] = summary.String()
 	}
 	if len(reasoning) > 0 {
-		extra := map[string]any{"openai": map[string]any{"reasoning": reasoning}}
-		encoded, _ := json.Marshal(extra)
-		if len(encoded) > 1<<20 {
-			return nil, chatwire.ErrProtocol
-		}
-		message["extra_content"] = extra
+		message["extra_content"] = map[string]any{"openai": map[string]any{"reasoning": reasoning}}
 	}
 	return message, nil
 }
@@ -222,15 +222,18 @@ func validItemStatus(item map[string]json.RawMessage) bool {
 	raw, ok := item["status"]
 	return !ok || string(raw) == `"completed"` || string(raw) == `"incomplete"`
 }
-func parsePart(raw []byte, summary bool) (string, string, error) {
+
+// reasoningKind selects the exact part type of a reasoning item's summary or content array.
+// An empty kind selects ordinary message content.
+func parsePart(raw []byte, reasoningKind string) (string, string, error) {
 	part, err := chatwire.Object(raw)
 	if err != nil {
 		return "", "", err
 	}
 	kind, _ := chatwire.String(part["type"])
 	field := "text"
-	if summary {
-		if kind != "summary_text" || !chatwire.Keys(part, "type", "text") {
+	if reasoningKind != "" {
+		if kind != reasoningKind || !chatwire.Keys(part, "type", "text") {
 			return "", "", chatwire.ErrProtocol
 		}
 	} else {
@@ -267,6 +270,10 @@ func sameJSON(a, b []byte) bool {
 	return json.Unmarshal(a, &x) == nil && json.Unmarshal(b, &y) == nil && reflect.DeepEqual(x, y)
 }
 func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
+	if d.terminal && !d.finished && !d.sentinelSeen && (name == "" || name == "message") && bytes.Equal(bytes.TrimSpace(raw), []byte("[DONE]")) {
+		d.sentinelSeen = true
+		return nil, nil
+	}
 	root, err := chatwire.Object(raw)
 	if err != nil || d.terminal || d.finished {
 		return nil, chatwire.ErrProtocol
@@ -277,9 +284,10 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		return nil, chatwire.ErrProtocol
 	}
 	d.sequence = sequence
+	terminalEvent := kind == "response.completed" || kind == "response.incomplete"
 	if value, present := root["response_id"]; present {
 		id, ok := chatwire.String(value)
-		if !ok || !d.started || id != d.responseID {
+		if !ok || !d.started && !terminalEvent || d.started && id != d.responseID {
 			return nil, chatwire.ErrProtocol
 		}
 	}
@@ -302,12 +310,10 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		}
 		return nil, nil
 	case "response.completed", "response.incomplete":
-		if !d.started {
-			return nil, chatwire.ErrProtocol
-		}
 		response, err := chatwire.Object(root["response"])
-		id, _ := chatwire.String(response["id"])
-		if err != nil || id != d.responseID {
+		id, valid := chatwire.String(response["id"])
+		eventID, hasID := chatwire.String(root["response_id"])
+		if err != nil || !valid || id == "" || len(id) > 512 || d.started && id != d.responseID || hasID && eventID != id {
 			return nil, chatwire.ErrProtocol
 		}
 		output := make([]json.RawMessage, len(d.items))
@@ -322,7 +328,7 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			return nil, chatwire.ErrProtocol
 		}
 		defer clear(completed)
-		_, finish, usage, err := projectResponse(completed)
+		message, finish, usage, err := projectResponse(completed)
 		if err != nil {
 			return nil, err
 		}
@@ -331,8 +337,13 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			d.finish = "tool_calls"
 		}
 		d.usage = usage
+		if len(d.items) == 0 {
+			delta, err = d.snapshotDelta(message, 0)
+			if err != nil {
+				return nil, err
+			}
+		}
 		d.terminal = true
-		return nil, nil
 	case "response.output_item.added":
 		if !d.started || len(d.items) >= 256 {
 			return nil, chatwire.ErrProtocol
@@ -355,11 +366,14 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 		state := &itemState{id: id, kind: itemType, toolIndex: -1}
 		switch itemType {
 		case "reasoning":
-			if d.nonReasoning {
+			if d.nonReasoning || len(d.items) >= 128 {
 				return nil, chatwire.ErrProtocol
 			}
 			var summary []json.RawMessage
 			if json.Unmarshal(item["summary"], &summary) != nil || len(summary) > 0 {
+				return nil, chatwire.ErrProtocol
+			}
+			if content := item["content"]; !chatwire.Null(content) && (json.Unmarshal(content, &summary) != nil || len(summary) != 0) {
 				return nil, chatwire.ErrProtocol
 			}
 		case "message":
@@ -406,12 +420,25 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			if err != nil || !valid {
 				return nil, chatwire.ErrProtocol
 			}
+			index, ok = int64(len(d.items)), true
+			open := false
 			for i, candidate := range d.items {
 				if candidate.id == id {
 					index, ok = int64(i), true
 					break
 				}
+				open = open || !candidate.done
 			}
+			if index == int64(len(d.items)) && open {
+				return nil, chatwire.ErrProtocol
+			}
+		}
+		if kind == "response.output_item.done" && ok && index == int64(len(d.items)) {
+			delta, err = d.completedItemSnapshot(root["item"])
+			if err != nil {
+				return nil, err
+			}
+			break
 		}
 		if !ok || index >= int64(len(d.items)) {
 			return nil, chatwire.ErrProtocol
@@ -426,6 +453,20 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 				return nil, chatwire.ErrProtocol
 			}
 		}
+		if item.kind == "reasoning" {
+			switch kind {
+			case "response.reasoning_text.delta", "response.reasoning_text.done",
+				"response.content_part.added", "response.content_part.done",
+				"response.reasoning_part.added", "response.reasoning_part.done",
+				"response.reasoning_summary_part.added", "response.reasoning_summary_part.done",
+				"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done":
+				delta, err = d.observeReasoningPart(item, kind, root)
+				if err != nil {
+					return nil, err
+				}
+				return d.emitDelta(delta)
+			}
+		}
 		switch kind {
 		case "response.output_item.done":
 			final, err := chatwire.Object(root["item"])
@@ -433,37 +474,44 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			if err != nil || id != item.id || string(final["type"]) != fmt.Sprintf("%q", item.kind) {
 				return nil, chatwire.ErrProtocol
 			}
+			message, err := projectItems([]json.RawMessage{root["item"]})
+			if err != nil {
+				return nil, err
+			}
 			if item.kind == "function_call" {
 				args, _ := chatwire.String(final["arguments"])
 				name, _ := chatwire.String(final["name"])
 				callID, _ := chatwire.String(final["call_id"])
-				if !item.argsDone || args != item.args.String() || name != item.name || callID != item.callID {
+				if name != item.name || callID != item.callID {
 					return nil, chatwire.ErrProtocol
 				}
-			} else {
-				key := "content"
-				if item.kind == "reasoning" {
-					key = "summary"
-				}
-				var parts []json.RawMessage
-				if json.Unmarshal(final[key], &parts) != nil || len(parts) != len(item.parts) {
+				if !item.argsObserved && !item.argsDone {
+					delta = item.argumentsDelta(args)
+				} else if !item.argsDone || args != item.args.String() {
 					return nil, chatwire.ErrProtocol
 				}
-				for i, part := range item.parts {
-					kind, text, err := parsePart(parts[i], item.kind == "reasoning")
-					if err != nil || !part.done || kind != part.kind || text != part.text.String() {
-						return nil, chatwire.ErrProtocol
+			} else if item.kind == "reasoning" {
+				if !finalPartsMatch(final["summary"], item.parts, "summary_text") ||
+					!finalPartsMatch(final["content"], item.reasoningParts, "reasoning_text") {
+					return nil, chatwire.ErrProtocol
+				}
+				for _, part := range item.parts {
+					if part.text.Len() > 0 {
+						delete(message, "reasoning_content") // summary deltas were already emitted
+						break
 					}
 				}
+				delta, err = d.snapshotDelta(message, 0)
+			} else if len(item.parts) == 0 {
+				delta, err = d.snapshotDelta(message, 0)
+			} else if !finalPartsMatch(final["content"], item.parts, "") {
+				return nil, chatwire.ErrProtocol
 			}
-			if _, err := projectItems([]json.RawMessage{root["item"]}); err != nil {
+			if err != nil {
 				return nil, err
 			}
 			item.done = true
 			item.final = append([]byte(nil), root["item"]...)
-			if item.kind == "reasoning" {
-				delta = map[string]any{"extra_content": continuation.Bind(map[string]any{"openai": map[string]any{"reasoning": []any{final}}}, d.continuationID)}
-			}
 		case "response.function_call_arguments.delta", "response.function_call_arguments.done":
 			if item.kind != "function_call" || item.argsDone {
 				return nil, chatwire.ErrProtocol
@@ -473,43 +521,38 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 				if !ok {
 					return nil, chatwire.ErrProtocol
 				}
+				item.argsObserved = true
 				item.args.WriteString(value)
-				delta = map[string]any{"tool_calls": []any{map[string]any{"index": item.toolIndex, "function": map[string]string{"arguments": value}}}}
+				delta = item.argumentsDelta(value)
 			} else {
 				value, ok := chatwire.String(root["arguments"])
-				if !ok || value != item.args.String() {
+				if !ok || item.argsObserved && value != item.args.String() {
 					return nil, chatwire.ErrProtocol
 				}
 				if _, err := chatwire.Object([]byte(value)); err != nil {
 					return nil, err
 				}
+				if !item.argsObserved {
+					delta = item.argumentsDelta(value)
+					item.args.WriteString(value)
+				}
 				item.argsDone = true
 			}
-		case "response.content_part.added", "response.reasoning_summary_part.added":
-			summary := kind == "response.reasoning_summary_part.added"
-			if summary && item.kind != "reasoning" || !summary && item.kind != "message" {
+		case "response.content_part.added":
+			if item.kind != "message" {
 				return nil, chatwire.ErrProtocol
 			}
-			key := "content_index"
-			if summary {
-				key = "summary_index"
-			}
-			partIndex, ok := chatwire.Integer(root[key])
-			kind, text, err := parsePart(root["part"], summary)
+			partIndex, ok := chatwire.Integer(root["content_index"])
+			kind, text, err := parsePart(root["part"], "")
 			if !ok || partIndex != int64(len(item.parts)) || err != nil || text != "" {
 				return nil, chatwire.ErrProtocol
 			}
 			item.parts = append(item.parts, &partState{kind: kind})
-		case "response.output_text.delta", "response.output_text.done", "response.refusal.delta", "response.refusal.done", "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done", "response.content_part.done", "response.reasoning_summary_part.done":
-			summary := kind == "response.reasoning_summary_text.delta" || kind == "response.reasoning_summary_text.done" || kind == "response.reasoning_summary_part.done"
-			if summary && item.kind != "reasoning" || !summary && item.kind != "message" {
+		case "response.output_text.delta", "response.output_text.done", "response.refusal.delta", "response.refusal.done", "response.content_part.done":
+			if item.kind != "message" {
 				return nil, chatwire.ErrProtocol
 			}
-			key := "content_index"
-			if summary {
-				key = "summary_index"
-			}
-			partIndex, ok := chatwire.Integer(root[key])
+			partIndex, ok := chatwire.Integer(root["content_index"])
 			if !ok || partIndex >= int64(len(item.parts)) {
 				return nil, chatwire.ErrProtocol
 			}
@@ -518,25 +561,22 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 				return nil, chatwire.ErrProtocol
 			}
 			switch kind {
-			case "response.content_part.done", "response.reasoning_summary_part.done":
-				partKind, text, err := parsePart(root["part"], summary)
+			case "response.content_part.done":
+				partKind, text, err := parsePart(root["part"], "")
 				if err != nil || partKind != part.kind || text != part.text.String() || !part.textDone {
 					return nil, chatwire.ErrProtocol
 				}
 				part.done = true
 			default:
 				want, field := "output_text", "content"
-				if summary {
-					want = "summary_text"
-					field = "reasoning_content"
-				} else if kind == "response.refusal.delta" || kind == "response.refusal.done" {
+				if kind == "response.refusal.delta" || kind == "response.refusal.done" {
 					want = "refusal"
 					field = "refusal"
 				}
 				if part.kind != want || part.textDone {
 					return nil, chatwire.ErrProtocol
 				}
-				isDelta := kind == "response.output_text.delta" || kind == "response.refusal.delta" || kind == "response.reasoning_summary_text.delta"
+				isDelta := kind == "response.output_text.delta" || kind == "response.refusal.delta"
 				key := "text"
 				if want == "refusal" {
 					key = "refusal"
@@ -552,7 +592,10 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 					part.text.WriteString(value)
 					delta = map[string]any{field: value}
 				} else {
-					if value != part.text.String() {
+					if part.text.Len() == 0 && value != "" {
+						part.text.WriteString(value)
+						delta = map[string]any{field: value}
+					} else if value != part.text.String() {
 						return nil, chatwire.ErrProtocol
 					}
 					part.textDone = true
@@ -562,8 +605,23 @@ func (d *decoder) Event(name string, raw []byte) ([][]byte, error) {
 			return nil, chatwire.ErrProtocol
 		}
 	}
-	if delta == nil {
+	return d.emitDelta(delta)
+}
+
+func (d *decoder) emitDelta(delta map[string]any) ([][]byte, error) {
+	if len(delta) == 0 {
 		return nil, nil
+	}
+	// Replay material can repeat the readable text inside a complete reasoning item.
+	// Keep the two in separate SSE lines so a valid source frame does not double in size.
+	if extra, ok := delta["extra_content"]; ok && len(delta) > 1 {
+		delete(delta, "extra_content")
+		first, err := d.emitDelta(delta)
+		if err != nil {
+			return nil, err
+		}
+		last, err := d.emitDelta(map[string]any{"extra_content": extra})
+		return append(first, last...), err
 	}
 	if !d.roleSent {
 		delta["role"] = "assistant"

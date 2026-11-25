@@ -42,21 +42,18 @@ export class PlatformBattle {
     document.getElementById('arena-dialog').addEventListener('close', () => {
       if (this.infoOpen) this.closeInfo();
     });
-    const inspect = arena.view.inspect.bind(arena.view);
-    arena.view.inspect = (card) => (this.view ? this.inspect([card], '卡牌详情') : inspect(card));
-    document.getElementById('arena-pass').onclick = () =>
-      this.view
-        ? this.perform(this.view.legal_actions.find((a) => a.kind === 'pass'))
-        : arena.command('pass');
-    document.getElementById('arena-leader').onclick = () =>
-      this.view
-        ? this.perform(this.view.legal_actions.find((a) => a.kind === 'leader'))
-        : arena.command('leader');
-    document.getElementById('arena-concede').onclick = () =>
-      this.view ? this.confirmSurrender() : arena.command('concede');
-    const handInspect = document.getElementById('inspect-hand').onclick;
-    document.getElementById('inspect-hand').onclick = () =>
-      this.view ? this.inspect(this.view.hand, '手牌详情 · 查看效果与触发时机') : handInspect();
+    arena.view.inspect = (card) => this.inspect([card], '卡牌详情');
+    for (const [id, kind] of [
+      ['arena-pass', 'pass'],
+      ['arena-leader', 'leader'],
+    ]) {
+      document.getElementById(id).onclick = () =>
+        this.perform(this.view?.legal_actions.find((action) => action.kind === kind));
+    }
+    document.getElementById('arena-concede').onclick = () => this.confirmSurrender();
+    document.getElementById('inspect-hand').onclick = () => {
+      if (this.view) this.inspect(this.view.hand, '手牌详情 · 查看效果与触发时机');
+    };
     for (const row of document.querySelectorAll('.arena-row')) {
       row.onclick = (event) => {
         if (!this.view || event.target.closest('button')) return;
@@ -69,14 +66,13 @@ export class PlatformBattle {
         if (side === target && legal) this.perform(legal);
       };
     }
-    document.getElementById('return-lobby').onclick = () =>
-      this.view ? this.lobby() : arena.lobby();
+    document.getElementById('return-lobby').onclick = () => this.lobby();
     document.getElementById('rematch').onclick = () => {
       if (this.view || this.resultActive) {
         const rematch = this.snapshot?.canRematch;
         this.lobby();
         if (rematch) host.send({ type: 'rematch' });
-      } else arena.start('watch', 'local');
+      }
     };
   }
   enrich(card) {
@@ -289,7 +285,8 @@ export class PlatformBattle {
     ])
       document.getElementById(id).disabled =
         this.replaying || this.blocked || !view.legal_actions.some((a) => a.kind === kind);
-    document.getElementById('arena-concede').disabled = this.replaying || this.blocked;
+    document.getElementById('arena-concede').disabled =
+      this.replaying || this.blocked || !!snapshot.readOnly;
     document.getElementById('inspect-hand').disabled = !view.hand.length;
     document.getElementById('arena-leader').textContent = view.self.leader_available
       ? `领袖 · ${abilityNames[leader.abilities[0]] ?? leader.name}`
@@ -313,7 +310,7 @@ export class PlatformBattle {
               ? '选择一张手牌，再点击高亮战线出牌。'
               : '等待对手行动…';
     const timer = document.getElementById('decision-timer');
-    timer.hidden = this.replaying || !current;
+    timer.hidden = this.replaying || !current || !!snapshot.companion;
     timer.textContent = `${current?.phase === 'turn' ? '决策回合' : '决策'} · ${snapshot.remaining ?? '—'}s`;
     timer.classList.toggle('urgent', (snapshot.remaining ?? 30) <= 5);
     if (previous && !this.replaying) {
@@ -373,8 +370,11 @@ export class PlatformBattle {
     if (key !== this.choiceKey) {
       const expected = this.snapshot.home?.current;
       document.getElementById('dialog-title').textContent = choices[choice.kind] ?? '完成卡牌选择';
-      document.getElementById('dialog-description').textContent =
-        `还可选择 ${choice.remaining} 次 · 按屏幕倒计时完成选择`;
+      document.getElementById('dialog-description').textContent = this.snapshot.companion
+        ? choice.remaining
+          ? `还可选择 ${choice.remaining} 次`
+          : '请选择行动。'
+        : `还可选择 ${choice.remaining} 次 · 按屏幕倒计时完成选择`;
       document.getElementById('dialog-cards').replaceChildren(
         ...choice.cards.map((card) => {
           const action = actions.find((a) => a.card === card.instance_id),
@@ -405,7 +405,7 @@ export class PlatformBattle {
     }
     this.decision = identity;
     if (!dialog.open) dialog.showModal();
-    document.getElementById('decision-dialog-timer').hidden = false;
+    document.getElementById('decision-dialog-timer').hidden = !!this.snapshot.companion;
     document.getElementById('decision-dialog-timer').textContent =
       `剩余 ${this.snapshot.remaining ?? '—'}s`;
   }
@@ -467,7 +467,9 @@ export class PlatformBattle {
     this.openInfo();
     const dialog = document.getElementById('arena-dialog');
     document.getElementById('dialog-title').textContent = '认输并结束对局？';
-    document.getElementById('dialog-description').textContent = '本场按对手获胜结算。';
+    document.getElementById('dialog-description').textContent = this.snapshot.companion
+      ? '放弃后本局结束，可以另开新局。'
+      : '本场按对手获胜结算。';
     document.getElementById('dialog-cards').replaceChildren();
     document.getElementById('dialog-actions').replaceChildren(
       this.button('继续对局', () => this.closeInfo()),

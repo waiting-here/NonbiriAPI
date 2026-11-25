@@ -1,4 +1,11 @@
-import { useLayoutEffect, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useLayoutEffect,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { getSceneAssetUrl, getSpriteUrl } from '../game/catalog';
 import type { WhaleExpression } from '../game/types';
 import type { RigActivity } from '../rig/animator';
@@ -6,6 +13,14 @@ import type { RigImpulseEvent } from '../rig/WhaleRigActor';
 import { requestMotion, loadCodexPetAssets, resolveOutfitPetId } from './loader';
 import { loadOriginalGaze, type OriginalGaze } from './originalGaze';
 import { CODEX_PET_ROWS, type CodexPetStateId, type LoadedCodexPetAssets } from './types';
+
+const motionPreference = '(prefers-reduced-motion: reduce)';
+const prefersReducedMotion = () => window.matchMedia(motionPreference).matches;
+function subscribeMotionPreference(update: () => void) {
+  const query = window.matchMedia(motionPreference);
+  query.addEventListener('change', update);
+  return () => query.removeEventListener('change', update);
+}
 
 export type WhalePetOutfitProp =
   | 'maid_classic'
@@ -139,6 +154,7 @@ export function WhalePetActor({
   className,
   children,
 }: WhalePetActorProps) {
+  const reduced = useSyncExternalStore(subscribeMotionPreference, prefersReducedMotion, () => true);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const originalGazeRef = useRef<OriginalGaze | null>(null);
@@ -201,7 +217,7 @@ export function WhalePetActor({
   const runtimeRef = useRef(initialRuntime);
 
   useEffect(() => {
-    if (isWorkerUniform) return;
+    if (isWorkerUniform || reduced || !lookTrackingEnabled) return;
     let cancelled = false;
     loadOriginalGaze(targetPetId)
       .then((art) => {
@@ -214,12 +230,12 @@ export function WhalePetActor({
       cancelled = true;
       originalGazeRef.current = null;
     };
-  }, [targetPetId, isWorkerUniform]);
+  }, [targetPetId, isWorkerUniform, reduced, lookTrackingEnabled]);
 
-  // Load Codex V2 pet atlas (and auto-retry every 4s if asset sheets are still building!)
+  // Load the selected pet only when motion is enabled.
   useEffect(() => {
     let cancelled = false;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (reduced) return;
     loadCodexPetAssets(targetPetId).then(
       (loaded) => {
         if (!cancelled) {
@@ -234,42 +250,61 @@ export function WhalePetActor({
     return () => {
       cancelled = true;
     };
-  }, [targetPetId, reloadToken]);
+  }, [targetPetId, reloadToken, reduced]);
 
-  // React to headpat / poke / teacake / celebrate / feed impulses (aligned to full seamless loop duration!)
-  useEffect(() => {
-    if (!impulse) return;
+  // A gesture starts on input. Its full action loop starts when its own sheet is decoded.
+  useLayoutEffect(() => {
+    if (reduced || !impulse || !assets || assets.manifest.id !== targetPetId) return;
+    const { kind, seq } = impulse;
     const rt = runtimeRef.current;
-    if (impulse.seq === rt.lastImpulseSeq) return;
-    rt.lastImpulseSeq = impulse.seq;
-
-    const loopMs = (st: CodexPetStateId, fallbackMs: number) => {
-      const sl = assets?.highFpsLayout?.states[st];
-      return sl ? Math.max(fallbackMs, sl.frames * sl.frameMs) : fallbackMs;
-    };
-
-    const now = performance.now();
-    if (impulse.kind === 'headpat') {
-      rt.impulseState = 'waving';
-      rt.impulseUntilMs = now + loopMs('waving', 1650);
-    } else if (impulse.kind === 'poke') {
-      rt.impulseState = 'failed';
-      rt.impulseUntilMs = now + loopMs('failed', 1850);
-    } else if (impulse.kind === 'teacake') {
-      const jumpMs = loopMs('jumping', 1800);
-      rt.impulseState = 'jumping';
-      rt.impulseUntilMs = now + jumpMs;
-      rt.snackUntilMs = now + jumpMs + loopMs('running', 3400);
-    } else if (impulse.kind === 'celebrate') {
-      rt.impulseState = 'jumping';
-      rt.impulseUntilMs = now + loopMs('jumping', 1800);
-    } else if (impulse.kind === 'feed') {
-      rt.impulseState = 'running';
-      rt.impulseUntilMs = now + loopMs('running', 3400);
+    if (seq === rt.lastImpulseSeq) return;
+    const state =
+      kind === 'headpat'
+        ? 'waving'
+        : kind === 'poke'
+          ? 'failed'
+          : kind === 'feed'
+            ? 'running'
+            : 'jumping';
+    const motion = isWorkerUniform
+      ? state === 'running'
+        ? 'workerFeast'
+        : 'workerIdle'
+      : alwaysEatingWhenActive && state === 'running'
+        ? 'feast'
+        : state;
+    const slice =
+      motion === 'workerIdle' || motion === 'workerFeast' || motion === 'feast'
+        ? assets.highFpsLayout?.[motion]
+        : assets.highFpsLayout?.states[state];
+    if (kind === 'headpat' || kind === 'poke') {
+      canvasRef.current?.animate?.(
+        [
+          { translate: '0 0' },
+          { translate: kind === 'headpat' ? '0 2px' : '2px 0' },
+          { translate: '0 0' },
+        ],
+        { duration: 160 },
+      );
     }
-    rt.frameIndex = 0;
-    rt.frameElapsedMs = 0;
-  }, [impulse, assets]);
+    let current = true;
+    void requestMotion(assets, motion, true).then((loaded) => {
+      if (!current) return;
+      rt.lastImpulseSeq = seq;
+      if (!loaded) return;
+      rt.impulseState = state;
+      rt.impulseUntilMs = performance.now() + (slice ? slice.frames * slice.frameMs : 1650);
+      rt.frameIndex = 0;
+      rt.frameElapsedMs = 0;
+      if (kind === 'teacake') {
+        const run = assets.highFpsLayout?.states.running;
+        rt.snackUntilMs = rt.impulseUntilMs + (run ? run.frames * run.frameMs : 3400);
+      }
+    });
+    return () => {
+      current = false;
+    };
+  }, [impulse, assets, targetPetId, alwaysEatingWhenActive, isWorkerUniform, reduced]);
 
   // Pointer gaze listener on parent .ocean-stage
   useEffect(() => {
@@ -311,11 +346,11 @@ export function WhalePetActor({
       stageEl.removeEventListener('pointercancel', onLeave);
       stageEl.removeEventListener('pointerup', onRelease);
     };
-  }, [assets]);
+  }, [assets, reduced]);
 
   // Main 60fps Codex V2 Sprite Atlas & Autonomous Roam Loop
   useEffect(() => {
-    if (!assets) return;
+    if (!assets || reduced) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -323,9 +358,15 @@ export function WhalePetActor({
 
     let rafId = 0;
     let prevNow = performance.now();
+    let previousImage: HTMLImageElement | undefined;
+    let previousRow = -1;
+    let previousColumn = -1;
+    let previousGaze = false;
+    const idleStart = prevNow;
+    let drawnImpulse = 0;
 
     const tick = (now: number) => {
-      const dtMs = Math.min(80, Math.max(0, now - prevNow));
+      const dtMs = Math.min(250, Math.max(0, now - prevNow));
       prevNow = now;
 
       const rt = runtimeRef.current;
@@ -378,8 +419,10 @@ export function WhalePetActor({
       }
 
       if (wrapRef.current) {
-        wrapRef.current.style.transform =
+        const transform =
           Math.abs(rt.roamX) > 0.2 ? `translate3d(${rt.roamX.toFixed(1)}px, 0, 0)` : '';
+        if (wrapRef.current.style.transform !== transform)
+          wrapRef.current.style.transform = transform;
       }
 
       // Periodic snack-munch cycle when trough has food at home
@@ -459,11 +502,20 @@ export function WhalePetActor({
             ? i2vLayout?.feast
             : i2vLayout?.states[rt.activeState];
       const totalFrames = i2vSlice ? i2vSlice.frames : rowSpec.frames;
-      const frameDur = i2vSlice ? i2vSlice.frameMs : (rowSpec.durationsMs[rt.frameIndex] ?? 140);
+      const frameDuration = () =>
+        Math.max(1, i2vSlice?.frameMs ?? rowSpec.durationsMs[rt.frameIndex] ?? 140);
 
-      rt.frameElapsedMs += dtMs;
-      if (rt.frameElapsedMs >= frameDur) {
-        rt.frameElapsedMs %= frameDur;
+      const firstImpulseFrame =
+        rt.impulseState === rt.activeState && drawnImpulse !== rt.lastImpulseSeq;
+      if (firstImpulseFrame) {
+        drawnImpulse = rt.lastImpulseSeq;
+        rt.frameElapsedMs = 0;
+        rt.frameIndex = 0;
+      } else {
+        rt.frameElapsedMs += dtMs;
+      }
+      while (rt.frameElapsedMs >= frameDuration()) {
+        rt.frameElapsedMs -= frameDuration();
         rt.frameIndex = (rt.frameIndex + 1) % totalFrames;
       }
 
@@ -491,8 +543,13 @@ export function WhalePetActor({
         drawCol = absSlot % stateSheet.columns;
         isWideI2vFrame = true;
       } else {
-        drawRow = 0;
-        drawCol = 0;
+        const idle = i2vLayout?.states.idle;
+        const slot = idle
+          ? idle.startSlot + (Math.floor((now - idleStart) / idle.frameMs) % idle.frames)
+          : 0;
+        const columns = assets.stateSheets?.idle?.columns ?? 1;
+        drawRow = Math.floor(slot / columns);
+        drawCol = slot % columns;
         isWideI2vFrame = true;
       }
 
@@ -657,11 +714,28 @@ export function WhalePetActor({
       const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
       const targetW = Math.round(cssCanvasW * dpr);
       const targetH = Math.round(cssCanvasH * dpr);
-      if (canvas.width !== targetW || canvas.height !== targetH) {
+      const resized = canvas.width !== targetW || canvas.height !== targetH;
+      if (resized) {
         canvas.width = targetW;
         canvas.height = targetH;
       }
 
+      const drawingGaze = Boolean(liveGaze && rt.gazeBlend > 0);
+      if (
+        !resized &&
+        previousImage === drawImage &&
+        previousRow === drawRow &&
+        previousColumn === drawCol &&
+        !drawingGaze &&
+        !previousGaze
+      ) {
+        rafId = window.requestAnimationFrame(tick);
+        return;
+      }
+      previousImage = drawImage;
+      previousRow = drawRow;
+      previousColumn = drawCol;
+      previousGaze = drawingGaze;
       ctx.clearRect(0, 0, targetW, targetH);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
@@ -685,9 +759,9 @@ export function WhalePetActor({
 
     rafId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(rafId);
-  }, [assets, displayWidth, displayHeight]);
+  }, [assets, displayWidth, displayHeight, reduced]);
 
-  if (!assets || assets.manifest.id !== targetPetId || loadFailed) {
+  if (reduced || !assets || assets.manifest.id !== targetPetId || loadFailed) {
     return (
       <div className={className} style={{ position: 'relative', display: 'inline-block' }}>
         <img

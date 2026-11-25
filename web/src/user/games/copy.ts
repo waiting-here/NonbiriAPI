@@ -1,5 +1,7 @@
 import { useRegisteredCopy } from '@shared/i18n/useRegisteredCopy';
 const keys = {
+  'linklink.summary.cancelled': 'user.games.copy.linklink.summary.cancelled',
+  'rps.result.reason.server_restart': 'user.games.copy.rps.result.reason.server_restart',
   'linklink.noRegularReward': 'user.games.copy.linklink.noRegularReward',
   'center.free': 'user.games.copy.center.free',
   'center.rewardExchange': 'user.games.copy.center.rewardExchange',

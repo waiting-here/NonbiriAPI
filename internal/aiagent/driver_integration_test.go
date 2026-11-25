@@ -79,6 +79,7 @@ func TestAutomaticReviewResolvesItsPurposeForTools(t *testing.T) {
 	f := newFixture(t)
 	settings := defaultSettings()
 	settings.Mode = "preview"
+	settings.AutoPrefill = `{"decision":`
 	if _, err := f.s.PutSettings(t.Context(), f.actor, SettingsUpdate{Settings: settings}); err != nil {
 		t.Fatal(err)
 	}
@@ -88,12 +89,16 @@ func TestAutomaticReviewResolvesItsPurposeForTools(t *testing.T) {
 	}
 	id, _ := result.LastInsertId()
 	manual, _ := json.Marshal(map[string]string{"role": "assistant", "content": `{"decision":"manual","internal_reason":"Needs review","user_note":"Please wait","bindings":[]}`})
-	f.driver.replies = []string{resultBudgetAssistant(resultBudgetCall("review-read", `{}`)), string(manual)}
+	const signed = `{"role":"assistant","content":"checking","extra_content":{"google":{"parts":[{"text":"checking","thoughtSignature":"signed"}]}},"tool_calls":[{"id":"review-read","type":"function","function":{"name":"donations","arguments":"{}"}}]}`
+	f.driver.replies = []string{signed, string(manual)}
 	if err := f.s.run(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.driver.inputs) != 2 || len(f.driver.resolved) < 3 {
 		t.Fatal("review did not budget both requests and the tool round")
+	}
+	if !strings.Contains(string(f.driver.inputs[1].Messages), signed) {
+		t.Fatal("review tool round lost its original signed assistant message")
 	}
 	for _, attr := range f.driver.resolved {
 		if attr.Source != "auto_review" || attr.Kind != "model" || attr.ActorID != 1 {
@@ -133,5 +138,80 @@ func TestSubscriptionBudgetUsesLocalOutputReserve(t *testing.T) {
 	budget := newToolRoundBudget(nil, nil, nil, nil, *f.driver.settings, nil)
 	if budget.fits(897, 1, 1) {
 		t.Fatal("tool budget consumed the output reserve")
+	}
+}
+
+func TestChatPrefillPreservesSignedRepliesAcrossToolRounds(t *testing.T) {
+	f := newFixture(t)
+	settings := defaultSettings()
+	settings.ChatEnabled = true
+	settings.ChatPrefill = "Lead: "
+	if _, err := f.s.PutSettings(t.Context(), f.actor, SettingsUpdate{Settings: settings}); err != nil {
+		t.Fatal(err)
+	}
+	const first = `{"role":"assistant","content":[{"type":"thinking","thinking":[{"type":"text","text":"private"}],"signature":"signed"},{"type":"text","text":"first"}],"tool_calls":[{"type":"function","id":"one","function":{"name":"donations","arguments":"{}"}}]}`
+	const second = `{"role":"assistant","content":"second","extra_content":{"gateway":{"content":[{"type":"text","text":"second","providerMetadata":{"google":{"thoughtSignature":"signed-answer"}}}]}},"tool_calls":[{"type":"function","id":"two","function":{"name":"donations","arguments":"{}"}}]}`
+	const final = `{"role":"assistant","content":"answer","extra_content":{"google":{"parts":[{"text":"answer","thoughtSignature":"done"}]}}}`
+	f.driver.replies = []string{first, second, final}
+	job := f.send(t, "Check both records", "p")
+	if err := f.s.run(t.Context(), job.ID); err != nil {
+		t.Fatal(err)
+	}
+	next := f.send(t, "Continue", "n")
+	if err := f.s.run(t.Context(), next.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.driver.inputs) != 4 {
+		t.Fatalf("got %d model calls", len(f.driver.inputs))
+	}
+	for i, want := range []string{first, second, final} {
+		sent := f.driver.inputs[i+1].Messages
+		assertResultBudgetProtocol(t, sent)
+		if !strings.Contains(string(sent), want) {
+			t.Fatalf("request %d lost the original reply: %s", i+2, sent)
+		}
+	}
+	history, err := f.s.Conversation(t.Context(), f.actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved []Message
+	for _, m := range history.Messages {
+		if m.Role == "assistant" {
+			saved = append(saved, m)
+		}
+	}
+	if len(saved) != 4 {
+		t.Fatalf("got %d assistant messages", len(saved))
+	}
+	for i, want := range []string{"first", "second", "answer"} {
+		if saved[i].Content != "Lead: "+want || string(saved[i].Wire) != f.driver.replies[i] {
+			t.Fatalf("reply %d: display=%q wire=%s", i, saved[i].Content, saved[i].Wire)
+		}
+	}
+}
+
+func TestAutoReviewCompletesPrefilledSignedDecision(t *testing.T) {
+	f := newFixture(t)
+	job := resultBudgetReview(t, f, `{}`)
+	settings, err := f.s.Settings(t.Context(), f.actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.AutoPrefill = `{"decision":`
+	if _, err := f.s.PutSettings(t.Context(), f.actor, SettingsUpdate{Settings: settings, ExpectedRevision: settings.Revision}); err != nil {
+		t.Fatal(err)
+	}
+	f.driver.replies = []string{`{"role":"assistant","content":[{"type":"thinking","thinking":[{"type":"text","text":"private"}],"signature":"opaque"},{"type":"text","text":"\"manual\",\"internal_reason\":\"checked\",\"user_note\":\"wait\",\"bindings\":[]}"}]}`}
+	if err := f.s.run(t.Context(), job.ID); err != nil {
+		t.Fatal(err)
+	}
+	var outcome string
+	if err := f.db.QueryRow(`SELECT review_result FROM ai_agent_jobs WHERE id=? AND state='completed'`, job.ID).Scan(&outcome); err != nil {
+		t.Fatal(err)
+	}
+	var result ReviewResult
+	if err := json.Unmarshal([]byte(outcome), &result); err != nil || result.Decision != "manual" || result.InternalReason != "checked" {
+		t.Fatalf("review=%s error=%v", outcome, err)
 	}
 }

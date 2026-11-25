@@ -37,10 +37,12 @@ for (const width of [1440, 390]) {
       sheet.getByRole('button', { name: services.addAndFetch, exact: true }),
     ).toBeDisabled();
     const advanced = sheet.locator('summary').filter({ hasText: services.advancedSetup });
-    await advanced.click();
     await expect(sheet.getByRole('combobox', { name: c.protocol, exact: true })).toBeVisible();
+    const discovery = sheet.locator('summary').filter({ hasText: c.discoveryOptional });
     await advanced.click();
-    await expect(sheet.getByRole('combobox', { name: c.protocol, exact: true })).toBeHidden();
+    await expect(discovery).toBeVisible();
+    await advanced.click();
+    await expect(discovery).toBeHidden();
     await sheet.getByRole('heading', { name: c.addEntry, exact: true }).focus();
     await page.keyboard.press('Shift+Tab');
     await expect(advanced).toBeFocused();

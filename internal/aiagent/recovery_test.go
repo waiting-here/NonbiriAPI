@@ -143,12 +143,42 @@ func TestChangedMemoryRollsBackBusinessOperations(t *testing.T) {
 
 func TestAssistantPrefillKeepsProviderFields(t *testing.T) {
 	input := []json.RawMessage{json.RawMessage(`{"role":"assistant","content":"{\"decision\":"}`)}
-	out := completePrefill(input, json.RawMessage(`{"role":"assistant","content":"\"manual\"}","reasoning_content":"context"}`))
+	raw := json.RawMessage(`{"role":"assistant","content":"\"manual\"}","reasoning_content":"context"}`)
+	var reply assistantMessage
+	if err := json.Unmarshal(raw, &reply); err != nil {
+		t.Fatal(err)
+	}
+	out := reply.completePrefill(input, raw)
 	var wire map[string]json.RawMessage
 	if err := json.Unmarshal(out, &wire); err != nil {
 		t.Fatal(err)
 	}
 	if messageText(wire["content"]) != `{"decision":"manual"}` || messageText(wire["reasoning_content"]) != "context" {
 		t.Fatalf("response=%s", out)
+	}
+}
+
+func TestPrefillPreservesOnlyNativeToolHistory(t *testing.T) {
+	input := []json.RawMessage{json.RawMessage(`{"role":"assistant","content":"Start "}`)}
+	for _, tc := range []struct {
+		calls    string
+		wantWire string
+	}{
+		{`[{"type":"function","id":"one","function":{"name":"donations","arguments":"{}"}}]`, "Start lookup"},
+		{`[{"type":"function","id":"one","function":{"name":"donations","arguments":"{}"},"extra_content":{"google":{"thought_signature":"opaque"}}}]`, "lookup"},
+	} {
+		raw := json.RawMessage(`{"role":"assistant","content":"lookup","tool_calls":` + tc.calls + `}`)
+		var reply assistantMessage
+		if err := json.Unmarshal(raw, &reply); err != nil {
+			t.Fatal(err)
+		}
+		wire := reply.completePrefill(input, raw)
+		var history assistantMessage
+		if err := json.Unmarshal(wire, &history); err != nil || messageText(history.Content) != tc.wantWire || messageText(reply.Content) != "Start lookup" {
+			t.Fatalf("display=%s wire=%s error=%v", reply.Content, wire, err)
+		}
+		if tc.wantWire == "lookup" && string(wire) != string(raw) {
+			t.Fatal("modified signed tool reply", string(wire))
+		}
 	}
 }

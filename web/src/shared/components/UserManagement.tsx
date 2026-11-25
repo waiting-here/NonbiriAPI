@@ -3,6 +3,8 @@ import { CreditNumber } from '@shared/components/CreditNumber';
 import { FilterBar } from '@shared/components/ui/FilterBar';
 import { Fields, FormActions } from '@shared/components/ui/Fields';
 import { InferenceLimitFields, InferenceLimitSummary } from './userInferenceLimits';
+import { decimalAmount, scaledAmount } from '@shared/inactivity/amounts';
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
 import { UserLimitBatch } from './UserLimitBatch';
 import { UserResources } from './UserResources';
 import { StewardPermissionEditor } from './StewardPermissionEditor';
@@ -11,13 +13,16 @@ import { UserDonationHistory } from './UserDonationHistory';
 import {
   defaultStewardPermissions,
   type StewardPermissions,
+  type StewardPermission,
 } from '@shared/operations/stewardPermissions';
 import {
   INFERENCE_LIMITS,
   canEditInferenceLimits,
   inferenceLimitDraft,
+  inferenceCeiling,
   parseInferenceLimit,
   type InferenceLimitDraft,
+  type ManagedLimitKey,
 } from '@shared/operations/userInferenceLimits';
 import { Button } from '@shared/components/ui/Button';
 import { Icon } from '@shared/components/Icon';
@@ -55,7 +60,12 @@ import {
 import { PagePagination } from '@shared/operations/PagePagination';
 import { isPageNumber } from '@shared/operations/pageNumbers';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
-import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import {
+  isForbidden,
+  isManagementForbidden,
+  isNotFoundError,
+  isUnauthorized,
+} from '@shared/query/http';
 import { useDateTimeFormatter } from '@shared/utils/datetime';
 import { accountCopy, accountHistoryCopy } from './accountCopy';
 import { formatCredits } from '../../user/games/common/strict';
@@ -94,6 +104,7 @@ interface UserDraft {
   economyReason: string;
   banReason: string;
   banDuration: string;
+  banDurationUnit: 'days' | 'seconds';
 }
 
 interface EconomyIntent {
@@ -124,7 +135,18 @@ const draftFor = (user: AdminUser): UserDraft => ({
   economyReason: '',
   banReason: '',
   banDuration: '',
+  banDurationUnit: 'days',
 });
+
+function projectedBalance(current: string, amount: string, direction: 'increase' | 'decrease') {
+  const base = scaledAmount(current.replace(/^-/, ''), 3);
+  const change = scaledAmount(amount, 3);
+  if (base === null || change === null) return '—';
+  const after =
+    BigInt(base) * (current.startsWith('-') ? -1n : 1n) +
+    BigInt(change) * (direction === 'increase' ? 1n : -1n);
+  return (after < 0n ? '-' : '') + decimalAmount((after < 0n ? -after : after).toString(), 3);
+}
 
 function nullableLimit(value: string, min: number, max: number): string | null | undefined {
   if (!value.trim()) return null;
@@ -142,11 +164,13 @@ function profileOutcome(outcome: OperationOutcome, recheck: () => void): Outcome
 }
 
 function ManagedCallerKeyControl({
+  mayRevoke,
   user,
   role,
   account,
   onAuthorityLoss,
 }: {
+  mayRevoke: boolean;
   user: AdminUser;
   role: ManagementRole;
   account: string;
@@ -174,7 +198,8 @@ function ManagedCallerKeyControl({
   );
   const authorityError = metadata.error ?? operation.error ?? operation.refreshError;
   useEffect(() => {
-    if (isUnauthorized(authorityError) || isForbidden(authorityError)) onAuthorityLoss?.();
+    if (isUnauthorized(authorityError) || isManagementForbidden(authorityError))
+      onAuthorityLoss?.();
   }, [authorityError, onAuthorityLoss]);
   const reload = async () => {
     const result = await metadata.refetch();
@@ -220,7 +245,7 @@ function ManagedCallerKeyControl({
             <dt>{t('management.users.callerKeyUpdated')}</dt>
             <dd>{formatDateTime(metadata.data.updated_at)}</dd>
           </dl>
-          {metadata.data.active ? (
+          {metadata.data.active && mayRevoke ? (
             <div className="nb-actions">
               <Button
                 type="button"
@@ -265,7 +290,7 @@ function ManagedCallerKeyControl({
         confirmLabel={t('management.users.callerKeyRevoke')}
         onCancel={() => setConfirmGeneration(null)}
         onConfirm={() => {
-          if (confirmGeneration === null || locked) return;
+          if (!mayRevoke || confirmGeneration === null || locked) return;
           const generation = confirmGeneration;
           setConfirmGeneration(null);
           operation.mutate({ generation });
@@ -288,6 +313,7 @@ function UserAuthority({
   trainee = false,
   actorLevel = trainee ? 5 : 6,
   permissions,
+  blockedInheritedLimits,
 }: {
   user: AdminUser;
   refresh: () => Promise<unknown>;
@@ -296,6 +322,7 @@ function UserAuthority({
   trainee?: boolean;
   actorLevel?: 5 | 6;
   permissions?: StewardPermissions;
+  blockedInheritedLimits?: ManagedLimitKey[];
   account: string;
   onAuthorityLoss?: () => void;
   renderDeletion?: (user: AdminUser, refresh: () => Promise<unknown>) => ReactNode;
@@ -304,6 +331,20 @@ function UserAuthority({
   const formatDateTime = useDateTimeFormatter();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
+  const [previousUser, setPreviousUser] = useState(user);
+  if (previousUser.revision !== user.revision) {
+    const prior = draftFor(previousUser),
+      latest = draftFor(user);
+    const next = { ...draft, inferenceLimits: { ...draft.inferenceLimits } };
+    for (const key of ['endpointLimit', 'lang', 'level', 'discordGatePolicy'] as const)
+      if (draft[key] === prior[key]) Object.assign(next, { [key]: latest[key] });
+    for (const { key } of INFERENCE_LIMITS)
+      if (draft.inferenceLimits[key] === prior.inferenceLimits[key])
+        next.inferenceLimits[key] = latest.inferenceLimits[key];
+    setDraft(next);
+    setPreviousUser(user);
+  }
+  const [permissionDirty, setPermissionDirty] = useState(false);
   const tabID = useId();
   const [tab, setTab] = useState<
     'overview' | 'limits' | 'economy' | 'resources' | 'penalties' | 'donations' | 'permissions'
@@ -316,11 +357,36 @@ function UserAuthority({
   const editable =
     role === 'admin' ||
     (!user.is_admin && user.id !== account && user.level.effective < actorLevel);
-  const limitsEditable = canEditInferenceLimits(user, role, account, actorLevel === 5);
+  const policy = permissions ?? defaultStewardPermissions(actorLevel);
+  const may = (key: StewardPermission) =>
+    role === 'admin' || actorLevel === 6 || policy.permissions[key];
+  const limits = role === 'steward' && actorLevel === 5 ? policy.limits : undefined;
+  const cannotInherit = limits ? blockedInheritedLimits : undefined;
+  const endpointMax = Number(limits?.['users.endpoint_limit_max'] ?? 10000);
+  const profileEditable = editable && may('users.profile');
+  const levelEditable = editable && may('users.level');
+  const limitsEditable = editable && may('users.limits');
+  const economyTargets = (['balance', 'game_balance', 'donation_credit'] as const).filter(
+    (target) =>
+      editable && (target === 'donation_credit' ? role === 'admin' : may(`users.${target}`)),
+  );
+  const target = economyTargets.includes(draft.economyTarget)
+    ? draft.economyTarget
+    : economyTargets[0];
+  const amount = scaledAmount(draft.economyAmount, 3);
+  const amountMax =
+    limits && target && target !== 'donation_credit'
+      ? BigInt(limits[`users.${target}_adjustment_max_milli`])
+      : null;
+  const amountValid =
+    amount !== null && BigInt(amount) > 0n && (amountMax === null || BigInt(amount) <= amountMax);
+  const maxBanSeconds = Number(limits?.['users.ban_duration_max_seconds'] ?? 316224000);
   const callerKeyEditable =
     !user.is_admin &&
     (role === 'admin' || (user.id !== account && user.level.effective < actorLevel));
-  const canBan = editable;
+  const canBan = editable && may('users.ban');
+  const canUnban = editable && may('users.unban');
+  const banActionAllowed = user.is_banned ? canUnban : canBan;
   const canManagePermissions = user.level.effective === 5 && (role === 'admin' || actorLevel === 6);
   const canReadDonations =
     role === 'admin' ||
@@ -373,28 +439,37 @@ function UserAuthority({
     setConfirm(null);
     setEconomyConfirm(null);
   }, [user.revision]);
-  const endpoint = nullableLimit(draft.endpointLimit, 0, 10_000);
+  const endpoint = nullableLimit(draft.endpointLimit, endpointMax < 10000 ? 1 : 0, endpointMax);
   const inferenceLimits = Object.fromEntries(
     INFERENCE_LIMITS.map(({ key, max }) => [
       key,
-      parseInferenceLimit(draft.inferenceLimits[key], max),
+      parseInferenceLimit(draft.inferenceLimits[key], inferenceCeiling(key, max, limits)),
     ]),
   );
   const invalidLimits =
-    (editable && endpoint === undefined) ||
-    (limitsEditable && Object.values(inferenceLimits).some((value) => value === undefined));
+    (profileEditable &&
+      draft.endpointLimit !== (user.endpoint_limit ?? '') &&
+      (endpoint === undefined ||
+        (endpoint === null && cannotInherit?.includes('endpoint_limit')))) ||
+    (limitsEditable &&
+      INFERENCE_LIMITS.some(
+        ({ key }) =>
+          draft.inferenceLimits[key] !== (user[key] ?? '') &&
+          (inferenceLimits[key] === undefined ||
+            (inferenceLimits[key] === null && cannotInherit?.includes(key))),
+      ));
 
   const baseline =
     confirmedUser && BigInt(confirmedUser.revision) > BigInt(user.revision) ? confirmedUser : user;
   const profileChanged =
     (limitsEditable &&
-      INFERENCE_LIMITS.some(({ key }) => inferenceLimits[key] !== baseline[key])) ||
-    (editable &&
-      (endpoint !== baseline.endpoint_limit ||
+      INFERENCE_LIMITS.some(({ key }) => draft.inferenceLimits[key] !== (baseline[key] ?? ''))) ||
+    (profileEditable &&
+      (draft.endpointLimit !== (baseline.endpoint_limit ?? '') ||
         draft.lang !== baseline.lang ||
         (role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy)));
   const levelChanged =
-    editable && (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
+    levelEditable && (draft.level ? Number(draft.level) : null) !== baseline.level.manual;
 
   const profileBusy = coordinating || profile.isPending || manualLevel.isPending;
   const saveLimits = async () => {
@@ -404,12 +479,17 @@ function UserAuthority({
       ...(limitsEditable
         ? Object.fromEntries(
             Object.entries(inferenceLimits).filter(
-              ([key, value]) => value !== baseline[key as keyof typeof baseline],
+              ([key, value]) =>
+                value !== undefined && value !== baseline[key as keyof typeof baseline],
             ),
           )
         : {}),
-      ...(editable && endpoint !== baseline.endpoint_limit ? { endpoint_limit: endpoint } : {}),
-      ...(editable && draft.lang && draft.lang !== baseline.lang ? { lang: draft.lang } : {}),
+      ...(profileEditable && endpoint !== undefined && endpoint !== baseline.endpoint_limit
+        ? { endpoint_limit: endpoint }
+        : {}),
+      ...(profileEditable && draft.lang && draft.lang !== baseline.lang
+        ? { lang: draft.lang }
+        : {}),
       ...(role === 'admin' && draft.discordGatePolicy !== baseline.discord_gate_policy
         ? { discord_gate_policy: draft.discordGatePolicy }
         : {}),
@@ -433,9 +513,20 @@ function UserAuthority({
       setCoordinating(false);
     }
   };
-  const banSeconds = draft.banDuration.trim() ? Number(draft.banDuration) * 86_400 : undefined;
-  const banDurationLabel = draft.banDuration.trim()
-    ? t('management.users.banPresetLabel', { days: draft.banDuration.trim() })
+  const secondsUnit = maxBanSeconds < 86_400 || draft.banDurationUnit === 'seconds';
+  const duration = draft.banDuration.trim();
+  const banSeconds = duration ? Number(duration) * (secondsUnit ? 1 : 86_400) : undefined;
+  const validBan =
+    Boolean(draft.banReason.trim()) &&
+    (banSeconds === undefined
+      ? may('users.ban_permanent')
+      : /^[1-9][0-9]*$/.test(duration) &&
+        Number.isSafeInteger(banSeconds) &&
+        banSeconds <= maxBanSeconds);
+  const banDurationLabel = duration
+    ? secondsUnit
+      ? t('management.users.banSecondsLabel', { seconds: duration })
+      : t('management.users.banPresetLabel', { days: duration })
     : t('management.users.banPermanent');
   const mutationError =
     patch.error ?? profile.error ?? manualLevel.error ?? ban.error ?? unban.error;
@@ -472,33 +563,76 @@ function UserAuthority({
       </div>
     ) : null;
 
-  const banControls = canBan ? (
+  const banControls = banActionAllowed ? (
     <Card>
       <h2>{t('management.users.banSectionTitle')}</h2>
-      <Fields>
-        <Field label={t('management.users.banReason')} size="long">
-          {(field) => (
-            <input
-              {...field}
-              maxLength={1024}
-              value={draft.banReason}
-              onChange={(event) => setDraft({ ...draft, banReason: event.target.value })}
-            />
+      {!user.is_banned && (
+        <Fields>
+          <Field label={t('management.users.banReason')} size="long">
+            {(field) => (
+              <input
+                {...field}
+                maxLength={1024}
+                value={draft.banReason}
+                onChange={(event) => setDraft({ ...draft, banReason: event.target.value })}
+              />
+            )}
+          </Field>
+          {maxBanSeconds >= 86_400 && (
+            <Field label={t('management.users.banDurationUnit')} size="short">
+              {(field) => (
+                <select
+                  {...field}
+                  value={draft.banDurationUnit}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      banDurationUnit: event.target.value === 'seconds' ? 'seconds' : 'days',
+                    })
+                  }
+                >
+                  <option value="days">{t('management.users.durationUnitDays')}</option>
+                  <option value="seconds">{t('management.users.durationUnitSeconds')}</option>
+                </select>
+              )}
+            </Field>
           )}
-        </Field>
-        <Field label={t('management.users.banDurationDays')} size="short">
-          {(field) => (
-            <input
-              {...field}
-              type="number"
-              min="1"
-              max="3660"
-              value={draft.banDuration}
-              onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
-            />
-          )}
-        </Field>
-      </Fields>
+          <Field
+            label={
+              may('users.ban_permanent')
+                ? t(
+                    secondsUnit
+                      ? 'management.users.banDurationSeconds'
+                      : 'management.users.banDurationDays',
+                  )
+                : t(
+                    secondsUnit
+                      ? 'management.users.temporaryBanSeconds'
+                      : 'management.users.temporaryBanDays',
+                  )
+            }
+            size="short"
+            help={
+              limits
+                ? t('common.governance.ceiling', {
+                    max: secondsUnit ? maxBanSeconds : Math.floor(maxBanSeconds / 86_400),
+                  })
+                : undefined
+            }
+          >
+            {(field) => (
+              <input
+                {...field}
+                type="number"
+                min="1"
+                max={secondsUnit ? maxBanSeconds : Math.floor(maxBanSeconds / 86_400)}
+                value={draft.banDuration}
+                onChange={(event) => setDraft({ ...draft, banDuration: event.target.value })}
+              />
+            )}
+          </Field>
+        </Fields>
+      )}
       <FormActions>
         {user.is_banned ? (
           <Button variant="danger-outline" type="button" onClick={() => setConfirm('unban')}>
@@ -508,11 +642,7 @@ function UserAuthority({
           <Button
             variant="danger-outline"
             type="button"
-            disabled={
-              !draft.banReason.trim() ||
-              (draft.banDuration !== '' &&
-                (!Number.isSafeInteger(banSeconds) || (banSeconds ?? 0) < 1))
-            }
+            disabled={!validBan}
             onClick={() => setConfirm('ban')}
           >
             {t('management.users.ban')}
@@ -525,6 +655,15 @@ function UserAuthority({
 
   return (
     <div className="ops-stack user-authority">
+      {permissionDirty && (
+        <DraftLeaveGuard
+          dirty
+          allowNavigation={({ currentLocation, nextLocation }) =>
+            currentLocation.pathname === nextLocation.pathname &&
+            new URLSearchParams(nextLocation.search).get('user') === user.id
+          }
+        />
+      )}
       <Card>
         <div className="user-authority__head">
           <Button variant="ghost" type="button" className="user-authority__back" onClick={onClose}>
@@ -625,32 +764,39 @@ function UserAuthority({
             <dd>{user.level.manual ?? t('management.users.levelManualNone')}</dd>
           </dl>
           <div className="nb-actions">
-            <Link
-              className="nb-btn nb-btn--secondary"
-              to={
-                role === 'admin'
-                  ? `/logs?user_id=${user.id}`
-                  : `/steward?tab=logs&user_id=${user.id}`
-              }
-            >
-              {t('management.users.viewLogs')}
-            </Link>
-            <Link
-              className="nb-btn nb-btn--secondary"
-              to={
-                role === 'admin'
-                  ? routePath('admin', 'admin-risk-audit') +
-                    `?audit_tab=user_ips&audit_ip_user=${user.id}`
-                  : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
-              }
-            >
-              {t('common.audit.inspectUserIPs')}
-            </Link>
-            <LoanHistory role={role} account={account} userID={user.id} />
+            {may('logs.read') && (
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to={
+                  role === 'admin'
+                    ? `/logs?user_id=${user.id}`
+                    : `/steward?tab=logs&user_id=${user.id}`
+                }
+              >
+                {t('management.users.viewLogs')}
+              </Link>
+            )}
+            {may('risk.read') && (
+              <Link
+                className="nb-btn nb-btn--secondary"
+                to={
+                  role === 'admin'
+                    ? routePath('admin', 'admin-risk-audit') +
+                      `?audit_tab=user_ips&audit_ip_user=${user.id}`
+                    : `/steward?tab=risk&audit_tab=user_ips&audit_ip_user=${user.id}`
+                }
+              >
+                {t('common.audit.inspectUserIPs')}
+              </Link>
+            )}
+            {may('users.loans.read') && (
+              <LoanHistory role={role} account={account} userID={user.id} />
+            )}
           </div>
         </Card>
-        {callerKeyEditable ? (
+        {callerKeyEditable && may('users.caller_keys.read') ? (
           <ManagedCallerKeyControl
+            mayRevoke={may('users.caller_keys.revoke')}
             key={JSON.stringify([role, account, trainee, user.id, user.level.effective])}
             user={user}
             role={role}
@@ -660,7 +806,7 @@ function UserAuthority({
         ) : null}
         {renderSecurity?.(user)}
       </section>
-      {editable || limitsEditable ? (
+      {profileEditable || levelEditable || limitsEditable ? (
         <>
           <section
             role="tabpanel"
@@ -671,7 +817,7 @@ function UserAuthority({
             <Card>
               <h2>
                 {t('management.users.manageLimitsTitle')}
-                {editable ? ' / ' + t('management.users.levelSectionTitle') : ''}
+                {levelEditable ? ' / ' + t('management.users.levelSectionTitle') : ''}
               </h2>
               <p>{t('management.users.limitHint')}</p>
               <Fold plain title={t('common.operations.management.details')}>
@@ -680,6 +826,8 @@ function UserAuthority({
               {limitsEditable ? (
                 <InferenceLimitFields
                   user={baseline}
+                  limits={limits}
+                  blockedInheritedLimits={cannotInherit}
                   value={draft.inferenceLimits}
                   onChange={(inferenceLimits) => setDraft({ ...draft, inferenceLimits })}
                 />
@@ -689,86 +837,93 @@ function UserAuthority({
               <Fold plain title={t('management.users.inferenceLimitRules')}>
                 <p>{t('management.users.inferenceLimitHelp')}</p>
               </Fold>
-              {editable ? (
-                <Fields>
-                  <Field label={t('management.users.endpointLimit')} size="short">
-                    {(field) => (
-                      <input
-                        {...field}
-                        inputMode="numeric"
-                        value={draft.endpointLimit}
-                        onChange={(event) =>
-                          setDraft({ ...draft, endpointLimit: event.target.value })
-                        }
-                      />
-                    )}
-                  </Field>
-                  <Field label={t('management.users.levelControl')} size="short">
-                    {(field) => (
-                      <select
-                        {...field}
-                        value={draft.level}
-                        onChange={(event) => setDraft({ ...draft, level: event.target.value })}
-                      >
-                        <option value="">{t('management.users.levelManualNone')}</option>
-                        {(role === 'admin'
-                          ? [1, 2, 3, 4, 5, 6]
-                          : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
-                        ).map((level) => (
-                          <option key={level} value={level}>
-                            {level}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </Field>
-                  <Field label={t('management.users.language')} size="short">
-                    {(field) => (
-                      <select
-                        {...field}
-                        value={draft.lang}
-                        onChange={(event) =>
-                          setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
-                        }
-                      >
-                        <option value="" disabled>
-                          {t('management.users.languageDefault')}
-                        </option>
-                        <option value="zh">中文</option>
-                        <option value="en">English</option>
-                      </select>
-                    )}
-                  </Field>
-                  {role === 'admin' ? (
-                    <Field
-                      label={t('management.users.discordGatePolicy')}
-                      help={t('management.users.discordGateHelp')}
+              <Fields>
+                <Field
+                  label={t('management.users.endpointLimit')}
+                  size="short"
+                  help={
+                    profileEditable && limits
+                      ? t('common.governance.ceiling', { max: endpointMax }) +
+                        (cannotInherit?.includes('endpoint_limit')
+                          ? ' ' + t('common.governance.inheritAboveCeiling')
+                          : '')
+                      : undefined
+                  }
+                >
+                  {(field) => (
+                    <input
+                      {...field}
+                      inputMode="numeric"
+                      disabled={!profileEditable}
+                      value={draft.endpointLimit}
+                      onChange={(event) =>
+                        setDraft({ ...draft, endpointLimit: event.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label={t('management.users.levelControl')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      disabled={!levelEditable}
+                      value={draft.level}
+                      onChange={(event) => setDraft({ ...draft, level: event.target.value })}
                     >
-                      {(field) => (
-                        <select
-                          {...field}
-                          value={draft.discordGatePolicy}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              discordGatePolicy: event.target
-                                .value as UserDraft['discordGatePolicy'],
-                            })
-                          }
-                        >
-                          <option value="inherit">
-                            {t('management.users.discordGateInherit')}
-                          </option>
-                          <option value="require">
-                            {t('management.users.discordGateRequire')}
-                          </option>
-                          <option value="exempt">{t('management.users.discordGateExempt')}</option>
-                        </select>
-                      )}
-                    </Field>
-                  ) : null}
-                </Fields>
-              ) : null}
+                      <option value="">{t('management.users.levelManualNone')}</option>
+                      {(role === 'admin'
+                        ? [1, 2, 3, 4, 5, 6]
+                        : [1, 2, 3, 4, 5].filter((level) => level < actorLevel)
+                      ).map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field label={t('management.users.language')} size="short">
+                  {(field) => (
+                    <select
+                      {...field}
+                      disabled={!profileEditable}
+                      value={draft.lang}
+                      onChange={(event) =>
+                        setDraft({ ...draft, lang: event.target.value as UserDraft['lang'] })
+                      }
+                    >
+                      <option value="" disabled>
+                        {t('management.users.languageDefault')}
+                      </option>
+                      <option value="zh">中文</option>
+                      <option value="en">English</option>
+                    </select>
+                  )}
+                </Field>
+                {role === 'admin' ? (
+                  <Field
+                    label={t('management.users.discordGatePolicy')}
+                    help={t('management.users.discordGateHelp')}
+                  >
+                    {(field) => (
+                      <select
+                        {...field}
+                        value={draft.discordGatePolicy}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            discordGatePolicy: event.target.value as UserDraft['discordGatePolicy'],
+                          })
+                        }
+                      >
+                        <option value="inherit">{t('management.users.discordGateInherit')}</option>
+                        <option value="require">{t('management.users.discordGateRequire')}</option>
+                        <option value="exempt">{t('management.users.discordGateExempt')}</option>
+                      </select>
+                    )}
+                  </Field>
+                ) : null}
+              </Fields>
               {invalidLimits ? (
                 <p className="field-error" role="alert">
                   {t('management.users.limitInvalid')}
@@ -847,105 +1002,118 @@ function UserAuthority({
           >
             <Card>
               <h2>{t('management.users.economyTitle')}</h2>
-              <p>{t('management.users.economyPositiveHint')}</p>
-              <Fields columns={2}>
-                <Fields columns={1} legend={t('management.users.economyTarget')}>
-                  <Segmented
-                    label={t('management.users.economyTarget')}
-                    value={draft.economyTarget}
-                    disabled={economyLocked}
-                    options={(role === 'admin'
-                      ? (['balance', 'game_balance', 'donation_credit'] as const)
-                      : (['balance', 'game_balance'] as const)
-                    ).map((value) => ({ value, label: t(economyTargetLabels[value]) }))}
-                    onChange={(economyTarget) => setDraft({ ...draft, economyTarget })}
-                  />
-                </Fields>
-                <Fields columns={1} legend={t('management.users.economyDirection')}>
-                  <Segmented
-                    label={t('management.users.economyDirection')}
-                    value={draft.economyDirection}
-                    disabled={economyLocked}
-                    options={[
-                      { value: 'increase', label: t('management.users.economyIncrease') },
-                      { value: 'decrease', label: t('management.users.economyDecrease') },
-                    ]}
-                    onChange={(economyDirection) => setDraft({ ...draft, economyDirection })}
-                  />
-                </Fields>
-              </Fields>
-              <Fields columns={1}>
-                <Field label={t('management.users.economyPositiveAmount')} size="medium">
-                  {(field) => (
-                    <Affix
-                      {...field}
-                      aria-label={t('management.users.economyPositiveAmount')}
-                      unit={t(economyTargetLabels[draft.economyTarget])}
-                      inputMode="decimal"
-                      value={draft.economyAmount}
-                      disabled={economyLocked}
-                      placeholder="1.5"
-                      onChange={(event) =>
-                        setDraft({ ...draft, economyAmount: event.target.value })
+              {economyTargets.length === 0 ? (
+                <StewardPermissionNotice />
+              ) : (
+                <>
+                  <p>{t('management.users.economyPositiveHint')}</p>
+                  <Fields columns={2}>
+                    <Fields columns={1} legend={t('management.users.economyTarget')}>
+                      <Segmented
+                        label={t('management.users.economyTarget')}
+                        value={target ?? 'balance'}
+                        disabled={economyLocked}
+                        options={economyTargets.map((value) => ({
+                          value,
+                          label: t(economyTargetLabels[value]),
+                        }))}
+                        onChange={(economyTarget) => setDraft({ ...draft, economyTarget })}
+                      />
+                    </Fields>
+                    <Fields columns={1} legend={t('management.users.economyDirection')}>
+                      <Segmented
+                        label={t('management.users.economyDirection')}
+                        value={draft.economyDirection}
+                        disabled={economyLocked}
+                        options={[
+                          { value: 'increase', label: t('management.users.economyIncrease') },
+                          { value: 'decrease', label: t('management.users.economyDecrease') },
+                        ]}
+                        onChange={(economyDirection) => setDraft({ ...draft, economyDirection })}
+                      />
+                    </Fields>
+                  </Fields>
+                  <Fields columns={1}>
+                    <Field
+                      label={t('management.users.economyPositiveAmount')}
+                      size="medium"
+                      help={
+                        amountMax !== null
+                          ? t('common.governance.ceiling', {
+                              max: decimalAmount(amountMax.toString(), 3),
+                            })
+                          : undefined
                       }
-                    />
-                  )}
-                </Field>
-                <Field
-                  label={t('management.users.economyReason')}
-                  size="long"
-                  help={t('management.users.reasonRequired')}
-                >
-                  {(field) => (
-                    <input
-                      {...field}
-                      aria-label={t('management.users.economyReason')}
-                      required
-                      maxLength={1024}
-                      value={draft.economyReason}
-                      disabled={economyLocked}
-                      onChange={(event) =>
-                        setDraft({ ...draft, economyReason: event.target.value })
+                    >
+                      {(field) => (
+                        <Affix
+                          {...field}
+                          aria-label={t('management.users.economyPositiveAmount')}
+                          unit={t(economyTargetLabels[target ?? 'balance'])}
+                          inputMode="decimal"
+                          value={draft.economyAmount}
+                          disabled={economyLocked}
+                          placeholder="1.5"
+                          onChange={(event) =>
+                            setDraft({ ...draft, economyAmount: event.target.value })
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field
+                      label={t('management.users.economyReason')}
+                      size="long"
+                      help={t('management.users.reasonRequired')}
+                    >
+                      {(field) => (
+                        <input
+                          {...field}
+                          aria-label={t('management.users.economyReason')}
+                          required
+                          maxLength={1024}
+                          value={draft.economyReason}
+                          disabled={economyLocked}
+                          onChange={(event) =>
+                            setDraft({ ...draft, economyReason: event.target.value })
+                          }
+                        />
+                      )}
+                    </Field>
+                  </Fields>
+                  <FormActions>
+                    <Button
+                      variant="primary"
+                      type="button"
+                      disabled={
+                        patch.isPending || !amountValid || !target || !draft.economyReason.trim()
                       }
-                    />
-                  )}
-                </Field>
-              </Fields>
-              <FormActions>
-                <Button
-                  variant="primary"
-                  type="button"
-                  disabled={
-                    patch.isPending ||
-                    !draft.economyAmount ||
-                    draft.economyAmount.startsWith('-') ||
-                    !draft.economyReason.trim()
-                  }
-                  onClick={() =>
-                    setEconomyConfirm(
-                      economyUnknown && patch.variables
-                        ? patch.variables
-                        : {
-                            revision: user.revision,
-                            body: {
-                              mode: 'economy',
-                              target: draft.economyTarget,
-                              direction: draft.economyDirection,
-                              amount: draft.economyAmount,
-                              reason: draft.economyReason.trim(),
-                            },
-                          },
-                    )
-                  }
-                >
-                  {t(
-                    economyUnknown
-                      ? 'management.users.economyRetry'
-                      : 'management.users.economySubmit',
-                  )}
-                </Button>
-              </FormActions>
-              {!economyConfirm ? economyFeedback : null}
+                      onClick={() =>
+                        setEconomyConfirm(
+                          economyUnknown && patch.variables
+                            ? patch.variables
+                            : {
+                                revision: user.revision,
+                                body: {
+                                  mode: 'economy',
+                                  target: target ?? 'balance',
+                                  direction: draft.economyDirection,
+                                  amount: draft.economyAmount,
+                                  reason: draft.economyReason.trim(),
+                                },
+                              },
+                        )
+                      }
+                    >
+                      {t(
+                        economyUnknown
+                          ? 'management.users.economyRetry'
+                          : 'management.users.economySubmit',
+                      )}
+                    </Button>
+                  </FormActions>
+                  {!economyConfirm ? economyFeedback : null}
+                </>
+              )}
             </Card>
           </section>
           <section
@@ -954,34 +1122,38 @@ function UserAuthority({
             aria-labelledby={`${tabID}-penalties`}
             hidden={tab !== 'penalties'}
           >
-            {penaltiesVisited ? (
+            {penaltiesVisited && may('users.penalties.read') ? (
               <Card>
                 <PenaltyHistory inline role={role} account={account} userID={user.id} />
               </Card>
             ) : null}
             {banControls}
           </section>
-          {tab === 'overview' || tab === 'penalties' ? (
+          {(tab === 'overview' || tab === 'penalties') && (banActionAllowed || renderDeletion) ? (
             <Card className="user-danger">
               <h2>{t('management.users.dangerTitle')}</h2>
-              <div className="user-danger-row">
-                <p>{t('management.users.banConsequence')}</p>
-                <Button
-                  variant="danger-outline"
-                  type="button"
-                  onClick={() => {
-                    if (user.is_banned) setConfirm('unban');
-                    else {
-                      setTab('penalties');
-                      setPenaltiesVisited(true);
-                    }
-                  }}
-                >
-                  {t(
-                    user.is_banned ? 'management.users.unbanAction' : 'management.users.banAction',
-                  )}
-                </Button>
-              </div>
+              {banActionAllowed && (
+                <div className="user-danger-row">
+                  <p>{t('management.users.banConsequence')}</p>
+                  <Button
+                    variant="danger-outline"
+                    type="button"
+                    onClick={() => {
+                      if (user.is_banned) setConfirm('unban');
+                      else {
+                        setTab('penalties');
+                        setPenaltiesVisited(true);
+                      }
+                    }}
+                  >
+                    {t(
+                      user.is_banned
+                        ? 'management.users.unbanAction'
+                        : 'management.users.banAction',
+                    )}
+                  </Button>
+                </div>
+              )}
               {renderDeletion ? (
                 <div className="user-danger-row">
                   <p>{t('management.users.deleteConsequence')}</p>
@@ -1009,7 +1181,7 @@ function UserAuthority({
             aria-labelledby={`${tabID}-penalties`}
             hidden={tab !== 'penalties'}
           >
-            {penaltiesVisited ? (
+            {penaltiesVisited && may('users.penalties.read') ? (
               <Card>
                 <PenaltyHistory inline role={role} account={account} userID={user.id} />
               </Card>
@@ -1033,7 +1205,7 @@ function UserAuthority({
               onCapabilityLoss={onAuthorityLoss}
             />
           ) : (
-            <StewardPermissionNotice />
+            <StewardPermissionNotice permission="users.donations.read" />
           )}
         </section>
       ) : null}
@@ -1058,13 +1230,19 @@ function UserAuthority({
           />
         </section>
       ) : null}
-      {tab === 'permissions' && canManagePermissions ? (
+      {(tab === 'permissions' || permissionDirty) && canManagePermissions ? (
         <section
           role="tabpanel"
+          hidden={tab !== 'permissions'}
           id={`${tabID}-permissions-panel`}
           aria-labelledby={`${tabID}-permissions`}
         >
-          <StewardPermissionEditor role={role} account={account} userId={user.id} />
+          <StewardPermissionEditor
+            role={role}
+            account={account}
+            userId={user.id}
+            onDirtyChange={setPermissionDirty}
+          />
         </section>
       ) : null}
       {confirm ? (
@@ -1081,9 +1259,10 @@ function UserAuthority({
           )}
           danger
           busy={ban.isPending || unban.isPending}
+          confirmDisabled={confirm === 'ban' ? !canBan || !validBan : !canUnban}
           onCancel={() => setConfirm(null)}
           onConfirm={() => {
-            if (confirm === 'ban' && canBan)
+            if (confirm === 'ban' && canBan && validBan)
               ban.mutate(
                 {
                   revision: user.revision,
@@ -1092,7 +1271,7 @@ function UserAuthority({
                 },
                 { onSuccess: () => setConfirm(null) },
               );
-            else if (confirm === 'unban' && editable)
+            else if (confirm === 'unban' && canUnban)
               unban.mutate({ revision: user.revision }, { onSuccess: () => setConfirm(null) });
           }}
         />
@@ -1137,6 +1316,17 @@ function UserAuthority({
               <dd className="nb-amount">{economyConfirm.body.amount}</dd>
             </div>
             <div>
+              <dt>{t('management.users.balances')}</dt>
+              <dd>
+                {user[economyConfirm.body.target]} →{' '}
+                {projectedBalance(
+                  user[economyConfirm.body.target],
+                  economyConfirm.body.amount,
+                  economyConfirm.body.direction,
+                )}
+              </dd>
+            </div>
+            <div>
               <dt>{t('management.users.economyReason')}</dt>
               <dd>{economyConfirm.body.reason}</dd>
             </div>
@@ -1152,6 +1342,7 @@ interface UserManagementProps {
   trainee?: boolean;
   actorLevel?: 5 | 6;
   permissions?: StewardPermissions;
+  blockedInheritedLimits?: ManagedLimitKey[];
   account: string;
   scopeReady: boolean;
   sessionError: unknown;
@@ -1174,6 +1365,7 @@ export function UserManagement({
   trainee = false,
   actorLevel = trainee ? 5 : 6,
   permissions,
+  blockedInheritedLimits,
   embedded = false,
 }: UserManagementProps) {
   const { t } = useTranslation();
@@ -1271,6 +1463,8 @@ export function UserManagement({
   const batchScope = JSON.stringify([
     account,
     role,
+    actorLevel,
+    permissions?.revision,
     query,
     banned,
     level,
@@ -1291,8 +1485,14 @@ export function UserManagement({
     setLimitSelection({ scope: batchScope, ids: [] });
   }, [batchScope]);
 
+  const batchPolicy =
+    role === 'steward' && actorLevel === 5
+      ? (permissions ?? defaultStewardPermissions(actorLevel))
+      : undefined;
+  const mayBatch = !batchPolicy || batchPolicy.permissions['users.limits'];
   const eligibleUsers = (users.data?.data ?? []).flatMap((entry) =>
     entry.account_state === 'active' &&
+    mayBatch &&
     canEditInferenceLimits(entry.user, role, account, actorLevel === 5)
       ? [entry.user]
       : [],
@@ -1304,12 +1504,12 @@ export function UserManagement({
   const setLimitSelected = (ids: string[]) => setLimitSelection({ scope: batchScope, ids });
   const detailUnavailable =
     isUnauthorized(users.error) ||
-    isForbidden(users.error) ||
+    isManagementForbidden(users.error) ||
     isUnauthorized(detail.error) ||
-    isForbidden(detail.error) ||
+    isManagementForbidden(detail.error) ||
     isNotFoundError(detail.error) ||
     isUnauthorized(deletedDetail.error) ||
-    isForbidden(deletedDetail.error) ||
+    isManagementForbidden(deletedDetail.error) ||
     isNotFoundError(deletedDetail.error);
   useEffect(() => {
     // Browser back/forward can change the committed filter while this draft
@@ -1330,11 +1530,11 @@ export function UserManagement({
   useEffect(() => {
     if (
       isUnauthorized(users.error) ||
-      isForbidden(users.error) ||
+      isManagementForbidden(users.error) ||
       isUnauthorized(detail.error) ||
-      isForbidden(detail.error) ||
+      isManagementForbidden(detail.error) ||
       isUnauthorized(deletedDetail.error) ||
-      isForbidden(deletedDetail.error)
+      isManagementForbidden(deletedDetail.error)
     ) {
       if (onAuthorityLoss) onAuthorityLoss();
       else if ([users.error, detail.error, deletedDetail.error].some(isUnauthorized))
@@ -1420,7 +1620,7 @@ export function UserManagement({
     });
   };
   const authorityError = [users.error, detail.error, deletedDetail.error].find(
-    (error) => isUnauthorized(error) || isForbidden(error),
+    (error) => isUnauthorized(error) || isManagementForbidden(error),
   );
   if (authorityError) return <ErrorState error={authorityError} />;
   return (
@@ -1578,6 +1778,31 @@ export function UserManagement({
           <Card>
             {embedded ? <h2>{t('management.users.listTitle')}</h2> : null}
             {accountState === 'deleted' ? <p>{accountHistoryCopy(t).coverage}</p> : null}
+            {scopeReady &&
+            !sessionError &&
+            !users.error &&
+            users.data &&
+            eligibleUsers.length > 0 ? (
+              <UserLimitBatch
+                key={batchScope}
+                role={role}
+                users={eligibleUsers}
+                limits={batchPolicy?.limits}
+                blockedInheritedLimits={batchPolicy ? blockedInheritedLimits : undefined}
+                selected={limitSelected}
+                onSelected={setLimitSelected}
+                onBusy={setBatchBusy}
+                loading={users.isFetching}
+                refresh={async () => {
+                  const result = await users.refetch();
+                  if (result.error) throw result.error;
+                  if (selected) {
+                    const current = await detail.refetch();
+                    if (current.error) throw current.error;
+                  }
+                }}
+              />
+            ) : null}
             {invalidCommittedUserID || invalidCommittedDiscordID ? (
               <p role="status">
                 {invalidCommittedUserID
@@ -1636,6 +1861,7 @@ export function UserManagement({
                       render: (entry) => (
                         <span className="user-list-selection">
                           {entry.account_state === 'active' &&
+                          mayBatch &&
                           canEditInferenceLimits(entry.user, role, account, actorLevel === 5) ? (
                             <TableCheckbox
                               aria-label={t('management.users.selectLimitUser', {
@@ -1787,29 +2013,6 @@ export function UserManagement({
                 />
               </div>
             )}
-            {scopeReady &&
-            !sessionError &&
-            !users.error &&
-            users.data &&
-            eligibleUsers.length > 0 ? (
-              <UserLimitBatch
-                key={batchScope}
-                role={role}
-                users={eligibleUsers}
-                selected={limitSelected}
-                onSelected={setLimitSelected}
-                onBusy={setBatchBusy}
-                loading={users.isFetching}
-                refresh={async () => {
-                  const result = await users.refetch();
-                  if (result.error) throw result.error;
-                  if (selected) {
-                    const current = await detail.refetch();
-                    if (current.error) throw current.error;
-                  }
-                }}
-              />
-            ) : null}
             {scopeReady && !sessionError && !users.error && users.data ? (
               <PagePagination
                 metadata={users.data.pagination}
@@ -1853,6 +2056,7 @@ export function UserManagement({
                 account={account}
                 actorLevel={actorLevel}
                 permissions={permissions}
+                blockedInheritedLimits={blockedInheritedLimits}
                 renderDeletion={renderDeletion}
                 renderSecurity={renderSecurity}
                 onAuthorityLoss={onAuthorityLoss}

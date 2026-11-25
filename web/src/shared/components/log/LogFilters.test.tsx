@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
@@ -200,21 +200,14 @@ describe('shared log filters', () => {
     await view.user.click(screen.getByRole('button', { name: 'Last hour' }));
     expect(onApply).toHaveBeenCalledWith({
       filters: { model: 'applied' },
-      fromUnix: now - 3600,
-      toUnix: now,
-    });
-    expect(screen.getByLabelText('Model')).toHaveValue('draft');
-    const applied = screen.getByRole('group', { name: 'Applied filters' });
-    const removeFrom = within(applied).getByRole('button', { name: 'Remove From filter' });
-    const removeTo = within(applied).getByRole('button', { name: 'Remove To filter' });
-    removeFrom.focus();
-    await view.user.keyboard('{Enter}');
-    expect(removeTo).toHaveFocus();
-    expect(onApply).toHaveBeenLastCalledWith({
-      filters: { model: 'applied' },
+      range: '1h',
       fromUnix: undefined,
-      toUnix: now,
+      toUnix: undefined,
     });
+    expect(screen.getByRole('button', { name: 'Last hour' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByLabelText('Model')).toHaveValue('draft');
     expect(screen.getByText('Select Search to apply changes to Model.')).toBeVisible();
   });

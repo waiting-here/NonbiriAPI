@@ -83,6 +83,16 @@ export function IssuesPage() {
     <div className="page ops-stack">
       <RecordsHeader
         description={t('user.issues.authorityDescription')}
+        actions={
+          <button
+            type="button"
+            className="nb-btn nb-btn--secondary"
+            disabled={busy || !scopeReady}
+            onClick={() => void issues.refetch()}
+          >
+            {t('common.refresh')}
+          </button>
+        }
         issueCount={
           state === 'current' &&
           pageData &&
@@ -150,7 +160,18 @@ export function IssuesPage() {
                         <dl className="nb-facts nb-facts--inline">
                           <div>
                             <dt>{t('user.issues.resourceType')}</dt>
-                            <dd>{t(RESOURCE_LABEL_KEYS[issue.resource_kind])}</dd>
+                            <dd>
+                              {t(RESOURCE_LABEL_KEYS[issue.resource_kind])}
+                              {issue.deep_link?.key_id
+                                ? ` #${issue.deep_link.key_id}`
+                                : issue.deep_link && issue.resource_kind !== 'endpoint_key'
+                                  ? ` #${issue.deep_link.resource_id}`
+                                  : ''}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>{t('user.issues.issueNumber')}</dt>
+                            <dd className="mono">{issue.id}</dd>
                           </div>
                           <div>
                             <dt>{t('user.issues.firstSeen')}</dt>
@@ -176,7 +197,7 @@ export function IssuesPage() {
                             className="nb-btn nb-btn--secondary"
                             to={
                               issue.deep_link.route_id === 'endpoint-detail'
-                                ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}`
+                                ? `/endpoints/${encodeURIComponent(issue.deep_link.resource_id)}${issue.deep_link.key_id ? '?' + new URLSearchParams({ focus_key_id: issue.deep_link.key_id }) : ''}`
                                 : `/models?model_id=${encodeURIComponent(issue.deep_link.resource_id)}`
                             }
                             state={{ returnTo: location.pathname + location.search }}

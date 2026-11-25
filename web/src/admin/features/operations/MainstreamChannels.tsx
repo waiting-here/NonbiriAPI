@@ -620,7 +620,6 @@ export function MainstreamChannelsPanel({ showHeader = false }: { showHeader?: b
         <FilterBar
           query={channels}
           activeCount={Number(state !== 'active')}
-          onSubmit={() => {}}
           search={
             <>
               <Field size="short" label={t('admin.mainstreamChannels.filters.state')}>

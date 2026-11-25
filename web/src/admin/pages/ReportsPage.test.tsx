@@ -100,7 +100,15 @@ describe('ReportsPage numbered pagination', () => {
         route: '/reports?status=pending_review&page=3&page_size=50',
       },
     );
-    expect(mocks.useReportsPage).toHaveBeenCalledWith('operator', 'pending_review', '3', 50, true);
+    expect(mocks.useReportsPage).toHaveBeenCalledWith(
+      'operator',
+      'pending_review',
+      '3',
+      50,
+      true,
+      '',
+      false,
+    );
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/reports?status=pending_review&page=3&page_size=50',
     );

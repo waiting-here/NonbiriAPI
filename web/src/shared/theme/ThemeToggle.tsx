@@ -22,3 +22,34 @@ export function ThemeToggle() {
     </select>
   );
 }
+
+export function DisplayPreferences() {
+  const { t } = useTranslation();
+  const { density, setDensity, fontSize, setFontSize } = useTheme();
+  return (
+    <>
+      <label>
+        {t('common.deviceDisplay.density')}
+        <select
+          value={density}
+          onChange={(event) =>
+            setDensity(event.target.value === 'compact' ? 'compact' : 'comfortable')
+          }
+        >
+          <option value="comfortable">{t('common.deviceDisplay.comfortable')}</option>
+          <option value="compact">{t('common.deviceDisplay.compact')}</option>
+        </select>
+      </label>
+      <label>
+        {t('common.deviceDisplay.font')}
+        <select
+          value={fontSize}
+          onChange={(event) => setFontSize(event.target.value === 'large' ? 'large' : 'default')}
+        >
+          <option value="default">{t('common.deviceDisplay.standard')}</option>
+          <option value="large">{t('common.deviceDisplay.large')}</option>
+        </select>
+      </label>
+    </>
+  );
+}

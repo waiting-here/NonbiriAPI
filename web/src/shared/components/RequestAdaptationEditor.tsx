@@ -1,7 +1,9 @@
 import { isAISDKGateway } from '@shared/operations/connectorPolicy';
+import { DraftLeaveGuard } from './charity/DraftLeaveScope';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Button } from '@shared/components/ui/Button';
 import { Field, Fields, FormActions, Fold, Note, OutcomeNote } from '@shared/components/ui';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiFetch, isApiError } from '@shared/query/http';
 import { useRequestAdaptationCopy, type RequestAdaptationCopyKey } from './requestAdaptationCopy';
@@ -240,9 +242,226 @@ function buildPayload(draft: Draft, revision: string, copy: Copy) {
   return payload;
 }
 
+type TransferRules = Partial<Record<MapKind, Record<string, string | number | boolean>>> &
+  Partial<Record<ListKind, string[]>>;
+const transferSections = ['body_defaults', 'body_forced', 'fixed_headers'] as const;
+
+function transferableValue(
+  kind: MapKind,
+  name: string,
+  value: unknown,
+): value is string | number | boolean {
+  if (kind === 'fixed_headers') {
+    if (typeof value !== 'string') return false;
+    return (
+      (name.toLowerCase() === 'x-client-version' &&
+        typeof value === 'string' &&
+        /^\d{1,4}(?:\.\d{1,4}){0,3}$/.test(value)) ||
+      (['content-type', 'accept'].includes(name.toLowerCase()) &&
+        ['application/json', 'text/event-stream'].includes(String(value)))
+    );
+  }
+  if (typeof value === 'number' && Number.isFinite(value))
+    return [
+      '/temperature',
+      '/top_p',
+      '/top_k',
+      '/max_tokens',
+      '/max_completion_tokens',
+      '/max_output_tokens',
+      '/presence_penalty',
+      '/frequency_penalty',
+      '/seed',
+      '/n',
+    ].includes(name);
+  if (typeof value === 'boolean')
+    return ['/stream', '/parallel_tool_calls', '/logprobs'].includes(name);
+  if (typeof value !== 'string') return false;
+  return (
+    (name === '/reasoning_effort' &&
+      ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(value))) ||
+    (name === '/tool_choice' && ['auto', 'none', 'required'].includes(String(value)))
+  );
+}
+
+function protectedRule(row: Row) {
+  return Boolean(
+    row.sensitivePaths?.length ||
+    row.sensitivePathText?.trim() ||
+    (row.existing && row.savedValue === undefined),
+  );
+}
+
+function safeRuleName(kind: ListKind, value: string) {
+  if (/authorization|cookie|token|secret|credential|password|api[-_]?key/i.test(value))
+    return false;
+  return kind === 'forward_headers'
+    ? /^[a-z][a-z0-9-]{0,62}$/i.test(value)
+    : /^\/[a-z][a-z0-9_]*(?:\/[a-z][a-z0-9_]*){0,5}$/i.test(value);
+}
+
+function exportRules(draft: Draft): TransferRules {
+  const result: TransferRules = {};
+  for (const kind of ['forward_headers', 'native_extension_paths'] as const) {
+    if (draft[kind].mode !== 'replace') continue;
+    const names = draft[kind].text
+      .split(/\r?\n/)
+      .map((name) => name.trim())
+      .filter((name) => safeRuleName(kind, name));
+    if (names.length) result[kind] = names;
+  }
+  for (const kind of transferSections) {
+    if (draft[kind].mode !== 'replace') continue;
+    for (const row of draft[kind].rows) {
+      if (row.action === 'clear' || protectedRule(row)) continue;
+      const value: unknown =
+        kind === 'fixed_headers'
+          ? row.value
+          : validJson(row.value)
+            ? JSON.parse(row.value)
+            : undefined;
+      if (transferableValue(kind, row.name, value)) (result[kind] ??= {})[row.name] = value;
+    }
+  }
+  return result;
+}
+
+function mergeRules(draft: Draft, text: string): Draft {
+  const rules = record(JSON.parse(text));
+  const next = { ...draft };
+  let count = 0;
+  for (const [rawKind, rawRules] of Object.entries(rules)) {
+    if (rawKind === 'forward_headers' || rawKind === 'native_extension_paths') {
+      if (
+        !Array.isArray(rawRules) ||
+        !rawRules.every((name) => typeof name === 'string' && safeRuleName(rawKind, name))
+      )
+        throw new Error('invalid rule list');
+      if (rawRules.length) {
+        const prior = next[rawKind].text
+          .split(/\r?\n/)
+          .map((name) => name.trim())
+          .filter(Boolean);
+        next[rawKind] = { mode: 'replace', text: [...new Set([...prior, ...rawRules])].join('\n') };
+        count += rawRules.length;
+      }
+      continue;
+    }
+    const kind = transferSections.find((key) => key === rawKind);
+    if (!kind) throw new Error('invalid section');
+    const rows = [...draft[kind].rows];
+    for (const [name, value] of Object.entries(record(rawRules))) {
+      if (!transferableValue(kind, name, value)) throw new Error('invalid portable rule');
+      const index = rows.findIndex((row) =>
+        kind === 'fixed_headers'
+          ? row.name.toLowerCase() === name.toLowerCase()
+          : row.name === name,
+      );
+      const previous = rows[index];
+      if (previous && protectedRule(previous)) throw new Error('protected rule');
+      const row: Row = {
+        ...previous,
+        existing: previous?.existing ?? false,
+        name: previous?.name ?? name,
+        action: 'replace',
+        value: kind === 'fixed_headers' ? String(value) : JSON.stringify(value),
+      };
+      if (index < 0) rows.push(row);
+      else rows[index] = row;
+      count++;
+    }
+    if (Object.keys(record(rawRules)).length) next[kind] = { mode: 'replace', rows };
+  }
+  if (!count) throw new Error('empty portable rule set');
+  return next;
+}
+
+function RuleTransfer({
+  draft,
+  setDraft,
+  copy,
+}: {
+  draft: Draft;
+  setDraft: (draft: Draft) => void;
+  copy: Copy;
+}) {
+  const { t } = useTranslation();
+  const [text, setText] = useState('');
+  const [preview, setPreview] = useState('');
+  const [error, setError] = useState(false);
+  function perform(apply: boolean) {
+    try {
+      const next = mergeRules(draft, text);
+      buildPayload(next, '0', copy);
+      if (apply) {
+        setDraft(next);
+        setPreview('');
+        setText('');
+      } else setPreview(JSON.stringify(JSON.parse(text), null, 2));
+      setError(false);
+    } catch {
+      setError(true);
+      setPreview('');
+    }
+  }
+  return (
+    <Fold title={t('common.adaptationTransfer.title')} plain>
+      <Field
+        label={t('common.adaptationTransfer.rules')}
+        help={t('common.adaptationTransfer.help')}
+        error={error ? t('common.adaptationTransfer.invalid') : undefined}
+      >
+        {(field) => (
+          <textarea
+            {...field}
+            rows={5}
+            maxLength={65536}
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value);
+              setPreview('');
+              setError(false);
+            }}
+          />
+        )}
+      </Field>
+      <Button
+        type="button"
+        onClick={() => {
+          setText(JSON.stringify(exportRules(draft), null, 2));
+          setPreview('');
+          setError(false);
+        }}
+      >
+        {t('common.adaptationTransfer.export')}
+      </Button>
+      <Button type="button" disabled={!text.trim()} onClick={() => perform(false)}>
+        {t('common.adaptationTransfer.preview')}
+      </Button>
+      {preview && (
+        <>
+          <pre>{preview}</pre>
+          <Button type="button" onClick={() => perform(true)}>
+            {t('common.adaptationTransfer.apply')}
+          </Button>
+        </>
+      )}
+    </Fold>
+  );
+}
+
 function newOperationKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function validJson(text: string) {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function MapEditor({
@@ -386,7 +605,15 @@ function MapEditor({
               )}
             </Field>
             {row.action === 'replace' || (row.action === 'keep' && row.savedValue !== undefined) ? (
-              <Field size="long" label={copy('value')}>
+              <Field
+                size="long"
+                label={copy('value')}
+                error={
+                  row.action === 'replace' && kind !== 'fixed_headers' && !validJson(row.value)
+                    ? copy('invalidJSON')
+                    : undefined
+                }
+              >
                 {(field) =>
                   kind === 'fixed_headers' ? (
                     <input
@@ -418,6 +645,35 @@ function MapEditor({
             ) : row.existing && row.action === 'keep' ? (
               <span>{copy('masked')}</span>
             ) : null}
+            {!row.existing && editable && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() =>
+                  change({
+                    ...section,
+                    rows: section.rows.filter((_, position) => position !== index),
+                  })
+                }
+              >
+                {t('common.remove')}
+              </Button>
+            )}
+            {editable && kind !== 'fixed_headers' && row.action === 'replace' && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!validJson(row.value)}
+                onClick={() =>
+                  changeRow(index, {
+                    ...row,
+                    value: JSON.stringify(JSON.parse(row.value), null, 2),
+                  })
+                }
+              >
+                {t('common.adaptationTransfer.format')}
+              </Button>
+            )}
             <div>
               <Field label={copy('protection')} help={copy('protectionHelp')}>
                 {(field) => (
@@ -545,19 +801,35 @@ export function RequestAdaptationEditor({
   const { t } = useTranslation();
   const modelScope = scope === 'personal-model' || scope === 'charity-model';
   const copy = useRequestAdaptationCopy(scope === 'endpoint' || scope === 'personal-model');
+  const [confirmRefresh, setConfirmRefresh] = useState(false);
   const [reload, setReload] = useState(0);
   const [view, setView] = useState<View | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingUrl, setSavingUrl] = useState<string | null>(null);
+  const saving = savingUrl === url;
   const [notice, setNotice] = useState('');
   const [loadError, setLoadError] = useState<'stale' | 'loadError' | 'savedRefreshFailed' | null>(
     null,
   );
   const [blocked, setBlocked] = useState(false);
+  const activeContext = useRef<symbol | null>(null);
+  useLayoutEffect(() => {
+    activeContext.current = Symbol();
+    return () => {
+      activeContext.current = null;
+    };
+  }, [url]);
   const [loadedContext, setLoadedContext] = useState<string | null>(null);
   const loadedContextRef = useRef<string | null>(null);
   const contextChanged = loadedContext !== null && loadedContext !== url;
+  const dirty = Boolean(
+    editable &&
+    view &&
+    draft &&
+    !contextChanged &&
+    JSON.stringify(draft) !== JSON.stringify(newDraft(view)),
+  );
   const saveBlocked = blocked || contextChanged;
   const canEdit = editable && !saving && !saveBlocked;
 
@@ -569,6 +841,7 @@ export function RequestAdaptationEditor({
         if (controller.signal.aborted) return;
         const next = parseView(payload);
         loadedContextRef.current = url;
+        setSavingUrl(null);
         setLoadedContext(url);
         setView(next);
         setDraft(newDraft(next));
@@ -630,10 +903,12 @@ export function RequestAdaptationEditor({
           .map((x) => x.trim())
           .filter(Boolean);
     } catch (error) {
+      event.currentTarget.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
       setNotice(error instanceof Error ? error.message : copy('saveError'));
       return;
     }
-    setSaving(true);
+    const savedContext = activeContext.current;
+    setSavingUrl(url);
     setNotice('');
     let successfulResponseReceived = false;
     try {
@@ -642,6 +917,7 @@ export function RequestAdaptationEditor({
         headers: { 'Idempotency-Key': newOperationKey() },
         json: payload,
       });
+      if (activeContext.current !== savedContext) return;
       successfulResponseReceived = true;
       const next = parseView(response);
       setView(next);
@@ -649,15 +925,18 @@ export function RequestAdaptationEditor({
       setLoadError(null);
       try {
         const current = parseView(await apiFetch<unknown>(url));
+        if (activeContext.current !== savedContext) return;
         setView(current);
         setDraft(newDraft(current));
         setBlocked(false);
       } catch {
+        if (activeContext.current !== savedContext) return;
         setLoadError('savedRefreshFailed');
         setBlocked(true);
       }
       setNotice(modelScope ? t('requestAdaptation.model.saved') : copy('saved'));
     } catch (error) {
+      if (activeContext.current !== savedContext) return;
       if (isApiError(error) && error.status === 409) {
         setNotice(copy('conflict'));
         setBlocked(true);
@@ -673,7 +952,9 @@ export function RequestAdaptationEditor({
         setNotice(copy('saveError'));
       }
     } finally {
-      setSaving(false);
+      setSavingUrl((current) =>
+        current === url && activeContext.current === savedContext ? null : current,
+      );
     }
   };
 
@@ -685,12 +966,12 @@ export function RequestAdaptationEditor({
       if (kind === 'forward_headers' || kind === 'native_extension_paths')
         updateList(kind, {
           mode: next,
-          text: next === 'inherit' ? '' : (section as ListDraft).text,
+          text: (section as ListDraft).text,
         });
       else
         updateMap(kind, {
           mode: next,
-          rows: next === 'inherit' ? [] : (section as MapDraft).rows,
+          rows: (section as MapDraft).rows,
         });
     };
     return (
@@ -729,6 +1010,9 @@ export function RequestAdaptationEditor({
               {scope === 'personal-model'
                 ? t('requestAdaptation.personal.inheritedEndpoint')
                 : copy('inherited')}
+              {view.effective?.[kind].values.length ? (
+                <code>{view.effective[kind].values.join(', ')}</code>
+              ) : null}
             </p>
           ) : (
             <div>
@@ -834,13 +1118,26 @@ export function RequestAdaptationEditor({
   );
   return (
     <section className="core-card">
+      <DraftLeaveGuard dirty={dirty} />
+      <ConfirmDialog
+        open={confirmRefresh}
+        title={t('common.leave.title')}
+        description={t('common.leave.body')}
+        confirmLabel={copy('refresh')}
+        cancelLabel={t('common.leave.stay')}
+        onCancel={() => setConfirmRefresh(false)}
+        onConfirm={() => {
+          setConfirmRefresh(false);
+          refresh();
+        }}
+      />
       <div className="core-card__header">
         <h3>{modelScope ? t('requestAdaptation.model.title') : copy('title')}</h3>
         <Button
           type="button"
 
           disabled={saving}
-          onClick={refresh}
+          onClick={() => (dirty && !blocked ? setConfirmRefresh(true) : refresh())}
         >
           {copy('refresh')}
         </Button>
@@ -915,8 +1212,21 @@ export function RequestAdaptationEditor({
               ] as const
             ).map(renderSection)
           )}
+          {canEdit && <RuleTransfer key={url} draft={draft} setDraft={setDraft} copy={copy} />}
           {editable ? (
             <FormActions>
+              {dirty && (
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setDraft(newDraft(view));
+                    setNotice('');
+                  }}
+                >
+                  {t('common.localDraftDiscard')}
+                </Button>
+              )}
               <Button variant="primary" type="submit" disabled={saving || saveBlocked}>
                 {modelScope ? t('requestAdaptation.model.save') : copy('save')}
               </Button>

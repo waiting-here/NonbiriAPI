@@ -244,10 +244,12 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   const master = page.getByLabel('Games master switch');
   await master.focus();
   await page.keyboard.press('Space');
-  await expect(master).not.toBeChecked();
-  await expect(page.getByRole('button', { name: 'Save game configuration' })).toBeDisabled();
-  await master.press('Space');
+  const pause = page.getByRole('alertdialog');
+  await expect(pause).toContainText('Fishing');
+  await expect(pause).toContainText('Link');
+  await pause.getByRole('button', { name: 'Cancel' }).click();
   await expect(master).toBeChecked();
+  expect(config.patches).toHaveLength(0);
 
   await page.getByRole('button', { name: 'Fishing Game settings', exact: true }).click();
   const worm = page.getByLabel('Worm bait', { exact: true });
@@ -336,6 +338,38 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   consoleGuard.assertNone();
 });
 import { duelConfigFixture } from '../duelConfigFixture';
+
+test('pausing games preserves unrelated edits and remembers the previous modules after reload', async ({
+  context,
+  page,
+}) => {
+  const config = {
+    current: structuredClone(INITIAL_CONFIG),
+    patches: [] as Record<string, unknown>[],
+  };
+  await prepare(context, page, config);
+  await page.goto(`${ADMIN_ORIGIN}/games`);
+  const fishing = page.getByRole('button', { name: 'Fishing Game settings', exact: true });
+  await fishing.click();
+  await page.getByLabel('Worm bait', { exact: true }).fill('4.25');
+  await page.getByRole('button', { name: 'Done, keep draft', exact: true }).click();
+  await page.getByLabel('Games master switch').press('Space');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Disable and save' }).click();
+  await expect.poll(() => config.patches.length).toBe(1);
+  expect(config.patches[0]).toMatchObject({
+    expected_revision: '7',
+    master_enabled: false,
+    fishing: { enabled: false, bait_prices: { worm: '2.5' } },
+    linklink: { enabled: false },
+    rps: { enabled: false },
+  });
+  await expect(page.getByText(/Enabled before the last pause/)).toContainText('Fishing');
+  await fishing.click();
+  await expect(page.getByLabel('Worm bait', { exact: true })).toHaveValue('4.25');
+  await page.getByRole('button', { name: 'Done, keep draft', exact: true }).click();
+  await page.reload();
+  await expect(page.getByText(/Enabled before the last pause/)).toContainText('Fishing');
+});
 
 test('admin validates quick amount count, duplicates and limits before saving the complete list', async ({
   context,
@@ -487,85 +521,94 @@ for (const scenario of [
   });
 }
 
-import { aiAdminFixture } from '../fixtures/aiPlayers';
-
 for (const width of [390, 1440]) {
-  test('AI strategy editor previews and publishes at ' + width, async ({ context, page }) => {
-    const errors = await prepare(context, page, {
-      current: structuredClone(INITIAL_CONFIG),
-      patches: [],
-    });
+  test('admin can toggle each built-in companion at ' + width, async ({ context, page }) => {
+    const zh = width === 390;
+    const errors = await prepare(
+      context,
+      page,
+      {
+        current: structuredClone(INITIAL_CONFIG),
+        patches: [],
+      },
+      { locale: zh ? 'zh' : 'en', theme: zh ? 'dark' : 'light' },
+    );
     await page.setViewportSize({ width, height: 900 });
-    const data = aiAdminFixture(),
-      writes: Record<string, unknown>[] = [];
-    await page.route('**/admin/api/games/bidding/ai**', async (route) => {
+    const games = zh
+      ? { bidding: '竞标对决', likes: '回合制对战', gwent: 'AI 昆特牌' }
+      : { bidding: 'Bidding Duel', likes: 'Turn-based battle', gwent: 'AI Gwent' };
+    const enabled = new Map(Object.keys(games).map((game) => [game, true]));
+    await page.route('**/admin/api/games/*/companion**', async (route) => {
       const req = route.request(),
-        path = new URL(req.url()).pathname;
-      if (path.endsWith('/preview'))
-        return route.fulfill({
-          json: {
-            candidates: [{ id: 'bid-2', score: 0.2, probability: 1, guaranteed_win: false }],
-            matched_rule: 0,
-            filter_empty: false,
-            memory_weight: 0,
-          },
-        });
-      if (path.endsWith('/policies')) {
-        const body = req.postDataJSON();
-        writes.push(body);
-        return route.fulfill({
-          json: {
-            ...data.policies[0],
-            ...body,
-            id: 'aip_BBBBBBBBBBBBBBBBBBBBBQ',
-            revision: '1',
-            version: 1,
-          },
-        });
+        parts = new URL(req.url()).pathname.split('/'),
+        game = parts[4];
+      if (req.method() === 'POST') {
+        expect(parts.slice(5).join('/')).toBe('companion/settings');
+        expect(req.headers()['idempotency-key']).toBeTruthy();
+        enabled.set(game, req.postDataJSON().enabled);
       }
-      return route.fulfill({ json: data });
+      return route.fulfill({
+        json: {
+          enabled: enabled.get(game),
+          upload_available: true,
+          upload_game_enabled: true,
+          upload_global_enabled: true,
+          official: {
+            name: 'official',
+            version: 0,
+            difficulties: [1],
+            versions: [
+              { version: 0, status: 'ready', created_at: 0 },
+              { version: 1, status: 'ready', created_at: 100 },
+            ],
+          },
+          programs: [],
+        },
+      });
     });
-    await page.goto(ADMIN_ORIGIN + '/games');
-    await page.getByRole('link', { name: 'AI players and strategies' }).click();
-    const dialog = page.getByRole('region', { name: 'AI players and strategies', exact: true });
-    await expect(page.getByRole('heading', { name: 'AI players and strategies' })).toBeVisible();
-    await dialog.getByRole('button', { name: 'Duplicate', exact: true }).click();
-    await dialog
-      .getByRole('spinbutton', { name: 'Preserve strong cards', exact: true })
-      .fill('0.95');
-    await dialog.getByRole('button', { name: 'Add rule', exact: true }).click();
-    await dialog.getByRole('button', { name: 'Preview choices', exact: true }).click();
-    await expect(dialog.getByText('Matched rule 1')).toBeVisible();
-    await expect(dialog.getByText('100.0%')).toBeVisible();
+    await page.goto(ADMIN_ORIGIN + '/games/companions');
+    for (const [game, label] of Object.entries(games)) {
+      await page.getByRole('tab', { name: label, exact: true }).click();
+      const toggle = page.getByRole('switch', {
+        name: zh ? '开放新的陪玩对局' : 'Allow new companion matches',
+      });
+      await expect(toggle).toBeChecked();
+      for (const name of zh
+        ? ['全站程序上传', '本游戏程序上传']
+        : ['Site-wide program uploads', 'Program uploads for this game']) {
+        const uploadGate = page.getByRole('switch', { name });
+        await expect(uploadGate).toBeDisabled();
+        await expect(uploadGate).not.toBeChecked();
+      }
+      await expect(
+        page.getByText(
+          zh ? 'v1.4.3 暂不支持程序上传。' : 'Program uploads are unavailable in v1.4.3.',
+        ),
+      ).toBeVisible();
+      await expect(page.locator('input[type=file]')).toBeDisabled();
+      await expect(
+        page.getByRole('textbox', { name: zh ? '源代码' : 'Source code' }),
+      ).toBeDisabled();
+      await expect(
+        page.getByRole('combobox', { name: zh ? '官方程序版本' : 'Official program version' }),
+      ).toBeDisabled();
+      for (const name of zh
+        ? ['上传并编译', '启用此版本']
+        : ['Upload and compile', 'Activate version'])
+        await expect(page.getByRole('button', { name })).toBeDisabled();
+      await page
+        .getByText(zh ? '开放新的陪玩对局' : 'Allow new companion matches', { exact: true })
+        .click();
+      await expect.poll(() => enabled.get(game)).toBe(false);
+      await expect(toggle).not.toBeChecked();
+    }
     if (process.env.NONBIRI_VISUAL_DIR)
       await page.screenshot({
-        path: process.env.NONBIRI_VISUAL_DIR + '/ai-editor-' + width + '.png',
-        fullPage: true,
+        path: process.env.NONBIRI_VISUAL_DIR + '/companion-admin-' + width + '.png',
       });
-    const overflow = await dialog.evaluate((root) =>
-      [root, ...root.querySelectorAll<HTMLElement>('*')]
-        .filter((el) => {
-          const style = getComputedStyle(el);
-          const visuallyHidden =
-            style.clip === 'rect(0px, 0px, 0px, 0px)' || style.clipPath === 'inset(50%)';
-          return !visuallyHidden && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1;
-        })
-        .map((el) => ({
-          tag: el.tagName,
-          class: el.className,
-          width: el.clientWidth,
-          content: el.scrollWidth,
-          columns: getComputedStyle(el).gridTemplateColumns,
-        })),
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
     );
-    expect(overflow).toEqual([]);
-    await dialog.getByRole('button', { name: 'Save strategy version', exact: true }).click();
-    await expect(dialog.getByRole('status').filter({ hasText: /^Saved$/ })).toBeVisible();
-    expect(writes).toHaveLength(1);
-    expect(
-      (writes[0].definition as { parameters: { hand_value: number } }).parameters.hand_value,
-    ).toBe(0.95);
-    await page.getByRole('link', { name: 'Back to game settings', exact: true }).click();
     errors.assertNone();
   });
 }

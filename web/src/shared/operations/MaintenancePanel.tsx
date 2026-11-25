@@ -55,6 +55,7 @@ export function MaintenancePanel({
         : disableAdminMaintenance(input.expectedRevision, input.reason, key));
       context.commit(() => {
         client.setQueryData(maintenanceKeys.state(role), result);
+        void client.invalidateQueries({ queryKey: ['public-config'] });
         setConfirmation(null);
         setReason('');
       });

@@ -253,9 +253,7 @@ async function applyLanguage(page: Page, language: ViewportFixture['language']):
   await expect(other).toBeVisible();
   await selected.click();
   await expect(selected).toHaveAttribute('aria-pressed', 'true');
-  await expect(selected).toHaveAttribute('aria-current', 'true');
   await expect(other).toHaveAttribute('aria-pressed', 'false');
-  await expect(other).not.toHaveAttribute('aria-current');
   await expect(page.locator('html')).toHaveAttribute('lang', language === 'zh' ? 'zh-CN' : 'en');
   await page.goto(gameURL);
   await expect(page.locator('.linklink-tile:not(.is-removed)').first()).toBeVisible();
@@ -278,11 +276,11 @@ async function applyViewport(
   await page.setViewportSize({ width: fixture.width, height: fixture.height });
   if (options.switchLanguage !== false) await applyLanguage(page, fixture.language);
   if (options.switchTheme !== false) {
-    const name = fixture.language === 'zh' ? '账号操作' : 'Account actions';
-    const trigger = page.getByRole('button', { name: new RegExp('^' + name) });
+    const name = fixture.language === 'zh' ? '装扮' : 'Appearance';
+    const trigger = page.getByRole('button', { name, exact: true });
     await trigger.click();
-    const account = page.getByRole('dialog', { name });
-    await account
+    const appearance = page.getByRole('dialog', { name, exact: true });
+    await appearance
       .getByRole('combobox', { name: fixture.language === 'zh' ? '主题' : 'Theme' })
       .selectOption(fixture.theme);
     await page.keyboard.press('Escape');
@@ -302,14 +300,14 @@ async function applyViewport(
     const body = getComputedStyle(document.body);
     return {
       densityFactor: Number(root.getPropertyValue('--nb-density-factor')),
-      fontScale: Number(root.getPropertyValue('--nb-font-scale')),
+      rootFontSize: root.fontSize,
       bodyFontSize: body.fontSize,
       backgroundColor: body.backgroundColor,
     };
   });
   expect(styles.densityFactor).toBe(fixture.density === 'compact' ? 0.875 : 1);
-  expect(styles.fontScale).toBe(fixture.fontSize === 'large' ? 1.125 : 1);
-  expect(styles.bodyFontSize).toBe(fixture.fontSize === 'large' ? '18px' : '16px');
+  expect(styles.rootFontSize).toBe(fixture.fontSize === 'large' ? '18px' : '16px');
+  expect(styles.bodyFontSize).toBe(styles.rootFontSize);
   expect(styles.backgroundColor).toBe(expectedBackground);
   await page.locator('.linklink-tile:not(.is-removed)').first().waitFor({ state: 'visible' });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));

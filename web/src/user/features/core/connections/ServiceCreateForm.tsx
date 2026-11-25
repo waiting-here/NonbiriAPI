@@ -5,7 +5,7 @@ import { Field, Fold, Note, Segmented } from '@shared/components/ui';
 import { OptionCards } from '@shared/components/ui/OptionCards';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
-import { DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
+import { configurationOptions, DISCOVERY_FORMATS, type DiscoveryPreset } from '@shared/connections';
 import { useQueryClient } from '@tanstack/react-query';
 import { coreKeys, coreSessionMatchesAccount, useEndpointCreateOptions } from '../queries';
 import { canonicalBaseURLPreview, validateEndpointSecret } from '../normalizers';
@@ -119,10 +119,13 @@ export function ServiceCreateForm({
   const channels = options.data?.mainstream_channels ?? [];
   const channel = channels.find((row) => row.id === channelId);
   const nativeOptions = options.data?.native_service_options ?? [];
+  const configurations = configurationOptions(nativeOptions);
   const connector =
     chosenConnector ??
-    (nativeOptions.find((row) => row.connector_type === 'openai-compatible') ?? nativeOptions[0])
-      ?.connector_type ??
+    (
+      configurations.find((row) => row.configuration_type === 'openai-compatible') ??
+      configurations[0]
+    )?.connector_type ??
     '';
   const chosenProtocol = nativeOptions.find((row) => row.connector_type === connector);
   const services = chosenProtocol?.native_services ?? [];
@@ -205,7 +208,7 @@ export function ServiceCreateForm({
     mode === 'custom' && !started && !locked,
   );
   const ready = Boolean(
-    serviceName.trim() &&
+    ((connection && mode === 'mainstream') || serviceName.trim()) &&
     inputs.length &&
     (mode === 'mainstream' || (chosenProtocol && address.trim() && services.length)) &&
     inputs.every(({ input }) => input.native_services?.length) &&
@@ -482,6 +485,31 @@ export function ServiceCreateForm({
                 />
               )}
             </Field>
+            <Field label={t('common.connections.protocol')}>
+              {(props) => (
+                <select
+                  {...props}
+                  form={formID}
+                  value={connector}
+                  disabled={locked || started}
+                  required
+                  onChange={(event) => {
+                    setConnector(event.target.value);
+                    setFormat(null);
+                    setRerankPath('');
+                    setDiscoveryOverride(undefined);
+                  }}
+                >
+                  <option value="">{t('common.connections.selectProtocol')}</option>
+                  {configurations.map((row) => (
+                    <option key={row.connector_type} value={row.connector_type}>
+                      {coreText(CONNECTOR_COPY_KEYS[row.configuration_type as ConnectorType])}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+
             <MainstreamMatches
               options={suggestions}
               disabled={locked || started}
@@ -576,19 +604,21 @@ export function ServiceCreateForm({
             ) : null}
           </>
         )}
-        <Field label={t('user.workflows.serviceName')}>
-          {(props) => (
-            <input
-              {...props}
-              form={formID}
-              value={serviceName}
-              required
-              maxLength={128}
-              disabled={locked || started || (!connection && Boolean(saved.connection))}
-              onChange={(event) => setName(event.target.value)}
-            />
-          )}
-        </Field>
+        {(!connection || mode === 'custom') && (
+          <Field label={t('user.workflows.serviceName')}>
+            {(props) => (
+              <input
+                {...props}
+                form={formID}
+                value={serviceName}
+                required
+                maxLength={128}
+                disabled={locked || started || (!connection && Boolean(saved.connection))}
+                onChange={(event) => setName(event.target.value)}
+              />
+            )}
+          </Field>
+        )}
         {saved.credential ? (
           <Note>{credentialLabel(saved.credential)}</Note>
         ) : (
@@ -673,37 +703,6 @@ export function ServiceCreateForm({
             }
             lazy
           >
-            <Field label={t('common.connections.protocol')}>
-              {(props) => (
-                <select
-                  {...props}
-                  form={formID}
-                  value={connector}
-                  disabled={locked || started}
-                  required
-                  onChange={(event) => {
-                    setConnector(event.target.value);
-                    setFormat(null);
-                    setRerankPath('');
-                    setDiscoveryOverride(undefined);
-                  }}
-                >
-                  <option value="">{t('common.connections.selectProtocol')}</option>
-                  {nativeOptions
-                    .filter(
-                      (row, index, rows) =>
-                        rows.findIndex(
-                          (other) => other.configuration_type === row.configuration_type,
-                        ) === index,
-                    )
-                    .map((row) => (
-                      <option key={row.connector_type} value={row.connector_type}>
-                        {coreText(CONNECTOR_COPY_KEYS[row.configuration_type as ConnectorType])}
-                      </option>
-                    ))}
-                </select>
-              )}
-            </Field>
             <ProtocolRerankField
               formats={chosenProtocol?.rerank_formats}
               value={format}

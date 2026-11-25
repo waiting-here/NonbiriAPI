@@ -36,6 +36,59 @@ func (f *fixture) pool(t *testing.T, name string, rules Rules, featured ...strin
 	t.Fatal("saved pool missing")
 	return Pool{}
 }
+func TestRemoveDraftRequiresUnpublishedHistoryAndCurrentRevision(t *testing.T) {
+	f := newFixture(t)
+	id, err := db.GenerateOpaqueID("gp_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Pool{ID: id, Name: "Draft", Kind: "limited", Cover: "i", Rules: DefaultRules(), Featured: []string{"i-chatgpt"}}
+	f.save(t, "new-draft", AdminInput{Kind: "pool", Pool: &p})
+	remove := AdminInput{Kind: "delete_pool", ExpectedRevision: 1, DeleteID: id}
+	stale := remove
+	stale.ExpectedRevision = 2
+	if _, err := f.s.AdminSave(t.Context(), f.admin, "stale-remove-0123456789abcdef", stale); !errors.Is(err, ErrConflict) {
+		t.Fatal(err)
+	}
+	for range 2 {
+		result := f.save(t, "remove-draft", remove)
+		for _, pool := range result.Pools {
+			if pool.ID == id {
+				t.Fatal("draft survived deletion")
+			}
+		}
+	}
+	if _, err := f.s.AdminSave(t.Context(), f.admin, "reuse-draft-0123456789abcdef", AdminInput{Kind: "pool", Pool: &p}); !errors.Is(err, ErrConflict) {
+		t.Fatal(err)
+	}
+	id, err = db.GenerateOpaqueID("gp_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, end := f.at.Load()+3600, f.at.Load()+7200
+	p.ID, p.Published, p.StartsAt, p.EndsAt = id, true, &start, &end
+	f.save(t, "schedule-draft", AdminInput{Kind: "pool", Pool: &p})
+	p.Published = false
+	f.save(t, "unschedule-draft", AdminInput{Kind: "pool", Pool: &p, ExpectedRevision: 1})
+	if _, err := f.s.AdminSave(t.Context(), f.admin, "past-public-0123456789abcdef", AdminInput{Kind: "delete_pool", DeleteID: id, ExpectedRevision: 2}); !errors.Is(err, ErrConflict) {
+		t.Fatal(err)
+	}
+	if _, err := f.s.AdminSave(t.Context(), f.admin, "builtin-0123456789abcdef", AdminInput{Kind: "delete_preset", DeleteID: "summer", ExpectedRevision: 1}); !errors.Is(err, ErrInvalid) {
+		t.Fatal(err)
+	}
+	presetID, err := db.GenerateOpaqueID("gt_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.save(t, "new-custom-preset", AdminInput{Kind: "preset", Preset: &Preset{ID: presetID, Name: "Saved draft", Pool: p}})
+	result := f.save(t, "remove-custom-preset", AdminInput{Kind: "delete_preset", DeleteID: presetID, ExpectedRevision: 1})
+	for _, preset := range result.Presets {
+		if preset.ID == presetID {
+			t.Fatal("custom preset survived deletion")
+		}
+	}
+}
+
 func TestLimitedGroupsFlagsPoolLocksAndRerun(t *testing.T) {
 	f := newFixture(t)
 	f.enter(t)

@@ -133,12 +133,9 @@ async function saveAdaptation(page: Page, modelID: string, bindingID?: string) {
       .getByRole('button', { name: adaptation.title, exact: true })
       .click();
   }
-  const fold = await openFold(
-    page,
-    bindingID
-      ? common.common.operations.charity.adaptationSettings
-      : common.requestAdaptation.model.title,
-  );
+  const fold = bindingID
+    ? page.getByRole('dialog', { name: common.common.operations.charity.adaptationSettings, exact: true })
+    : await openFold(page, common.requestAdaptation.model.title);
   const defaults = fold.getByRole('group', { name: adaptation.bodyDefaults, exact: true });
   await expect(defaults).toBeVisible();
   const mode = defaults.getByLabel(adaptation.mode, { exact: true });
@@ -157,6 +154,10 @@ async function saveAdaptation(page: Page, modelID: string, bindingID?: string) {
     action: 'replace',
     value: 0.7,
   });
+  if (bindingID) {
+    await fold.getByRole('button', { name: common.common.connections.returnToBindings, exact: true }).click();
+    await expect(fold).toBeHidden();
+  }
 }
 async function maintainTemplate(page: Page, origin: string, suffix: string) {
   await page.goto(origin + '/steward?tab=charity&charity_section=templates&price_template=new');

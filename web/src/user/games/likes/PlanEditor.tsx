@@ -64,7 +64,10 @@ function ChoiceOptions({
   disabled,
 }: {
   readonly catalog: ModeCatalog;
-  readonly state: DuelState<LikesView, Presentation, LikesEvent[]>;
+  readonly state: Pick<
+    DuelState<LikesView, Presentation, LikesEvent[]>,
+    'view' | 'you' | 'locked' | 'round' | 'phase'
+  >;
   readonly value: Choice;
   readonly onChange: (v: Choice) => void;
   readonly disabled: boolean;
@@ -168,7 +171,10 @@ export function PlanEditor({
   onSelect,
 }: {
   readonly catalog: ModeCatalog;
-  readonly state: DuelState<LikesView, Presentation, LikesEvent[]>;
+  readonly state: Pick<
+    DuelState<LikesView, Presentation, LikesEvent[]>,
+    'view' | 'you' | 'locked' | 'round' | 'phase'
+  >;
   readonly blocked: boolean;
   readonly onLock: (plan: Plan) => void;
   readonly onInspect: (id: string) => void;

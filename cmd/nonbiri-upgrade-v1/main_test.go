@@ -18,7 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/upgrade/v1"
 )
 
-var expectedSourceSchemaVersions = []int{54, 55}
+var expectedSourceSchemaVersions = []int{54, 55, 56, 57, 58}
 
 func TestArgumentErrorsDoNotReadOrExposeEnvironment(t *testing.T) {
 	t.Setenv("NONBIRI_MASTER_KEY", "private-key-value")
@@ -49,9 +49,13 @@ func TestSchemaInfoNeedsNoDatabaseOrSecretEnvironment(t *testing.T) {
 			t.Fatal("unexpected source descriptor", source)
 		}
 	}
-	last := descriptor.OfflineConversions[len(descriptor.OfflineConversions)-1]
-	if last.SourceSchemaVersion != 55 || last.SourceManifestHash != db.Schema55ManifestHash || last.SourceCommit != "b1700f25d7a73535af76cdd15c356d92eff0d8fd" {
-		t.Fatal("latest source identity changed", last)
+	last := descriptor.OfflineConversions[2]
+	if last.SourceSchemaVersion != 56 || last.SourceManifestHash != db.Schema56ManifestHash || last.SourceCommit != "1bb01bdb833396fdd25dc2229f3be6265c34bae5" {
+		t.Fatal("released source identity changed", last)
+	}
+	dev := descriptor.OfflineConversions[3]
+	if dev.SourceSchemaVersion != 57 || dev.SourceManifestHash != db.Schema57ManifestHash || dev.SourceCommit != "5a50687973b51f0709103a907836e96041ae89f6" {
+		t.Fatal("development source identity changed", dev)
 	}
 	if strings.Contains(output.String(), "private-") {
 		t.Fatal("environment appeared in schema metadata")

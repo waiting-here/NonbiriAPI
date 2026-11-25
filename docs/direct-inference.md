@@ -179,19 +179,28 @@ When Responses uses the Chat service, input supports inline text and URL/data
 images, `instructions`, complete function-call/output history, function tools
 and choice, `max_output_tokens`, `temperature`, `top_p`, `parallel_tool_calls`
 and representable `text.format` values (`text`, `json_object`, `json_schema`).
+Text-only content blocks in Chat replies also map to Responses output text.
 Omitted Responses function `strict` uses supported strict-schema normalization;
 schemas outside that subset need an explicit representable strict setting.
-Reasoning/compaction items, audio/files, hosted tools, persistent references and
+Opaque reasoning or compaction items, audio/files, hosted tools, persistent references and
 other unrepresentable fields are rejected. A `reasoning` object containing only
 a supported `effort` maps to Chat `reasoning_effort`. A requested reasoning
 summary requires a route that can preserve it. Tool flattening and Chat transport
 overrides do not add capabilities to native direct operations.
 
 Generated `output_text` with empty annotations/logprobs and assistant refusal
-parts can be copied directly into the next inline input. Gateway additionally
-accepts its own reasoning items and bounded continuation extension, preserving
-part order and provider metadata; ordinary Chat conversion still rejects
-reasoning items. See [continuation histories](content-protocols.md#continuation-source-and-history-integrity).
+parts can be copied directly into the next inline input. Ordinary Chat
+`reasoning_content` and `reasoning` strings map to typed Responses
+`reasoning_text` items. Keep the generated item, including its ID, with the
+answer and tool calls to restore the same assistant field on the next request.
+Terminal partial assistant text can also be replayed after a token limit or
+content filter, including its readable reasoning. Tool history still requires
+complete calls and matching results.
+Switching between representations within one reply, signed native blocks and
+provider-specific replay fields require a route that can carry them intact.
+Gateway additionally accepts its own reasoning items and bounded continuation
+extension, preserving part order and provider metadata.
+[Continuation histories](content-protocols.md#continuation-source-and-history-integrity)
 
 Native Responses streams require an explicit completed/incomplete terminal
 event. A sparse terminal may supply only identity and usage: omitted object,

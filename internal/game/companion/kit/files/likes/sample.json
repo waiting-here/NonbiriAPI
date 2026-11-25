@@ -1,0 +1,252 @@
+{
+  "protocol": "nonbiri.decision/1",
+  "game": "likes",
+  "mode": "standard",
+  "rules_hash": "effe624f282f62ff5085c4cd177df089d41a83922d41ed0a3ca6356ae84b80d9",
+  "decision_id": "practice/1",
+  "seat": 0,
+  "round": 2,
+  "phase": "plan",
+  "view": {
+    "energy": 990,
+    "players": [
+      {
+        "role": "DeepSeek",
+        "harness": null,
+        "activeSlots": 4,
+        "gold": 500,
+        "likes": 3,
+        "burstCap": 0,
+        "burst": 0,
+        "sub": 0,
+        "api": 6900,
+        "images": 0,
+        "apiPack": 600,
+        "resources": {},
+        "resourceCaps": {},
+        "subscription": {
+          "burstInitial": 0,
+          "totalInitial": 0,
+          "totalCap": 0,
+          "burstResetAt": null,
+          "totalResetAt": null
+        },
+        "normalTurns": 2,
+        "stunned": false,
+        "overloaded": false,
+        "effects": [
+          {
+            "key": "B01:原版",
+            "kind": "CACHE",
+            "name": "短效缓存·普攻",
+            "positive": true,
+            "category": "buff",
+            "p": 30,
+            "q": 3,
+            "remaining": 0,
+            "layers": 1,
+            "refreshedTurn": 1,
+            "buffId": "B01:原版",
+            "appliedBy": "PUB01",
+            "activeFrom": 2,
+            "persistentLayers": 0
+          }
+        ],
+        "revealed": [
+          "PUB01"
+        ],
+        "slots": [
+          "PUB01",
+          null,
+          null,
+          null
+        ],
+        "fog": false,
+        "loadout": [
+          "PUB01"
+        ],
+        "used": {
+          "PUB01": 1
+        },
+        "skillDecay": {},
+        "distill": {
+          "template": null,
+          "level": null,
+          "learning": 10,
+          "usedSamples": []
+        }
+      },
+      {
+        "role": "ChatGPT",
+        "harness": null,
+        "activeSlots": 4,
+        "gold": 500,
+        "likes": 3,
+        "burstCap": 2000,
+        "burst": 1900,
+        "sub": 3900,
+        "api": 2000,
+        "images": 0,
+        "apiPack": 300,
+        "resources": {
+          "R_IMAGE": 10
+        },
+        "resourceCaps": {
+          "R_IMAGE": 10
+        },
+        "subscription": {
+          "burstInitial": 2000,
+          "totalInitial": 4000,
+          "totalCap": 4000,
+          "burstResetAt": 11,
+          "totalResetAt": 26
+        },
+        "normalTurns": 2,
+        "stunned": false,
+        "overloaded": false,
+        "effects": [
+          {
+            "key": "B01:原版",
+            "kind": "CACHE",
+            "name": "短效缓存·普攻",
+            "positive": true,
+            "category": "buff",
+            "p": 30,
+            "q": 3,
+            "remaining": 0,
+            "layers": 1,
+            "refreshedTurn": 1,
+            "buffId": "B01:原版",
+            "appliedBy": "PUB01",
+            "activeFrom": 2,
+            "persistentLayers": 0
+          }
+        ],
+        "revealed": [
+          "PUB01"
+        ],
+        "slots": [
+          "PUB01",
+          null,
+          null,
+          null
+        ],
+        "fog": true,
+        "used": {
+          "PUB01": 1
+        },
+        "skillDecay": {},
+        "distill": null
+      }
+    ],
+    "records": [
+      {
+        "skipped": false,
+        "stunned": false,
+        "last": {
+          "id": 1,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        },
+        "lastMain": {
+          "id": 1,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        },
+        "lastSuccess": {
+          "id": 1,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        },
+        "lastCopyable": {
+          "id": 1,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        }
+      },
+      {
+        "skipped": false,
+        "stunned": false,
+        "last": {
+          "id": 2,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        },
+        "lastMain": {
+          "id": 2,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        },
+        "lastSuccess": {
+          "id": 2,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        },
+        "lastCopyable": {
+          "id": 2,
+          "skillId": "PUB01",
+          "success": true,
+          "kind": "basic",
+          "derived": false
+        }
+      }
+    ],
+    "locked_plan": null
+  },
+  "space": {
+    "kind": "structured",
+    "examples": [
+      {
+        "kind": "plan",
+        "plan": {
+          "purchases": [],
+          "main": {
+            "skillId": "PUB01"
+          },
+          "extra": []
+        }
+      }
+    ]
+  },
+  "recent": [
+    {
+      "plans": [
+        {
+          "purchases": [],
+          "main": {
+            "skillId": "PUB01"
+          },
+          "extra": []
+        },
+        {
+          "purchases": [],
+          "main": {
+            "skillId": "PUB01"
+          },
+          "extra": []
+        }
+      ],
+      "round": 1,
+      "scores": [
+        3,
+        3
+      ]
+    }
+  ],
+  "memory": "",
+  "budget_ms": 20000
+}

@@ -1,4 +1,4 @@
-import { guestVisitLabel, useWhaleText } from '../copy';
+import { guestVisitLabel, useWhaleText, visitMealDetail } from '../copy';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
@@ -121,6 +121,16 @@ export function SocialPane({
               : t('本次只串门', 'Visiting only')}
           </p>
           {social.away.working && shiftEnd(social.away.work_ends_at_ms)}
+          {!social.away.working && profile.snapshot.whale.location.kind === 'visiting' && (
+            <p>
+              {visitMealDetail(
+                profile.snapshot.whale.location.eatenGrams ?? 0,
+                values,
+                social.away.meal_paused,
+                t,
+              )}
+            </p>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -271,6 +281,14 @@ export function SocialPane({
           />{' '}
           {t('开放小筑，允许互相串门', 'Open my haven for mutual visits')}
         </label>
+        {social.open && (
+          <p>
+            {t(
+              '家里断粮、饱食度降到 24 或以下时，小鲸可能自己去还有饭的邻居家。她只去蹭饭，你可以随时召回。',
+              'With an empty bowl and satiety at 24 or below, your whale may visit a neighbor for a meal. She will only eat, and you can recall her at any time.',
+            )}
+          </p>
+        )}
         <div>
           <h4>{t('今日社交所得（含工资）', 'Social earnings today (including wages)')}</h4>
           <dl className="wh-metrics">

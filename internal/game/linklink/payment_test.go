@@ -10,6 +10,15 @@ import (
 )
 
 func TestMixedEntryKeepsEachAssetInItsPlatformAccount(t *testing.T) {
+	for _, restart := range []bool{false, true} {
+		name := "abandon"
+		if restart {
+			name = "restart"
+		}
+		t.Run(name, func(t *testing.T) { testMixedEntry(t, restart) })
+	}
+}
+func testMixedEntry(t *testing.T, restart bool) {
 	fixture := newFixture(t)
 	user, binding := fixture.seedUser("mixed-entry", 400)
 	ctx := context.Background()
@@ -52,9 +61,21 @@ func TestMixedEntryKeepsEachAssetInItsPlatformAccount(t *testing.T) {
 	if err != nil || !replay.IdempotentReplay || replay.State.Payment != started.State.Payment {
 		t.Fatalf("replay=%+v err=%v", replay, err)
 	}
-	summary, err := fixture.service.Abandon(ctx, AbandonInput{UserID: user, SessionBinding: binding, SessionID: started.State.SessionID, ExpectedRevision: "1", Confirmation: true, IdempotencyKey: fixture.key(9902)})
-	if err != nil || summary.Payment != started.State.Payment || summary.RulesVersion != 2 {
-		t.Fatalf("summary=%+v err=%v", summary, err)
+	if restart {
+		for range 2 {
+			fixture.service.recovered.Store(false)
+			if err := fixture.service.RecoverBeforeListen(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if fixture.scalar("SELECT count(*) FROM credit_operations WHERE kind='linklink_refund'") != 1 || fixture.scalar("SELECT count(*) FROM game_linklink_summaries WHERE terminal_reason='cancelled' AND score IS NULL") != 1 {
+			t.Fatal("missing cancellation")
+		}
+	} else {
+		summary, err := fixture.service.Abandon(ctx, AbandonInput{UserID: user, SessionBinding: binding, SessionID: started.State.SessionID, ExpectedRevision: "1", Confirmation: true, IdempotencyKey: fixture.key(9902)})
+		if err != nil || summary.Payment != started.State.Payment || summary.RulesVersion != 2 {
+			t.Fatalf("summary=%+v err=%v", summary, err)
+		}
 	}
 	if fixture.scalar("SELECT COUNT(*) FROM game_onboarding_holds") != 0 || fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 0 {
 		t.Fatal("abandoned game retained a reward or hold")
@@ -69,13 +90,24 @@ func TestMixedEntryKeepsEachAssetInItsPlatformAccount(t *testing.T) {
 		base  ledger.Amount
 		delta int64
 	}{{ledger.General, beforeGeneral.Balance, 300}, {ledger.Game, beforeGame.Balance, 700}} {
+		if restart {
+			amount := want.delta
+			if want.asset == ledger.General {
+				amount = 400
+			}
+			wallet, err := ledger.UserAssetAccount(ctx, tx, user, want.asset)
+			if err != nil || wallet.Balance.Big().Int64() != amount {
+				t.Fatal(want.asset, wallet, err)
+			}
+			want.delta = 0
+		}
 		actual, err := ledger.CodedAssetAccount(ctx, tx, "platform", want.asset)
 		if err != nil || new(big.Int).Sub(actual.Balance.Big(), want.base.Big()).Cmp(big.NewInt(want.delta)) != 0 {
 			t.Fatalf("platform %s=%+v err=%v", want.asset, actual, err)
 		}
 	}
 	remaining, err := ledger.UserAccount(ctx, tx, user)
-	if err != nil || remaining.Balance.Big().Cmp(big.NewInt(100)) != 0 {
+	if err != nil || !restart && remaining.Balance.Big().Cmp(big.NewInt(100)) != 0 {
 		t.Fatal("general wallet charge", err)
 	}
 	if err := ledger.ValidateRecovery(ctx, tx); err != nil {

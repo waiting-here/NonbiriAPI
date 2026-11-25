@@ -89,6 +89,13 @@ it.each([false, true])(
     expect(await screen.findByRole('link', { name: /#42/ })).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: /123456789012345678/ }));
     await rendered.user.click(screen.getByRole('menuitem', { name: 'Remove from blacklist' }));
+    const removal = await screen.findByRole('alertdialog');
+    expect(removal).toHaveTextContent('123456789012345678');
+    expect(removal).toHaveTextContent('Policy violation');
+    expect(writes).toHaveLength(1);
+    await rendered.user.click(
+      within(removal).getByRole('button', { name: 'Remove from blacklist' }),
+    );
     if (loseRemoveResponse) {
       const retry = await screen.findByRole('button', { name: 'Retry' });
       expect(retry).toBeVisible();

@@ -12,7 +12,9 @@ v1.4.0 改进用户站与管理站的服务接入、模型发现、公益绑定�
 
 「鲸鱼湾小筑」支持领养、喂养、装扮和跨账号串门。串门时可以看见正在用餐或帮工的客鲸。屋主可以雇佣自愿帮工的客鲸，玩家可通过来往获得社交奖励。小鲸币和海螺碎片可用于站内奖励，也可由获授权的管理人员调整。游戏和独立兑出开关默认关闭。[鲸鱼湾小筑](docs/api-contract.md#whale-haven)
 
-本版使用 schema 56 和账号导出格式 38。v1.4.0、v1.4.1 和精确 schema 54 实例需停服并使用独立工具显式升级。更早的受支持版本先经 v1.3.12 中转。[数据库升级](docs/database-upgrades.md) · [版本记录](CHANGELOG.md)
+《竞标对决》《回合制对战小游戏（测试）》和《AI 昆特牌》各提供一款可免费挑战的内置陪玩。服务持续运行时可以关页后继续，结束后可从自己的席位逐步复盘。服务重启会取消未完局、清退候场。鲸鱼湾的串门、工资与离线生产仍按原有时间结算。[游戏陪玩](docs/ai-players.md)
+
+当前源码使用 schema 59 和账号导出格式 39。v1.4.0 至 v1.4.2、精确 schema 54 及本地开发版 schema 57、58 实例需停服并使用独立工具显式升级。更早的受支持版本先经 v1.3.12 中转。[数据库升级](docs/database-upgrades.md) · [版本记录](CHANGELOG.md)
 
 ## 架构
 
@@ -57,7 +59,7 @@ v1.4.0 改进用户站与管理站的服务接入、模型发现、公益绑定�
 
 有权读取请求适配配置的用户可查看未标记响应防回显的固定请求头和主体值；任何保护标记都会隐藏整项已保存值。保存回执和账户导出继续省略这些值。
 
-管理员及 5／6 级协管的日志页显示[全站并发与 RPM](docs/api-contract.md#global-pressure)、近似 24 小时峰值和持久化最大观测值。只有确认来自原始未改参数的有限错误才保持捐赠密钥连续失败次数不变，模糊错误仍按原规则处理。
+管理员及 5／6 级协管的日志页显示[全站并发与 RPM](docs/api-contract.md#global-pressure)、近似 24 小时峰值和持久化最大观测值。上游明确报告调用参数或输入长度错误时，捐赠密钥保留当前连续失败次数。
 
 公益短请求的拒绝说明会以中文或英文解释最低长度要求。字符计数包括消息文本、工具说明、参数定义及历史调用参数；工具存在不豁免真正的短请求。Dry 调试仅提醒并继续捕获，不扣分、不计入自动限制；Live 调试和普通请求保留现行处罚。未来字段校验或协议转换失败会保存安全的字段、原因与修正提示，显示在本人日志及获授权管理视图和导出中，不记录提交值或秘密；没有历史原因的旧记录仍显示未知。
 
@@ -131,7 +133,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 
 [首次配置](docs/first-run-setup.md) 涵盖私有目录、加密密钥、Discord OAuth 和公共域名。将 [admin.env.example](admin.env.example) 复制到检出目录外，替换占位值并在启动前加载。数据库与对应密钥须配套保留。
 
-新库使用 schema 56，默认开启维护并关闭公共功能。停服并保全匹配的完整恢复集后，使用本版[独立升级器](cmd/nonbiri-upgrade-v1/README.md)将精确的 schema 54 或 55 数据库转换为 56。更早的受支持结构先用 v1.3.12 的工具升级。服务只打开精确当前结构，升级由部署者显式执行。账号导出使用格式 38。升级后的数据库只向前使用，开放后的新增数据须保全。
+新库使用 schema 59，默认开启维护并关闭公共功能。停服并保全匹配的完整恢复集后，可以将精确的 schema 54、55、56 或本地开发版的 57、58 数据库转换为 59。更早的受支持结构先用 v1.3.12 的工具升级。服务只打开精确当前结构，升级由部署者显式执行。账号导出使用格式 39。升级后的数据库只向前使用，开放后的新增数据须保全。[独立升级器](cmd/nonbiri-upgrade-v1/README.md)
 
 [部署指南](docs/deployment.md) 说明 systemd、代理、不可变产物、升级和完整快照恢复；启动变量及在线设置统一维护在 [配置参考](docs/configuration.md)。
 
@@ -141,7 +143,7 @@ CGO_ENABLED=0 go build -buildvcs=true -tags dist -trimpath -o nonbiriapi .
 | --- | --- |
 | HTTP 与自动化 | [API 契约](docs/api-contract.md)、[协管权限](docs/steward-permissions.md)、[协管接入](docs/steward-automation.md) |
 | Gateway 与计费 | [模型控制](docs/gateway-model-controls.md)、[上下文价格](docs/charity-context-pricing.md)、[托管请求头](docs/charity-session-headers.md) |
-| 游戏接入 | [游戏模块](docs/game-modules.md)、[随机性](docs/game-randomness.md)、[对战](docs/duel-games.md)、[AI 玩家](docs/ai-players.md) |
+| 游戏接入 | [游戏模块](docs/game-modules.md)、[随机性](docs/game-randomness.md)、[对战](docs/duel-games.md)、[游戏陪玩](docs/ai-players.md) |
 | 游戏数据与规则 | [二十一点](docs/blackjack.md)、[稳稳地接住你](docs/steady-catch.md)、[AI 昆特牌](docs/ai-gwent.md)、[垂钓手记](docs/lake-notes.md)、[大肥鱼编辑器](docs/fatfish-editor.md) |
 | 收藏与活动 | [真·抽卡模拟器](docs/gacha.md)、[美术资源](docs/gacha-art.md)、[活动周期](docs/limited-activities.md)、[绘本活动](docs/image-activity.md)、[奖励](docs/rewards.md) |
 | 候选验收与发布 | [发布检查](docs/release-checklist.md)、[仓库设置](docs/github-settings.md) |

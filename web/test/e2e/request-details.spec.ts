@@ -65,10 +65,15 @@ for (const station of ['user', 'admin'] as const) {
     if (station === 'admin') await page.locator('.log-table tbody button').first().click();
     const drawer = page.locator('.inspection-dock, .nb-sheet:has(.log-detail-content)');
     await expect(drawer).toBeVisible();
-    await drawer.locator('summary').filter({ hasText: 'Service call attempts' }).click();
+    const attemptsSummary = drawer.locator('summary').filter({ hasText: 'Service call attempts' });
+    const notice = drawer.locator('.log-attempt-notice');
+    await expect(notice).toBeVisible();
+    await attemptsSummary.click();
+    await expect(notice).toBeHidden();
+    await attemptsSummary.click();
     await expect(drawer.locator('.log-attempt')).toHaveCount(2);
     await expect(drawer.locator('table')).toHaveCount(0);
-    await expect(drawer.locator('.log-attempt-notice')).toBeVisible();
+    await expect(notice).toBeVisible();
     expect(detailReads).toBeGreaterThan(0);
     await expect
       .poll(() => drawer.evaluate((node) => node.scrollWidth <= node.clientWidth + 1))
@@ -82,12 +87,9 @@ for (const station of ['user', 'admin'] as const) {
       await expect
         .poll(() => drawer.evaluate((node) => node.getBoundingClientRect().left))
         .toBeGreaterThanOrEqual(0);
-      // Switching from the desktop dock to a sheet mounts a fresh disclosure.
+      // The same disclosure stays open as the dock moves into a sheet.
       await expect(page.locator('.nb-sheet:has(.log-detail-content)')).toBeVisible();
       const endpoint = drawer.getByText(longEndpoint, { exact: true });
-      if (!(await endpoint.isVisible())) {
-        await drawer.locator('summary').filter({ hasText: 'Service call attempts' }).click();
-      }
       await expect(endpoint).toBeVisible();
       const secondAttempt = drawer.locator('.log-attempt').nth(1);
       const diagnostic = secondAttempt.locator('.log-attempt-diagnostic');
@@ -308,7 +310,7 @@ test('switches requests in a wide dock and returns from a narrow sheet to the ac
   // Keep the same viewport and sidebar while narrowing the space allocated to the tool.
   const workspace = page.locator('.inspection-workspace');
   await workspace.evaluate((node) => {
-    node.style.maxWidth = '74rem';
+    node.style.maxWidth = '56rem';
   });
   const narrowDetails = page.getByRole('dialog', { name: 'Log details ' + ids[0] });
   await expect(narrowDetails.getByRole('heading', { name: 'Log details ' + ids[0] })).toBeFocused();

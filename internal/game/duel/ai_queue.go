@@ -238,7 +238,7 @@ func (s *Service) cancelAIQueue(ctx context.Context, in CancelInput) (MutationRe
 	return finish(ctx, tx, d, 204, nil)
 }
 
-func (s *Service) workAIQueue(ctx context.Context, tx *sql.Tx, now int64, recovery bool) (bool, error) {
+func (s *Service) clearLegacyAIQueue(ctx context.Context, tx *sql.Tx, now int64) (bool, error) {
 	if s.aiAdapter == nil {
 		return false, nil
 	}
@@ -260,83 +260,14 @@ func (s *Service) workAIQueue(ctx context.Context, tx *sql.Tx, now int64, recove
 	}
 	cleaned := count+memories > 0
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT q.id FROM game_ai_queue q WHERE q.game_key=? AND q.state='waiting' ORDER BY (q.deadline>? AND EXISTS(SELECT 1 FROM game_ai_bots b JOIN game_ai_policies p ON p.id=b.policy_id WHERE b.id=q.bot_id AND b.enabled=1 AND p.enabled=1) AND EXISTS(SELECT 1 FROM game_ai_policies accepted WHERE accepted.id=json_extract(q.snapshot_json,'$.terms.ai.policy_id') AND accepted.enabled=1) AND EXISTS(SELECT 1 FROM users u WHERE u.id=q.user_id AND (u.is_banned=0 OR u.banned_until<=?))),q.ordinal LIMIT 1`, s.rules.ID(), now, now).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT id FROM game_ai_queue WHERE game_key=? AND state='waiting' ORDER BY ordinal LIMIT 1`, s.rules.ID()).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return cleaned, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	q, err := s.aiQueue(ctx, tx, id)
-	if err != nil {
-		return false, err
-	}
-	reason := ""
-	if recovery {
-		reason = "server_restart"
-	} else if now >= q.Deadline {
-		reason = "expired"
-	} else {
-		settings, err := s.aiSettings(ctx, tx)
-		if err != nil {
-			return false, err
-		}
-		cfg, err := s.config(ctx, tx)
-		if err != nil {
-			return false, err
-		}
-		maintenance, err := maintenanceOn(ctx, tx)
-		if err != nil {
-			return false, err
-		}
-		_, enabled, err := s.aiConfiguration(ctx, tx, q.Snapshot.Terms.AI.BotID)
-		if err != nil {
-			return false, err
-		}
-		var acceptedPolicyEnabled bool
-		if err := tx.QueryRowContext(ctx, `SELECT enabled FROM game_ai_policies WHERE id=? AND game_key=?`, q.Snapshot.Terms.AI.PolicyID, s.rules.ID()).Scan(&acceptedPolicyEnabled); err != nil {
-			return false, err
-		}
-		allowed, err := eligible(ctx, tx, q.User, now)
-		if err != nil {
-			return false, err
-		}
-		if !allowed {
-			reason = "account_unavailable"
-		} else if !settings.Enabled || !cfg.Enabled || maintenance || !enabled || !acceptedPolicyEnabled {
-			reason = "closed"
-		}
-	}
-	if reason != "" {
-		return true, s.releaseAIQueue(ctx, tx, id, reason, now)
-	}
-	var active int
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM game_duel_sessions WHERE game_key=? AND state='active' AND economy='ai_challenge'`, s.rules.ID()).Scan(&active); err != nil {
-		return false, err
-	}
-	if active >= AIActiveCapacity {
-		return cleaned, nil
-	}
-	// A failed admission must roll back escrow creation and capacity changes
-	// before the unpaid queue receives its user-visible failure receipt.
-	if _, err := tx.ExecContext(ctx, `SAVEPOINT ai_admission`); err != nil {
-		return false, err
-	}
-	err = s.startAI(ctx, tx, q, now)
-	if errors.Is(err, ErrInsufficientCredits) || errors.Is(err, ledger.ErrInsufficientBalance) {
-		if _, rollback := tx.ExecContext(ctx, `ROLLBACK TO ai_admission`); rollback != nil {
-			return false, rollback
-		}
-		if _, release := tx.ExecContext(ctx, `RELEASE ai_admission`); release != nil {
-			return false, release
-		}
-		return true, s.releaseAIQueue(ctx, tx, id, "insufficient_credits", now)
-	}
-	if err != nil {
-		return false, err
-	}
-	_, err = tx.ExecContext(ctx, `RELEASE ai_admission`)
-	return true, err
+	return true, s.releaseAIQueue(ctx, tx, id, "server_restart", now)
 }
 
 func (s *Service) startAI(ctx context.Context, tx *sql.Tx, q aiQueueRecord, now int64) error {

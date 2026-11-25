@@ -133,6 +133,45 @@ func TestTransportCompletionPreservesToolsReasoningRefusalAndUsage(t *testing.T)
 	}
 }
 
+func TestForcedStreamKeepsTextAndRichContentInOrder(t *testing.T) {
+	var upstream strings.Builder
+	for _, choices := range []string{
+		`[{"index":0,"delta":{"role":"assistant","content":"开头"}},{"index":1,"delta":{"role":"assistant","content":"plain"}}]`,
+		`[{"index":0,"delta":{"content":[{"type":"vendor_widget","data":{"id":9007199254740993}},{"type":"text","text":"正文"}]}},{"index":1,"delta":{"content":[]}}]`,
+		`[{"index":0,"delta":{"content":"中"}}]`,
+		`[{"index":0,"delta":{"content":"段"}},{"index":1,"delta":{"content":" reply"}}]`,
+		`[{"index":0,"delta":{"content":[{"type":"image_url","image_url":{"url":"https://example.com/image"}}]},"finish_reason":"stop"},{"index":1,"delta":{},"finish_reason":"stop"}]`,
+	} {
+		fmt.Fprintf(&upstream, "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":%s}\n\n", choices)
+	}
+	upstream.WriteString("data: [DONE]\n\n")
+	f := newServiceFixture(t, nil)
+	useRealStreamConnector(t, f, contract.TypeOpenAICompatible, &delayedStreamBackend{do: func(r *http.Request) (*http.Response, error) {
+		if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			t.Fatal("upstream request was not streaming")
+		}
+		return streamResponse(http.StatusOK, upstream.String()), nil
+	}}, 0, false)
+	f.charity.preflight.TransportRule = transportpolicy.ForceStream
+	f.charity.snapshot.TransportRule = transportpolicy.ForceStream
+	request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[{"role":"user","content":"hello"}]}`)
+	w := httptest.NewRecorder()
+	f.service.Chat(context.Background(), w, 1, request, nil, "application/json", "en")
+	var completion struct {
+		Choices []struct {
+			Index   int
+			Message struct{ Content json.RawMessage }
+		}
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &completion) != nil || len(completion.Choices) != 2 {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+	want := `[{"text":"开头","type":"text"},{"data":{"id":9007199254740993},"type":"vendor_widget"},{"text":"正文","type":"text"},{"text":"中段","type":"text"},{"image_url":{"url":"https://example.com/image"},"type":"image_url"}]`
+	if first, second := completion.Choices[0], completion.Choices[1]; first.Index != 0 || string(first.Message.Content) != want || second.Index != 1 || string(second.Message.Content) != `"plain reply"` {
+		t.Fatalf("content was lost, reordered or changed: %s", w.Body)
+	}
+}
+
 func TestGeminiFlatteningRejectedBeforeAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		t.Run(fmt.Sprint(stream), func(t *testing.T) {

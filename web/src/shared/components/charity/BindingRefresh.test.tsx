@@ -163,7 +163,10 @@ async function selectTarget(view: Awaited<ReturnType<typeof setup>>) {
   const group = summary.closest('details')!;
   await view.user.click(summary);
   await view.user.click(await within(group).findByRole('button', { name: 'Add target' }));
-  expect(within(group).getByRole('checkbox')).toBeChecked();
+  const service = within(group).getByRole('checkbox', { name: 'Embeddings' });
+  expect(service).not.toBeChecked();
+  await view.user.click(service);
+  expect(service).toBeChecked();
   return group;
 }
 
@@ -179,7 +182,12 @@ it.each(['order', 'delete'] as const)(
     if (action === 'order') {
       await view.user.click(screen.getAllByRole('button', { name: 'Down' })[0]!);
       await view.user.click(screen.getByRole('button', { name: 'Save connection order' }));
-    } else await view.user.click(screen.getAllByRole('button', { name: 'Remove' })[0]!);
+    } else {
+      await view.user.click(screen.getAllByRole('button', { name: 'Remove' })[0]!);
+      const dialog = await screen.findByRole('alertdialog');
+      expect(f.writes).toHaveLength(0);
+      await view.user.click(within(dialog).getByRole('button', { name: 'Remove' }));
+    }
     await waitFor(() => expect(f.writes).toHaveLength(1));
     await waitFor(() => expect(f.reads()).toBe(before + 1));
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Remove' })[0]).toBeEnabled());

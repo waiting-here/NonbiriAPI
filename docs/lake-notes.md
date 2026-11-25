@@ -61,7 +61,7 @@ Past periods are read-only at `GET /admin/api/games/lake-notes/periods?page=1&pa
 
 ## Recovery and data
 
-Replay lasts 24 hours and rechecks account authorization. Retry the original request after a lost response; reload state after a conflict. A profile and current or paused cast follow the account lifetime. Terminal summaries last 30 days; minimal identities needed by live replay receipts remain until those expire.
+Replay lasts 24 hours and rechecks account authorization. Retry the original request after a lost response; reload state after a conflict. A server restart cancels each unfinished cast, including paused casts, and returns the bait consumed on that cast. A full stack converts the returned unit to its shop value in coins. The saved profile, collections and other inventory persist. Terminal summaries last 30 days; minimal identities needed by live replay receipts remain until those expire.
 
 Permanent `profile.collectionClaims` maps claimed location IDs to Unix timestamps. It survives temporary receipt expiry, is included in account export and is removed with the account. Adding fish later does not reset a claimed reward.
 

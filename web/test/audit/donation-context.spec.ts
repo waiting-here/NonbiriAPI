@@ -1,3 +1,4 @@
+import { submitPendingReview } from '../controls';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Browser, type BrowserContext } from '@playwright/test';
@@ -107,6 +108,7 @@ test('owner pages size the workspace to the task and center their state illustra
       await page.setViewportSize({ width, height: 900 });
       const contentWidths: number[] = [];
       for (const path of [
+        '/charity?tab=models',
         '/charity?tab=donations',
         '/models',
         '/endpoints',
@@ -118,7 +120,9 @@ test('owner pages size the workspace to the task and center their state illustra
         const box = (await content.boundingBox())!;
         expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThanOrEqual(1);
         contentWidths.push(box.width);
-        if (path.startsWith('/charity?')) {
+        if (path === '/charity?tab=donations')
+          await expect(page.locator('.economy-charity-sidebar')).toHaveCount(0);
+        if (path === '/charity?tab=models') {
           const ranking = page.locator('.rank-empty');
           await expect(ranking.locator('svg')).toBeVisible();
           const cloud = (await ranking.locator('svg').boundingBox())!;
@@ -128,7 +132,8 @@ test('owner pages size the workspace to the task and center their state illustra
           );
         }
       }
-      const [overview, models, services, detail] = contentWidths;
+      const [overview, donations, models, services, detail] = contentWidths;
+      expect(donations).toBe(overview);
       expect(models).toBe(services);
       if (width === 1440) {
         expect(overview!).toBeGreaterThan(models!);
@@ -446,9 +451,7 @@ for (const actor of ['admin', 'five', 'six'] as const) {
             response.request().method() === 'GET' &&
             new URL(response.url()).pathname === api + '/donations/badge',
         ),
-        page
-          .getByRole('button', { name: copy.common.connections.rejectAllUses, exact: true })
-          .click(),
+        submitPendingReview(page, copy.common.connections.rejectAllUses),
       ]);
       expect(review.status()).toBe(200);
       expect((await review.json()).handling).toMatchObject({

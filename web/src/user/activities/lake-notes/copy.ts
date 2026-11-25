@@ -18,6 +18,7 @@ const keys = {
   paid: 'user.lakeNotes.paid',
   enter: 'user.lakeNotes.enter',
   closed: 'user.lakeNotes.closed',
+  cancelled: 'user.lakeNotes.cancelled',
   entryUnknown: 'user.lakeNotes.entryUnknown',
   retry: 'user.lakeNotes.retry',
   saved: 'user.lakeNotes.saved',

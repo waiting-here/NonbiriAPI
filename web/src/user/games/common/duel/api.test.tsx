@@ -147,10 +147,10 @@ describe('two-player request recovery', () => {
   });
 });
 
-describe('AI queue receipts', () => {
+describe('human queue receipts', () => {
   it.each([
-    ['bidding', 'aiq_'],
-    ['gwent', 'gaq_'],
+    ['bidding', 'bidq_'],
+    ['gwent', 'gwtq_'],
   ] as const)(
     'accepts the %s queue prefix and rejects the other game',
     async (game, expectedPrefix) => {
@@ -163,21 +163,20 @@ describe('AI queue receipts', () => {
       vi.stubGlobal('fetch', fetch);
       const intent = {
         kind: 'queue',
-        mode: 'ai',
+        mode: 'standard',
         termsHash: 'a'.repeat(64),
-        botID: 'bot',
         loadout: { faction: 'openai' },
       } as const;
       await expect(sendDuelIntent(game, intent, 'safe-key')).resolves.toBeUndefined();
       expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
-        mode: 'ai',
-        bot_id: 'bot',
+        mode: 'standard',
+        device_token: expect.any(String),
         loadout: intent.loadout,
       });
       fetch.mockImplementationOnce(async () =>
         json(
           {
-            queue_id: (game === 'gwent' ? 'aiq_' : 'gaq_') + 'AAAAAAAAAAAAAAAAAAAAAA',
+            queue_id: (game === 'gwent' ? 'bidq_' : 'gwtq_') + 'AAAAAAAAAAAAAAAAAAAAAA',
             revision: '1',
             deadline: 2000,
           },

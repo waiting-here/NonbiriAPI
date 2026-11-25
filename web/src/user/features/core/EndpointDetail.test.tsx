@@ -194,7 +194,7 @@ describe('endpoint detail numbered resource panels', () => {
 
     expect(await screen.findByText('key note')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'View models' }));
-    await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Manual models' }));
     expect(await screen.findByText('Vendor/Manual')).toBeVisible();
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(
       '/api/endpoints/11/keys?page=1&page_size=20',
@@ -292,7 +292,7 @@ describe('endpoint detail numbered resource panels', () => {
     expect(requests).not.toContain(
       '/api/endpoints/11/keys/22/models?page=3&page_size=100&source=manual',
     );
-    await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Manual models' }));
     const first = await screen.findByText('Vendor/Manual-0');
     const panel = first.closest('section')!;
     await rendered.user.click(within(panel).getByRole('button', { name: 'Next' }));
@@ -300,10 +300,10 @@ describe('endpoint detail numbered resource panels', () => {
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent('manual_21_page=2'),
     );
-    await rendered.user.click(screen.getByRole('link', { name: 'Key' }));
+    await rendered.user.click(screen.getByRole('link', { name: 'Back to all keys' }));
     const secondKey = (await screen.findByText('second key note')).closest('tr')!;
     await rendered.user.click(within(secondKey).getByRole('button', { name: 'View models' }));
-    await rendered.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Manual models' }));
     expect(await screen.findByText('Vendor/Second')).toBeVisible();
     expect(requests).toContain(
       '/api/endpoints/11/keys/22/models?page=3&page_size=100&source=manual',
@@ -475,7 +475,7 @@ describe('key model operation feedback', () => {
       throw Error('Unexpected ' + url.pathname);
     });
     await view.user.click(screen.getByRole('button', { name: 'View models' }));
-    await view.user.click(screen.getByText('Manual models', { selector: 'strong' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Manual models' }));
     const input = await screen.findByRole('textbox', { name: 'Provider model name' });
     await view.user.type(input, 'Vendor/Manual');
     await view.user.type(screen.getByRole('textbox', { name: 'Note (optional)' }), 'Vendor');

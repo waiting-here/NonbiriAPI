@@ -35,6 +35,13 @@ const options = {
   base_connector_types: ['openai-compatible', 'typesafe-systemone'],
   native_service_options: [
     {
+      connector_type: 'openai-chat-completions',
+      configuration_type: 'openai-compatible',
+      native_services: ['chat_completions'],
+      default_native_services: ['chat_completions'],
+      rerank_formats: [],
+    },
+    {
       connector_type: 'typesafe-systemone',
       configuration_type: 'typesafe-systemone',
       native_services: ['systemone'],
@@ -221,6 +228,9 @@ async function fillCustom(
 describe('service setup as one task', () => {
   it('validates the address before saving and accepts a corrected address with a trailing slash', async () => {
     const view = await fillCustom();
+    expect(screen.getByLabelText(common.common.connections.protocol)).toHaveValue(
+      'openai-compatible',
+    );
     const address = screen.getByLabelText(userEn.user.services.serviceAddress);
     const submit = screen.getByRole('button', { name: userEn.user.services.addAndFetch });
     const invalidAddress = 'ftp://old.example/v1';

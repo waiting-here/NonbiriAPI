@@ -15,7 +15,7 @@ import {
   stationSessionMatches,
   type CharityManagementFrame,
 } from '@shared/charityManagement';
-import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { ApiError, isManagementForbidden, isUnauthorized } from '@shared/query/http';
 import { responseOutcomeUnknown } from '@shared/operations/api';
 import { CreditText } from './CreditText';
 import { QuotaAmountField } from './QuotaAmountField';
@@ -280,9 +280,12 @@ function timeValue(
   kind: 'period' | 'transition',
   formatDateTime: ReturnType<typeof useDateTimeFormatter>,
   displayLabel: string,
+  displayZone: string | null,
 ): string {
   if (epoch === null) return copy.noPeriod;
   const business = `${localInZone(epoch, zone, locale)} (${zone} ${offsetAt(epoch, zone) ?? copy.offsetUnavailable})`;
+  if (displayZone === zone || (displayZone && offsetAt(epoch, zone) === displayZone))
+    return business;
   const displayed = `${displayLabel}: ${formatDateTime(epoch)}`;
   return kind === 'period'
     ? copy.periodValue(business, displayed)
@@ -311,6 +314,18 @@ function RuleUsage({
   const context = useDisplayTimeContext();
   const displayLabel =
     context.mode === 'site' ? (locale === 'zh' ? '站点时间' : 'Site time') : copy.browserTime;
+  const minutes = context.offset_minutes;
+  const displayZone =
+    context.mode === 'browser'
+      ? browserTimeZone()
+      : minutes === null
+        ? null
+        : minutes === 0
+          ? 'UTC'
+          : 'UTC' +
+            (minutes < 0 ? '-' : '+') +
+            Math.floor(Math.abs(minutes) / 60) +
+            (minutes % 60 ? ':' + String(Math.abs(minutes) % 60).padStart(2, '0') : '');
   if (!view) {
     return <p className="recurring-limits__new-note">{copy.preserveUsage}</p>;
   }
@@ -325,7 +340,7 @@ function RuleUsage({
     );
   const period =
     view.period_start !== null && view.period_end !== null
-      ? `${timeValue(view.period_start, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel)} — ${timeValue(view.period_end, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel)}`
+      ? `${timeValue(view.period_start, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel, displayZone)} — ${timeValue(view.period_end, view.time_zone, locale, copy, 'period', formatDateTime, displayLabel, displayZone)}`
       : copy.noPeriod;
   const next =
     view.next_transition_at === null
@@ -340,6 +355,7 @@ function RuleUsage({
           'transition',
           formatDateTime,
           displayLabel,
+          displayZone,
         );
   return (
     <div className="recurring-limits__usage" aria-label={copy.usage}>
@@ -406,30 +422,13 @@ function ruleSummary(
   draft: DraftRule,
   view: RecurringLimitRuleView | undefined,
 ): string {
-  const usageMetric = view?.metric ?? draft.metric;
-  const startsAt =
-    draft.mode === 'reset'
-      ? copy.alignmentValue[draft.alignment ?? 'first_success']
-      : copy.slidingStart;
-  const weekStart =
-    draft.mode === 'reset' && draft.alignment === 'calendar' && draft.interval === 'week'
-      ? `${copy.weekStartsOn}: ${copy.weekValue(draft.week_starts_on ?? 1)}`
-      : null;
   return [
     ruleLabel,
-    `${copy.metric}: ${copy.metricValue[draft.metric]}`,
-    `${copy.mode}: ${copy.modeValue[draft.mode]}`,
+    copy.modeValue[draft.mode],
     `${copy.interval}: ${copy.intervalValue[draft.interval]}`,
-    `${copy.alignment}: ${startsAt}${draft.alignment === 'exact_time' ? ` ${draft.anchor_local ?? ''}` : ''}`,
-    weekStart,
-    `${copy.timeZone}: ${draft.time_zone || '—'}`,
-    `${copy.limit}: ${metricWithUnit(draft.limit || null, draft.metric, copy)}`,
-    `${copy.used}: ${metricWithUnit(view?.used, usageMetric, copy)}`,
-    `${copy.reserved}: ${metricWithUnit(view?.reserved, usageMetric, copy)}`,
-    `${copy.remaining}: ${metricWithUnit(view?.remaining, usageMetric, copy)}`,
-  ]
-    .filter((part): part is string => part !== null)
-    .join(' · ');
+    copy.metricValue[draft.metric],
+    `${metricWithUnit(view?.used, view?.metric ?? draft.metric, copy)} / ${metricWithUnit(draft.limit || null, draft.metric, copy)}`,
+  ].join(' · ');
 }
 
 function RuleCard({
@@ -876,7 +875,7 @@ function authorityFrame(role: RecurringLimitRole): CharityManagementFrame {
 }
 
 function readOrWriteError(error: unknown): boolean {
-  return isUnauthorized(error) || isForbidden(error);
+  return isUnauthorized(error) || isManagementForbidden(error);
 }
 
 function scopeChanged(
@@ -974,7 +973,12 @@ export function RecurringLimits({
   const notifiedReceiptRef = useRef<RecurringLimitsWriteReceipt | null>(null);
   const read = useQuery({
     queryKey: recurringLimitsKeys.detail(
-      role, accountId, donationId, keyId, modelID, upstreamModelID,
+      role,
+      accountId,
+      donationId,
+      keyId,
+      modelID,
+      upstreamModelID,
     ),
     queryFn: ({ signal }) =>
       getRecurringLimits(role, donationId, keyId, signal, modelID, upstreamModelID),
@@ -1141,7 +1145,13 @@ export function RecurringLimits({
     authoritySyncPending ||
     authoritySyncUnavailable;
   const addRule = () => {
-    if (disabled || !draftRules || draftRules.length >= MAX_RULES || save.isPending || unresolvedCommand)
+    if (
+      disabled ||
+      !draftRules ||
+      draftRules.length >= MAX_RULES ||
+      save.isPending ||
+      unresolvedCommand
+    )
       return;
     draftID.current += 1;
     const zone = browserTimeZone() ?? 'UTC';
@@ -1459,7 +1469,9 @@ export function RecurringLimits({
           <Button
             type="button"
 
-            disabled={disabled || save.isPending || unresolvedCommand || draftRules.length >= MAX_RULES}
+            disabled={
+              disabled || save.isPending || unresolvedCommand || draftRules.length >= MAX_RULES
+            }
             onClick={addRule}
           >
             {copy.addRule}

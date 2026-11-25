@@ -131,7 +131,7 @@ func stewardModalityPricing(p *AdminModalityPricing) *StewardModalityPricing {
 	}
 	return out
 }
-func capabilityModalityPricing(p *credits.ModalityPricing, discount int) (*CapabilityModalityPricing, error) {
+func capabilityModalityPricing(p *credits.ModalityPricing, basisPoints int) (*CapabilityModalityPricing, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -143,7 +143,7 @@ func capabilityModalityPricing(p *credits.ModalityPricing, discount int) (*Capab
 		}
 		var values [4]string
 		for j, n := range []int64{v.UncachedInput, v.CacheWriteInput, v.CacheReadInput, v.Output} {
-			price, err := credits.ApplyDiscountPercent(n, discount)
+			price, err := credits.ApplyDiscountBasisPoints(n, basisPoints)
 			if err != nil {
 				return nil, ErrInvariant
 			}

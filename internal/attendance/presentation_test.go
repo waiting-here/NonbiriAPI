@@ -81,7 +81,7 @@ func TestAttendancePresentationAfterSchema55Upgrade(t *testing.T) {
 		t.Fatal(checked, err)
 	}
 	converted, err := upgrade.Run(ctx, path, vault, upgrade.Options{Apply: true})
-	if err != nil || converted.SourceSchemaVersion != 55 || converted.TargetSchemaVersion != 56 || converted.Status != "converted" {
+	if err != nil || converted.SourceSchemaVersion != 55 || converted.TargetSchemaVersion != db.CurrentSchemaVersion || converted.Status != "converted" {
 		t.Fatal(converted, err)
 	}
 	f.store, err = db.Open(path, vault)

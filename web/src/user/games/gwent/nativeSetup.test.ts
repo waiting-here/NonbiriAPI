@@ -18,87 +18,68 @@ beforeEach(() => {
     select.value = id === 'player-faction' ? 'openai' : 'deepseek';
   }
 });
-it('keeps original selectors working through offer polling, demo and player matching', async () => {
+it('uses the selected deck for player matching and free companion starts', () => {
   const decks = new DeckStore(cards, localStorage);
-  const arena = { catalog: cards, decks, view: { modalOpen: false }, start: vi.fn() };
+  const arena = { catalog: cards, decks, view: { modalOpen: false } };
   const editor = new DeckEditor(arena, document.getElementById('player-faction'));
-  const host = { send: vi.fn(), startDemo: vi.fn(), inspectDeck: vi.fn() };
+  const host = { send: vi.fn() };
   const setup = new PlatformSetup(arena, editor, host);
-  const loadout = decks.profile('deepseek').deck;
   const snapshot = {
     config: {
-      enabled: true,
       available: true,
       modes: {
         standard: {
           enabled: true,
           available: true,
           ticket: '3',
-          termsHash: 'standard-hash',
+          termsHash: 'pvp',
           rates: { platform: 100, welfare: 200, thursday: 0 },
         },
       },
     },
-    home: { current: null, queue: null },
     accepting: true,
     blocked: false,
     availableCredits: '30',
-    ai: {
-      enabled: true,
-      bots: [
-        {
-          terms: {
-            ticket: '1',
-            ai: {
-              bot_id: 'opaque-bot-id',
-              bot_name: '冻结挑战',
-              description: '挑战说明',
-              first_reward: '5',
-              bot_loadout: loadout,
-            },
-          },
-          terms_hash: 'challenge-hash',
-          completed: false,
-        },
-      ],
-    },
+    home: { current: null, queue: null },
   };
   setup.update(snapshot);
-  setup.update(snapshot);
-  expect((document.getElementById('opponent-faction') as HTMLSelectElement).value).toBe(
-    'opaque-bot-id',
-  );
-  expect(document.getElementById('platform-terms')!.textContent).toContain('仅首次胜利奖励 5');
-  document.getElementById('opponent-deck-help')!.click();
-  expect(host.inspectDeck).toHaveBeenCalledWith(loadout);
-  document.getElementById('launch-play')!.click();
-  expect(host.send).toHaveBeenCalledWith({
-    type: 'queue',
-    mode: 'ai',
-    termsHash: 'challenge-hash',
-    botID: 'opaque-bot-id',
-    deck: decks.profile('openai').deck,
-  });
-  document.querySelector<HTMLButtonElement>('[data-mode=demo]')!.click();
-  expect((document.getElementById('opponent-faction') as HTMLSelectElement).value).toBe('deepseek');
-  expect((document.getElementById('opponent-deck') as HTMLSelectElement).options.length).toBe(6);
-  await setup.watch();
-  expect(arena.start).toHaveBeenCalledWith('watch', 'local');
-  expect(host.send).toHaveBeenCalledTimes(1);
-  document.querySelector<HTMLButtonElement>('[data-mode=standard]')!.click();
   document.getElementById('launch-play')!.click();
   expect(host.send).toHaveBeenLastCalledWith({
     type: 'queue',
     mode: 'standard',
-    termsHash: 'standard-hash',
+    termsHash: 'pvp',
     deck: decks.profile('openai').deck,
   });
-  setup.update({
-    ...snapshot,
-    home: { current: null, queue: { mode: 'standard', id: 'queue' } },
-    remaining: 10,
+  document.getElementById('companion-entry')!.click();
+  expect(host.send).toHaveBeenLastCalledWith({ type: 'companion-entry' });
+  setup.update({ ...snapshot, companion: true });
+  document.getElementById('launch-play')!.click();
+  expect(host.send).toHaveBeenLastCalledWith({
+    type: 'companion-start',
+    deck: decks.profile('openai').deck,
   });
+  expect(document.getElementById('platform-terms')!.textContent).toContain('免费');
+  setup.update({ ...snapshot, home: { queue: { id: 'queue' }, current: null } });
   expect((document.getElementById('player-faction') as HTMLSelectElement).disabled).toBe(true);
   document.querySelector<HTMLButtonElement>('.match-panel .ghost-button')!.click();
   expect(host.send).toHaveBeenLastCalledWith({ type: 'cancel' });
+});
+
+it('boots the native deck editor and card rules without the retired browser engine', async () => {
+  // The native HTML loads a standalone ES module; exercise its normal boot with JSON card data.
+  const bootPath = '../../../../public/assets/gwent/interface/src/main.js';
+  const { boot } = await import(bootPath);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json(cards)),
+  );
+  vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn() }));
+  const { setup, arena } = await boot(localStorage, { send: vi.fn() });
+  setup.update({ companion: true, config: { modes: {} }, home: { current: null, queue: null } });
+  expect(document.getElementById('launch-play')).toBeEnabled();
+  const hero = document.querySelector('#hero-preview .arena-card');
+  expect(hero).toBeTruthy();
+  document.getElementById('view-rules')!.click();
+  expect(document.querySelector('.rules-guide')).toHaveTextContent('检查点恢复');
+  arena.view.closeDialog();
 });

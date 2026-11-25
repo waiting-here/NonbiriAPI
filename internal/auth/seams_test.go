@@ -3,8 +3,10 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -397,6 +399,60 @@ func newStewardActor(t *testing.T, fixture *runtimeFixture, code string) (int64,
 		t.Fatalf("promote steward: %v", err)
 	}
 	return userID, actor
+}
+
+func TestSessionProjectsInheritedLimitsAgainstLiveStewardCeilings(t *testing.T) {
+	fixture := newRuntimeFixture(t, nil)
+	id, _ := newStewardActor(t, fixture, "limit-inheritance")
+	database := fixture.store.DB()
+	exec := func(statement string, args ...any) {
+		t.Helper()
+		if _, err := database.Exec(statement, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec("UPDATE users SET level=5 WHERE id=?", id)
+	p := authz.DefaultStewardPermissions(5)
+	p.Permissions["users.profile"] = true
+	p.Limits["users.endpoint_limit_max"] = "3"
+	p.Limits["users.rpm_limit_max"] = "40"
+	p.Limits["users.concurrency_limit_max"] = "9"
+	flags, err := json.Marshal(p.Permissions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits, err := json.Marshal(p.Limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec("INSERT INTO steward_permissions(user_id,revision,permissions,limits,donation_scope,created_at,updated_at) VALUES(?,1,?,?,'standard',1,1)", id, string(flags), string(limits))
+	for key, value := range map[string]string{
+		"default_endpoint_limit": "0", "default_rpm_per_user": "41", "default_light_rpm_per_user": "40",
+		"global_rpm_per_user": "1", "default_concurrency_per_user": "9", "default_light_concurrency_per_user": "10",
+	} {
+		exec("UPDATE site_config SET value=? WHERE key=?", value, key)
+	}
+	check := func(want ...string) {
+		t.Helper()
+		envelope, err := fixture.runtime.readUserEnvelope(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(envelope.User.BlockedInheritedLimits, want) {
+			t.Fatalf("blocked defaults = %v, want %v", envelope.User.BlockedInheritedLimits, want)
+		}
+	}
+	check("endpoint_limit", "rpm_limit", "light_concurrency_limit")
+	exec("UPDATE site_config SET value='3' WHERE key='default_endpoint_limit'")
+	check("rpm_limit", "light_concurrency_limit")
+	exec(`UPDATE steward_permissions SET permissions=json_set(permissions, '$."users.limits"',json('false')), revision=revision+1 WHERE user_id=?`, id)
+	check()
+	exec("UPDATE site_config SET value='0' WHERE key='default_endpoint_limit'")
+	check("endpoint_limit")
+	for _, level := range []int{6, 4} {
+		exec("UPDATE users SET level=? WHERE id=?", level, id)
+		check()
+	}
 }
 
 func TestAuthorizeStewardFinalRechecksCallerTransaction(t *testing.T) {

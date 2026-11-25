@@ -5,8 +5,8 @@ cd "$(dirname "$0")/.."
 test "$#" -eq 1
 source_commit=$1
 case "$source_commit" in
-  03456c51d7537e806fc1b4576fc7e9660dc3f696|b1700f25d7a73535af76cdd15c356d92eff0d8fd) ;;
-  *) printf 'Unrecognized released source commit\n' >&2; exit 2 ;;
+  03456c51d7537e806fc1b4576fc7e9660dc3f696|b1700f25d7a73535af76cdd15c356d92eff0d8fd|1bb01bdb833396fdd25dc2229f3be6265c34bae5|b1472fa832167ff045a71ea3ee2878541757af10) ;;
+  *) printf 'Unrecognized upgrade source commit\n' >&2; exit 2 ;;
 esac
 if ! git cat-file -e "$source_commit^{commit}" 2>/dev/null; then
   timeout 120s git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=30 \

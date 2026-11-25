@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { createMemoryRouter, RouterProvider, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,10 +7,10 @@ import { useLogUrlState, type LogUrlState } from './useLogUrlState';
 const fields = ['model', 'operation'] as const;
 const now = 1_800_000_000;
 
-function mount(search = '') {
+function mount(search = '', scope = '') {
   const observations: LogUrlState[] = [];
   function Probe() {
-    const { state, patch } = useLogUrlState(fields, 20);
+    const { state, patch } = useLogUrlState(fields, 20, scope);
     const location = useLocation();
     const navigate = useNavigate();
     observations.push(state);
@@ -23,6 +23,18 @@ function mount(search = '') {
         </button>
         <button onClick={() => patch({ fromUnix: now - 3_600, toUnix: now, page: 1 })}>
           Set range
+        </button>
+        <button
+          onClick={() =>
+            patch({
+              filters: { model: 'private model', operation: 'chat_completions' },
+              range: '15m',
+              fromUnix: undefined,
+              toUnix: undefined,
+            })
+          }
+        >
+          Use private filter
         </button>
         <button onClick={() => navigate(-1)}>Back</button>
         <button onClick={() => navigate(1)}>Forward</button>
@@ -48,6 +60,39 @@ const query = () => new URLSearchParams(screen.getByTestId('query').textContent 
 afterEach(() => vi.restoreAllMocks());
 
 describe('log time range', () => {
+  it('keeps a private model in the current role history and only shares the rolling preset and operation', async () => {
+    const { router } = mount('', 'user:7');
+    fireEvent.click(screen.getByRole('button', { name: 'Use private filter' }));
+    await waitFor(() => expect(query().get('range')).toBe('15m'));
+    expect(query().has('model')).toBe(false);
+    expect(query().has('from')).toBe(false);
+    expect(query().get('operation')).toBe('chat_completions');
+    expect(router.state.location.state?.logPrivate).toEqual({
+      scope: 'user:7',
+      filters: { model: 'private model' },
+    });
+    expect(JSON.parse(screen.getByTestId('range').textContent!).filters.model).toBe(
+      'private model',
+    );
+  });
+  it('restores a legacy private filter into scoped history and replaces the original address', async () => {
+    const { router } = await act(async () =>
+      mount('?model=legacy&operation=chat_completions&page=4', 'user:7'),
+    );
+    expect(query().has('model')).toBe(false);
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(query().get('operation')).toBe('chat_completions');
+    expect(query().get('page')).toBe('4');
+    expect(router.state.location.state.logPrivate).toEqual({
+      scope: 'user:7',
+      filters: { model: 'legacy' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    });
+    expect(screen.getByText('Before logs')).toBeVisible();
+    expect(router.state.location.pathname).toBe('/before');
+  });
   it.each(['images_generations', 'chat_completions', 'model_discovery'])(
     'preserves service operation %s through range updates and history',
     async (operation) => {

@@ -208,9 +208,6 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 	if response != nil && response.Request != nil {
 		response.Request.Header.Del("Authorization")
 	}
-	if err == nil && response != nil && response.StatusCode == http.StatusBadRequest && errorContext.CharityCall {
-		errorContext.GatewayCallerInput = callerInput(chat, body, policy)
-	}
 	upload.Release()
 	if response != nil && response.Body != nil {
 		defer response.Body.Close()
@@ -247,7 +244,7 @@ func (a *Adapter) attempt(ctx context.Context, w http.ResponseWriter, target con
 		if response.Header.Get("Content-Encoding") != "" {
 			return upstreamFailure("upstream stream encoding was invalid", response.StatusCode)
 		}
-		return a.stream(ctx, w, response, chat, guard, errorContext, policy.ContinuationID)
+		return a.stream(ctx, w, response, chat, guard, errorContext, target.Type(), policy.ContinuationID)
 	}
 	if !validContentType(response, "application/json") {
 		_ = errorContext.ReadResponse(ctx, response)

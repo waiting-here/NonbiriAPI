@@ -77,40 +77,13 @@ func TestGatewayCallerFaultDoesNotExemptUnprovenRequests(t *testing.T) {
 			request := chat(t, `{"model":"test","messages":[{"role":"assistant","content":"hello"}]}`)
 			defer request.Clear()
 			result := a.AttemptWithPolicy(smartbackoff.WithCharityCall(t.Context(), !tc.personal), httptest.NewRecorder(), target(), secret(), request, nil, "", tc.policy)
-			if result.Success || result.Committed || result.StreakDisposition != contract.StreakUpstreamFailure || result.ErrorDetail.CallerFault().Matches(400, "AI_APICallError") {
+			want := contract.StreakUpstreamFailure
+			if !tc.personal && tc.status == 400 {
+				want = contract.StreakNeutral
+			}
+			if result.Success || result.Committed || result.StreakDisposition != want || result.ErrorDetail.CallerFault().Matches(400, "AI_APICallError") != (want == contract.StreakNeutral) {
 				t.Fatalf("unproven response exempted: %+v", result)
 			}
 		})
-	}
-}
-
-func TestGatewayCallerInputRequiresUnmodifiedMatchingFields(t *testing.T) {
-	request := chat(t, `{"model":"test","messages":[{"role":"assistant","content":"hello"}],"max_tokens":100000}`)
-	defer request.Clear()
-	const body = `{"prompt":[{"role":"assistant","content":[]}],"maxOutputTokens":100000}`
-	for _, tc := range []struct {
-		name   string
-		body   string
-		policy contract.AttemptPolicy
-		want   upstreamerror.GatewayCallerInput
-	}{
-		{"original", body, contract.AttemptPolicy{}, upstreamerror.GatewayCallerInput{EndsWithAssistant: true, MaxOutputTokens: 100000}},
-		{"different budget", strings.Replace(body, "100000", "128", 1), contract.AttemptPolicy{}, upstreamerror.GatewayCallerInput{EndsWithAssistant: true}},
-		{"different final role", strings.Replace(body, "assistant", "user", 1), contract.AttemptPolicy{}, upstreamerror.GatewayCallerInput{MaxOutputTokens: 100000}},
-		{"adapted", body, contract.AttemptPolicy{HasAdaptation: true}, upstreamerror.GatewayCallerInput{}},
-		{"added header", body, contract.AttemptPolicy{AdditionalHeaders: http.Header{"X-Custom": {"value"}}}, upstreamerror.GatewayCallerInput{}},
-		{"managed header", body, contract.AttemptPolicy{ManagedHeaders: http.Header{"X-Session": {"value"}}}, upstreamerror.GatewayCallerInput{}},
-		{"native extension", body, contract.AttemptPolicy{NativeExtensions: map[string]json.RawMessage{"/vendor": json.RawMessage(`true`)}}, upstreamerror.GatewayCallerInput{}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := callerInput(request, []byte(tc.body), tc.policy); got != tc.want {
-				t.Fatalf("proof=%+v want=%+v", got, tc.want)
-			}
-		})
-	}
-	user := chat(t, `{"model":"test","messages":[{"role":"assistant","content":"earlier"},{"role":"user","content":"hello"}]}`)
-	defer user.Clear()
-	if got := callerInput(user, []byte(body), contract.AttemptPolicy{}); got != (upstreamerror.GatewayCallerInput{}) {
-		t.Fatalf("missing caller controls minted proof: %+v", got)
 	}
 }

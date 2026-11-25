@@ -685,6 +685,19 @@ describe('economy closed-wire normalizers', () => {
     expect(result.reviewResult?.reason).toBe(reason);
   });
 
+  it('shows a forced rejection as rejected in donation details and mutation receipts', () => {
+    const result = normalizeDonation({
+      ...DONATION_FIXTURE,
+      status: 'rejected',
+      review_result: { decision: 'force_reject', reason: 'Review required', reviewed_at: 10 },
+    });
+    expect(result.reviewResult).toEqual({
+      decision: 'reject',
+      reason: 'Review required',
+      reviewedAt: 10,
+    });
+  });
+
   it('preserves approved-use budgets without promoting a pending submission header', () => {
     const wire = pendingUseDonation();
     const donation = normalizeDonation(wire);

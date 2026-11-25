@@ -22,12 +22,13 @@ export interface LogFilterField {
 }
 
 const QUICK_RANGES = [
-  { key: 'logs.range1h', seconds: 3600 },
-  { key: 'logs.range24h', seconds: 86_400 },
-  { key: 'logs.range7d', seconds: 7 * 86_400 },
+  { key: 'common.logRange15m', value: '15m' },
+  { key: 'logs.range1h', value: '1h' },
+  { key: 'logs.range24h', value: '24h' },
+  { key: 'logs.range7d', value: '7d' },
 ] as const;
 
-type FilterState = Pick<LogUrlState, 'filters' | 'fromUnix' | 'toUnix'>;
+type FilterState = Pick<LogUrlState, 'filters' | 'fromUnix' | 'toUnix' | 'range'>;
 interface LogFiltersProps {
   station: TimeStation;
   fields: readonly LogFilterField[];
@@ -68,6 +69,7 @@ export function LogFilters({
       Object.entries(value.filters).sort(([a], [b]) => a.localeCompare(b)),
       value.fromUnix,
       value.toUnix,
+      value.range,
     ]);
   const stateSeed = seed(state);
   const [seededFor, setSeededFor] = useState(stateSeed);
@@ -137,7 +139,12 @@ export function LogFilters({
     }
     setSubmitted(false);
     setDrafts(filters);
-    apply({ filters, fromUnix: from ?? undefined, toUnix: to ?? undefined });
+    apply({
+      filters,
+      fromUnix: from ?? undefined,
+      toUnix: to ?? undefined,
+      range: from === null && to === null ? state.range : undefined,
+    });
   };
   const reset = () => {
     onResetLookup?.();
@@ -145,7 +152,7 @@ export function LogFilters({
     setDraftFrom(createTimeDraft(null));
     setDraftTo(createTimeDraft(null));
     setSubmitted(false);
-    apply({ filters: {}, fromUnix: undefined, toUnix: undefined });
+    apply({ filters: {}, fromUnix: undefined, toUnix: undefined, range: undefined });
   };
   const primaryNames = ['outcome', 'operation', 'discord_id', 'model', 'charity_model'];
   const errors: Record<string, string> = submitted ? readDraft().errors : {};
@@ -265,16 +272,19 @@ export function LogFilters({
               type="button"
               variant="secondary"
               size="sm"
-              aria-pressed={
-                state.fromUnix !== undefined &&
-                state.toUnix !== undefined &&
-                state.toUnix - state.fromUnix === range.seconds
-              }
+              aria-pressed={state.range === range.value}
               onClick={() => {
-                const now = Math.floor(Date.now() / 1000);
-                setDraftFrom(createTimeDraft(now - range.seconds));
-                setDraftTo(createTimeDraft(now));
-                apply({ filters: state.filters, fromUnix: now - range.seconds, toUnix: now }, true);
+                setDraftFrom(createTimeDraft(null));
+                setDraftTo(createTimeDraft(null));
+                apply(
+                  {
+                    filters: state.filters,
+                    fromUnix: undefined,
+                    toUnix: undefined,
+                    range: range.value,
+                  },
+                  true,
+                );
               }}
             >
               {t(range.key)}
@@ -283,7 +293,9 @@ export function LogFilters({
         </div>
         {toolbarActions}
       </div>
+      {state.range && <p className="nb-small">{t('common.logRolling')}</p>}
       <FilterBar
+        onReset={reset}
         as="div"
         ariaLabel={t('common.filter')}
         activeCount={
@@ -314,12 +326,6 @@ export function LogFilters({
         }
         footer={
           <div className="log-filters__actions">
-            <Button type="submit" variant="primary">
-              {t('common.search')}
-            </Button>
-            <Button type="button" onClick={reset}>
-              {t('common.resetFilter')}
-            </Button>
             <span className="log-filters__pending" role="status">
               {pendingFields.length > 0 &&
                 t('logs.applyEdits', { fields: pendingFields.join(' · ') })}

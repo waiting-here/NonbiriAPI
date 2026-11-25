@@ -82,6 +82,40 @@ func TestCallerKeyMiddlewareExactBearerAndLifecycleRecheck(t *testing.T) {
 	}
 }
 
+func TestCallerKeyPlatformErrorUsesAccountLanguage(t *testing.T) {
+	for _, tc := range []struct{ saved, header, want string }{
+		{"zh", "en", "zh"}, {"en", "zh", "en"}, {"", "en;q=0.3,zh-CN;q=0.9", "zh"}, {"", "", "en"},
+	} {
+		t.Run(tc.saved+"/"+tc.header, func(t *testing.T) {
+			lifecycle, err := lifecyclegate.New(lifecyclegate.Config{MaxUsers: 4})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolver := &fakeCallerKeyResolver{identity: resources.CallerIdentity{UserID: 9, Generation: 3, Language: tc.saved}}
+			middleware, err := NewCallerKeyMiddleware(resolver, lifecycle)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest("GET", "/v1/models", nil)
+			req.Header.Set("Authorization", "Bearer nbk_test")
+			req.Header.Set("Accept-Language", tc.header)
+			rec := httptest.NewRecorder()
+			middleware.Wrap(NewHandler(nil)).ServeHTTP(httperr.WithLanguage(rec, tc.header), req)
+			if rec.Code != http.StatusServiceUnavailable || rec.Header().Get("Content-Language") != tc.want ||
+				!strings.Contains(rec.Body.String(), "[NonbiriAPI]") || strings.Contains(rec.Body.String(), "服务") != (tc.want == "zh") {
+				t.Fatalf("platform response: %d %s %s", rec.Code, rec.Header().Get("Content-Language"), rec.Body)
+			}
+			rec = httptest.NewRecorder()
+			middleware.Wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				httperr.WriteUpstreamError(w, httperr.New(httperr.CodeUpstream, "original upstream message"), 400)
+			})).ServeHTTP(httperr.WithLanguage(rec, tc.header), req)
+			if rec.Code != 400 || rec.Header().Get("Content-Language") != "" || !strings.Contains(rec.Body.String(), "original upstream message") {
+				t.Fatalf("upstream response: %d %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
 func TestCallerKeyMiddlewareRejectsBeforeDownstream(t *testing.T) {
 	lifecycle, _ := lifecyclegate.New(lifecyclegate.Config{MaxUsers: 4})
 	tests := []struct {

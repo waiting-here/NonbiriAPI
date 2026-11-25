@@ -209,15 +209,21 @@ for (const scenario of cases) {
             total: '0',
             total_pages: '1',
             anchor: null,
+            game_balance: '0',
             current_balance: '0',
             server_now: 1800000000,
           },
         });
       });
+      let releaseTime!: () => void;
+      const pendingTime = new Promise<void>((resolve) => {
+        releaseTime = resolve;
+      });
       await page.route('**/api/time/resolve?**', async (route) => {
         const params = new URL(route.request().url()).searchParams;
         expect(params.get('local')).toBe(inputLocal);
         expect(params.get('time_zone')).toBe(browserZone);
+        await pendingTime;
         await route.fulfill({
           json: {
             instant: scenario.instant,
@@ -235,10 +241,17 @@ for (const scenario of cases) {
       const from = page.locator('input[type="datetime-local"]').first();
       await from.fill(inputLocal.slice(0, 16));
       const apply = page.getByRole('button', {
-        name: scenario.locale === 'en' ? 'Search' : '搜索',
+        name: scenario.locale === 'en' ? 'Apply filters' : '应用筛选',
         exact: true,
       });
-      await expect(apply).toBeDisabled();
+      await apply.click();
+      await expect(page.locator('.credit-history .field-error[role="alert"]')).toBeVisible();
+      expect(queries.some((query) => query.has('from'))).toBe(false);
+      const resolved = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === '/api/time/resolve',
+      );
+      releaseTime();
+      await resolved;
       if (scenario.adjustment !== 'none')
         await expect(
           page.getByText(scenario.local.replace('T', ' '), { exact: false }),

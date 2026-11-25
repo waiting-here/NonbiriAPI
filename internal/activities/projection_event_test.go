@@ -155,8 +155,10 @@ func TestActivitiesPublisherUsesCurrentPlanForNonGlobalFacts(t *testing.T) {
 type invalidatingActivitySink struct {
 	mu            sync.Mutex
 	hub           *accountstream.Hub
+	beforePublish func() error
 	preparedPlan  accountstream.ActivitiesPublishPlan
 	publishedPlan accountstream.ActivitiesPublishPlan
+	publishedData json.RawMessage
 }
 
 func (sink *invalidatingActivitySink) PrepareActivitiesPublish(global bool) (accountstream.ActivitiesPublishPlan, error) {
@@ -178,8 +180,9 @@ func (sink *invalidatingActivitySink) PublishActivitiesCommitted(
 ) (accountstream.Frame, error) {
 	sink.mu.Lock()
 	sink.publishedPlan = cloneActivitiesPublishPlan(plan)
+	sink.publishedData = append(json.RawMessage(nil), event.Data...)
 	sink.mu.Unlock()
-	if _, err := sink.hub.PrepareActivitiesPublish(true); err != nil {
+	if err := sink.beforePublish(); err != nil {
 		return accountstream.Frame{}, err
 	}
 	return sink.hub.PublishActivitiesCommitted(ctx, accountID, plan, event)
@@ -193,7 +196,10 @@ func TestActivitiesPublisherReturnsStalePlanError(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = hub.Close() })
-	sink := &invalidatingActivitySink{hub: hub}
+	sink := &invalidatingActivitySink{hub: hub, beforePublish: func() error {
+		_, err := hub.PrepareActivitiesPublish(true)
+		return err
+	}}
 	publisher, err := NewAccountstreamPublisher(fixture.repository, sink)
 	if err != nil {
 		t.Fatal(err)
@@ -207,6 +213,47 @@ func TestActivitiesPublisherReturnsStalePlanError(t *testing.T) {
 	if sink.preparedPlan.Generation == 0 || sink.publishedPlan.Generation != sink.preparedPlan.Generation ||
 		!slices.Equal(sink.publishedPlan.ActiveAccountIDs, sink.preparedPlan.ActiveAccountIDs) {
 		t.Fatalf("prepared plan=%+v published plan=%+v", sink.preparedPlan, sink.publishedPlan)
+	}
+}
+
+func TestCommittedActivitySurvivesCallerDisconnectAndInterveningGlobalChange(t *testing.T) {
+	fixture := newActivityFixture(t, 1_800_175_000)
+	account, _ := fixture.seedUser("activity-rebuild", false)
+	fixture.setActivityConfig(true, true, false, 0, 0)
+	before, err := fixture.repository.ProjectActivities(t.Context(), account)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub, err := accountstream.New(fixture.repository, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = hub.Close() })
+	calls := 0
+	sink := &invalidatingActivitySink{hub: hub, beforePublish: func() error {
+		calls++
+		if calls == 1 {
+			fixture.setActivityConfig(false, true, false, 0, 0)
+			_, err := hub.PrepareActivitiesPublish(true)
+			return err
+		}
+		return nil
+	}}
+	publisher, err := NewAccountstreamPublisher(fixture.repository, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, disconnect := context.WithCancel(t.Context())
+	disconnect()
+	if err := publisher.Publish(request, PublishFacts{AccountIDs: []int64{account}}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := fixture.repository.ProjectActivities(t.Context(), account)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || bytes.Equal(before.Data, current.Data) || !bytes.Equal(sink.publishedData, current.Data) {
+		t.Fatalf("latest committed snapshot was not rebuilt (attempts=%d)", calls)
 	}
 }
 

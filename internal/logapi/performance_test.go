@@ -33,7 +33,7 @@ func TestLogReadPhasesSeparateConnectionWaitAndQueryWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	phases := performance.Drain()
-	if len(phases) != 1 || phases[0].Route != "log_read.admin.acquire" || phases[0].Canceled != 1 || phases[0].Active != 0 {
+	if len(phases) != 1 || phases[0].Route != "log_read.admin.acquire" || phases[0].Deadlines != 1 || phases[0].Canceled != 0 || phases[0].Active != 0 {
 		t.Fatalf("connection wait was attributed to query work: %+v", phases)
 	}
 	page, err := f.repo.ListSteward(ctx, 999, filter, allowLogStewardRead{})
@@ -41,7 +41,7 @@ func TestLogReadPhasesSeparateConnectionWaitAndQueryWork(t *testing.T) {
 		t.Fatalf("steward read: %+v %v", page, err)
 	}
 	phases = performance.Drain()
-	want := map[string]bool{"acquire": false, "authorize": false, "models": false, "count": false, "rows": false}
+	want := map[string]bool{"acquire": false, "authorize": false, "models": false, "count": false, "rows": false, "ids": false, "projection": false}
 	for _, phase := range phases {
 		for name := range want {
 			if phase.Route == "log_read.steward."+name {

@@ -147,7 +147,7 @@ strings. Both presentations retain `Cache-Control: no-store` and relevant
 
 `code`, `source`, and `message` are always present. `source` is `upstream` only for code `upstream`; it is `platform` otherwise. Platform messages receive the prefix exactly once. Messages are bounded to 1,024 UTF-8 bytes. Personal and charity upstream errors may include `upstream_code`, extracted from the upstream `code` or `type` and restricted to 1–64 ASCII letters, digits, underscores, dots, colons or hyphens. A bounded integer code is represented as a string. The optional `diag` remains limited to explicitly allowed owner-visible failures, sanitized to at most 4,096 bytes; charity errors omit it. Platform and Debug errors omit both context fields.
 
-Platform error messages follow `Accept-Language` (`zh` or `en`, including regional variants and quality weights); unsupported or missing preferences use English. Both stations send their selected language. Stable codes, source, HTTP status and retry semantics do not change. Upstream messages are sanitized but not translated. This applies to platform errors emitted inside an active SSE response as well as ordinary JSON errors.
+On authenticated CallerKey requests, platform error messages use the account language saved by the caller. When the account follows the browser or no account has been identified, messages follow `Accept-Language` (`zh` or `en`, including regional variants and quality weights); unsupported or missing preferences use English. Both stations send their selected language. Stable codes, source, HTTP status and retry semantics do not change. Upstream messages are sanitized but not translated. This applies to platform errors emitted inside an active SSE response as well as ordinary JSON errors.
 
 Ordinary user display projections replace valid IPv4 address strings with `[redacted]`. Current administrators and level-6 stewards receive complete saved content through their authorized log, audit, diagnostic and history routes and existing exports, without display redaction or text truncation. Level-5 stewards with the corresponding read grants can read site-wide logs and diagnostics; without `logs.unredacted`, their upstream error bodies and error-text projections replace IPv4 addresses with `[redacted]`. Source IPs, endpoint addresses, other authorized fields and IPv6 remain unchanged. Collection limits, retention, role restrictions and safe JSON/CSV/text encoding remain. Editable endpoint addresses, IP-rule values and normal model output retain their original values.
 
@@ -178,12 +178,12 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 56.
-Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.2 offline tool converts the registered schema 54 and 55 sources. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
+The Generation 2 database uses SQLite `application_id=0x4E425249`, `user_version=2` and schema 59.
+Startup initializes absent storage or opens the exact current structure. A mismatch reports the actual and required schema and the explicit upgrade entry point before repair or recovery writes. The v1.4.3 offline tool converts the registered schema 54, 55, 56, 57 and 58 sources. Older registered databases must first be converted with the v1.3.12 tool. Preserve the complete stopped recovery set before running the converter. A converted database requires the new server. [Database upgrades](database-upgrades.md)
 
-`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=56`, `minimum_schema_version=56`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists both source fingerprints in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
+`maintenance schema-info --json` reads compiled metadata without opening storage. Its version-1 descriptor reports `schema_version=59`, `minimum_schema_version=59`, `startup_policy="exact"` and `upgrade_tool="nonbiri-upgrade-v1"`, with empty source and conversion arrays. The matching standalone tool lists all five source fingerprints in `offline_conversions`. Startup validates the current structure, configuration and key check, then recovers unfinished work. Full offline verification is available with `maintenance verify`.
 
-Current account export `schema_version=38` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v38.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
+Current account export `schema_version=39` is independent of SQLite `user_version`; its filename is `nonbiriapi-account-export-v39.json`. See §9 for its safe projections. This contract describes the source tree, not an instance's release or deployment status.
 
 ### 1.5 Display time context
 
@@ -226,7 +226,7 @@ The request is the OpenAI Chat Completions shape. Its body limit defaults to 10 
 
 Admission order is fixed: CallerKey/account, one permit from the user's operation-class concurrency pool, global/user RPM, strict body/model policy, Debug interception, model/capability resolution, candidate selection, credential/egress checks, then dispatch. A refused concurrency permit creates no RPM hit, candidate access, reservation, or penalty. One logical request retains one permit and one 1200-second aggregate deadline across retries and streaming. Upstream response headers may take up to 900 seconds; receiving them does not end the remaining output budget. Embeddings, rerank, System One and Decisions use the light pool; all other model operations use the heavy pool. Each pool combines personal and charity calls. Charity RPM windows are also independent by class, while global RPM remains shared; see §7.1 for defaults and overrides.
 
-Short charity requests return `400 content_too_short`; the minimum-length calculation is unchanged. The platform-owned message starts with `[NonbiriAPI]` and explains that the minimum input length protects shared resources and asks for a complete request, in English or Chinese according to `Accept-Language`; it does not echo input content. The server applies the current optional penalty, temporary ban, and charity suspension settings before any reservation or upstream attempt. Their rejection log and any credit penalty commit together; `X-Request-ID` identifies that log. Rejected requests count once with zero upstream tokens. The separate automatic RPM-ban window counts only charity requests denied by the site's per-user RPM limit. Personal resource calls, global RPM, concurrency limits, shared EndpointKey limits and upstream `429` responses do not contribute. Successfully intercepted Debug dry runs retain their zero-accounting and zero-log behavior.
+Short charity requests return `400 content_too_short`; the minimum-length calculation is unchanged. The platform-owned message starts with `[NonbiriAPI]` and explains that the minimum input length protects shared resources and asks for a complete request, in the caller's selected language; it does not echo input content. The server applies the current optional penalty, temporary ban, and charity suspension settings before any reservation or upstream attempt. Their rejection log and any credit penalty commit together; `X-Request-ID` identifies that log. Rejected requests count once with zero upstream tokens. The separate automatic RPM-ban window counts only charity requests denied by the site's per-user RPM limit. Personal resource calls, global RPM, concurrency limits, shared EndpointKey limits and upstream `429` responses do not contribute. Successfully intercepted Debug dry runs retain their zero-accounting and zero-log behavior.
 
 On a per-user RPM denial, the server can attribute a charity violation only after decoding the reserved `[公益]` model namespace from a valid bounded request for a registered operation, including supported multipart requests. This read is limited to the configured model-request body maximum and two seconds, or the earlier request deadline; at most 16 such reads run at once, without queuing. An unreadable or malformed body, or exhausted classification capacity, keeps the rate-limit rejection without adding an automatic-ban event. This does not select a candidate, access a credential, reserve credit or send upstream; admitted requests retain the order above.
 
@@ -340,7 +340,9 @@ Administrator setting `gateway_user_attribution_enabled` defaults to `false` (th
 
 In Chat output, native reasoning text is returned separately as `reasoning_content` in the assistant message or stream delta; it is never merged into answer text. Assistant histories accept this field as native reasoning parts. Bounded Responses conversion emits actual text in reasoning items with empty summaries and accepts those generated items on replay, alongside generated output text and refusal parts. Reasoning or signed replies retain ordered text/reasoning/tool-call parts in `extra_content.gateway.content`; clients must return the extension together with the unchanged visible message. JSON emits it on the message, SSE once on the final delta, and Responses attaches it to the first generated output item. Complete histories are checked against visible content, reasoning and tool-call arguments before native-order replay.
 
-The closed per-part `providerMetadata` mapping is `google|googleVertex|vertex.thoughtSignature`, `anthropic.signature|redactedData`, and `openai|azure.itemId|reasoningEncryptedContent`. Replay changes the container to native `providerOptions` and retains those exact provider keys. Other provider options, credentials and routing controls are rejected in incoming continuation extensions. Each opaque string is bounded to 1 MiB and the extension to 4,096 parts within the complete request/response limits. Missing metadata cannot be reconstructed from readable reasoning; untagged text replay alone does not guarantee lossless continuation on a provider requiring signatures. Generated opaque source bindings and their routing constraints are described in [continuation histories](content-protocols.md#continuation-source-and-history-integrity).
+The closed per-part `providerMetadata` mapping accepts `google|googleVertex|vertex.thoughtSignature`, `anthropic.signature|redactedData` and `openai|azure.itemId|reasoningEncryptedContent`. Reasoning parts also accept `bedrock.signature`, `bedrock.redactedData` and `bedrock.redactedContent`. Replay changes the container to native `providerOptions` and retains those exact keys. Each opaque string is bounded to 1 MiB and the extension to 4,096 parts within the request and response limits. Clients must preserve the complete extension for signed or redacted reasoning. [Continuation histories](content-protocols.md#continuation-source-and-history-integrity)
+
+Gateway v4 streams can carry a `{"type":"ping"}` heartbeat before finish. It produces no Chat content or usage. The stream still requires its native finish event and closed content parts. [AI SDK v4 stream parts](https://github.com/vercel/ai/blob/ai%407.0.163/packages/provider/src/language-model/v4/language-model-v4-stream-part.ts#L103-L106)
 
 Gateway v3/v4 also accept standard Google `extra_content.google.thought_signature`
 on assistant messages and individual tool calls. They map to the matching native
@@ -382,6 +384,29 @@ Decisions uses the existing CallerKey, ownership, admission, original-input clie
 ## 3. User identity, account, resources, and logs
 
 All routes in this section require a user session unless marked anonymous.
+
+**Long-running request log searches.** The numbered lists at `/api/logs`,
+`/api/steward/logs` and `/admin/api/logs` accept the optional
+`Prefer: respond-async` request header. A completed list returns the usual
+`200` page with its exact count. When the five-second foreground budget
+expires, the server queues the same filters and returns `202 Accepted` with
+`{"status":"running","search_id":"…"}` and `Retry-After: 1`.
+
+Replace the final `logs` in the list path with `log-searches/{search_id}`
+and poll with `GET`. Supply `page` and `page_size` to retrieve any numbered
+window. Each poll returns a running receipt or a complete, role-scoped page.
+The worker captures matching IDs in chronological order, newest first. Later
+insertions enter a new search. Entries reaching their retention deadline leave
+the result, including its total. Each read checks current authorization and
+projects the page with the current display rules.
+
+The originating session can discard its own result with `DELETE` on the
+same resource, receiving `204`. This also releases ongoing work if the
+account's log grant changes. The service runs one collection at a time and
+retains up to two searches per account and eight overall. A full active
+queue returns `429` with `Retry-After`. Idle results expire after five
+minutes and service restart clears them. On `404` or `409 refresh_required`,
+start a fresh list request with the desired filters.
 
 Request-log and Debug model-call `route_kind` values use `openai_` or `charity_` followed by one of the 16 operation names in §3.4, including `responses_compact`, `responses_input_tokens`, `rerank` and `systemone`. Discovery retains `model_discovery`. Debug accepts registered model-call kinds only. Log clients using a closed enum must handle the complete set. Existing model/status/time filters, pagination, role-specific projections and exports include every registered operation. Personal and charity records retain their corresponding privacy boundary; these ordinary request logs do not store prompts, vectors, uploaded files or generated media. The separate administrator-only assistant request history in §7.8 deliberately retains complete model input and responses.
 
@@ -454,7 +479,7 @@ Request-log list/detail and JSON exports may include safe `rejection_detail:{fie
 
 These fields describe validated field names, type/format/capability requirements and bounded length facts; they never echo submitted values, request bodies, credentials or raw upstream diagnostics. Typed protocol-conversion refusals retain their actual safe field/reason instead of being flattened to a generic `invalid_request`. CSV exports append `rejection_field,rejection_detail,rejection_suggestion`; the CSV `rejection_detail` cell contains the reason text. Existing `rejection_stage,rejection_reason,caller_error_code` remain stable and separate.
 
-API error messages include the available safe field, reason and next step, localized for a supported `Accept-Language`. A model with no usable resource for the requested operation returns `503 unbound_model`; a healthy resource for an unrelated operation does not make the request invalid. Temporary shared capacity limits retain `429 rate_limited`. Healthy resources that cannot represent the requested features still return a specific `400 invalid_request`. These refusals do not dispatch an upstream request or charge for one.
+API error messages include the available safe field, reason and next step, localized to the caller's selected language. A model with no usable resource for the requested operation returns `503 unbound_model`; a healthy resource for an unrelated operation does not make the request invalid. Temporary shared capacity limits retain `429 rate_limited`. Healthy resources that cannot represent the requested features still return a specific `400 invalid_request`. These refusals do not dispatch an upstream request or charge for one.
 
 The same detail can explain a refusal before an upstream call. For a physical
 connection it distinguishes requests per minute, concurrent requests, reaching
@@ -503,13 +528,15 @@ Personal requests reserve no general credits and remain available with a negativ
 | `GET /api/logs` | Filters `operation,model,error_code,status,from,to`; legacy `cursor,limit` or numbered `page,page_size`; returns owner rows and numbered `pagination`. |
 | `GET /api/logs/{id}` | Legacy `attempt_cursor,attempt_limit` or numbered `attempt_page,attempt_page_size`; numbered detail returns `attempt_pagination`. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
-| `GET /api/issues` | Required `state=current|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; returns the owner's bounded issue page and numbered `pagination`. |
+| `GET /api/issues` | Required `state=current|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; returns the owner's bounded issue page and numbered `pagination`. A permitted endpoint-key detail link may include `deep_link.key_id`. |
 | `POST /api/account/export` | Fresh elevation; bounded JSON attachment. The export schema version is independent of the database version. |
 | `POST /api/account/delete` | Fresh elevation and confirmation; synchronous coordinated deletion; 204. |
 
 `balance` always means general credits; `game_balance` is the separate signed game-credit wallet. Both use exact decimal strings. New accounts start both at zero. API calls, donations and Thursday use general credits. Administrators can adjust either wallet, including below zero; cumulative donation credit remains nonnegative and is a separate lifetime statistic.
 
 `UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state and independent game/charity public preferences. `automatic_restrictions` is an array of safe `{kind,reason_code,reason,started_at,ends_at}` summaries, without thresholds, counters or evidence. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
+
+For level-5 stewards, the optional `user.blocked_inherited_limits` lists the editable limit fields whose current site defaults exceed that steward's delegated maximum. Both individual and batch limit editors use these names when offering inheritance. The backend checks the current effective value again when applying a change. The list omits fields outside the steward's permissions and exposes no site default values.
 
 ### Browser association audit
 
@@ -982,7 +1009,7 @@ and configured `text,image,audio,video` four-price entries. Input/output
 classification and missing-price fallback are independent. Donor prices and
 decisions are excluded. See [usage and context pricing](charity-context-pricing.md).
 
-`discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Enabling it pauses the recurring schedule even outside the fixed window, where full price applies. `recurring_discount` supplies a time zone, default payable percentage and at most 16 weekly periods. `effective_discount` contains `source,percent,next_change_at`; the latter is the next actual percentage change as a Unix second or null. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and pricing. Existing `discounted_*` fields use the configured fixed percentage regardless of the active window; consumers should use `current_user_*` for current prices. No donated-resource identity is exposed. See [weekly configuration, precedence, DST and frozen settlement](charity-discounts.md).
+`discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Enabling it pauses the recurring schedule even outside the fixed window, where full price applies. `recurring_discount` supplies a time zone, a default payable percentage and at most 16 weekly periods. Its percentages accept up to two decimal places from 0 through 100. New reservations capture the effective value in integer basis points. `effective_discount` contains `source,percent,next_change_at`; the latter is the next actual percentage change as a Unix second or null. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and pricing. Existing `discounted_*` fields use the configured fixed percentage regardless of the active window; consumers should use `current_user_*` for current prices. No donated-resource identity is exposed. See [weekly configuration, precedence, DST and frozen settlement](charity-discounts.md).
 
 The complete capability response shares one read-only snapshot, including current
 level, switches, models, availability and batched recent-success statistics.
@@ -1112,7 +1139,7 @@ schema 54 to 55 upgrade start with empty model-specific waits.
 
 Smart backoff automatically applies to charity calls without per-key setup. It keeps
 the normal consecutive-failure policy: a recognized quota error leaves the
-current streak unchanged. Verified caller-parameter errors have the separate
+current streak unchanged. Upstream-reported caller-parameter errors have the separate
 neutral treatment below. Initial HTTP 200 still resets it, including later
 read or protocol failure. A valid retry header, including zero or a past deadline,
 takes precedence over error classification.
@@ -1227,23 +1254,15 @@ failure streaks. In-flight requests finish using their dispatch snapshot.
 A matched custom rule leaves the existing failure count unchanged. Ordinary
 ordinary users and CallerKeys cannot manage these policies; level-5 sessions require `charity.backoff`.
 
-### 4.1.4 Verified caller-parameter errors
+### 4.1.4 Reported caller-input errors
 
-A recognized caller-parameter or input-length error leaves the donated key's consecutive-failure count unchanged: it neither increments nor clears it. The request still fails and retains its normal sanitized error, diagnostics, retry and accounting behavior. HTTP 400/422 or a generic `invalid_request_error` alone does not qualify. Existing retry-header and quota-backoff rules retain priority.
+An upstream response that identifies a caller-input error leaves the donated key's consecutive-failure count unchanged. The request still fails with the usual sanitized response, retry policy and accounting. The connector uses the upstream report even if a protocol adapter supplied or rewrote the rejected input. Existing retry-header and quota-backoff rules retain priority.
 
-All recognized categories require a complete, bounded `application/json` response with no duplicate keys, an `error` object and a nonempty string message. For native OpenAI generation parameters, exact string `type`, `code` and `param` are required and the message is not used for classification. HTTP 400/422 with `type:"invalid_request_error"` accepts codes `invalid_value`, `invalid_type`, `unsupported_parameter` and `unsupported_value`. HTTP 400 also accepts the exact `type:"BadRequest"` and `code:"InvalidParameter"` pair used by Ark. This pair still requires an eligible named parameter; missing or empty `param`, code suffixes and HTTP 422 do not qualify.
+Recognition reads the bounded JSON error in the actual HTTP response. OpenAI-style HTTP 400 or 422 errors can identify invalid or unsupported generation parameters and indexed message roles in Chat Completions or Responses input. Ark also reports parameter failures as BadRequest / InvalidParameter. Context, prompt and input length codes identify input-length failures. A generic invalid value on an input field needs an explicit input-length message.
 
-The exact top-level parameter allowlist is `temperature`, `top_p`, `top_k`, `frequency_penalty`, `presence_penalty`, `seed`, `stop`, `n`, `logprobs`, `top_logprobs`, `logit_bias`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `reasoning_effort`, `reasoning`, `verbosity`, `response_format`, `dimensions`, `encoding_format`, `size`, `quality`, `style`, `output_format`, `output_compression`, `partial_images`, `aspect_ratio`, `resolution`, `steps`, `cfg_scale`, `negative_prompt`, `async`, `speed` and `language`. Extension names only expand error recognition; they do not add asynchronous task or result-retrieval support.
+Gateway and Google responses can report an unsupported final model turn or an output-token budget outside the provider's range. Google's HTTP 400 INVALID_ARGUMENT envelope can also identify generation or message fields in BadRequest details or explicitly report the input token limit. An invalid credential, a conflicting provider reason, a generic HTTP status or an unrelated quota or service error retains its existing handling.
 
-For those generation parameters, only supported native OpenAI JSON paths can supply the proof. The named parameter must come from the original caller and have the same raw JSON value in the final upstream body. Request adaptation, additional or managed headers, native extensions and protocol conversion exclude this proof. Changing the reported parameter's raw JSON value, even by equivalent normalization, also excludes it.
-
-Input-length recognition uses HTTP 400/422 and `type:"invalid_request_error"`. Codes `context_length_exceeded`, `input_too_long` and `prompt_too_long` qualify when `param` is absent, null, or exactly `messages`, `input` or `prompt`. The generic code `string_above_max_length` requires one of those three input parameters. Code `invalid_value` also requires one of those input parameters and an explicit input-length limit message, such as `system/developer 消息字符数超限：6001，最多 5000`; an ordinary invalid message structure or content error does not qualify. An explicit parameter outside that input set is rejected.
-
-Input-length recognition covers existing OpenAI JSON outbound paths even when input is adapted, headers are configured, native extensions are used or the request is converted. It does not compare original and outgoing input. Multipart, unsupported error protocols and unrelated model/resource/identity/store/service-tier errors remain outside this category. Authorization, billing, platform, network and ambiguous failures retain their existing handling. Personal calls are unchanged.
-
-Native Gateway v3/v4 language requests also recognize two specific HTTP 400 `AI_APICallError` rejections: a final model turn is unsupported, or `maxOutputTokens` is outside the explicitly reported numeric range. The nested `param` must contain the same error type and message, `statusCode:400` and `isRetryable:false`; an unrelated explicit code does not qualify. The connector verifies that both caller messages and the outgoing prompt end with an assistant turn, or that the outgoing output budget equals an explicit caller `max_tokens`/`max_completion_tokens` value and the out-of-range value in the error. The existing Responses translation of `max_output_tokens` follows the same check. Limits come from the error, not a fixed model list. Configured request adaptation, additional or managed headers, and native extensions exclude this Gateway proof. Generic Gateway errors, other operations and errors after HTTP 200 do not qualify.
-
-The same completion transaction saves a minimal claim-bound receipt before accepting the neutral outcome. The receipt contains only its claim reference, HTTP status and recognized code, with no parameter name/value, body or upstream message. Gateway errors retain the existing `AI_APICallError` type fallback as their code. The receipt follows the claim lifecycle and is excluded from account export.
+The same completion transaction saves a minimal claim-bound receipt before accepting the neutral outcome. The receipt contains only its claim reference, HTTP status and recognized code, with no parameter name/value, body or upstream message. Google errors retain the numeric envelope code `400` and Gateway wrappers retain their `AI_APICallError` code. The receipt follows the claim lifecycle and is excluded from account export.
 
 ### 4.2 Donation failure-streak reset
 
@@ -1686,7 +1705,7 @@ Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}
 
 Donation review is independent of its current terminal status. Approved donations retain `review_result=approve` after expiry or termination, including automatic approvals without a reviewer. Donations that expire or are withdrawn before review retain null review fields. A removed reviewer does not erase the original review result. Contradictory state/review combinations remain invalid.
 
-Management donation lists accept `status=pending|approved|rejected|deleted|expired`, `handling=legacy|pending|processed|closed`, `q`, exact donor `user_id` and exact donor `discord_id`, alongside legacy `cursor,limit` or numbered `page,page_size`. Numbered lists additionally accept `review_status`. Filters combine with AND before counting and pagination and bind cursor identity. Donor `user_id` is a canonical positive signed-64-bit decimal string; donor `discord_id` is 1–20 decimal digits with no leading zero. Discord filtering resolves the current donor account; it does not search immutable request-log origins. Empty, repeated or noncanonical donor filters fail. Owner lists reject donor and handling filters. Search uses donation ID and description with the existing 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`; all bindings count, including disabled models. Owner DTOs and exports omit these management fields. Historical receipts add safe handling/count fields on replay without rewriting the immutable result.
+Management donation lists accept `status=pending|approved|rejected|deleted|expired`, `handling=legacy|pending|processed|closed`, `q`, exact donor `user_id` and exact donor `discord_id`, alongside legacy `cursor,limit` or numbered `page,page_size`. Numbered lists additionally accept `review_status` and `sort=oldest|newest` (default oldest). Use `review_status=any_pending` to include pending changes to previously approved donations. Each active management list item with a pending revision adds `review_submitted_at`, the Unix timestamp of its oldest current pending revision. Management pages sort on that time when available and otherwise use the donation creation time, with the ID as the tie-breaker. Filters combine with AND before counting and pagination and bind cursor identity. Donor `user_id` is a canonical positive signed-64-bit decimal string; donor `discord_id` is 1–20 decimal digits with no leading zero. Discord filtering resolves the current donor account; it does not search immutable request-log origins. Empty, repeated or noncanonical donor filters fail. Owner lists reject donor and handling filters. Search uses donation ID and description with the existing 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`; all bindings count, including disabled models. Owner DTOs and exports omit these management fields. Historical receipts add safe handling/count fields on replay without rewriting the immutable result.
 
 `GET {prefix}/users/{userId}/donations` and `GET {prefix}/users/{userId}/donations/{id}` expose complete retained target-user donation history through a safe summary. The prefix is `/admin/api` or `/api/steward`; steward reads require `users.donations.read`, independently of donation scope, including `none`. Lists accept numbered `page,page_size` and `status,review_status,q`; detail accepts no query. Owner-hidden rows remain included with `owner_hidden_at`. Pending, approved and retained terminal records are available independently of the ordinary steward donation-scope predicate. The summary includes safe donation/use/key counts and handling state, with no key controls or credential material. Without `donations.read_all`, donor/reviewer identity remains redacted. Reads are no-store and share a five-second budget. This route does not widen key-management authority or the 400-day terminal retention period.
 
@@ -1922,7 +1941,7 @@ Thursday `literature` accepts empty text or up to 1,024 Unicode characters and 4
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /admin/api/announcements` | `state,severity` plus legacy `cursor,limit` or numbered `page,page_size`; administrator page with numbered `pagination`. |
+| `GET /admin/api/announcements` | Optional `state`, `severity` and `title` filters with legacy `cursor,limit` or numbered `page,page_size`. The title filter accepts up to 160 Unicode characters and matches a literal substring of the Chinese or English draft title before pagination. Use the same filters when continuing a cursor. |
 | `POST /admin/api/announcements` | Complete bilingual draft fields, severity, pin/dismiss policy and nullable expiry; 201 receipt. |
 | `GET /admin/api/announcements/{id}` | Administrator draft/published detail. |
 | `PATCH /admin/api/announcements/{id}` | `expected_revision` plus a non-empty partial draft patch. |
@@ -2017,7 +2036,7 @@ replacement, so omission clears any previously configured schedule.
 | `pricing.context_penalty` | Null/absent disables it and clears its values; otherwise copy `input_threshold,fine`. |
 | `token_reserve_credits` | Null clears the form override to inherited global reserve; otherwise copy the canonical credit string. It remains stored but inactive in request mode. |
 | `discount` | Replace all of `enabled,percent,start_at,end_at`, including false, zero and null; do not merge with stale form values. Percent is an integer 0–100; nullable times use Unix seconds and a configured start must precede the end. |
-| `recurring_discount` | Replace `enabled,time_zone,default_percent,periods` completely, including false, zero and an empty array. Applying a template copies both discount configurations; it never merges them with previous form values. |
+| `recurring_discount` | Replace `enabled,time_zone,default_percent,periods` completely, including false, zero and an empty array. The default and period percentages accept up to two decimal places. Applying a template copies both discount configurations; it never merges them with previous form values. |
 
 Prices, rewards, thresholds, reserve bounds and context behavior use the model's
 existing validators and [context pricing contract](charity-context-pricing.md).
@@ -2166,7 +2185,7 @@ Recent records include actual participant/payment information. Anonymous records
 | Method and path | Request / response |
 | --- | --- |
 | `GET /admin/api/reports/badge` | Pending badge count. |
-| `GET /admin/api/reports` | Optional `status` plus legacy `cursor,limit` or numbered `page,page_size`; case page with numbered `pagination`. |
+| `GET /admin/api/reports` | Optional `status` or `pending=true`, plus optional `search`. Supply legacy `cursor,limit` or numbered `page,page_size`. Matching precedes counting and pagination. |
 | `GET /admin/api/reports/{id}` | Optional `materials_cursor,materials_limit` or numbered `materials_page,materials_page_size`; case detail, bounded material page, and numbered `materials_pagination`. |
 | `GET /admin/api/reports/{id}/targets` | Legacy `cursor,limit` or numbered `page,page_size`; target page, each target includes canonical `donation_match_count`. |
 | `GET /admin/api/reports/{id}/targets/{targetId}/donations` | Legacy `cursor,limit` or numbered `page,page_size`; donation lineage page. |
@@ -2176,6 +2195,8 @@ Recent records include actual participant/payment information. Anonymous records
 | `GET|POST /admin/api/legal-holds` | GET filters `state,object_kind` plus legacy `cursor,limit` or numbered `page,page_size`; POST is an elevated create. |
 | `GET /admin/api/legal-holds/{id}` | Elevated hold detail. |
 | `POST /admin/api/legal-holds/{id}/release` | Elevated release. |
+
+The pending filter includes `pending_indexing`, `pending_review` and `approved_processing`. Choose either this filter or a specific status. The optional search matches a literal substring of the case ID, connector type or canonical base URL and accepts up to 160 Unicode characters after trimming whitespace. A continuation cursor belongs to the selected status, pending flag and search text.
 
 Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_state,expires_at,ended_reason,ended_at}`. They exclude donor identity, descriptions, safe notes, fingerprint, source key ID, and provenance. Legal holds cover only the documented object roots, never identity/session/account deletion, and last at most 365 days. The ordinary list/export window and new-report matching period do not change. An active hold can retain its object beyond ordinary expiry for authorized reads by known ID until the hold ends.
 
@@ -2694,7 +2715,7 @@ not proof that deletion has finished; read its cleanup status.
 
 ## 9. Export, privacy, and account deletion
 
-`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v38.json`, with `schema_version:38` and `generated_at`. All fields below describe that current format. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
+`POST /api/account/export` requires elevated user-session authorization and returns `nonbiriapi-account-export-v39.json`, with `schema_version:39` and `generated_at`. All fields below describe that current format. Format 39 adds `companion` to `bidding`, `likes` and `gwent`. It contains the owner's preferences, retained matches and visible seat state, their setup constraints and submitted actions. The reserved program list is empty on a new v1.4.3 installation. Export versioning is independent of the database schema. Driver/ChatGPT/Codex credentials, assistant conversations, personal/shared memories and histories, model-request records and management-operation records remain administrator assets outside the account export.
 Structured failure/delivery snapshots and restricted raw diagnostics are also
 excluded; the export retains its existing safe request summaries.
 
@@ -3077,6 +3098,12 @@ The game center opens Whale Haven when both the games master switch and the sanc
 
 Authenticated players read `/api/games/whale-haven/availability`, `/profile` and `/neighbors/search` under the same prefix. `POST /api/games/whale-haven/actions` takes a typed action, string `expected_profile_revision` and `expected_settings_revision`, and an `Idempotency-Key` header. Specify the name and opening choice on adoption. Only open homes can host or visit other open homes. Guest employment requires the guest owner's consent. With the default settings, the guest owner earns 20% of the guest's production as wages, and wages and social rewards share a five-whale-coin allowance per account per site day. Conch shards have a separate allowance.
 
+For a bowl refill, `use_feed` accepts an optional nonnegative integer `maxSpillGrams`. Send zero to require room for the whole serving. If the player confirms a partial refill, send the maximum grams of waste shown in the prompt. The server settles elapsed activity before checking this limit. Excess spill returns HTTP 409 and leaves the serving in inventory. Omitting the field keeps the existing partial-fill behavior. Automatic refill tickets choose a stocked serving that fits the empty bowl. If neither staple fits, the ticket and food stay in inventory.
+
+An awake whale at home with satiety at or below 24 may forage when its bowl is empty and no automatic refill is available. The server periodically checks open homes even while their keepers are offline. Each check has a 38% chance after at least 20 seconds of elapsed care, or 3% for a shorter positive interval. A randomly selected eligible open neighbor must still have at least 50 g, room to digest food and a free guest slot at departure. Automatic visitors have no permission to work. Both homes record the visit in their timelines and footprints. Feeding, recall, closing the door and meal settlement use the ordinary visit rules.
+
+With the default visit settings, a guest eats 6 mg per second and returns after 28 g. The guest's base reward is one coin per 28 g and one conch shard per 25 g. A guest who finishes the meal also leaves the host a separate thank-you worth one coin and one shard before limits. Each keeper's recent home feeding, daily allowances and wallet capacity determine their own payout. A full host bank prevents new meal visits. For a guest already eating, `social.away.meal_paused` shows whether the host needs to collect coins before the meal can continue.
+
 `GET /api/games/whale-haven/neighbors/house?door=…` opens one neighbor's current scene. Both players must have an open home. The response contains the usual `house` neighbor profile and a `guests` array with up to two current visitors. Each guest exposes `whaleName`, `whaleOutfit`, `stage` (`eating` or `working`) and `mine` (whether the guest belongs to the viewer). The host can manage visits from their own profile. Reading the scene projects elapsed activity through the time of the request.
 
 `POST /api/games/whale-haven/exchange/quote` takes a decimal string `quantity` in whole lots. Use `"0"` for availability, the maximum lot count and daily room. Positive quotes break out gross credits, platform, welfare and Thursday cuts, and net credits. All credit amounts on this API use integer milli-credit strings. Confirm by sending the quoted lot count and revisions to `POST /api/games/whale-haven/exchange` with an idempotency key. The transaction checks the resulting general-wallet balance as well as the site-day cap. The defaults are five whale coins per lot for 5,000 general credits gross and 4,550 net after separate 3% cuts to the platform, welfare pool and Thursday pool. The default cap is 75 whale coins per account per site day and a general-credit balance of 300,000 after payment.
@@ -3129,9 +3156,11 @@ Registration and ban changes recheck the blacklist within the identity transacti
 
 Model-discovery status (`GET /admin/api/limited-activities/picture-book/models/refresh/{operationID}`) may include `http_status`, an integer from 100 through 599, on failed operations when retained diagnostic metadata is available. The field is omitted otherwise. This administrator-only projection does not return response bodies, provider messages, headers or credentials.
 
-### AI challenge extensions
+### Game companions
 
-Bidding Duel adds session-authenticated AI offers, preferences and unpaid admission, plus administrator-only player/strategy configuration and previews. Exact routes, DTOs, bounds and errors are specified in [AI players](ai-players.md). Existing duel state and history add optional `economy`, `ai` and `action_sources`; round records add `sources`. `mode=ai` uses `economy=ai_challenge`. Bot profiles have `kind=ai`; administrative participants have `kind=bot`. Free terminal records have an empty operation ID and ledger sequence `0`; pagination uses a separate persistent history order. Old signed history cursors must be restarted after this upgrade. Export v13 adds the AI families under the player's `bidding.ai`, with no private strategy or AI seed.
+Authenticated players can challenge the built-in opponent in Bidding, Likes and Gwent. The same-game slot covers human admission and companion play. The player API uses `/api/games/{game}/companion`, and administrators manage each game's companion availability under `/admin/api/games/{game}/companion`. New matches are free. Historical paid challenges keep their original records and settled first-clear awards. [Routes, payloads and replay](ai-players.md#http)
+
+Returning players resume the same match while the service remains up. At startup, unfinished games and queues are cancelled. Existing payments and holds are refunded or released by source. Committed results remain available. Whale Haven production, visits and employment continue under their normal schedules.
 
 ## Collectible-card activity
 

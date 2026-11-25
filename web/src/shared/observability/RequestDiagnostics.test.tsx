@@ -47,6 +47,33 @@ describe('request diagnostics', () => {
     expect(await screen.findByText('<script>x</script>')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
   });
+  it('opens the selected failed attempt metadata without reading its captured body', async () => {
+    requests.apiFetch.mockResolvedValueOnce({
+      data: [
+        {
+          event_seq: 1,
+          http_status: 503,
+          content_type: 'text/plain',
+          bytes_saved: 7,
+          truncated: false,
+          save_state: 'saved',
+          created_at: 1,
+          expires_at: 2,
+        },
+      ],
+      next_after: null,
+    });
+    render(
+      <AttemptErrors
+        role="admin"
+        requestID="req_AAAAAAAAAAAAAAAAAAAAAA"
+        attempt={2}
+        readMetadata
+      />,
+    );
+    expect(await screen.findByRole('button', { name: 'Load error body' })).toBeVisible();
+    expect(requests.apiFetch).toHaveBeenCalledTimes(1);
+  });
   it('renders the complete saved body beyond the old preview limit as text', () => {
     const text =
       'Failed at 192.0.2.7 person@example.invalid <script>x</script> ' +

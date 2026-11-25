@@ -18,8 +18,8 @@ func (r *InferenceRequest) AsChatRequest() (*ChatRequest, error) {
 	return r.asChatRequest(false)
 }
 
-// AsGatewayChatRequest also accepts the bounded reasoning and continuation
-// items emitted by the Gateway Responses projection.
+// AsGatewayChatRequest also accepts the continuation metadata emitted by the
+// Gateway Responses projection.
 func (r *InferenceRequest) AsGatewayChatRequest() (*ChatRequest, error) {
 	return r.asChatRequest(true)
 }
@@ -53,8 +53,8 @@ type ResponsesChatProjection struct {
 	failed    bool
 }
 
-// NewGatewayResponsesChatProjection explicitly enables the reasoning text
-// already validated by the Gateway codec. Ordinary Chat conversion stays strict.
+// NewGatewayResponsesChatProjection preserves continuation metadata already
+// validated by the Gateway codec.
 func NewGatewayResponsesChatProjection(ctx context.Context, writer http.ResponseWriter, request *InferenceRequest, limit int64) (*ResponsesChatProjection, error) {
 	if ctx == nil || writer == nil || request == nil || request.Operation() != contract.OperationResponses || limit <= httperr.MaxSSEErrorFrameBytes {
 		return nil, ErrInvalidRequest
@@ -63,7 +63,7 @@ func NewGatewayResponsesChatProjection(ctx context.Context, writer http.Response
 	if request.Stream {
 		maximum = DefaultMaxStreamBytes
 	}
-	return &ResponsesChatProjection{ctx: ctx, writer: writer, request: request, state: responseChatState{model: request.Model, gatewayReasoning: true}, limit: min(limit, maximum)}, nil
+	return &ResponsesChatProjection{ctx: ctx, writer: writer, request: request, state: responseChatState{model: request.Model, gateway: true}, limit: min(limit, maximum)}, nil
 }
 
 func (p *ResponsesChatProjection) Clear()                      { p.state.clear() }
@@ -209,7 +209,7 @@ func (p *ResponsesChatProjection) write(body []byte, terminalError bool) error {
 func (p *ResponsesChatProjection) reject() (int, error) {
 	p.rejected = true
 	if p.committed && p.request.Stream {
-		frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeInternal, "response conversion failed"))
+		frame := httperr.SSEErrorFrame(httperr.Localize(httperr.New(httperr.CodeInternal, "response conversion failed"), httperr.Language(p.writer)))
 		defer clear(frame)
 		if err := p.write(frame, true); err != nil {
 			return 0, err

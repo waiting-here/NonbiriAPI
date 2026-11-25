@@ -191,7 +191,7 @@ function RequestReference({
       <code>{id}</code>
       {available ? (
         <a
-          href={`${scope.role === 'admin' ? '/logs' : '/steward'}?request_id=${encodeURIComponent(id)}&user_id=${scope.userID}`}
+          href={`${scope.role === 'admin' ? '/logs?' : '/steward?tab=logs&'}request_id=${encodeURIComponent(id)}&user_id=${scope.userID}`}
           target="_blank"
           rel="noreferrer"
         >
@@ -433,7 +433,6 @@ function PenaltyList({ scope }: { scope: Scope }) {
       <FilterBar
         query={query}
         activeCount={Object.values(filter).filter(Boolean).length}
-        onSubmit={() => {}}
         search={
           <>
             <Field label={text('处罚类型', 'Penalty type')} size="short">

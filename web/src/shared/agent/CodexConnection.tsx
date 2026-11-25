@@ -1,6 +1,8 @@
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { CopyValue } from '@shared/components/CopyValue';
 import { CodexUsageCard } from './CodexUsage';
 import { DriverFailure } from './DriverFailure';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -37,6 +39,7 @@ export function CodexConnection({ account, active }: { account: string; active: 
     refetchInterval: (q) =>
       active && ['starting', 'pending'].includes(q.state.data?.login?.state ?? '') ? 1500 : false,
   });
+  const [disconnect, setDisconnect] = useState<{ revision: string; account: string } | null>(null);
   const revision = query.data?.revision;
   useEffect(() => {
     void client.invalidateQueries({ queryKey: [...agentRoot('admin', account), 'drivers'] });
@@ -98,17 +101,24 @@ export function CodexConnection({ account, active }: { account: string; active: 
                     {t('common.agent.codex.openOfficial')}
                   </a>
                   {status.login.user_code ? (
-                    <Field label={t('common.agent.codex.code')} size="short">
-                      {(props) => (
-                        <input
-                          {...props}
-                          className="mono"
-                          readOnly
-                          value={status.login?.user_code ?? ''}
-                          autoComplete="off"
-                        />
-                      )}
-                    </Field>
+                    <>
+                      <Field label={t('common.agent.codex.code')} size="short">
+                        {(props) => (
+                          <input
+                            {...props}
+                            className="mono"
+                            readOnly
+                            value={status.login?.user_code ?? ''}
+                            autoComplete="off"
+                          />
+                        )}
+                      </Field>
+                      <CopyValue
+                        value={status.login.user_code}
+                        label={t('common.agent.codex.code')}
+                        showValue={false}
+                      />
+                    </>
                   ) : (
                     <LoadingState />
                   )}
@@ -155,7 +165,12 @@ export function CodexConnection({ account, active }: { account: string; active: 
                     type="button"
                     variant="danger-outline"
                     disabled={operation.isPending}
-                    onClick={() => run({ action: 'disconnect', revision: status.revision })}
+                    onClick={() =>
+                      setDisconnect({
+                        revision: status.revision,
+                        account: status.account_label || status.account_id || 'Codex',
+                      })
+                    }
                   >
                     {t('common.agent.codex.disconnect')}
                   </Button>
@@ -187,6 +202,20 @@ export function CodexConnection({ account, active }: { account: string; active: 
           ) : null}
         </div>
       </PanelBody>
+      <ConfirmDialog
+        open={Boolean(disconnect && status?.connected && disconnect.revision === revision)}
+        title={t('common.agent.codex.disconnect')}
+        description={t('common.agent.disconnectAccountConfirm', { name: disconnect?.account })}
+        confirmLabel={t('common.agent.codex.disconnect')}
+        danger
+        busy={operation.isPending}
+        onCancel={() => setDisconnect(null)}
+        onConfirm={() => {
+          if (disconnect && disconnect.revision === revision)
+            run({ action: 'disconnect', revision: disconnect.revision });
+          setDisconnect(null);
+        }}
+      />
     </Panel>
   );
 }

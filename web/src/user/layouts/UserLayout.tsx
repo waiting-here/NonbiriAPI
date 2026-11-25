@@ -1,3 +1,4 @@
+import { DraftLeaveScope } from '@shared/components/charity/DraftLeaveScope';
 import { FocusScope } from 'react-aria';
 import { useDrawerOverlay } from '@shared/components/OverlaySurface';
 import { MfaChallenge } from '../features/mfa/MfaChallenge';
@@ -352,6 +353,13 @@ export function UserLayout() {
                     ) : null}
                   </li>
                 ))}
+                {showStewardEntry && !profile?.is_banned && (
+                  <li>
+                    <NavLink className="nb-user-header__nav-link" to="/steward" onClick={closeMenu}>
+                      {t('user.steward.title')}
+                    </NavLink>
+                  </li>
+                )}
               </ul>
               {menuOpen && (
                 <button
@@ -423,7 +431,9 @@ export function UserLayout() {
         <main id="main" className="user-main nb-user-shell__main" tabIndex={-1}>
           {/* A same-tab account switch must remount every route-local form,
             mutation observer, and transient secret/result state. */}
-          <Outlet key={profile?.id ?? 'signed-out'} />
+          <DraftLeaveScope>
+            <Outlet key={profile?.id ?? 'signed-out'} />
+          </DraftLeaveScope>
         </main>
         <div className="site-footer nb-user-shell__footer">
           <PageFooter

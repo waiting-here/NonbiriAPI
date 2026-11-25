@@ -11,10 +11,10 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
-func setRecurringDiscount(t *testing.T, e *charityTestEnv, model int64, percent int) {
+func setRecurringDiscount[P ~int | ~float64](t *testing.T, e *charityTestEnv, model int64, percent P) {
 	t.Helper()
 	config := charitydiscount.Default()
-	config.Enabled, config.DefaultPercent = true, percent
+	config.Enabled, config.DefaultPercent = true, charitydiscount.Percent(percent)
 	encoded, err := charitydiscount.Encode(config)
 	if err != nil {
 		t.Fatal(err)
@@ -132,5 +132,43 @@ func TestRecurringDiscountFreeTokensKeepReserveAndOutputFloor(t *testing.T) {
 	candidate := e.claim(t, request, 1, false, 100)
 	if candidate.reservation.ReservedPriceMilli != 200 || candidate.reservation.ReservedTokens != 100 {
 		t.Fatal(candidate.reservation)
+	}
+}
+
+func TestRecurringDiscountBasisPointsPersistThroughSettlement(t *testing.T) {
+	for _, tc := range []struct {
+		percent charitydiscount.Percent
+		charge  int64
+		legacy  bool
+	}{
+		{0.05, 2, false}, {50.05, 1502, false}, {50, 1500, true},
+	} {
+		t.Run(fmt.Sprintf("%v/legacy=%t", tc.percent, tc.legacy), func(t *testing.T) {
+			e := newCharityTestEnv(t)
+			rail := e.billingRail(t)
+			setRecurringDiscount(t, e, e.requestModel, tc.percent)
+			request := e.billingRequest(t, rail, e.requestModel, tc.charge, 1)
+			var snapshot int
+			if err := e.store.DB().QueryRow("SELECT discount_basis_points FROM charity_reservations WHERE logical_request_id=?", request.ID).Scan(&snapshot); err != nil || snapshot != tc.percent.BasisPoints() {
+				t.Fatalf("snapshot=%d, err=%v", snapshot, err)
+			}
+			if tc.legacy {
+				if _, err := e.store.DB().Exec("UPDATE charity_reservations SET discount_basis_points=NULL WHERE logical_request_id=?", request.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			setRecurringDiscount(t, e, e.requestModel, 100)
+			attempt := e.billingDispatch(t, rail, request.ID, 1)
+			if err := rail.MarkResponseStarted(t.Context(), attempt); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := rail.CompleteAttempt(t.Context(), attempt, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 200, ProtocolSuccess: true, ResponseStarted: true}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := rail.CompleteRequest(t.Context(), claim.CompleteRequestInput{RequestID: request.ID, Caller: claim.CallerResult{Class: claim.ResultSuccess, Status: 200}, Disposition: claim.AccountingCommit}); err != nil {
+				t.Fatal(err)
+			}
+			e.billingBalance(t, e.callerID, 10000-tc.charge)
+		})
 	}
 }

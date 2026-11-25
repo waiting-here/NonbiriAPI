@@ -39,6 +39,7 @@ const keys = {
   key: 'user.models.key',
   modelName: 'user.models.modelName',
   moreSource: 'user.models.moreSource',
+  orderChanged: 'user.models.orderChanged',
   dirtyCount: 'user.models.dirtyCount',
   discard: 'user.models.discard',
   deleteHelp: 'user.models.deleteHelp',
