@@ -209,8 +209,19 @@ func applyUpgrade(ctx context.Context, database *sql.DB, codec secret.Generation
 			return err
 		}
 	}
-	if err := offlineStep(ctx, "migration", 58, "request_logs", "caller error log index", func() error {
-		_, err := tx.ExecContext(ctx, db.RequestLogCallerErrorIndexSQL)
+	if source < 58 {
+		if err := offlineStep(ctx, "migration", 58, "request_logs", "caller error log index", func() error {
+			_, err := tx.ExecContext(ctx, db.RequestLogCallerErrorIndexSQL)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+	if err := offlineStep(ctx, "migration", 59, "companion_matches", "companion games and restart settlement", func() error {
+		if err := UpgradeGameCancellation(ctx, tx); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, db.CompanionProgramsSQL+"\n"+db.CompanionMatchesSQL)
 		return err
 	}); err != nil {
 		return err

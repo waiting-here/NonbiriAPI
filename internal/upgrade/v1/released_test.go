@@ -64,6 +64,10 @@ func TestConvertDevelopmentSchema57Database(t *testing.T) {
 	convertReleasedFixture(t, "NONBIRI_DEVELOPMENT_SCHEMA57_FIXTURE", 0, 57, db.Schema57ManifestHash)
 }
 
+func TestConvertDevelopmentSchema58Database(t *testing.T) {
+	convertReleasedFixture(t, "NONBIRI_DEVELOPMENT_SCHEMA58_FIXTURE", 0, 58, db.Schema58ManifestHash)
+}
+
 func TestSchema57CallerErrorIndexUpgrade(t *testing.T) {
 	path, vault := bootstrapTestPath(t, "logs.sqlite"), bootstrapTestVault(t)
 	source, err := db.Open(path, vault)

@@ -78,7 +78,22 @@ func RestoreSchema56Fixture(t *testing.T, source *sql.DB) {
 // RestoreSchema57Fixture reinstates the exact v1.4.3 development layout.
 func RestoreSchema57Fixture(t *testing.T, source *sql.DB) {
 	t.Helper()
+	RestoreSchema58Fixture(t, source)
 	if _, err := source.ExecContext(t.Context(), `DROP INDEX idx_request_logs_caller_error_started; UPDATE schema_state SET version=57`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// RestoreSchema58Fixture recreates the development schema preceding companions.
+func RestoreSchema58Fixture(t *testing.T, source *sql.DB) {
+	t.Helper()
+	RestoreSchema58GameCancellation(t, source)
+	if _, err := source.ExecContext(t.Context(), `DROP TABLE companion_history_snapshot;
+DROP TABLE companion_matches;
+DROP TABLE companion_preferences;
+DROP TABLE companion_program_versions;
+DROP TABLE companion_programs;
+UPDATE schema_state SET version=58`); err != nil {
 		t.Fatal(err)
 	}
 }

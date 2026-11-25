@@ -47,7 +47,7 @@ func assertExactStartupRejection(t *testing.T, path string, vault *secret.Vault,
 	assertBootstrapSourcesUnchanged(t, path, before)
 }
 func TestExactStartupRejectsHistoricalAndNewerSchemasBeforeWriting(t *testing.T) {
-	for _, version := range []int{33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 49, 50, 51, 52, 53, 54, 55, 56, 57, CurrentSchemaVersion + 1} {
+	for _, version := range []int{33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, CurrentSchemaVersion + 1} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			var path string
 			var vault *secret.Vault

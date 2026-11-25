@@ -242,7 +242,7 @@ func TestRewardsRootAuthorizationReplayExportAndDeletion(t *testing.T) {
 	if e = json.Unmarshal(account("/api/account/export", ""), &exported); e != nil {
 		t.Fatal(e)
 	}
-	if exported.SchemaVersion != 38 {
+	if exported.SchemaVersion != 39 {
 		t.Fatalf("unexpected export schema %d", exported.SchemaVersion)
 	}
 	assertUnadoptedWhaleAward(t, exported.WhaleHaven, 4, 2, "redemption_code", campaign.ID)

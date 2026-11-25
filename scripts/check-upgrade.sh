@@ -7,9 +7,11 @@ python_command=${PYTHON:-python3}
 released_commit=03456c51d7537e806fc1b4576fc7e9660dc3f696
 attendance_commit=b1700f25d7a73535af76cdd15c356d92eff0d8fd
 schema56_commit=1bb01bdb833396fdd25dc2229f3be6265c34bae5
+schema58_commit=b1472fa832167ff045a71ea3ee2878541757af10
 bash "$root/scripts/ensure-upgrade-source.sh" "$released_commit"
 bash "$root/scripts/ensure-upgrade-source.sh" "$attendance_commit"
 bash "$root/scripts/ensure-upgrade-source.sh" "$schema56_commit"
+bash "$root/scripts/ensure-upgrade-source.sh" "$schema58_commit"
 temporary_base=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 umask 077
 temporary=$(mktemp -d "$temporary_base/nonbiri-upgrade.XXXXXXXX")
@@ -59,6 +61,8 @@ check_attendance_source() (
     export NONBIRI_RELEASED_ATTENDANCE_FIXTURE="$temporary/data/attendance-$2.db"
     if [[ "$2" == 56 ]]; then
         export NONBIRI_RELEASED_SCHEMA56_FIXTURE="$NONBIRI_RELEASED_ATTENDANCE_FIXTURE"
+    elif [[ "$2" == 58 ]]; then
+        export NONBIRI_DEVELOPMENT_SCHEMA58_FIXTURE="$NONBIRI_RELEASED_ATTENDANCE_FIXTURE"
     fi
     (
         unset NONBIRI_RACE_TEMPLATE_PATH NONBIRI_RACE_TEMPLATE_SHA256 NONBIRI_RACE_TEMPLATE_ID
@@ -72,5 +76,6 @@ check_attendance_source() (
 )
 check_attendance_source "$attendance_commit" 55 TestConvertReleasedAttendanceDatabase
 check_attendance_source "$schema56_commit" 56 TestConvertReleasedSchema56Database
-printf 'Released sources: %s %s %s\n' "$released_commit" "$attendance_commit" "$schema56_commit"
+check_attendance_source "$schema58_commit" 58 TestConvertDevelopmentSchema58Database
+printf 'Upgrade sources: %s %s %s %s\n' "$released_commit" "$attendance_commit" "$schema56_commit" "$schema58_commit"
 "$go_command" version
