@@ -379,6 +379,16 @@ func TestRestartRefundsActualBaitFromPausedCastAndLeavesNewCastAlone(t *testing.
 	if after.Profile.BaitStock["basic"] != 2 || after.Profile.Coins != before.Profile.Coins || after.Profile.XP != before.Profile.XP || after.Cast != nil {
 		t.Fatal(after)
 	}
+	// A cancelled checkpoint remains readable with either historical snapshot phase.
+	for _, phase := range []string{"waiting", "cancelled"} {
+		if _, err := f.database.Exec(`UPDATE lake_notes_casts SET snapshot=CAST(json_set(snapshot,'$.phase',?) AS BLOB) WHERE id=?`, phase, c.Value.Cast.ID); err != nil {
+			t.Fatal(err)
+		}
+		archived, err := f.service.Cast(ctx, f.user, c.Value.Cast.ID)
+		if err != nil || archived.Cast.Phase != "cancelled" || !archived.Cast.Readonly || archived.Cast.RecoveryAction != "" || archived.Cast.AckTick != c.Value.Cast.AckTick {
+			t.Fatal(phase, archived, err)
+		}
+	}
 	fresh, err := f.service.Start(ctx, f.user, testKey(1512), StartInput{after.Revision})
 	if err != nil {
 		t.Fatal(err)

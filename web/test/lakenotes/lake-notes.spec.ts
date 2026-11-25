@@ -87,6 +87,26 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
     await expect(page.getByText(u.exchangeSaved, { exact: true })).toBeVisible();
   }
   expect((await profile(ctx)).wallet).toEqual(before.wallet);
+  const finances = await profile(ctx);
+  const funding = await api(ctx, base + '/exchange', 'POST', {
+    direction: 'general_to_coins',
+    quantity: '605',
+    expected_settings_revision: finances.settings.revision,
+    expected_profile_revision: finances.revision,
+  });
+  expect(funding.status(), await funding.text()).toBe(200);
+  for (const action of [
+    { action: 'buy_gear', id: 'fiberglassRod' },
+    { action: 'buy_bait', id: 'basic', quantity: 2 },
+    { action: 'select_bait', id: 'basic' },
+  ]) {
+    const result = await api(ctx, base + '/actions', 'POST', {
+      ...action,
+      expected_profile_revision: (await profile(ctx)).revision,
+    });
+    expect(result.status(), await result.text()).toBe(200);
+  }
+  await page.reload();
   await page.locator('.lake-original #startButton').click();
   await expect
     .poll(async () => (await profile(ctx)).cast?.ack_tick ?? 0, { timeout: 8000 })
@@ -101,14 +121,16 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
   // Keep the shell mounted beyond its session freshness window. Returning by
   // in-app navigation must survive the resulting same-account session refresh.
   await page.waitForTimeout(15_100);
-  await control(ctx, 'restart');
   const sessionRefresh = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/api/session' && response.status() === 200,
   );
   await page.locator('a[href="/games/lake-notes"]').click();
   await sessionRefresh;
   await expect(page.locator('.lake-original #overlayButton')).toBeVisible();
-  expect((await profile(ctx)).cast?.state.plan).toEqual(saved.state.plan);
+  await page.reload();
+  const reconnected = (await profile(ctx)).cast;
+  expect(reconnected).toMatchObject({ id: saved.id, ack_tick: saved.ack_tick, paused: true });
+  expect(reconnected?.state.plan).toEqual(saved.state.plan);
   const resumed = page.waitForResponse((response) =>
     new URL(response.url()).pathname.endsWith('/resume'),
   );
@@ -122,6 +144,31 @@ test('free permanent play, menus, four exchanges and restart recovery', async ({
     .poll(async () => (await profile(ctx)).cast?.ack_tick ?? 0, { timeout: 8000 })
     .toBeGreaterThan(saved.ack_tick);
   await expect(page.getByRole('alert')).toHaveCount(0);
+  const leaving = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith('/pause'),
+  );
+  await page.locator('.lake-back').click();
+  expect((await leaving).status()).toBe(200);
+  const stopped = await profile(ctx);
+  expect(stopped.cast?.state.snapshot.bait).toBe('basic');
+  await control(ctx, 'restart');
+  const recovered = await profile(ctx);
+  expect(recovered.cast).toBeNull();
+  expect(recovered.profile.baitStock.basic).toBe(stopped.profile.baitStock.basic + 1);
+  expect(recovered.wallet).toEqual(stopped.wallet);
+  const archived = await api(ctx, base + '/casts/' + saved.id);
+  expect(archived.status()).toBe(200);
+  expect((await archived.json()).cast).toMatchObject({
+    id: saved.id,
+    phase: 'cancelled',
+    paused: true,
+    readonly: true,
+    ack_tick: stopped.cast?.ack_tick,
+  });
+  await page.locator('a[href="/games/lake-notes"]').click();
+  await page.locator('.lake-original #startButton').click();
+  await expect.poll(async () => (await profile(ctx)).cast?.id).toMatch(/^lnc_/);
+  expect((await profile(ctx)).cast?.id).not.toBe(saved.id);
   await configure(admin, false);
   await page.reload();
   await expect(page.getByText(u.closed, { exact: true })).toBeVisible();

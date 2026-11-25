@@ -879,10 +879,13 @@ test('RPS result follows the real language and theme settings on a narrow phone 
     session.user.lang = 'zh';
     await route.fulfill({ json: session });
   });
+  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+  const appearance = page.getByRole('dialog', { name: 'Appearance', exact: true });
+  await appearance.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /^Account actions/ }).click();
   const account = page.getByRole('dialog', { name: 'Account actions' });
-  await account.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await account.getByRole('button', { name: '中文' }).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await page.keyboard.press('Escape');
