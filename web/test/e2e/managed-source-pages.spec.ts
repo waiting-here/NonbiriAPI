@@ -249,6 +249,7 @@ function createManagedSourceFixture(setup: StationSetup): ManagedSourceFixture {
                 '/admin/api/alerts',
                 '/admin/api/branding',
                 '/admin/api/config',
+                '/admin/api/reports/badge',
                 '/admin/api/session',
                 '/admin/api/time-zones',
                 '/admin/api/donations/badge',
