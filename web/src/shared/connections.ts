@@ -30,6 +30,16 @@ export interface NativeServiceOption {
   default_native_services: NativeService[];
   rerank_formats: RerankFormat[];
 }
+export function configurationOptions(rows: NativeServiceOption[]): NativeServiceOption[] {
+  const options = new Map<string, NativeServiceOption>();
+  for (const row of rows) {
+    if (row.connector_type === row.configuration_type || !options.has(row.configuration_type)) {
+      options.set(row.configuration_type, row);
+    }
+  }
+  return Array.from(options.values());
+}
+
 export interface MainstreamEntry {
   id?: string;
   name: string;

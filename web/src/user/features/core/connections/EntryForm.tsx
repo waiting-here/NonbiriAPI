@@ -5,7 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { ProtocolRerankField } from '@shared/components/ProtocolRerankField';
 import { ChoiceRow, Field, Fields, FormActions, Note, Segmented } from '@shared/components/ui';
 import type { NativeService, RerankFormat } from '@shared/nativeServices';
-import type { DiscoveryPreset, NativeServiceOption } from '@shared/connections';
+import {
+  configurationOptions,
+  type DiscoveryPreset,
+  type NativeServiceOption,
+} from '@shared/connections';
 import { ConnectorLabel, CoreErrorPanel, CoreLoading } from '../components';
 import { CONNECTOR_COPY_KEYS, useCoreCopy } from '../copy';
 import { useEndpointCreateOptions } from '../queries';
@@ -44,14 +48,13 @@ export function EntryForm({
   const activeDiscoveryPreset = useRef<DiscoveryPreset | null>(null);
   const active = useRef('custom');
   const nativeOptions = options.data?.native_service_options ?? [];
-  const configurations = nativeOptions.filter(
-    (item, index, items) =>
-      items.findIndex((other) => other.configuration_type === item.configuration_type) === index,
-  );
+  const configurations = configurationOptions(nativeOptions);
   const connector =
     chosenConnector ??
-    (configurations.find((row) => row.connector_type === 'openai-compatible') ?? configurations[0])
-      ?.connector_type ??
+    (
+      configurations.find((row) => row.configuration_type === 'openai-compatible') ??
+      configurations[0]
+    )?.connector_type ??
     '';
   const selectedOption = nativeOptions.find((item) => item.connector_type === connector);
   const services = selectedOption?.native_services ?? [];

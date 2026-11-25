@@ -4,13 +4,19 @@ import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '../../../../test/unit/support';
 import { MainstreamEntries, type MainstreamLayout } from './MainstreamEntries';
 
-function Editor({ failed = false }: { failed?: boolean }) {
+function Editor({
+  failed = false,
+  connector = 'openai-compatible',
+}: {
+  failed?: boolean;
+  connector?: string;
+}) {
   const [value, setValue] = useState<MainstreamLayout>({
     entries: [
       {
         id: '1',
         name: 'Primary',
-        connector_type: 'openai-compatible',
+        connector_type: connector,
         base_url: 'https://example.test/v1',
         native_services: ['chat_completions', 'rerank'],
         rerank_format: 'cohere',
@@ -30,6 +36,13 @@ function Editor({ failed = false }: { failed?: boolean }) {
         connectorLabels={{ 'openai-compatible': 'common.connectorChatCompletions' }}
         options={[
           {
+            connector_type: 'openai-chat-completions',
+            configuration_type: 'openai-compatible',
+            native_services: ['chat_completions'],
+            default_native_services: ['chat_completions'],
+            rerank_formats: [],
+          },
+          {
             connector_type: 'openai-compatible',
             configuration_type: 'openai-compatible',
             native_services: ['chat_completions', 'rerank'],
@@ -38,6 +51,9 @@ function Editor({ failed = false }: { failed?: boolean }) {
           },
         ]}
       />
+      <output aria-label="Saved connectors">
+        {value.entries.map((entry) => entry.connector_type).join(', ')}
+      </output>
       <button type="submit">Save channel</button>
     </form>
   );
@@ -60,6 +76,22 @@ describe('channel entry disclosures', () => {
     await waitFor(() => expect(input).toHaveFocus());
     expect(input).toHaveValue('invalid-url');
     expect(screen.queryByLabelText('Custom rerank path')).not.toBeInTheDocument();
+  });
+
+  it('keeps an existing connector and defaults new entries to the registered configuration protocol', async () => {
+    const view = await renderWithProviders(<Editor connector="openai-chat-completions" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(screen.getByText('Primary').closest('summary')!);
+    const protocol = screen.getByLabelText('Protocol');
+    expect(protocol).toHaveValue('openai-compatible');
+    expect(protocol.querySelectorAll('option')).toHaveLength(1);
+    await view.user.type(screen.getByLabelText('Endpoint URL'), '/changed');
+    await view.user.click(screen.getByRole('button', { name: 'Add endpoint' }));
+    expect(screen.getByLabelText('Saved connectors')).toHaveTextContent(
+      'openai-chat-completions, openai-compatible',
+    );
   });
 
   it('reopens an unsaved entry after a failed save without replacing its draft', async () => {

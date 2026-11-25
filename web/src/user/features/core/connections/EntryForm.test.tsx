@@ -24,14 +24,14 @@ function options(matching = false) {
     base_connector_types: ['openai-compatible', 'anthropic-compatible'],
     native_service_options: [
       {
-        connector_type: 'openai-compatible',
+        connector_type: 'openai-chat-completions',
         configuration_type: 'openai-compatible',
         native_services: ['chat_completions', 'responses'],
         default_native_services: ['chat_completions'],
         rerank_formats: [],
       },
       {
-        connector_type: 'openai-chat-completions',
+        connector_type: 'openai-compatible',
         configuration_type: 'openai-compatible',
         native_services: ['chat_completions', 'responses'],
         default_native_services: ['chat_completions'],
@@ -130,9 +130,7 @@ async function renderForm(fetchMock: typeof fetch, onChanged?: () => void) {
   view.queryClient.setQueryData(['user', 'session'], {
     user: { id: '1', username: 'reader', effective_level: 1 },
   });
-  await screen.findByRole('combobox', { name: 'Protocol' });
-  await view.user.selectOptions(
-    screen.getByRole('combobox', { name: 'Protocol' }),
+  expect(await screen.findByRole('combobox', { name: 'Protocol' })).toHaveValue(
     'openai-compatible',
   );
   return view;
