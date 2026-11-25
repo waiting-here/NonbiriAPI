@@ -47,27 +47,53 @@ func messageText(raw json.RawMessage) string {
 	return ""
 }
 
-func completePrefill(messages []json.RawMessage, response json.RawMessage) json.RawMessage {
+func (reply *assistantMessage) completePrefill(messages []json.RawMessage, response json.RawMessage) json.RawMessage {
 	if len(messages) == 0 {
 		return response
 	}
-	var last, reply assistantMessage
-	if json.Unmarshal(messages[len(messages)-1], &last) != nil || last.Role != "assistant" || json.Unmarshal(response, &reply) != nil {
+	var last assistantMessage
+	if json.Unmarshal(messages[len(messages)-1], &last) != nil || last.Role != "assistant" {
 		return response
 	}
 	prefix, content := messageText(last.Content), messageText(reply.Content)
 	if prefix == "" || content == "" || strings.HasPrefix(content, prefix) {
 		return response
 	}
+
+	original := reply.Content
+	reply.Content, _ = json.Marshal(prefix + content)
+	// The local transcript and review parser consume the completed text. A
+	// structured reply may bind a signature to its exact original content.
+	if original[0] != '"' {
+		return response
+	}
 	var wire map[string]json.RawMessage
 	if json.Unmarshal(response, &wire) != nil {
 		return response
 	}
-	wire["content"], _ = json.Marshal(prefix + content)
-	raw, err := json.Marshal(wire)
-	if err != nil {
+	for name, value := range wire {
+		if name == "role" || name == "content" || string(value) == "null" {
+			continue
+		}
+		switch name {
+		case "reasoning", "reasoning_content", "refusal":
+			if value[0] == '"' {
+				continue
+			}
+		case "tool_calls":
+			var calls []toolCall
+			if decodeClosed(value, &calls) == nil {
+				continue
+			}
+		case "annotations":
+			if string(value) == "[]" {
+				continue
+			}
+		}
 		return response
 	}
+	wire["content"] = reply.Content
+	raw, _ := json.Marshal(wire)
 	return raw
 }
 
@@ -315,17 +341,17 @@ func (s *Service) run(ctx context.Context, id int64) error {
 			}
 			return err
 		}
-		response.Message = completePrefill(messages, response.Message)
 		var assistant assistantMessage
 		if err = json.Unmarshal(response.Message, &assistant); err != nil || assistant.Role != "assistant" {
 			return fmt.Errorf("%w: 模型未返回助手消息", ErrInvalid)
 		}
+		historyMessage := assistant.completePrefill(messages, response.Message)
 		if job.Kind != "auto_review" {
-			if err = s.persistAssistant(ctx, job, actor, response.Message, assistant); err != nil {
+			if err = s.persistAssistant(ctx, job, actor, historyMessage, assistant); err != nil {
 				return err
 			}
 		}
-		messages = append(messages, response.Message)
+		messages = append(messages, historyMessage)
 		if len(assistant.ToolCalls) == 0 {
 			if job.Kind == "auto_review" {
 				var outcome ReviewResult
