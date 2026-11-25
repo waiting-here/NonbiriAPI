@@ -45,7 +45,14 @@ func scanCastContext(ctx context.Context, scan func(...any) error) (_ castRow, r
 	}
 	decode := lakePhase(ctx, "decode")
 	defer func() { decode(resultErr) }()
-	row.state, e = decodeStoredCast(version, rulesID, snapshot)
+	if row.storedPhase == "cancelled" {
+		if !paused || held || string(reward) != "{}" {
+			return row, ErrInvariant
+		}
+		row.state, e = decodeCancelledCast(version, rulesID, snapshot, tick)
+	} else {
+		row.state, e = decodeStoredCast(version, rulesID, snapshot)
+	}
 	if e != nil {
 		return row, ErrInvariant
 	}
@@ -57,7 +64,7 @@ func scanCastContext(ctx context.Context, scan func(...any) error) (_ castRow, r
 			return row, ErrInvariant
 		}
 	}
-	if row.state.Phase != row.storedPhase || row.state.Tick != tick {
+	if row.state.Tick != tick || (row.storedPhase != "cancelled" && row.state.Phase != row.storedPhase) {
 		return row, ErrInvariant
 	}
 	row.state.Paused, row.state.Held = paused, held
@@ -66,6 +73,7 @@ func scanCastContext(ctx context.Context, scan func(...any) error) (_ castRow, r
 			return row, ErrInvariant
 		}
 	}
+	row.state.Phase = row.storedPhase
 	return row, nil
 }
 func castTx(ctx context.Context, tx *sql.Tx, user int64, id string) (castRow, error) {
@@ -84,10 +92,10 @@ func currentCastTx(ctx context.Context, tx *sql.Tx, user int64) (_ castRow, resu
 }
 func (c castRow) view(profileRevision int64) CastView {
 	action := ""
-	if c.state.Paused && !c.state.Terminal() {
+	if c.state.Paused && !castEnded(c.state) {
 		action = "resume"
 	}
-	return CastView{ID: c.id, SourcePeriodID: c.period, RulesID: c.state.RulesID, Generation: rev(c.generation), Revision: rev(c.revision), AckTick: c.state.Tick, Phase: c.state.Phase, Paused: c.state.Paused, Readonly: c.state.Paused || c.state.Terminal(), RecoveryAction: action, State: c.state, ProfileRevision: rev(profileRevision)}
+	return CastView{ID: c.id, SourcePeriodID: c.period, RulesID: c.state.RulesID, Generation: rev(c.generation), Revision: rev(c.revision), AckTick: c.state.Tick, Phase: c.state.Phase, Paused: c.state.Paused, Readonly: c.state.Paused || castEnded(c.state), RecoveryAction: action, State: c.state, ProfileRevision: rev(profileRevision)}
 }
 func (c *castRow) accrue(now int64) error {
 	if c.state.Paused || !c.started.Valid {
@@ -117,6 +125,13 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 		return ErrCapacity
 	}
 	state := c.state
+	if state.Phase == "cancelled" {
+		// The row records the cancellation; the rules codec saves the last playable checkpoint.
+		if (c.storedPhase != "waiting" && c.storedPhase != "playing") || !state.Paused || state.Held || state.Result != nil || state.Reward != nil {
+			return ErrInvariant
+		}
+		state.Phase = c.storedPhase
+	}
 	state.Reward = nil
 
 	encode := lakePhase(ctx, "encode")
@@ -142,9 +157,9 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 	const where = " WHERE id=? AND user_id=? AND revision=?"
 	query := update + where
 	args := []any{rules.RulesID, castStorageVersion, c.state.Paused, c.generation, c.state.Tick, raw, reward, c.state.Held, c.elapsed, c.started, c.lease, string(last), now.Unix()}
-	if c.state.Phase != c.storedPhase || c.state.Terminal() {
+	if c.state.Phase != c.storedPhase || castEnded(c.state) {
 		var terminal any
-		if c.state.Terminal() {
+		if castEnded(c.state) {
 			terminal = now.Unix()
 		}
 		query = update + ",phase=?,terminal_at=?" + where
@@ -171,7 +186,7 @@ func saveCastTx(ctx context.Context, tx *sql.Tx, c *castRow, now time.Time, ack 
 func (s *Service) castResultTx(ctx context.Context, tx *sql.Tx, c castRow, now time.Time, known profileProjection) (CastResult, error) {
 	// A live cast is the unique current cast for this user. A historical
 	// terminal target is not: its profile must still read the current cast.
-	if !c.state.Terminal() {
+	if !castEnded(c.state) {
 		known.current, known.currentKnown = &c, true
 	}
 	p, e := s.profileViewFromTx(ctx, tx, c.user, now, known)
@@ -180,7 +195,7 @@ func (s *Service) castResultTx(ctx context.Context, tx *sql.Tx, c castRow, now t
 	}
 	r, _ := revision(p.Revision, false)
 	v := c.view(r)
-	if p.Readonly && !c.state.Terminal() {
+	if p.Readonly && !castEnded(c.state) {
 		v.Readonly = true
 		v.RecoveryAction = "closed"
 	}
@@ -198,7 +213,7 @@ func checkpointResultTx(ctx context.Context, tx *sql.Tx, c castRow, row profileR
 	}
 	v := c.view(row.revision)
 	p := ProfileView{Revision: rev(row.revision), RulesID: rules.RulesID, Profile: row.profile, Wallet: wallet, Settings: settings}
-	if !c.state.Terminal() {
+	if !castEnded(c.state) {
 		p.Cast = &v
 	}
 	return CastResult{Cast: v, Profile: p}, nil
@@ -393,7 +408,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if c.generation != generation || c.revision != expected {
 			return CastResult{}, ErrConflict
 		}
-		if c.state.Terminal() {
+		if castEnded(c.state) {
 			return CastResult{}, ErrConflict
 		}
 		settings, gateErr := s.qualifiedTx(ctx, tx, user, now.Unix())
@@ -446,7 +461,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 				return CastResult{}, e
 			}
 		}
-		if c.state.Terminal() {
+		if castEnded(c.state) {
 			if e = c.stop(now.UnixNano()); e != nil {
 				return CastResult{}, e
 			}
@@ -475,7 +490,7 @@ func (s *Service) Checkpoint(ctx context.Context, user int64, id, key string, in
 		if current.Cast.Generation != in.Generation {
 			return result, ErrConflict
 		}
-		if current.Cast.Readonly && !result.Value.Cast.State.Terminal() {
+		if current.Cast.Readonly && !castEnded(result.Value.Cast.State) {
 			result.Value.Cast.Readonly = true
 			result.Value.Cast.Paused = current.Cast.Paused
 			result.Value.Cast.State.Paused = current.Cast.Paused
@@ -505,7 +520,7 @@ func (s *Service) control(ctx context.Context, user int64, id, key string, in Co
 		if e != nil {
 			return CastResult{}, e
 		}
-		if c.state.Terminal() {
+		if castEnded(c.state) {
 			if _, e = tx.ExecContext(ctx, "UPDATE lake_notes_casts SET updated_at=? WHERE id=? AND user_id=?", now.Unix(), id, user); e != nil {
 				return CastResult{}, e
 			}

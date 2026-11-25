@@ -9,17 +9,6 @@ import (
 )
 
 func ValidateCast(c Cast) error {
-	// A system cancellation freezes the exact last accepted active snapshot.
-	if c.Phase == "cancelled" {
-		if !c.Paused || c.Held || c.Result != nil || c.Reward != nil {
-			return ErrInvalid
-		}
-		if c.Tick < c.Plan.BiteTick {
-			c.Phase = "waiting"
-		} else {
-			c.Phase = "playing"
-		}
-	}
 	if c.RulesID != RulesID || c.Motion.State == 0 || c.Motion.DrawCount > MaxSafeInteger || c.Tick > MaxSafeInteger || c.Snapshot.Level < 0 || c.Snapshot.Level > 20 {
 		return ErrInvalid
 	}

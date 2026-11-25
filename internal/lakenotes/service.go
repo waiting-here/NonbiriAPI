@@ -374,7 +374,7 @@ func (s *Service) profileViewFromTx(ctx context.Context, tx *sql.Tx, user int64,
 	}
 	if c != nil {
 		v := c.view(row.revision)
-		if out.Readonly && !c.state.Terminal() {
+		if out.Readonly && !castEnded(c.state) {
 			v.Readonly = true
 			v.RecoveryAction = "closed"
 		}
