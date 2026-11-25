@@ -300,14 +300,14 @@ async function applyViewport(
     const body = getComputedStyle(document.body);
     return {
       densityFactor: Number(root.getPropertyValue('--nb-density-factor')),
-      fontScale: Number(root.getPropertyValue('--nb-font-scale')),
+      rootFontSize: root.fontSize,
       bodyFontSize: body.fontSize,
       backgroundColor: body.backgroundColor,
     };
   });
   expect(styles.densityFactor).toBe(fixture.density === 'compact' ? 0.875 : 1);
-  expect(styles.fontScale).toBe(fixture.fontSize === 'large' ? 1.125 : 1);
-  expect(styles.bodyFontSize).toBe(fixture.fontSize === 'large' ? '18px' : '16px');
+  expect(styles.rootFontSize).toBe(fixture.fontSize === 'large' ? '18px' : '16px');
+  expect(styles.bodyFontSize).toBe(styles.rootFontSize);
   expect(styles.backgroundColor).toBe(expectedBackground);
   await page.locator('.linklink-tile:not(.is-removed)').first().waitFor({ state: 'visible' });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
