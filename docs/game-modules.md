@@ -65,13 +65,11 @@ in independent Bidding, Likes and Gwent engines. Gwent can suspend an action for
 target or card choice; private legal actions and decision tokens belong to the acting
 seat. Likes commits a round atomically before its event-paced
 presentation; clients consume the server's structured events and replenish from
-the next round's facts. Startup cancels unfinished Bidding and Likes matches;
-Gwent resumes its saved cards with a new decision window. Later periodic
-recovery advances live deadlines. Neither presentation nor a
+the next round's facts. Startup cancels unfinished Bidding, Likes and Gwent games and clears their queues. Periodic recovery then advances the ordinary human-game deadlines. Neither presentation nor a
 client acknowledgement controls final accounting.
 
-Bidding and Likes have empty newcomer-task lists. Their personal export sections
-are included in the current account export. Thirty-day complete histories
+Bidding and Likes grant their registered newcomer rewards in eligible human matches. Their personal export sections
+are included in the current account export. Eligible thirty-day human duel histories
 become anonymous long-term traces through one transactional migration, and the
 administrator exporter uses bounded pages without copying opponent identities
 into ordinary user exports.
@@ -84,7 +82,7 @@ at most 4,096 waiters. Queue entry and each split or double reserve actual payme
 sources atomically; normal per-hand returns become General Credits after the
 frozen fees, while cancellation refunds the original sources. The game starts
 disabled and adds no newcomer rewards. Completed players explicitly rejoin at
-the tail. Restart cancels only an unsettled table and preserves unseated waiters;
+the tail. Restart cancels unsettled tables and clears unseated waiters, including their original-source refunds or releases. During ordinary operation,
 maintenance releases waiters and undealt seats while dealt tables finish. Bans
 auto-stand dealt hands; deletion removes identity and finishes those hands without
 cancelling other seats or recreating a wallet. Account export includes owner-safe queue,
@@ -105,15 +103,12 @@ commitments are excluded from anonymous archives. See the
 
 Steady Catch owns a deterministic tick engine and bounded, revisioned input batches.
 The server limits advancement by elapsed time and commits scores and payments from
-its own simulation. Lake Notes owns persistent progression and a recoverable fishing
-simulation; its old activity receipts remain valid after moving into the game host.
+its own simulation. Lake Notes owns persistent progression and an in-progress cast. Startup cancels an unfinished or paused Steady Catch session and an unfinished Lake Notes cast, returning eligible tickets and bait. Lake Notes keeps its progression and collections, and its old activity receipts remain valid after moving into the game host.
 Both modules participate in the same configuration, account and shutdown boundaries.
 See [Steady Catch](steady-catch.md) and [Lake Notes](lake-notes.md).
 
-The [AI decision interface](ai-players.md) separates observations, legal actions,
-decision windows and budgets from the decision provider. Local scorers, neural
-models and remote services can implement the provider boundary without owning
-game state or settlement. Gwent uses its ported scorer for faction AI challenges
-and timed-out human turns. Its sequential choices use the same action
-validation as human input. Competitive ratings are a separate module with game-scoped
-records and terminal-transaction updates, described in [AI Gwent](ai-gwent.md).
+The [companion decision interface](ai-players.md) supplies each program with its seat's current view, legal action space and authorized history. One scheduler provides two execution slots for all three games. It starts the 20-second decision clock after queueing. Waiting for the human player releases the slot. The game validates the answer and stores it in the current window. The same rule engine reconstructs replay steps. Built-in opponents work with the main binary. Private uploads and official version upgrades use the optional isolated worker.
+
+Gwent's automatic human-turn choices still use its native scorer. Its separate rating module commits game-scoped competitive records with the terminal result. [AI Gwent](ai-gwent.md)
+
+Startup also clears unsettled Pond Fishing reservations and unfinished LinkLink and RPS games. Committed catches and committed RPS results awaiting acknowledgement remain available. Whale Haven keeps its homes, ongoing visits, offline production and employment. Wages follow the original schedule.
